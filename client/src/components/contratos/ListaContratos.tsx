@@ -78,18 +78,18 @@ const tipoLabelFull: Record<string, string> = {
 };
 
 const tipoCor: Record<string, string> = {
-  assessoria:          'bg-blue-100 text-blue-800',
+  assessoria:          'bg-primary/20 text-primary',
   assessoria_pf:       'bg-sky-100 text-sky-800',
-  limpa_nome:          'bg-purple-100 text-purple-800',
-  limpa_bacen:         'bg-indigo-100 text-indigo-800',
-  rating:              'bg-amber-100 text-amber-800',
-  parceria_comercial:  'bg-teal-100 text-teal-800',
+  limpa_nome:          'bg-primary/20 text-primary',
+  limpa_bacen:         'bg-primary/20 text-primary',
+  rating:              'bg-warning/20 text-warning',
+  parceria_comercial:  'bg-success/20 text-success',
 };
 
 const statusConfig = {
-  gerado:    { label: 'Gerado',    class: 'bg-blue-100 text-blue-800' },
-  assinado:  { label: 'Assinado',  class: 'bg-emerald-100 text-emerald-800' },
-  cancelado: { label: 'Cancelado', class: 'bg-red-100 text-red-800' },
+  gerado:    { label: 'Gerado',    class: 'bg-primary/20 text-primary' },
+  assinado:  { label: 'Assinado',  class: 'bg-success/20 text-success' },
+  cancelado: { label: 'Cancelado', class: 'bg-destructive/20 text-destructive' },
 };
 
 function normalizeCargo(cargo: string | undefined | null): string {
@@ -273,7 +273,7 @@ export function ListaContratos({ contratos, onStatusChange, onDelete, userCargo,
 
   if (!contratos.length) {
     return (
-      <div className="text-center py-8 text-gray-400 text-sm">
+      <div className="text-center py-8 text-muted-foreground text-sm">
         Nenhum contrato encontrado.
       </div>
     );
@@ -283,19 +283,19 @@ export function ListaContratos({ contratos, onStatusChange, onDelete, userCargo,
     <div className="space-y-2">
       {/* Barra de ações em lote */}
       {podeExcluirContrato && (
-        <div className="flex items-center justify-between py-2 px-3 bg-gray-50 border border-gray-200 rounded-lg">
+        <div className="flex items-center justify-between py-2 px-3 bg-muted border border-border rounded-lg">
           <div className="flex items-center gap-3">
-            <label className="flex items-center gap-2 text-xs text-gray-600 cursor-pointer select-none">
+            <label className="flex items-center gap-2 text-xs text-muted-foreground cursor-pointer select-none">
               <input
                 type="checkbox"
                 checked={todosSelecionados}
                 onChange={toggleAll}
-                className="w-3.5 h-3.5 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                className="w-3.5 h-3.5 rounded border-input text-primary focus:ring-primary"
               />
               {todosSelecionados ? 'Desmarcar todos' : 'Selecionar todos'}
             </label>
             {totalSelecionados > 0 && (
-              <span className="text-xs text-blue-700 font-medium bg-blue-50 px-2 py-0.5 rounded-full">
+              <span className="text-xs text-primary font-medium bg-primary/10 px-2 py-0.5 rounded-full">
                 {totalSelecionados} selecionado{totalSelecionados > 1 ? 's' : ''}
               </span>
             )}
@@ -304,7 +304,7 @@ export function ListaContratos({ contratos, onStatusChange, onDelete, userCargo,
             <button
               onClick={handleDeleteBatch}
               disabled={deletingBatch}
-              className="flex items-center gap-1.5 px-3 py-1.5 bg-red-600 text-white text-xs rounded-lg hover:bg-red-700 disabled:opacity-50 font-medium"
+              className="flex items-center gap-1.5 px-3 py-1.5 bg-destructive text-primary-foreground text-xs rounded-lg hover:bg-destructive disabled:opacity-50 font-medium"
             >
               <Trash2 className="w-3.5 h-3.5" />
               {deletingBatch ? 'Excluindo...' : `Excluir ${totalSelecionados}`}
@@ -314,27 +314,27 @@ export function ListaContratos({ contratos, onStatusChange, onDelete, userCargo,
       )}
 
       {/* Tabela compacta */}
-      <div className="overflow-x-auto rounded-lg border border-gray-200">
+      <div className="overflow-x-auto rounded-lg border border-border">
         <table className="w-full text-xs border-collapse min-w-[700px]">
           <thead>
-            <tr className="bg-gray-50 border-b border-gray-200">
+            <tr className="bg-muted border-b border-border">
               {podeExcluirContrato && (
                 <th className="py-2 px-2 w-8">
                   <input
                     type="checkbox"
                     checked={todosSelecionados}
                     onChange={toggleAll}
-                    className="w-3.5 h-3.5 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                    className="w-3.5 h-3.5 rounded border-input text-primary focus:ring-primary"
                   />
                 </th>
               )}
-              <th className="text-left py-2 px-2 font-semibold text-gray-600 w-20">Tipo</th>
-              <th className="text-left py-2 px-2 font-semibold text-gray-600">Cliente</th>
-              <th className="text-left py-2 px-2 font-semibold text-gray-600 w-28">Valor</th>
-              <th className="text-left py-2 px-2 font-semibold text-gray-600 w-24">Data</th>
-              <th className="text-left py-2 px-2 font-semibold text-gray-600 w-20">Status</th>
-              <th className="text-left py-2 px-2 font-semibold text-gray-600 w-28">Responsável</th>
-              <th className="py-2 px-2 font-semibold text-gray-600 w-44 text-center">Ações</th>
+              <th className="text-left py-2 px-2 font-semibold text-muted-foreground w-20">Tipo</th>
+              <th className="text-left py-2 px-2 font-semibold text-muted-foreground">Cliente</th>
+              <th className="text-left py-2 px-2 font-semibold text-muted-foreground w-28">Valor</th>
+              <th className="text-left py-2 px-2 font-semibold text-muted-foreground w-24">Data</th>
+              <th className="text-left py-2 px-2 font-semibold text-muted-foreground w-20">Status</th>
+              <th className="text-left py-2 px-2 font-semibold text-muted-foreground w-28">Responsável</th>
+              <th className="py-2 px-2 font-semibold text-muted-foreground w-44 text-center">Ações</th>
             </tr>
           </thead>
           <tbody>
@@ -344,7 +344,7 @@ export function ListaContratos({ contratos, onStatusChange, onDelete, userCargo,
               const valor = c.valor_contrato ?? c.valor_referencia;
               const dataDisplay = formatData(c.data_assinatura || c.created_at);
               const isSelected = selectedIds.has(c.id);
-              const tipoCorClass = tipoCor[c.tipo_contrato || ''] || 'bg-gray-100 text-gray-700';
+              const tipoCorClass = tipoCor[c.tipo_contrato || ''] || 'bg-muted text-foreground';
               const numRef = c.protocolo_contrato || c.numero_contrato;
               const responsavel = c.responsavel_contrato_nome || c.criado_por_nome || '—';
               const contratoAssinado = c.status === 'assinado' || !!c.assinado_em || !!c.assinado_pdf_path;
@@ -352,7 +352,7 @@ export function ListaContratos({ contratos, onStatusChange, onDelete, userCargo,
               return (
                 <tr
                   key={c.id}
-                  className={`border-b border-gray-100 hover:bg-blue-50/30 transition-colors ${isSelected ? 'bg-blue-50' : ''}`}
+                  className={`border-b border-border hover:bg-primary/10/30 transition-colors ${isSelected ? 'bg-primary/10' : ''}`}
                 >
                   {podeExcluirContrato && (
                     <td className="py-2 px-2">
@@ -360,7 +360,7 @@ export function ListaContratos({ contratos, onStatusChange, onDelete, userCargo,
                         type="checkbox"
                         checked={isSelected}
                         onChange={() => toggleOne(c.id)}
-                        className="w-3.5 h-3.5 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                        className="w-3.5 h-3.5 rounded border-input text-primary focus:ring-primary"
                       />
                     </td>
                   )}
@@ -372,29 +372,29 @@ export function ListaContratos({ contratos, onStatusChange, onDelete, userCargo,
                       {tipoLabel[c.tipo_contrato || ''] || c.tipo_contrato || '—'}
                     </span>
                     {numRef && (
-                      <div className="text-[10px] text-gray-400 mt-0.5 truncate max-w-[70px]" title={numRef}>{numRef}</div>
+                      <div className="text-[10px] text-muted-foreground mt-0.5 truncate max-w-[70px]" title={numRef}>{numRef}</div>
                     )}
                   </td>
 
                   {/* Cliente */}
                   <td className="py-2 px-2">
-                    <div className="font-medium text-gray-900 truncate max-w-[200px]" title={nomeCliente}>
+                    <div className="font-medium text-foreground truncate max-w-[200px]" title={nomeCliente}>
                       {nomeCliente}
                     </div>
                     {c.parceiro_nome && (
-                      <div className="text-[10px] text-gray-400 truncate max-w-[200px]" title={c.parceiro_nome}>
+                      <div className="text-[10px] text-muted-foreground truncate max-w-[200px]" title={c.parceiro_nome}>
                         Parceiro: {c.parceiro_nome}
                       </div>
                     )}
                   </td>
 
                   {/* Valor */}
-                  <td className="py-2 px-2 font-semibold text-gray-900 whitespace-nowrap">
+                  <td className="py-2 px-2 font-semibold text-foreground whitespace-nowrap">
                     {formatBRL(valor)}
                   </td>
 
                   {/* Data */}
-                  <td className="py-2 px-2 text-gray-700 whitespace-nowrap">
+                  <td className="py-2 px-2 text-foreground whitespace-nowrap">
                     {dataDisplay}
                   </td>
 
@@ -406,7 +406,7 @@ export function ListaContratos({ contratos, onStatusChange, onDelete, userCargo,
                   </td>
 
                   {/* Responsável */}
-                  <td className="py-2 px-2 text-gray-600 truncate max-w-[110px]" title={responsavel}>
+                  <td className="py-2 px-2 text-muted-foreground truncate max-w-[110px]" title={responsavel}>
                     {responsavel}
                   </td>
 
@@ -415,14 +415,14 @@ export function ListaContratos({ contratos, onStatusChange, onDelete, userCargo,
                     <div className="flex items-center justify-center gap-1 flex-wrap">
                       <button
                         onClick={() => abrirPdf(c.id)}
-                        className="inline-flex items-center justify-center w-7 h-7 rounded-md border border-slate-200 bg-white hover:bg-slate-50 text-slate-600"
+                        className="inline-flex items-center justify-center w-7 h-7 rounded-md border border-border bg-card hover:bg-muted text-muted-foreground"
                         title="Visualizar PDF"
                       >
                         <Eye className="w-3.5 h-3.5" />
                       </button>
                       <button
                         onClick={() => handleDownload(c)}
-                        className="inline-flex items-center justify-center w-7 h-7 rounded-md border border-blue-200 bg-white hover:bg-blue-50 text-blue-600"
+                        className="inline-flex items-center justify-center w-7 h-7 rounded-md border border-primary/20 bg-card hover:bg-primary/10 text-primary"
                         title="Baixar PDF"
                       >
                         <Download className="w-3.5 h-3.5" />
@@ -430,7 +430,7 @@ export function ListaContratos({ contratos, onStatusChange, onDelete, userCargo,
                       {podeEditar && !contratoAssinado && onEdit && (
                         <button
                           onClick={() => onEdit(c.id)}
-                          className="inline-flex items-center justify-center w-7 h-7 rounded-md border border-cyan-200 bg-white hover:bg-cyan-50 text-cyan-700"
+                          className="inline-flex items-center justify-center w-7 h-7 rounded-md border border-primary/20 bg-card hover:bg-primary/10 text-primary"
                           title="Editar contrato"
                         >
                           <Pencil className="w-3.5 h-3.5" />
@@ -439,7 +439,7 @@ export function ListaContratos({ contratos, onStatusChange, onDelete, userCargo,
                       {podeEditar && !contratoAssinado && (
                         <button
                           onClick={() => handleRegenerar(c.id)}
-                          className="inline-flex items-center justify-center w-7 h-7 rounded-md border border-amber-200 bg-white hover:bg-amber-50 text-amber-600"
+                          className="inline-flex items-center justify-center w-7 h-7 rounded-md border border-warning/20 bg-card hover:bg-warning/10 text-warning"
                           title="Regenerar PDF"
                         >
                           <RefreshCw className="w-3.5 h-3.5" />
@@ -447,7 +447,7 @@ export function ListaContratos({ contratos, onStatusChange, onDelete, userCargo,
                       )}
                       <button
                         onClick={() => handleUploadAssinado(c.id)}
-                        className="inline-flex items-center justify-center w-7 h-7 rounded-md border border-purple-200 bg-white hover:bg-purple-50 text-purple-600"
+                        className="inline-flex items-center justify-center w-7 h-7 rounded-md border border-primary/20 bg-card hover:bg-primary/10 text-purple-600"
                         title="Anexar contrato assinado"
                       >
                         <Upload className="w-3.5 h-3.5" />
@@ -456,14 +456,14 @@ export function ListaContratos({ contratos, onStatusChange, onDelete, userCargo,
                         <>
                           <button
                             onClick={() => handleStatusChange(c.id, 'assinado')}
-                            className="inline-flex items-center justify-center w-7 h-7 rounded-md border border-emerald-200 bg-white hover:bg-emerald-50 text-emerald-600"
+                            className="inline-flex items-center justify-center w-7 h-7 rounded-md border border-success/20 bg-card hover:bg-success/10 text-success"
                             title="Marcar como assinado"
                           >
                             <CheckCircle className="w-3.5 h-3.5" />
                           </button>
                           <button
                             onClick={() => handleStatusChange(c.id, 'cancelado')}
-                            className="inline-flex items-center justify-center w-7 h-7 rounded-md border border-red-200 bg-white hover:bg-red-50 text-red-600"
+                            className="inline-flex items-center justify-center w-7 h-7 rounded-md border border-destructive/20 bg-card hover:bg-destructive/10 text-destructive"
                             title="Cancelar contrato"
                           >
                             <XCircle className="w-3.5 h-3.5" />
@@ -473,7 +473,7 @@ export function ListaContratos({ contratos, onStatusChange, onDelete, userCargo,
                       {podeExcluirContrato && (
                         <button
                           onClick={() => handleDelete(c.id)}
-                          className="inline-flex items-center justify-center w-7 h-7 rounded-md border border-red-200 bg-white hover:bg-red-50 text-red-600"
+                          className="inline-flex items-center justify-center w-7 h-7 rounded-md border border-destructive/20 bg-card hover:bg-destructive/10 text-destructive"
                           title="Excluir contrato"
                         >
                           <Trash2 className="w-3.5 h-3.5" />
@@ -489,10 +489,10 @@ export function ListaContratos({ contratos, onStatusChange, onDelete, userCargo,
       </div>
 
       {/* Rodapé com total */}
-      <div className="text-[11px] text-gray-400 px-1">
+      <div className="text-[11px] text-muted-foreground px-1">
         {contratosSemDuplicatas.length} contrato{contratosSemDuplicatas.length !== 1 ? 's' : ''}
         {contratos.length !== contratosSemDuplicatas.length && (
-          <span className="ml-1 text-amber-600">
+          <span className="ml-1 text-warning">
             ({contratos.length - contratosSemDuplicatas.length} duplicata{contratos.length - contratosSemDuplicatas.length !== 1 ? 's' : ''} removida{contratos.length - contratosSemDuplicatas.length !== 1 ? 's' : ''})
           </span>
         )}

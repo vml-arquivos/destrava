@@ -124,18 +124,18 @@ interface Colaborador {
 
 // ─── Configurações ────────────────────────────────────────────
 const ETAPA_FUNIL_STYLE: Record<string, { color: string; text: string; dot: string }> = {
-  entrada:      { color: "bg-gray-100 border-gray-300",    text: "text-gray-700",   dot: "bg-gray-400" },
-  triagem:      { color: "bg-slate-50 border-slate-300",   text: "text-slate-700",  dot: "bg-slate-500" },
-  contato:      { color: "bg-blue-50 border-blue-300",     text: "text-blue-700",   dot: "bg-blue-500" },
-  qualificacao: { color: "bg-cyan-50 border-cyan-300",     text: "text-cyan-700",   dot: "bg-cyan-500" },
-  documentos:   { color: "bg-orange-50 border-orange-300", text: "text-orange-700", dot: "bg-orange-500" },
+  entrada:      { color: "bg-muted border-input",    text: "text-foreground",   dot: "bg-gray-400" },
+  triagem:      { color: "bg-muted border-input",   text: "text-foreground",  dot: "bg-muted0" },
+  contato:      { color: "bg-primary/10 border-primary/30",     text: "text-primary",   dot: "bg-primary" },
+  qualificacao: { color: "bg-primary/10 border-cyan-300",     text: "text-primary",   dot: "bg-primary/100" },
+  documentos:   { color: "bg-warning/10 border-warning/30", text: "text-warning", dot: "bg-warning" },
   analise:      { color: "bg-lime-50 border-lime-300",     text: "text-lime-700",   dot: "bg-lime-500" },
-  proposta:     { color: "bg-violet-50 border-violet-300", text: "text-violet-700", dot: "bg-violet-500" },
+  proposta:     { color: "bg-primary/10 border-primary/30", text: "text-primary", dot: "bg-primary/100" },
   negociacao:   { color: "bg-yellow-50 border-yellow-300", text: "text-yellow-700", dot: "bg-yellow-500" },
   ganho:        { color: "bg-green-50 border-green-300",   text: "text-green-700",  dot: "bg-green-500" },
-  perdido:      { color: "bg-red-50 border-red-300",       text: "text-red-700",    dot: "bg-red-400" },
-  reativacao:   { color: "bg-amber-50 border-amber-300",   text: "text-amber-700",  dot: "bg-amber-500" },
-  carteira:     { color: "bg-emerald-50 border-emerald-300", text: "text-emerald-700", dot: "bg-emerald-500" },
+  perdido:      { color: "bg-destructive/10 border-destructive/30",       text: "text-destructive",    dot: "bg-red-400" },
+  reativacao:   { color: "bg-warning/10 border-warning/30",   text: "text-warning",  dot: "bg-warning/100" },
+  carteira:     { color: "bg-success/10 border-success/30", text: "text-success", dot: "bg-success" },
 };
 
 const ETAPAS_FUNIL = ETAPAS_FUNIL_VALIDAS.map((id) => ({
@@ -145,10 +145,10 @@ const ETAPAS_FUNIL = ETAPAS_FUNIL_VALIDAS.map((id) => ({
 }));
 
 const TEMPERATURA_CONFIG: Record<string, { label: string; color: string; bg: string; icon: React.ElementType }> = {
-  frio:    { label: "Frio",    color: "text-blue-600",  bg: "bg-blue-50",   icon: Snowflake },
+  frio:    { label: "Frio",    color: "text-primary",  bg: "bg-primary/10",   icon: Snowflake },
   morno:   { label: "Morno",   color: "text-yellow-600",bg: "bg-yellow-50", icon: Thermometer },
-  quente:  { label: "Quente",  color: "text-orange-600",bg: "bg-orange-50", icon: Flame },
-  urgente: { label: "Urgente", color: "text-red-600",   bg: "bg-red-50",    icon: Zap },
+  quente:  { label: "Quente",  color: "text-warning",bg: "bg-warning/10", icon: Flame },
+  urgente: { label: "Urgente", color: "text-destructive",   bg: "bg-destructive/10",    icon: Zap },
 };
 
 const TIPO_ATIVIDADE: Record<string, { label: string; icon: string }> = {
@@ -189,11 +189,11 @@ const fmtDateTime = (d?: string) =>
 
 // ─── Componente Score ─────────────────────────────────────────
 function ScoreBadge({ score }: { score?: number }) {
-  if (score == null) return <span className="text-gray-400 text-xs">—</span>;
+  if (score == null) return <span className="text-muted-foreground text-xs">—</span>;
   const color = score >= 75 ? "text-green-600 bg-green-50" :
                 score >= 50 ? "text-yellow-600 bg-yellow-50" :
-                score >= 25 ? "text-orange-600 bg-orange-50" :
-                              "text-red-600 bg-red-50";
+                score >= 25 ? "text-warning bg-warning/10" :
+                              "text-destructive bg-destructive/10";
   return (
     <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-bold ${color}`}>
       <Brain className="h-3 w-3" />
@@ -219,15 +219,15 @@ function KanbanCard({
     <div
       draggable
       onDragStart={e => { e.dataTransfer.effectAllowed = "move"; onDragStart(lead); }}
-      className="bg-white rounded-lg border border-gray-200 p-2.5 cursor-grab active:cursor-grabbing hover:border-blue-400 hover:shadow-md transition-all group select-none"
+      className="bg-card rounded-lg border border-border p-2.5 cursor-grab active:cursor-grabbing hover:border-blue-400 hover:shadow-md transition-all group select-none"
       onClick={onClick}
     >
       {/* Header */}
       <div className="flex items-start justify-between gap-1.5 mb-1.5">
         <div className="flex-1 min-w-0">
-          <p className="text-xs font-semibold text-gray-900 truncate leading-tight">{lead.nome}</p>
+          <p className="text-xs font-semibold text-foreground truncate leading-tight">{lead.nome}</p>
           {lead.empresa && (
-            <p className="text-[11px] text-gray-400 truncate">{lead.empresa}</p>
+            <p className="text-[11px] text-muted-foreground truncate">{lead.empresa}</p>
           )}
         </div>
         <div className="flex items-center gap-1 flex-shrink-0">
@@ -242,7 +242,7 @@ function KanbanCard({
 
       {/* Produto */}
       {lead.produto_interesse && (
-        <span className="inline-block text-[11px] bg-blue-50 text-blue-700 px-1.5 py-0.5 rounded truncate max-w-full mb-1.5">
+        <span className="inline-block text-[11px] bg-primary/10 text-primary px-1.5 py-0.5 rounded truncate max-w-full mb-1.5">
           {lead.produto_interesse}
         </span>
       )}
@@ -251,17 +251,17 @@ function KanbanCard({
       <div className="flex items-center justify-between gap-1">
         <div className="flex items-center gap-1 flex-wrap">
           {hasFollowup && (
-            <span className="inline-flex items-center gap-0.5 text-[11px] text-red-600 bg-red-50 px-1 py-0.5 rounded">
+            <span className="inline-flex items-center gap-0.5 text-[11px] text-destructive bg-destructive/10 px-1 py-0.5 rounded">
               <Clock className="h-2.5 w-2.5" />FU
             </span>
           )}
           {docsAlert && (
-            <span className="inline-flex items-center gap-0.5 text-[11px] text-orange-600 bg-orange-50 px-1 py-0.5 rounded">
+            <span className="inline-flex items-center gap-0.5 text-[11px] text-warning bg-warning/10 px-1 py-0.5 rounded">
               <AlertTriangle className="h-2.5 w-2.5" />Doc
             </span>
           )}
           {lead.dias_sem_contato != null && lead.dias_sem_contato > 7 && (
-            <span className="inline-flex items-center gap-0.5 text-[11px] text-gray-400 bg-gray-50 px-1 py-0.5 rounded">
+            <span className="inline-flex items-center gap-0.5 text-[11px] text-muted-foreground bg-muted px-1 py-0.5 rounded">
               <Clock className="h-2.5 w-2.5" />{lead.dias_sem_contato}d
             </span>
           )}
@@ -289,7 +289,7 @@ function KanbanColuna({
   return (
     <div
       className={`flex-shrink-0 w-52 rounded-xl border-2 flex flex-col transition-all ${
-        isDragOver ? "border-blue-400 bg-blue-50 scale-[1.01] shadow-lg" : etapa.color
+        isDragOver ? "border-blue-400 bg-primary/10 scale-[1.01] shadow-lg" : etapa.color
       }`}
       style={{ minHeight: 160 }}
       onDragOver={e => { e.preventDefault(); setIsDragOver(true); }}
@@ -301,13 +301,13 @@ function KanbanColuna({
         <div className="flex items-center gap-1.5">
           <span className={`w-2 h-2 rounded-full flex-shrink-0 ${etapa.dot}`} />
           <span className={`text-[11px] font-bold uppercase tracking-wide ${etapa.text} truncate max-w-[90px]`}>{etapa.label}</span>
-          <span className={`text-[11px] font-bold px-1.5 py-0.5 rounded-full bg-white/70 ${etapa.text}`}>
+          <span className={`text-[11px] font-bold px-1.5 py-0.5 rounded-full bg-card/70 ${etapa.text}`}>
             {leads.length}
           </span>
         </div>
         <button
           onClick={() => onAddLead(etapa.id)}
-          className={`p-0.5 rounded hover:bg-white/50 transition-colors ${etapa.text} opacity-60 hover:opacity-100`}
+          className={`p-0.5 rounded hover:bg-card/50 transition-colors ${etapa.text} opacity-60 hover:opacity-100`}
         >
           <Plus className="h-3 w-3" />
         </button>
@@ -320,7 +320,7 @@ function KanbanColuna({
       )}
       {/* Drop zone hint */}
       {isDragOver && (
-        <div className="mx-2 mb-1 border-2 border-dashed border-blue-400 rounded-lg py-2 text-center text-xs text-blue-500 font-medium">
+        <div className="mx-2 mb-1 border-2 border-dashed border-blue-400 rounded-lg py-2 text-center text-xs text-primary font-medium">
           Soltar aqui
         </div>
       )}
@@ -603,12 +603,12 @@ function FichaLead({
     <Sheet open modal={false} onOpenChange={(open) => { if (!open) onClose(); }}>
       <SheetContent side="right" className="w-[min(1100px,96vw)] sm:w-[min(1100px,96vw)] p-0 overflow-hidden flex flex-col">
         {/* Header */}
-        <div className="px-6 py-4 border-b border-gray-200 bg-gradient-to-r from-blue-900 to-blue-700 text-white flex-shrink-0">
+        <div className="px-6 py-4 border-b border-border bg-gradient-to-r from-blue-900 to-blue-700 text-primary-foreground flex-shrink-0">
           <div className="flex items-start justify-between gap-4">
             <div className="flex-1 min-w-0">
               <div className="flex items-center gap-2 mb-1">
                 {etapaAtual && (
-                  <span className="text-xs bg-white/20 px-2 py-0.5 rounded-full font-medium">
+                  <span className="text-xs bg-card/20 px-2 py-0.5 rounded-full font-medium">
                     {etapaAtual.label}
                   </span>
                 )}
@@ -629,13 +629,13 @@ function FichaLead({
                   href={`https://chatwoot.permupay.com.br/app/accounts/1/conversations/${lead.chatwoot_conv_id}`}
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="flex items-center gap-1 text-xs bg-white/20 hover:bg-white/30 px-2 py-1 rounded transition-colors"
+                  className="flex items-center gap-1 text-xs bg-card/20 hover:bg-card/30 px-2 py-1 rounded transition-colors"
                 >
                   <MessageSquare className="h-3 w-3" />
                   Chatwoot
                 </a>
               )}
-              <button onClick={onClose} className="p-1 hover:bg-white/20 rounded transition-colors">
+              <button onClick={onClose} className="p-1 hover:bg-card/20 rounded transition-colors">
                 <X className="h-5 w-5" />
               </button>
             </div>
@@ -643,12 +643,12 @@ function FichaLead({
 
           {/* Contatos rápidos */}
           <div className="flex items-center gap-4 mt-3 text-sm text-blue-100">
-            <a href={`tel:${lead.telefone}`} className="flex items-center gap-1 hover:text-white">
+            <a href={`tel:${lead.telefone}`} className="flex items-center gap-1 hover:text-primary-foreground">
               <Phone className="h-3.5 w-3.5" />
               {lead.telefone}
             </a>
             {lead.email && (
-              <a href={`mailto:${lead.email}`} className="flex items-center gap-1 hover:text-white">
+              <a href={`mailto:${lead.email}`} className="flex items-center gap-1 hover:text-primary-foreground">
                 <Mail className="h-3.5 w-3.5" />
                 {lead.email}
               </a>
@@ -658,7 +658,7 @@ function FichaLead({
                 href={`https://wa.me/${lead.telefone.replace(/\D/g, "")}`}
                 target="_blank"
                 rel="noopener noreferrer"
-                className="flex items-center gap-1 hover:text-white"
+                className="flex items-center gap-1 hover:text-primary-foreground"
               >
                 <MessageSquare className="h-3.5 w-3.5" />
                 WhatsApp
@@ -675,13 +675,13 @@ function FichaLead({
               <TabsTrigger value="atividades">
                 Atividades
                 {atividades.length > 0 && (
-                  <span className="ml-1 text-xs bg-blue-100 text-blue-700 px-1.5 rounded-full">{atividades.length}</span>
+                  <span className="ml-1 text-xs bg-primary/20 text-primary px-1.5 rounded-full">{atividades.length}</span>
                 )}
               </TabsTrigger>
               <TabsTrigger value="documentos">
                 Documentos
                 {(lead.docs_pendentes_obrig ?? 0) > 0 && (
-                  <span className="ml-1 text-xs bg-orange-100 text-orange-700 px-1.5 rounded-full">!</span>
+                  <span className="ml-1 text-xs bg-warning/20 text-warning px-1.5 rounded-full">!</span>
                 )}
               </TabsTrigger>
               <TabsTrigger value="ia">
@@ -695,14 +695,14 @@ function FichaLead({
               {/* ── Visão Geral ── */}
               <TabsContent value="visao_geral" className="mt-4 space-y-4">
                 {/* Mover funil */}
-                <div className="bg-gray-50 rounded-xl p-4 border border-gray-200">
-                  <h3 className="text-sm font-semibold text-gray-700 mb-3 flex items-center gap-2">
-                    <Target className="h-4 w-4 text-blue-600" />
+                <div className="bg-muted rounded-xl p-4 border border-border">
+                  <h3 className="text-sm font-semibold text-foreground mb-3 flex items-center gap-2">
+                    <Target className="h-4 w-4 text-primary" />
                     Posição no Funil
                   </h3>
                   <div className="grid grid-cols-2 gap-3">
                     <div>
-                      <label className="text-xs text-gray-500 mb-1 block">Etapa</label>
+                      <label className="text-xs text-muted-foreground mb-1 block">Etapa</label>
                       <Select value={novaEtapa} onValueChange={setNovaEtapa}>
                         <SelectTrigger className="h-9 text-sm">
                           <SelectValue />
@@ -715,7 +715,7 @@ function FichaLead({
                       </Select>
                     </div>
                     <div>
-                      <label className="text-xs text-gray-500 mb-1 block">Temperatura</label>
+                      <label className="text-xs text-muted-foreground mb-1 block">Temperatura</label>
                       <Select value={novaTemp} onValueChange={setNovaTemp}>
                         <SelectTrigger className="h-9 text-sm">
                           <SelectValue />
@@ -735,15 +735,15 @@ function FichaLead({
                 </div>
 
                 {/* Dados do lead */}
-                <div className="bg-white rounded-xl border border-gray-200 p-4">
+                <div className="bg-card rounded-xl border border-border p-4">
                   <div className="flex items-center justify-between mb-3">
-                    <h3 className="text-sm font-semibold text-gray-700 flex items-center gap-2">
-                      <UserCheck className="h-4 w-4 text-blue-600" />
+                    <h3 className="text-sm font-semibold text-foreground flex items-center gap-2">
+                      <UserCheck className="h-4 w-4 text-primary" />
                       Dados do Lead
                     </h3>
                     <div className="flex items-center gap-2">
                       {podeGerenciarCarteira && (
-                        <Button variant="ghost" size="sm" onClick={excluirLead} disabled={salvando} className="text-red-600 hover:text-red-700">
+                        <Button variant="ghost" size="sm" onClick={excluirLead} disabled={salvando} className="text-destructive hover:text-destructive">
                           <Trash2 className="h-3.5 w-3.5 mr-1" />
                           Excluir
                         </Button>
@@ -766,7 +766,7 @@ function FichaLead({
                         { key: "cidade", label: "Cidade" },
                       ].map(({ key, label }) => (
                         <div key={key}>
-                          <label className="text-xs text-gray-500 mb-1 block">{label}</label>
+                          <label className="text-xs text-muted-foreground mb-1 block">{label}</label>
                           <Input
                             className="h-8 text-sm"
                             defaultValue={((lead as unknown) as Record<string, unknown>)[key] as string ?? ""}
@@ -775,7 +775,7 @@ function FichaLead({
                         </div>
                       ))}
                       <div>
-                        <label className="text-xs text-gray-500 mb-1 block">Valor Solicitado</label>
+                        <label className="text-xs text-muted-foreground mb-1 block">Valor Solicitado</label>
                         <Input
                           className="h-8 text-sm text-right font-mono tabular-nums"
                           type="text"
@@ -790,7 +790,7 @@ function FichaLead({
                         />
                       </div>
                       <div>
-                        <label className="text-xs text-gray-500 mb-1 block">Prazo (meses)</label>
+                        <label className="text-xs text-muted-foreground mb-1 block">Prazo (meses)</label>
                         <Input
                           className="h-8 text-sm"
                           type="number"
@@ -799,7 +799,7 @@ function FichaLead({
                         />
                       </div>
                       <div className="col-span-2">
-                        <label className="text-xs text-gray-500 mb-1 block">Responsável</label>
+                        <label className="text-xs text-muted-foreground mb-1 block">Responsável</label>
                         <Select
                           defaultValue={lead.responsavel_id || "__sem_responsavel__"}
                           disabled={!podeReatribuirLead}
@@ -816,11 +816,11 @@ function FichaLead({
                           </SelectContent>
                         </Select>
                         {!podeReatribuirLead && (
-                          <p className="text-[11px] text-amber-600 mt-1">Somente perfis de gestão podem reatribuir leads entre agentes.</p>
+                          <p className="text-[11px] text-warning mt-1">Somente perfis de gestão podem reatribuir leads entre agentes.</p>
                         )}
                       </div>
                       <div className="col-span-2">
-                        <label className="text-xs text-gray-500 mb-1 block">Follow-up</label>
+                        <label className="text-xs text-muted-foreground mb-1 block">Follow-up</label>
                         <Input
                           className="h-8 text-sm"
                           type="datetime-local"
@@ -850,8 +850,8 @@ function FichaLead({
                         ["Cadastrado em", fmtDate(lead.created_at)],
                       ].filter(([, v]) => v).map(([k, v]) => (
                         <div key={k as string}>
-                          <span className="text-gray-400 text-xs">{k}</span>
-                          <p className="text-gray-800 font-medium text-xs mt-0.5">{v as string}</p>
+                          <span className="text-muted-foreground text-xs">{k}</span>
+                          <p className="text-foreground font-medium text-xs mt-0.5">{v as string}</p>
                         </div>
                       ))}
                     </div>
@@ -859,8 +859,8 @@ function FichaLead({
                 </div>
 
                 {/* IA Actions */}
-                <div className="bg-gradient-to-br from-violet-50 to-blue-50 rounded-xl border border-violet-200 p-4">
-                  <h3 className="text-sm font-semibold text-violet-800 mb-3 flex items-center gap-2">
+                <div className="bg-gradient-to-br from-violet-50 to-blue-50 rounded-xl border border-primary/20 p-4">
+                  <h3 className="text-sm font-semibold text-primary mb-3 flex items-center gap-2">
                     <Sparkles className="h-4 w-4" />
                     Assistente IA
                   </h3>
@@ -868,7 +868,7 @@ function FichaLead({
                     <Button
                       size="sm"
                       variant="outline"
-                      className="justify-start gap-2 bg-white border-violet-200 hover:bg-violet-50 text-violet-700"
+                      className="justify-start gap-2 bg-card border-primary/20 hover:bg-primary/10 text-primary"
                       onClick={gerarResumoIA}
                       disabled={iaLoading !== null}
                     >
@@ -878,7 +878,7 @@ function FichaLead({
                     <Button
                       size="sm"
                       variant="outline"
-                      className="justify-start gap-2 bg-white border-violet-200 hover:bg-violet-50 text-violet-700"
+                      className="justify-start gap-2 bg-card border-primary/20 hover:bg-primary/10 text-primary"
                       onClick={gerarRecomendacoesIA}
                       disabled={iaLoading !== null}
                     >
@@ -888,7 +888,7 @@ function FichaLead({
                     <Button
                       size="sm"
                       variant="outline"
-                      className="justify-start gap-2 bg-white border-violet-200 hover:bg-violet-50 text-violet-700"
+                      className="justify-start gap-2 bg-card border-primary/20 hover:bg-primary/10 text-primary"
                       onClick={() => setShowIaModal("followup")}
                       disabled={iaLoading !== null}
                     >
@@ -897,9 +897,9 @@ function FichaLead({
                     </Button>
                   </div>
                   {lead.resumo_ia && (
-                    <div className="mt-3 pt-3 border-t border-violet-200">
-                      <p className="text-xs text-violet-600 font-medium mb-1">Análise anterior:</p>
-                      <p className="text-xs text-violet-700">{lead.resumo_ia}</p>
+                    <div className="mt-3 pt-3 border-t border-primary/20">
+                      <p className="text-xs text-primary font-medium mb-1">Análise anterior:</p>
+                      <p className="text-xs text-primary">{lead.resumo_ia}</p>
                     </div>
                   )}
                 </div>
@@ -909,28 +909,28 @@ function FichaLead({
                   <DialogContent className="max-w-lg w-[95vw]">
                     <DialogHeader>
                       <DialogTitle className="flex items-center gap-2">
-                        <Brain className="h-5 w-5 text-violet-600" />
+                        <Brain className="h-5 w-5 text-primary" />
                         Resumo do Lead — IA
                       </DialogTitle>
                     </DialogHeader>
                     {iaResumo && (
                       <div className="space-y-4">
-                        <div className="bg-violet-50 rounded-lg p-4">
-                          <p className="text-sm text-gray-800 leading-relaxed">{iaResumo.resumo}</p>
+                        <div className="bg-primary/10 rounded-lg p-4">
+                          <p className="text-sm text-foreground leading-relaxed">{iaResumo.resumo}</p>
                         </div>
                         {iaResumo.pontos_atencao?.length > 0 && (
                           <div>
-                            <p className="text-xs font-semibold text-orange-700 mb-2">Pontos de Atenção:</p>
+                            <p className="text-xs font-semibold text-warning mb-2">Pontos de Atenção:</p>
                             <ul className="space-y-1">
                               {iaResumo.pontos_atencao.map((p, i) => (
-                                <li key={i} className="text-xs text-orange-600 flex items-start gap-1.5">
+                                <li key={i} className="text-xs text-warning flex items-start gap-1.5">
                                   <AlertTriangle className="h-3 w-3 mt-0.5 flex-shrink-0" />{p}
                                 </li>
                               ))}
                             </ul>
                           </div>
                         )}
-                        <p className="text-xs text-gray-400">Gerado em {new Date(iaResumo.gerado_em).toLocaleString("pt-BR")}</p>
+                        <p className="text-xs text-muted-foreground">Gerado em {new Date(iaResumo.gerado_em).toLocaleString("pt-BR")}</p>
                       </div>
                     )}
                     <DialogFooter>
@@ -944,21 +944,21 @@ function FichaLead({
                   <DialogContent className="max-w-lg w-[95vw]">
                     <DialogHeader>
                       <DialogTitle className="flex items-center gap-2">
-                        <Target className="h-5 w-5 text-violet-600" />
+                        <Target className="h-5 w-5 text-primary" />
                         Recomendações — IA
                       </DialogTitle>
                     </DialogHeader>
                     <div className="space-y-3 max-h-96 overflow-y-auto">
                       {iaRecomendacoes.map((r, i) => {
-                        const prioColor = r.prioridade === "alta" ? "border-red-300 bg-red-50" : r.prioridade === "media" ? "border-yellow-300 bg-yellow-50" : "border-green-300 bg-green-50";
-                        const prioText = r.prioridade === "alta" ? "text-red-700" : r.prioridade === "media" ? "text-yellow-700" : "text-green-700";
+                        const prioColor = r.prioridade === "alta" ? "border-destructive/30 bg-destructive/10" : r.prioridade === "media" ? "border-yellow-300 bg-yellow-50" : "border-green-300 bg-green-50";
+                        const prioText = r.prioridade === "alta" ? "text-destructive" : r.prioridade === "media" ? "text-yellow-700" : "text-green-700";
                         return (
                           <div key={i} className={`rounded-lg border p-3 ${prioColor}`}>
                             <div className="flex items-center justify-between mb-1">
-                              <p className="text-sm font-semibold text-gray-800">{r.titulo}</p>
+                              <p className="text-sm font-semibold text-foreground">{r.titulo}</p>
                               <span className={`text-xs font-bold uppercase ${prioText}`}>{r.prioridade}</span>
                             </div>
-                            <p className="text-xs text-gray-600">{r.descricao}</p>
+                            <p className="text-xs text-muted-foreground">{r.descricao}</p>
                           </div>
                         );
                       })}
@@ -974,14 +974,14 @@ function FichaLead({
                   <DialogContent className="max-w-lg w-[95vw]">
                     <DialogHeader>
                       <DialogTitle className="flex items-center gap-2">
-                        <MessageSquare className="h-5 w-5 text-violet-600" />
+                        <MessageSquare className="h-5 w-5 text-primary" />
                         Mensagem de Follow-up — IA
                       </DialogTitle>
                     </DialogHeader>
                     <div className="space-y-3">
                       <div className="grid grid-cols-2 gap-3">
                         <div>
-                          <label className="text-xs text-gray-500 mb-1 block">Tipo</label>
+                          <label className="text-xs text-muted-foreground mb-1 block">Tipo</label>
                           <Select value={followupTipo} onValueChange={v => setFollowupTipo(v as any)}>
                             <SelectTrigger className="h-9 text-sm"><SelectValue /></SelectTrigger>
                             <SelectContent>
@@ -993,7 +993,7 @@ function FichaLead({
                           </Select>
                         </div>
                         <div>
-                          <label className="text-xs text-gray-500 mb-1 block">Canal</label>
+                          <label className="text-xs text-muted-foreground mb-1 block">Canal</label>
                           <Select value={followupCanal} onValueChange={v => setFollowupCanal(v as any)}>
                             <SelectTrigger className="h-9 text-sm"><SelectValue /></SelectTrigger>
                             <SelectContent>
@@ -1012,12 +1012,12 @@ function FichaLead({
                         <div className="space-y-3">
                           {iaFollowup.assunto && (
                             <div>
-                              <p className="text-xs text-gray-500 mb-1">Assunto:</p>
-                              <p className="text-sm font-medium text-gray-800">{iaFollowup.assunto}</p>
+                              <p className="text-xs text-muted-foreground mb-1">Assunto:</p>
+                              <p className="text-sm font-medium text-foreground">{iaFollowup.assunto}</p>
                             </div>
                           )}
                           <div>
-                            <p className="text-xs text-gray-500 mb-1">Mensagem:</p>
+                            <p className="text-xs text-muted-foreground mb-1">Mensagem:</p>
                             <Textarea
                               className="text-sm resize-none"
                               rows={6}
@@ -1057,8 +1057,8 @@ function FichaLead({
               {/* ── Atividades ── */}
               <TabsContent value="atividades" className="mt-4 space-y-4">
                 {/* Nova atividade */}
-                <div className="bg-gray-50 rounded-xl p-4 border border-gray-200">
-                  <h3 className="text-sm font-semibold text-gray-700 mb-3">Registrar Atividade</h3>
+                <div className="bg-muted rounded-xl p-4 border border-border">
+                  <h3 className="text-sm font-semibold text-foreground mb-3">Registrar Atividade</h3>
                   <div className="grid grid-cols-2 gap-3 mb-3">
                     <Select value={novaAtiv.tipo} onValueChange={v => setNovaAtiv(p => ({ ...p, tipo: v }))}>
                       <SelectTrigger className="h-9 text-sm">
@@ -1103,36 +1103,36 @@ function FichaLead({
 
                 {/* Timeline */}
                 {loading ? (
-                  <div className="flex justify-center py-8"><Loader2 className="h-6 w-6 animate-spin text-blue-600" /></div>
+                  <div className="flex justify-center py-8"><Loader2 className="h-6 w-6 animate-spin text-primary" /></div>
                 ) : (
                   <div className="space-y-2">
                     {atividades.map(a => {
                       const tipoConf = TIPO_ATIVIDADE[a.tipo] ?? { label: a.tipo, icon: "💡" };
                       return (
-                        <div key={a.id} className={`flex gap-3 p-3 rounded-lg border ${a.origem_ia ? "bg-blue-50 border-blue-200" : "bg-white border-gray-200"}`}>
+                        <div key={a.id} className={`flex gap-3 p-3 rounded-lg border ${a.origem_ia ? "bg-primary/10 border-primary/20" : "bg-card border-border"}`}>
                           <span className="text-lg flex-shrink-0 mt-0.5">{tipoConf.icon}</span>
                           <div className="flex-1 min-w-0">
                             <div className="flex items-center justify-between gap-2">
-                              <p className="text-sm font-medium text-gray-900 truncate">{a.titulo}</p>
-                              <span className="text-xs text-gray-400 flex-shrink-0">{fmtDateTime(a.created_at)}</span>
+                              <p className="text-sm font-medium text-foreground truncate">{a.titulo}</p>
+                              <span className="text-xs text-muted-foreground flex-shrink-0">{fmtDateTime(a.created_at)}</span>
                             </div>
-                            {a.descricao && <p className="text-xs text-gray-600 mt-0.5">{a.descricao}</p>}
+                            {a.descricao && <p className="text-xs text-muted-foreground mt-0.5">{a.descricao}</p>}
                             {a.resultado && (
                               <span className={`text-xs mt-1 inline-block px-1.5 py-0.5 rounded ${
                                 a.resultado === "positivo" ? "bg-green-100 text-green-700" :
-                                a.resultado === "negativo" ? "bg-red-100 text-red-700" :
-                                "bg-gray-100 text-gray-600"
+                                a.resultado === "negativo" ? "bg-destructive/20 text-destructive" :
+                                "bg-muted text-muted-foreground"
                               }`}>
                                 {a.resultado}
                               </span>
                             )}
-                            {a.origem_ia && <span className="text-xs text-blue-600 ml-1">🤖 IA</span>}
+                            {a.origem_ia && <span className="text-xs text-primary ml-1">🤖 IA</span>}
                           </div>
                         </div>
                       );
                     })}
                     {atividades.length === 0 && (
-                      <p className="text-center text-sm text-gray-400 py-8">Nenhuma atividade registrada.</p>
+                      <p className="text-center text-sm text-muted-foreground py-8">Nenhuma atividade registrada.</p>
                     )}
                   </div>
                 )}
@@ -1156,24 +1156,24 @@ function FichaLead({
 
                 {/* Lista de documentos */}
                 {loading ? (
-                  <div className="flex justify-center py-8"><Loader2 className="h-6 w-6 animate-spin text-blue-600" /></div>
+                  <div className="flex justify-center py-8"><Loader2 className="h-6 w-6 animate-spin text-primary" /></div>
                 ) : (
                   <div className="space-y-2">
                     {documentos.map(doc => (
-                      <div key={doc.id} className="flex items-center gap-3 p-3 bg-white rounded-lg border border-gray-200">
+                      <div key={doc.id} className="flex items-center gap-3 p-3 bg-card rounded-lg border border-border">
                         <div className={`w-2 h-2 rounded-full flex-shrink-0 ${
                           doc.status === "aprovado" ? "bg-green-500" :
-                          doc.status === "recebido" ? "bg-blue-500" :
+                          doc.status === "recebido" ? "bg-primary" :
                           doc.status === "solicitado" ? "bg-yellow-500" :
-                          doc.status === "rejeitado" ? "bg-red-500" :
+                          doc.status === "rejeitado" ? "bg-destructive" :
                           "bg-gray-300"
                         }`} />
                         <div className="flex-1 min-w-0">
-                          <p className="text-sm font-medium text-gray-900">{doc.nome}</p>
-                          <p className="text-xs text-gray-500 capitalize">{doc.status.replace("_", " ")}</p>
+                          <p className="text-sm font-medium text-foreground">{doc.nome}</p>
+                          <p className="text-xs text-muted-foreground capitalize">{doc.status.replace("_", " ")}</p>
                         </div>
                         {doc.obrigatorio && (
-                          <span className="text-xs bg-orange-50 text-orange-600 px-1.5 py-0.5 rounded">Obrigatório</span>
+                          <span className="text-xs bg-warning/10 text-warning px-1.5 py-0.5 rounded">Obrigatório</span>
                         )}
                         <Select value={doc.status} onValueChange={v => atualizarDocumento(doc.id, v)}>
                           <SelectTrigger className="w-32 h-7 text-xs">
@@ -1190,7 +1190,7 @@ function FichaLead({
                       </div>
                     ))}
                     {documentos.length === 0 && (
-                      <p className="text-center text-sm text-gray-400 py-8">Nenhum documento adicionado.</p>
+                      <p className="text-center text-sm text-muted-foreground py-8">Nenhum documento adicionado.</p>
                     )}
                   </div>
                 )}
@@ -1199,47 +1199,47 @@ function FichaLead({
               {/* ── IA ── */}
               <TabsContent value="ia" className="mt-4 space-y-4">
                 {loading ? (
-                  <div className="flex justify-center py-8"><Loader2 className="h-6 w-6 animate-spin text-blue-600" /></div>
+                  <div className="flex justify-center py-8"><Loader2 className="h-6 w-6 animate-spin text-primary" /></div>
                 ) : qualificacoes.length === 0 ? (
                   <div className="text-center py-12">
                     <Brain className="h-12 w-12 text-gray-300 mx-auto mb-3" />
-                    <p className="text-gray-500 text-sm">Nenhuma qualificação da IA ainda.</p>
-                    <p className="text-gray-400 text-xs mt-1">O agente qualificará este lead automaticamente via WhatsApp.</p>
+                    <p className="text-muted-foreground text-sm">Nenhuma qualificação da IA ainda.</p>
+                    <p className="text-muted-foreground text-xs mt-1">O agente qualificará este lead automaticamente via WhatsApp.</p>
                   </div>
                 ) : (
                   qualificacoes.map(q => (
-                    <div key={q.id} className="bg-gradient-to-br from-blue-50 to-indigo-50 rounded-xl border border-blue-200 p-4">
+                    <div key={q.id} className="bg-gradient-to-br from-blue-50 to-indigo-50 rounded-xl border border-primary/20 p-4">
                       <div className="flex items-center justify-between mb-3">
                         <div className="flex items-center gap-2">
-                          <Brain className="h-5 w-5 text-blue-600" />
-                          <span className="text-sm font-bold text-blue-900">Qualificação IA</span>
+                          <Brain className="h-5 w-5 text-primary" />
+                          <span className="text-sm font-bold text-primary">Qualificação IA</span>
                         </div>
-                        <span className="text-xs text-gray-500">{fmtDateTime(q.created_at)}</span>
+                        <span className="text-xs text-muted-foreground">{fmtDateTime(q.created_at)}</span>
                       </div>
 
                       {/* Score e probabilidade */}
                       <div className="flex items-center gap-4 mb-3">
                         <div className="text-center">
-                          <div className={`text-3xl font-black ${q.score >= 75 ? "text-green-600" : q.score >= 50 ? "text-yellow-600" : "text-red-600"}`}>
+                          <div className={`text-3xl font-black ${q.score >= 75 ? "text-green-600" : q.score >= 50 ? "text-yellow-600" : "text-destructive"}`}>
                             {q.score}
                           </div>
-                          <div className="text-xs text-gray-500">Score</div>
+                          <div className="text-xs text-muted-foreground">Score</div>
                         </div>
                         {q.probabilidade_conv != null && (
                           <div className="text-center">
-                            <div className="text-3xl font-black text-blue-600">{q.probabilidade_conv}%</div>
-                            <div className="text-xs text-gray-500">Prob. conversão</div>
+                            <div className="text-3xl font-black text-primary">{q.probabilidade_conv}%</div>
+                            <div className="text-xs text-muted-foreground">Prob. conversão</div>
                           </div>
                         )}
                         <div className="flex-1">
                           <span className={`text-sm font-semibold px-3 py-1 rounded-full ${TEMPERATURA_CONFIG[q.temperatura]?.bg} ${TEMPERATURA_CONFIG[q.temperatura]?.color}`}>
                             {TEMPERATURA_CONFIG[q.temperatura]?.label ?? q.temperatura}
                           </span>
-                          <p className="text-xs text-gray-500 mt-1">→ {q.etapa_sugerida.replace("_", " ")}</p>
+                          <p className="text-xs text-muted-foreground mt-1">→ {q.etapa_sugerida.replace("_", " ")}</p>
                         </div>
                       </div>
 
-                      <p className="text-sm text-gray-700 mb-3">{q.resumo}</p>
+                      <p className="text-sm text-foreground mb-3">{q.resumo}</p>
 
                       {q.pontos_positivos && q.pontos_positivos.length > 0 && (
                         <div className="mb-2">
@@ -1254,10 +1254,10 @@ function FichaLead({
 
                       {q.pontos_atencao && q.pontos_atencao.length > 0 && (
                         <div className="mb-2">
-                          <p className="text-xs font-semibold text-orange-700 mb-1">⚠️ Pontos de atenção</p>
+                          <p className="text-xs font-semibold text-warning mb-1">⚠️ Pontos de atenção</p>
                           <ul className="space-y-0.5">
                             {q.pontos_atencao.map((p, i) => (
-                              <li key={i} className="text-xs text-orange-700 flex gap-1"><span>•</span>{p}</li>
+                              <li key={i} className="text-xs text-warning flex gap-1"><span>•</span>{p}</li>
                             ))}
                           </ul>
                         </div>
@@ -1265,19 +1265,19 @@ function FichaLead({
 
                       {q.documentos_faltando && q.documentos_faltando.length > 0 && (
                         <div className="mb-2">
-                          <p className="text-xs font-semibold text-red-700 mb-1">📁 Documentos faltando</p>
+                          <p className="text-xs font-semibold text-destructive mb-1">📁 Documentos faltando</p>
                           <div className="flex flex-wrap gap-1">
                             {q.documentos_faltando.map((d, i) => (
-                              <span key={i} className="text-xs bg-red-50 text-red-700 px-1.5 py-0.5 rounded">{d}</span>
+                              <span key={i} className="text-xs bg-destructive/10 text-destructive px-1.5 py-0.5 rounded">{d}</span>
                             ))}
                           </div>
                         </div>
                       )}
 
                       {q.proxima_acao && (
-                        <div className="mt-3 pt-3 border-t border-blue-200">
-                          <p className="text-xs font-semibold text-blue-800">🎯 Próxima ação recomendada</p>
-                          <p className="text-sm text-blue-700 mt-0.5">{q.proxima_acao}</p>
+                        <div className="mt-3 pt-3 border-t border-primary/20">
+                          <p className="text-xs font-semibold text-primary">🎯 Próxima ação recomendada</p>
+                          <p className="text-sm text-primary mt-0.5">{q.proxima_acao}</p>
                         </div>
                       )}
                     </div>
@@ -1464,20 +1464,20 @@ export default function CRM() {
 
   return (
     <Layout title="CRM — Pipeline de Leads">
-      <div className="flex flex-col h-full bg-gray-50">
+      <div className="flex flex-col h-full bg-muted">
 
         {/* ── Topo: métricas ── */}
-        <div className="bg-white border-b border-gray-200 px-6 py-3">
+        <div className="bg-card border-b border-border px-6 py-3">
           <div className="flex items-center justify-between gap-4 flex-wrap">
             {/* Cards de métricas */}
             <div className="flex items-center gap-4 flex-wrap">
               <div className="flex items-center gap-2">
-                <div className="w-8 h-8 bg-blue-100 rounded-lg flex items-center justify-center">
-                  <Users className="h-4 w-4 text-blue-600" />
+                <div className="w-8 h-8 bg-primary/20 rounded-lg flex items-center justify-center">
+                  <Users className="h-4 w-4 text-primary" />
                 </div>
                 <div>
-                  <p className="text-xs text-gray-500">Leads ativos</p>
-                  <p className="text-lg font-bold text-gray-900">{totalLeads}</p>
+                  <p className="text-xs text-muted-foreground">Leads ativos</p>
+                  <p className="text-lg font-bold text-foreground">{totalLeads}</p>
                 </div>
               </div>
               <div className="flex items-center gap-2">
@@ -1485,37 +1485,37 @@ export default function CRM() {
                   <DollarSign className="h-4 w-4 text-green-600" />
                 </div>
                 <div>
-                  <p className="text-xs text-gray-500">Pipeline</p>
-                  <p className="text-lg font-bold text-gray-900">{fmt(totalValor)}</p>
+                  <p className="text-xs text-muted-foreground">Pipeline</p>
+                  <p className="text-lg font-bold text-foreground">{fmt(totalValor)}</p>
                 </div>
               </div>
               <div className="flex items-center gap-2">
-                <div className="w-8 h-8 bg-orange-100 rounded-lg flex items-center justify-center">
-                  <Flame className="h-4 w-4 text-orange-600" />
+                <div className="w-8 h-8 bg-warning/20 rounded-lg flex items-center justify-center">
+                  <Flame className="h-4 w-4 text-warning" />
                 </div>
                 <div>
-                  <p className="text-xs text-gray-500">Leads quentes</p>
-                  <p className="text-lg font-bold text-gray-900">{leadQuentes}</p>
+                  <p className="text-xs text-muted-foreground">Leads quentes</p>
+                  <p className="text-lg font-bold text-foreground">{leadQuentes}</p>
                 </div>
               </div>
               {(followupHoje > 0 || followupAtrasado > 0) && (
                 <>
                   <div className="flex items-center gap-2">
-                    <div className="w-8 h-8 bg-red-100 rounded-lg flex items-center justify-center">
-                      <AlertTriangle className="h-4 w-4 text-red-600" />
+                    <div className="w-8 h-8 bg-destructive/20 rounded-lg flex items-center justify-center">
+                      <AlertTriangle className="h-4 w-4 text-destructive" />
                     </div>
                     <div>
-                      <p className="text-xs text-gray-500">Atrasados</p>
-                      <p className="text-lg font-bold text-red-600">{followupAtrasado}</p>
+                      <p className="text-xs text-muted-foreground">Atrasados</p>
+                      <p className="text-lg font-bold text-destructive">{followupAtrasado}</p>
                     </div>
                   </div>
                   <div className="flex items-center gap-2">
-                    <div className="w-8 h-8 bg-amber-100 rounded-lg flex items-center justify-center">
-                      <Clock className="h-4 w-4 text-amber-600" />
+                    <div className="w-8 h-8 bg-warning/20 rounded-lg flex items-center justify-center">
+                      <Clock className="h-4 w-4 text-warning" />
                     </div>
                     <div>
-                      <p className="text-xs text-gray-500">Hoje</p>
-                      <p className="text-lg font-bold text-amber-600">{followupHoje}</p>
+                      <p className="text-xs text-muted-foreground">Hoje</p>
+                      <p className="text-lg font-bold text-warning">{followupHoje}</p>
                     </div>
                   </div>
                 </>
@@ -1531,7 +1531,7 @@ export default function CRM() {
                 {visuKanban ? <BarChart2 className="h-4 w-4 mr-1" /> : <Target className="h-4 w-4 mr-1" />}
                 {visuKanban ? "Lista" : "Kanban"}
               </Button>
-              <Button size="sm" className="bg-blue-600 hover:bg-blue-700" onClick={() => { setEtapaNovoLead(ETAPA_FUNIL_DEFAULT); setShowNovoLead(true); }}>
+              <Button size="sm" className="bg-primary hover:bg-primary" onClick={() => { setEtapaNovoLead(ETAPA_FUNIL_DEFAULT); setShowNovoLead(true); }}>
                 <Plus className="h-4 w-4 mr-1" />
                 Novo Lead
               </Button>
@@ -1541,7 +1541,7 @@ export default function CRM() {
           {/* Navegação e filtros */}
           <div className="mt-3 flex flex-col gap-3">
             <div className="flex items-center gap-2 flex-wrap">
-              <Link href="/colaborador/fila" className="inline-flex items-center gap-2 rounded-lg border border-gray-200 bg-gray-50 px-3 py-1.5 text-sm font-medium text-gray-700 hover:bg-gray-100">
+              <Link href="/colaborador/fila" className="inline-flex items-center gap-2 rounded-lg border border-border bg-muted px-3 py-1.5 text-sm font-medium text-foreground hover:bg-muted">
                   <ClipboardList className="h-4 w-4" />
                   Fila operacional
                   {leadsSemResponsavel > 0 && <Badge variant="secondary">{leadsSemResponsavel}</Badge>}
@@ -1552,7 +1552,7 @@ export default function CRM() {
                   setFiltroEscopo("meus");
                   setFiltroResponsavel("todos");
                 }}
-                className={`inline-flex items-center gap-2 rounded-lg border px-3 py-1.5 text-sm font-medium transition-colors ${filtroEscopo === "meus" ? "border-blue-200 bg-blue-50 text-blue-700" : "border-gray-200 bg-white text-gray-700 hover:bg-gray-50"}`}
+                className={`inline-flex items-center gap-2 rounded-lg border px-3 py-1.5 text-sm font-medium transition-colors ${filtroEscopo === "meus" ? "border-primary/20 bg-primary/10 text-primary" : "border-border bg-card text-foreground hover:bg-muted"}`}
               >
                 <UserCheck className="h-4 w-4" />
                 Minha carteira
@@ -1561,7 +1561,7 @@ export default function CRM() {
                 <button
                   type="button"
                   onClick={() => setFiltroEscopo("todos")}
-                  className={`inline-flex items-center gap-2 rounded-lg border px-3 py-1.5 text-sm font-medium transition-colors ${filtroEscopo === "todos" ? "border-emerald-200 bg-emerald-50 text-emerald-700" : "border-gray-200 bg-white text-gray-700 hover:bg-gray-50"}`}
+                  className={`inline-flex items-center gap-2 rounded-lg border px-3 py-1.5 text-sm font-medium transition-colors ${filtroEscopo === "todos" ? "border-success/20 bg-success/10 text-success" : "border-border bg-card text-foreground hover:bg-muted"}`}
                 >
                   <Users className="h-4 w-4" />
                   Visão do time
@@ -1571,7 +1571,7 @@ export default function CRM() {
                 <button
                   type="button"
                   onClick={() => setFiltroEscopo("sem_responsavel")}
-                  className={`inline-flex items-center gap-2 rounded-lg border px-3 py-1.5 text-sm font-medium transition-colors ${filtroEscopo === "sem_responsavel" ? "border-amber-200 bg-amber-50 text-amber-700" : "border-gray-200 bg-white text-gray-700 hover:bg-gray-50"}`}
+                  className={`inline-flex items-center gap-2 rounded-lg border px-3 py-1.5 text-sm font-medium transition-colors ${filtroEscopo === "sem_responsavel" ? "border-warning/20 bg-warning/10 text-warning" : "border-border bg-card text-foreground hover:bg-muted"}`}
                 >
                   <AlertTriangle className="h-4 w-4" />
                   Sem responsável
@@ -1581,7 +1581,7 @@ export default function CRM() {
 
             <div className="flex items-center gap-2 flex-wrap">
             <div className="relative flex-1 min-w-[200px] max-w-xs">
-              <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
+              <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
               <Input
                 className="pl-8 h-8 text-sm"
                 placeholder="Buscar por nome, telefone, empresa..."
@@ -1619,58 +1619,58 @@ export default function CRM() {
 
         {(followupAtrasado > 0 || followupHoje > 0) && (
           <div className="px-6 pt-4 grid grid-cols-1 xl:grid-cols-2 gap-4">
-            <div className="bg-white rounded-xl border border-red-200 overflow-hidden">
-              <div className="px-4 py-3 border-b border-red-100 bg-red-50 flex items-center justify-between">
+            <div className="bg-card rounded-xl border border-destructive/20 overflow-hidden">
+              <div className="px-4 py-3 border-b border-destructive/20 bg-destructive/10 flex items-center justify-between">
                 <div>
-                  <p className="text-sm font-semibold text-red-800">Follow-ups atrasados</p>
-                  <p className="text-xs text-red-600">Prioridade operacional imediata</p>
+                  <p className="text-sm font-semibold text-destructive">Follow-ups atrasados</p>
+                  <p className="text-xs text-destructive">Prioridade operacional imediata</p>
                 </div>
                 <Badge variant="destructive">{followupAtrasado}</Badge>
               </div>
               <div className="max-h-56 overflow-y-auto divide-y divide-red-50">
                 {followupsAtrasados.length === 0 ? (
-                  <div className="px-4 py-5 text-sm text-gray-500">Nenhum follow-up atrasado.</div>
+                  <div className="px-4 py-5 text-sm text-muted-foreground">Nenhum follow-up atrasado.</div>
                 ) : followupsAtrasados.slice(0, 8).map(lead => (
                   <button
                     key={lead.id}
-                    className="w-full text-left px-4 py-3 hover:bg-red-50 transition-colors"
+                    className="w-full text-left px-4 py-3 hover:bg-destructive/10 transition-colors"
                     onClick={() => setLeadSelecionado(lead)}
                   >
                     <div className="flex items-center justify-between gap-3">
                       <div className="min-w-0">
-                        <p className="text-sm font-medium text-gray-900 truncate">{lead.nome}</p>
-                        <p className="text-xs text-gray-500 truncate">{lead.responsavel_nome || "Sem responsável"}</p>
+                        <p className="text-sm font-medium text-foreground truncate">{lead.nome}</p>
+                        <p className="text-xs text-muted-foreground truncate">{lead.responsavel_nome || "Sem responsável"}</p>
                       </div>
-                      <span className="text-xs font-semibold text-red-600 whitespace-nowrap">{fmtDateTime(lead.proximo_followup)}</span>
+                      <span className="text-xs font-semibold text-destructive whitespace-nowrap">{fmtDateTime(lead.proximo_followup)}</span>
                     </div>
                   </button>
                 ))}
               </div>
             </div>
 
-            <div className="bg-white rounded-xl border border-amber-200 overflow-hidden">
-              <div className="px-4 py-3 border-b border-amber-100 bg-amber-50 flex items-center justify-between">
+            <div className="bg-card rounded-xl border border-warning/20 overflow-hidden">
+              <div className="px-4 py-3 border-b border-warning/20 bg-warning/10 flex items-center justify-between">
                 <div>
-                  <p className="text-sm font-semibold text-amber-800">Follow-ups de hoje</p>
-                  <p className="text-xs text-amber-600">Agenda do dia para o time</p>
+                  <p className="text-sm font-semibold text-warning">Follow-ups de hoje</p>
+                  <p className="text-xs text-warning">Agenda do dia para o time</p>
                 </div>
                 <Badge variant="secondary">{followupHoje}</Badge>
               </div>
               <div className="max-h-56 overflow-y-auto divide-y divide-amber-50">
                 {followupsHojeLista.length === 0 ? (
-                  <div className="px-4 py-5 text-sm text-gray-500">Nenhum follow-up agendado para hoje.</div>
+                  <div className="px-4 py-5 text-sm text-muted-foreground">Nenhum follow-up agendado para hoje.</div>
                 ) : followupsHojeLista.slice(0, 8).map(lead => (
                   <button
                     key={lead.id}
-                    className="w-full text-left px-4 py-3 hover:bg-amber-50 transition-colors"
+                    className="w-full text-left px-4 py-3 hover:bg-warning/10 transition-colors"
                     onClick={() => setLeadSelecionado(lead)}
                   >
                     <div className="flex items-center justify-between gap-3">
                       <div className="min-w-0">
-                        <p className="text-sm font-medium text-gray-900 truncate">{lead.nome}</p>
-                        <p className="text-xs text-gray-500 truncate">{lead.responsavel_nome || "Sem responsável"}</p>
+                        <p className="text-sm font-medium text-foreground truncate">{lead.nome}</p>
+                        <p className="text-xs text-muted-foreground truncate">{lead.responsavel_nome || "Sem responsável"}</p>
                       </div>
-                      <span className="text-xs font-semibold text-amber-700 whitespace-nowrap">{fmtDateTime(lead.proximo_followup)}</span>
+                      <span className="text-xs font-semibold text-warning whitespace-nowrap">{fmtDateTime(lead.proximo_followup)}</span>
                     </div>
                   </button>
                 ))}
@@ -1702,12 +1702,12 @@ export default function CRM() {
             {loading ? (
               <LoadingState message="Carregando leads…" size="lg" className="py-16" />
             ) : (
-              <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
+              <div className="bg-card rounded-xl border border-border overflow-hidden">
                 <table className="w-full text-sm">
-                  <thead className="bg-gray-50 border-b border-gray-200">
+                  <thead className="bg-muted border-b border-border">
                     <tr>
                       {["Lead", "Contato", "Produto / Valor", "Etapa", "Score", "Follow-up", ""].map(h => (
-                        <th key={h} className="px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wide">{h}</th>
+                        <th key={h} className="px-4 py-3 text-left text-xs font-semibold text-muted-foreground uppercase tracking-wide">{h}</th>
                       ))}
                     </tr>
                   </thead>
@@ -1717,18 +1717,18 @@ export default function CRM() {
                       const TempIcon = temp?.icon;
                       const etapa = ETAPAS_FUNIL.find(e => e.id === lead.etapa_funil);
                       return (
-                        <tr key={lead.id} className="hover:bg-gray-50 cursor-pointer" onClick={() => setLeadSelecionado(lead)}>
+                        <tr key={lead.id} className="hover:bg-muted cursor-pointer" onClick={() => setLeadSelecionado(lead)}>
                           <td className="px-4 py-3">
-                            <p className="font-medium text-gray-900">{lead.nome}</p>
-                            {lead.empresa && <p className="text-xs text-gray-500">{lead.empresa}</p>}
+                            <p className="font-medium text-foreground">{lead.nome}</p>
+                            {lead.empresa && <p className="text-xs text-muted-foreground">{lead.empresa}</p>}
                           </td>
                           <td className="px-4 py-3">
-                            <p className="text-gray-700">{lead.telefone}</p>
-                            {lead.email && <p className="text-xs text-gray-500">{lead.email}</p>}
+                            <p className="text-foreground">{lead.telefone}</p>
+                            {lead.email && <p className="text-xs text-muted-foreground">{lead.email}</p>}
                           </td>
                           <td className="px-4 py-3">
-                            {lead.produto_interesse && <p className="text-gray-700">{lead.produto_interesse}</p>}
-                            {lead.valor_solicitado && <p className="text-xs text-gray-500">{fmt(lead.valor_solicitado)}</p>}
+                            {lead.produto_interesse && <p className="text-foreground">{lead.produto_interesse}</p>}
+                            {lead.valor_solicitado && <p className="text-xs text-muted-foreground">{fmt(lead.valor_solicitado)}</p>}
                           </td>
                           <td className="px-4 py-3">
                             {etapa && (
@@ -1748,13 +1748,13 @@ export default function CRM() {
                           </td>
                           <td className="px-4 py-3">
                             {lead.proximo_followup ? (
-                              <span className={`text-xs ${new Date(lead.proximo_followup) <= new Date() ? "text-red-600 font-semibold" : "text-gray-600"}`}>
+                              <span className={`text-xs ${new Date(lead.proximo_followup) <= new Date() ? "text-destructive font-semibold" : "text-muted-foreground"}`}>
                                 {fmtDateTime(lead.proximo_followup)}
                               </span>
-                            ) : <span className="text-gray-400">—</span>}
+                            ) : <span className="text-muted-foreground">—</span>}
                           </td>
                           <td className="px-4 py-3">
-                            <ChevronRight className="h-4 w-4 text-gray-400" />
+                            <ChevronRight className="h-4 w-4 text-muted-foreground" />
                           </td>
                         </tr>
                       );
@@ -1785,13 +1785,13 @@ export default function CRM() {
         <DialogContent className="max-w-md w-[calc(100vw-2rem)] sm:w-full mx-auto max-h-[90vh] flex flex-col">
           <DialogHeader className="flex-shrink-0">
             <DialogTitle className="flex items-center gap-2">
-              <Plus className="h-5 w-5 text-blue-600" />
+              <Plus className="h-5 w-5 text-primary" />
               Novo Lead
             </DialogTitle>
           </DialogHeader>
           <div className="space-y-3 overflow-y-auto flex-1 pr-1">
             <div>
-              <label className="text-xs text-gray-500 mb-1 block">Etapa inicial</label>
+              <label className="text-xs text-muted-foreground mb-1 block">Etapa inicial</label>
               <Select value={etapaNovoLead} onValueChange={(value) => setEtapaNovoLead(value as EtapaFunil)}>
                 <SelectTrigger className="text-sm">
                   <SelectValue />
@@ -1813,7 +1813,7 @@ export default function CRM() {
               { key: "valor_solicitado", label: "Valor solicitado", placeholder: "0,00" },
             ].map(({ key, label, placeholder }) => (
               <div key={key}>
-                <label className="text-xs text-gray-500 mb-1 block">{label}</label>
+                <label className="text-xs text-muted-foreground mb-1 block">{label}</label>
                 <Input
                   className="text-sm"
                   placeholder={placeholder}
@@ -1825,7 +1825,7 @@ export default function CRM() {
           </div>
           <DialogFooter className="flex-shrink-0 flex-col-reverse sm:flex-row gap-2 pt-2">
             <Button variant="outline" className="w-full sm:w-auto" onClick={() => setShowNovoLead(false)}>Cancelar</Button>
-            <Button onClick={criarLead} disabled={salvando} className="w-full sm:w-auto bg-blue-600 hover:bg-blue-700">
+            <Button onClick={criarLead} disabled={salvando} className="w-full sm:w-auto bg-primary hover:bg-primary">
               {salvando ? <Loader2 className="h-4 w-4 animate-spin mr-1" /> : <Plus className="h-4 w-4 mr-1" />}
               Criar Lead
             </Button>

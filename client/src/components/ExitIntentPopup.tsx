@@ -63,15 +63,15 @@ export default function ExitIntentPopup({ onClose }: ExitIntentPopupProps) {
           }
         `}</style>
         <div className="exit-popup">
-        <div className="bg-white rounded-2xl shadow-2xl overflow-hidden border-2 border-[var(--color-caixa-yellow)] hover:shadow-3xl transition-shadow duration-300">
+        <div className="bg-card rounded-2xl shadow-2xl overflow-hidden border-2 border-[var(--color-caixa-yellow)] hover:shadow-3xl transition-shadow duration-300">
           {/* Header com gradiente */}
           <div className="bg-gradient-to-r from-[var(--color-caixa-blue)] to-[var(--color-caixa-blue-dark)] p-6 relative overflow-hidden">
-            <div className="absolute top-0 right-0 w-32 h-32 bg-white/10 rounded-full -mr-16 -mt-16 blur-2xl" />
+            <div className="absolute top-0 right-0 w-32 h-32 bg-card/10 rounded-full -mr-16 -mt-16 blur-2xl" />
             <div className="relative z-10 flex items-center gap-3">
               <div className="bg-[var(--color-caixa-yellow)] p-2 rounded-lg">
                 <TrendingUp className="h-6 w-6 text-[var(--color-caixa-blue)]" />
               </div>
-              <h2 className="text-xl font-bold text-white">
+              <h2 className="text-xl font-bold text-primary-foreground">
                 Espera aí! 👋
               </h2>
             </div>
@@ -79,12 +79,12 @@ export default function ExitIntentPopup({ onClose }: ExitIntentPopupProps) {
 
           {/* Conteúdo */}
           <div className="p-6">
-            <p className="text-gray-700 mb-4 font-medium">
+            <p className="text-foreground mb-4 font-medium">
               Antes de ir, faça em <span className="font-bold text-[var(--color-caixa-blue)]">2 minutos</span> um diagnóstico educativo do seu perfil de crédito.
             </p>
 
-            <div className="bg-blue-50 border-l-4 border-[var(--color-caixa-yellow)] p-4 rounded mb-6">
-              <p className="text-sm text-gray-600">
+            <div className="bg-primary/10 border-l-4 border-[var(--color-caixa-yellow)] p-4 rounded mb-6">
+              <p className="text-sm text-muted-foreground">
                 ✓ Análise de perfil sem compromisso<br />
                 ✓ Dicas personalizadas para melhorar seu score<br />
                 ✓ Entenda pontos de atenção antes de solicitar crédito
@@ -105,7 +105,7 @@ export default function ExitIntentPopup({ onClose }: ExitIntentPopupProps) {
                 variant="outline"
                 size="lg"
                 onClick={handleClose}
-                className="border-gray-300"
+                className="border-input"
               >
                 Agora não
               </Button>
@@ -114,15 +114,15 @@ export default function ExitIntentPopup({ onClose }: ExitIntentPopupProps) {
             {/* Link para fechar */}
             <button
               onClick={handleClose}
-              className="absolute top-4 right-4 p-2 hover:bg-gray-100 rounded-full transition-all duration-200 hover:scale-110"
+              className="absolute top-4 right-4 p-2 hover:bg-muted rounded-full transition-all duration-200 hover:scale-110"
               aria-label="Fechar"
             >
-              <X className="h-5 w-5 text-gray-500" />
+              <X className="h-5 w-5 text-muted-foreground" />
             </button>
           </div>
 
           {/* Footer com garantia */}
-          <div className="bg-gray-50 px-6 py-3 border-t border-gray-200 text-center text-xs text-gray-600">
+          <div className="bg-muted px-6 py-3 border-t border-border text-center text-xs text-muted-foreground">
             Sem spam. Sem compromisso. Apenas uma análise rápida e útil.
           </div>
         </div>

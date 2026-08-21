@@ -358,15 +358,15 @@ function whatsappUrl(row: Acompanhamento): string {
 function statusBadge(status?: string | null): string {
   const value = String(status || "pendente").toLowerCase();
   const classes: Record<string, string> = {
-    positiva: "bg-green-50 text-green-700 border-green-200",
-    negativo: "bg-red-50 text-red-700 border-red-200",
-    negativa: "bg-red-50 text-red-700 border-red-200",
-    atencao: "bg-amber-50 text-amber-700 border-amber-200",
-    atenção: "bg-amber-50 text-amber-700 border-amber-200",
-    pendente: "bg-blue-50 text-blue-700 border-blue-200",
-    neutra: "bg-gray-50 text-gray-700 border-gray-200",
+    positiva: "bg-success/10 text-success border-success/20",
+    negativo: "bg-destructive/10 text-destructive border-destructive/20",
+    negativa: "bg-destructive/10 text-destructive border-destructive/20",
+    atencao: "bg-warning/10 text-warning border-warning/20",
+    atenção: "bg-warning/10 text-warning border-warning/20",
+    pendente: "bg-primary/10 text-primary border-primary/20",
+    neutra: "bg-muted text-foreground border-border",
   };
-  return classes[value] || "bg-gray-50 text-gray-700 border-gray-200";
+  return classes[value] || "bg-muted text-foreground border-border";
 }
 
 function labelStatus(status?: string | null): string {
@@ -395,8 +395,8 @@ function situacaoBadgeInfo(row: { status?: string | null; status_semana?: string
     const negativo = motivo === "declinado" || motivo === "cancelado" || motivo === "finalizado_negativo";
     const label = MOTIVO_ENCERRAMENTO_LABEL[motivo] || "Encerrado";
     return negativo
-      ? { classe: "bg-red-50 text-red-700 border-red-200", label }
-      : { classe: "bg-slate-100 text-slate-600 border-slate-300", label };
+      ? { classe: "bg-destructive/10 text-destructive border-destructive/20", label }
+      : { classe: "bg-muted text-muted-foreground border-input", label };
   }
   return { classe: statusBadge(row.status_semana), label: labelStatus(row.status_semana) };
 }
@@ -434,15 +434,15 @@ function impactoRatingLabel(value?: string | null): string {
 function chipInteligenciaClass(value?: string | null): string {
   const v = String(value || "");
   if (["critico", "nao_recomendada", "exige_correcao", "alta", "critica"].includes(v)) {
-    return "border-red-200 bg-red-50 text-red-700";
+    return "border-destructive/20 bg-destructive/10 text-destructive";
   }
   if (["atencao", "em_preparacao", "prejudica", "media"].includes(v)) {
-    return "border-amber-200 bg-amber-50 text-amber-700";
+    return "border-warning/20 bg-warning/10 text-warning";
   }
   if (["positivo", "pronta", "quase_pronta", "melhora", "baixa"].includes(v)) {
-    return "border-emerald-200 bg-emerald-50 text-emerald-700";
+    return "border-success/20 bg-success/10 text-success";
   }
-  return "border-slate-200 bg-slate-50 text-slate-700";
+  return "border-border bg-muted text-muted-foreground";
 }
 
 function listaItensInteligencia(value: any): any[] {
@@ -2434,25 +2434,25 @@ export default function AcompanhamentoBancario() {
     return (
       <div className="flex flex-wrap items-center gap-1.5">
         <button
-          className="rounded-lg border border-slate-200 bg-white px-2.5 py-1.5 text-xs font-semibold text-slate-700 transition hover:bg-slate-50"
+          className="rounded-lg border border-border bg-white px-2.5 py-1.5 text-xs font-semibold text-muted-foreground transition hover:bg-muted"
           onClick={() => carregarDetalhe(row.id)}
         >Detalhes</button>
         {!encerradoJa && (
           <button
-            className="rounded-lg border border-blue-200 bg-blue-50 px-2.5 py-1.5 text-xs font-semibold text-blue-700 transition hover:bg-blue-100"
+            className="rounded-lg border border-primary/20 bg-primary/10 px-2.5 py-1.5 text-xs font-semibold text-primary transition hover:bg-primary/20"
             onClick={() => abrirAtualizacao(row)}
           >Atualizar semana</button>
         )}
         {whats && (
           <a
-            className="rounded-lg border border-green-200 bg-green-50 px-3 py-1.5 text-xs font-semibold text-green-700 transition hover:bg-green-100"
+            className="rounded-lg border border-success/20 bg-success/10 px-3 py-1.5 text-xs font-semibold text-success transition hover:bg-success/20"
             href={whats}
             target="_blank"
             rel="noreferrer"
           >WhatsApp</a>
         )}
         {encerradoJa && (
-          <span className="rounded-lg border border-slate-300 bg-slate-100 px-3 py-1.5 text-xs font-semibold text-slate-500">
+          <span className="rounded-lg border border-input bg-muted px-3 py-1.5 text-xs font-semibold text-muted-foreground">
             Encerrado{row.observacoes_finais ? ` — ${row.observacoes_finais}` : ""}
           </span>
         )}
@@ -2461,24 +2461,24 @@ export default function AcompanhamentoBancario() {
           <button
             type="button"
             onClick={() => setMenuAcoesAbertoId(menuAberto ? null : row.id)}
-            className={`rounded-lg border px-2.5 py-1.5 text-xs font-semibold transition ${menuAberto ? "border-slate-300 bg-slate-100 text-slate-800" : "border-slate-200 bg-white text-slate-500 hover:bg-slate-50"}`}
+            className={`rounded-lg border px-2.5 py-1.5 text-xs font-semibold transition ${menuAberto ? "border-input bg-muted text-foreground" : "border-border bg-white text-muted-foreground hover:bg-muted"}`}
           >Mais ações ▾</button>
           {menuAberto && (
-            <div className="absolute left-0 top-full z-20 mt-1 w-52 rounded-lg border border-slate-200 bg-white py-1 shadow-lg">
+            <div className="absolute left-0 top-full z-20 mt-1 w-52 rounded-lg border border-border bg-white py-1 shadow-lg">
               <button
-                className="block w-full px-3 py-1.5 text-left text-xs font-medium text-slate-700 hover:bg-violet-50 hover:text-violet-700"
+                className="block w-full px-3 py-1.5 text-left text-xs font-medium text-muted-foreground hover:bg-primary/10 hover:text-primary"
                 onClick={() => { setMenuAcoesAbertoId(null); carregarDetalhe(row.id); }}
                 title="Abrir extratos e comprovantes bancários deste acompanhamento"
               >Extratos</button>
               {!encerradoJa && (
                 <button
-                  className="block w-full px-3 py-1.5 text-left text-xs font-medium text-slate-700 hover:bg-amber-50 hover:text-amber-700"
+                  className="block w-full px-3 py-1.5 text-left text-xs font-medium text-muted-foreground hover:bg-warning/10 hover:text-warning"
                   onClick={() => { setMenuAcoesAbertoId(null); abrirEditarAcompanhamento(row); }}
                 >Editar</button>
               )}
               {!encerradoJa && (
                 <button
-                  className="block w-full px-3 py-1.5 text-left text-xs font-medium text-slate-700 hover:bg-sky-50 hover:text-sky-700 disabled:opacity-60"
+                  className="block w-full px-3 py-1.5 text-left text-xs font-medium text-muted-foreground hover:bg-primary/10 hover:text-primary disabled:opacity-60"
                   disabled={saving}
                   onClick={() => { setMenuAcoesAbertoId(null); sincronizarCadastroEmpresa(row); }}
                   title="Puxa para este acompanhamento os mesmos dados cadastrais já atualizados no módulo Empresas"
@@ -2486,17 +2486,17 @@ export default function AcompanhamentoBancario() {
               )}
               {!encerradoJa && (
                 <button
-                  className="block w-full px-3 py-1.5 text-left text-xs font-medium text-slate-700 hover:bg-indigo-50 hover:text-indigo-700"
+                  className="block w-full px-3 py-1.5 text-left text-xs font-medium text-muted-foreground hover:bg-primary/10 hover:text-primary"
                   onClick={() => { setMenuAcoesAbertoId(null); adicionarOutroBanco(row); }}
                   title="Criar acompanhamento separado para outro banco da mesma empresa"
                 >+ Banco</button>
               )}
               <button
-                className="block w-full px-3 py-1.5 text-left text-xs font-medium text-slate-700 hover:bg-purple-50 hover:text-purple-700"
+                className="block w-full px-3 py-1.5 text-left text-xs font-medium text-muted-foreground hover:bg-primary/10 hover:text-primary"
                 onClick={() => { setMenuAcoesAbertoId(null); abrirImpressao(row); }}
               >Imprimir</button>
               <button
-                className="block w-full px-3 py-1.5 text-left text-xs font-medium text-slate-700 hover:bg-teal-50 hover:text-teal-700"
+                className="block w-full px-3 py-1.5 text-left text-xs font-medium text-muted-foreground hover:bg-success/10 hover:text-success"
                 onClick={async () => {
                   setMenuAcoesAbertoId(null);
                   let rowCompleto = row;
@@ -2508,18 +2508,18 @@ export default function AcompanhamentoBancario() {
                 }}
               >Exportar XLS</button>
               <button
-                className="block w-full px-3 py-1.5 text-left text-xs font-medium text-slate-700 hover:bg-blue-50 hover:text-blue-700"
+                className="block w-full px-3 py-1.5 text-left text-xs font-medium text-muted-foreground hover:bg-primary/10 hover:text-primary"
                 onClick={() => { setMenuAcoesAbertoId(null); abrirRelatorio(row); }}
               >Gerar relatório</button>
               {!encerradoJa && (
                 <button
-                  className="block w-full px-3 py-1.5 text-left text-xs font-medium text-slate-700 hover:bg-slate-100"
+                  className="block w-full px-3 py-1.5 text-left text-xs font-medium text-muted-foreground hover:bg-muted"
                   onClick={() => { setMenuAcoesAbertoId(null); prorrogar(row.id); }}
                 >Prorrogar</button>
               )}
               {!encerradoJa && (
                 <button
-                  className="block w-full px-3 py-1.5 text-left text-xs font-medium text-red-700 hover:bg-red-50"
+                  className="block w-full px-3 py-1.5 text-left text-xs font-medium text-destructive hover:bg-destructive/10"
                   onClick={() => { setMenuAcoesAbertoId(null); encerrar(row); }}
                 >Encerrar</button>
               )}
@@ -2548,7 +2548,7 @@ export default function AcompanhamentoBancario() {
             <col className="w-[12%]" /><col className="w-[7%]" /><col className="w-[8%]" />
           </colgroup>
           <thead>
-            <tr className="bg-gray-50 text-left text-[11px] font-semibold uppercase tracking-wide text-gray-500">
+            <tr className="bg-muted text-left text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
               <th className="px-4 py-3">Empresa</th>
               <th className="px-3 py-3">CNPJ</th>
               <th className="px-3 py-3">Banco</th>
@@ -2562,9 +2562,9 @@ export default function AcompanhamentoBancario() {
           </thead>
           <tbody>
             {loading ? (
-              <tr><td className="px-4 py-5 text-gray-500" colSpan={9}>Carregando acompanhamentos...</td></tr>
+              <tr><td className="px-4 py-5 text-muted-foreground" colSpan={9}>Carregando acompanhamentos...</td></tr>
             ) : lista.length === 0 ? (
-              <tr><td className="px-4 py-5 text-gray-500" colSpan={9}>Nenhum acompanhamento cadastrado.</td></tr>
+              <tr><td className="px-4 py-5 text-muted-foreground" colSpan={9}>Nenhum acompanhamento cadastrado.</td></tr>
             ) : (
               lista.map((row, index) => {
                 const pendente = row.status_pendente || row.atualizacao_pendente;
@@ -2576,35 +2576,35 @@ export default function AcompanhamentoBancario() {
                   <Fragment key={row.id}>
                     {opts.mostrarDivisorPendente && index === 0 && pendente && (
                       <tr>
-                        <td colSpan={9} className="bg-orange-50 border-t border-orange-200 px-4 py-2 text-xs font-bold text-orange-700 uppercase tracking-wide">
+                        <td colSpan={9} className="bg-warning/10 border-t border-warning/20 px-4 py-2 text-xs font-bold text-warning uppercase tracking-wide">
                           ⚠️ Parados — precisam de atenção ({lista.filter((r) => r.status_pendente || r.atualizacao_pendente).length})
                         </td>
                       </tr>
                     )}
                     {iniciaGrupoEmDia && (
                       <tr>
-                        <td colSpan={9} className="bg-slate-50 border-t border-slate-200 px-4 py-2 text-xs font-bold text-slate-500 uppercase tracking-wide">
+                        <td colSpan={9} className="bg-muted border-t border-border px-4 py-2 text-xs font-bold text-muted-foreground uppercase tracking-wide">
                           Em dia
                         </td>
                       </tr>
                     )}
-                    <tr className="border-t border-gray-100 align-middle hover:bg-gray-50/60">
+                    <tr className="border-t border-border align-middle hover:bg-muted/60">
                       <td className="px-4 py-4">
                         <div className="min-w-0">
-                          <div className="break-words font-semibold leading-snug text-gray-900">{row.nome_empresa || "-"}</div>
+                          <div className="break-words font-semibold leading-snug text-foreground">{row.nome_empresa || "-"}</div>
                           {pendente && (
-                            <span className="mt-1 inline-flex items-center gap-1 rounded-full bg-orange-100 px-2 py-0.5 text-[11px] font-semibold text-orange-700">
+                            <span className="mt-1 inline-flex items-center gap-1 rounded-full bg-warning/20 px-2 py-0.5 text-[11px] font-semibold text-warning">
                               ⚠️ {row.dias_sem_atualizacao > 0 ? `Parado há ${row.dias_sem_atualizacao} dia(s)` : "Pendente hoje"}
                             </span>
                           )}
                         </div>
                       </td>
-                      <td className="px-3 py-4 text-gray-700"><span className="break-words">{row.cnpj || "-"}</span></td>
-                      <td className="px-3 py-4 font-medium text-gray-800">{row.banco_observado || "-"}</td>
-                      <td className="px-3 py-4 text-gray-700">{row.rating_interno_atual || row.rating_bacen_atual || "-"}</td>
-                      <td className="px-3 py-4 text-gray-700">{formatDateBR(row.ultima_atualizacao_em || row.ultimo_update_em)}</td>
-                      <td className="px-3 py-4 text-gray-700">{formatDateBR(row.proxima_atualizacao)}</td>
-                      <td className={`px-3 py-4 text-right font-semibold ${saldo < 0 ? "text-red-600" : saldo > 0 ? "text-green-700" : "text-gray-700"}`}>
+                      <td className="px-3 py-4 text-foreground"><span className="break-words">{row.cnpj || "-"}</span></td>
+                      <td className="px-3 py-4 font-medium text-foreground">{row.banco_observado || "-"}</td>
+                      <td className="px-3 py-4 text-foreground">{row.rating_interno_atual || row.rating_bacen_atual || "-"}</td>
+                      <td className="px-3 py-4 text-foreground">{formatDateBR(row.ultima_atualizacao_em || row.ultimo_update_em)}</td>
+                      <td className="px-3 py-4 text-foreground">{formatDateBR(row.proxima_atualizacao)}</td>
+                      <td className={`px-3 py-4 text-right font-semibold ${saldo < 0 ? "text-destructive" : saldo > 0 ? "text-success" : "text-foreground"}`}>
                         {moneyBR(saldo)}
                       </td>
                       <td className="px-3 py-4">
@@ -2612,12 +2612,12 @@ export default function AcompanhamentoBancario() {
                           {situacaoBadgeInfo(row).label}
                         </span>
                       </td>
-                      <td className="px-3 py-4 text-gray-700">{row.responsavel_nome || "-"}</td>
+                      <td className="px-3 py-4 text-foreground">{row.responsavel_nome || "-"}</td>
                     </tr>
-                    <tr className="border-t border-gray-100 bg-gray-50/70">
+                    <tr className="border-t border-border bg-muted/70">
                       <td colSpan={9} className="px-4 py-3">
                         <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
-                          <div className="text-xs font-medium uppercase tracking-wide text-gray-500">Ações do acompanhamento</div>
+                          <div className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Ações do acompanhamento</div>
                           {renderActionButtons(row)}
                         </div>
                       </td>
@@ -2634,16 +2634,16 @@ export default function AcompanhamentoBancario() {
       {visualizacao === "blocos" && (
         <div className="hidden gap-3 p-4 lg:grid lg:grid-cols-2 xl:grid-cols-3">
           {loading ? (
-            <div className="col-span-full rounded-lg border border-gray-200 p-4 text-sm text-gray-500">Carregando acompanhamentos...</div>
+            <div className="col-span-full rounded-lg border border-border p-4 text-sm text-muted-foreground">Carregando acompanhamentos...</div>
           ) : lista.length === 0 ? (
-            <div className="col-span-full rounded-lg border border-gray-200 p-4 text-sm text-gray-500">Nenhum acompanhamento cadastrado.</div>
+            <div className="col-span-full rounded-lg border border-border p-4 text-sm text-muted-foreground">Nenhum acompanhamento cadastrado.</div>
           ) : (
             lista.map((row) => {
               const pendente = row.status_pendente || row.atualizacao_pendente;
               const saldo = Number(row.saldo_semanal || row.saldo_ultima_semana || 0);
               const iniciais = (row.nome_empresa || "-").split(" ").filter(Boolean).slice(0, 2).map((w: string) => w[0]).join("").toUpperCase();
               return (
-                <article key={row.id} className="flex flex-col rounded-2xl border border-slate-200 bg-white p-4 shadow-sm transition hover:shadow-md hover:border-slate-300">
+                <article key={row.id} className="flex flex-col rounded-2xl border border-border bg-white p-4 shadow-sm transition hover:shadow-md hover:border-input">
                   <div className="flex items-start justify-between gap-2">
                     <button
                       type="button"
@@ -2651,12 +2651,12 @@ export default function AcompanhamentoBancario() {
                       className="flex min-w-0 items-start gap-2.5 text-left"
                       title="Abrir detalhes deste acompanhamento"
                     >
-                      <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-slate-800 text-xs font-black text-white">
+                      <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-brand-navy text-xs font-black text-white">
                         {iniciais || "-"}
                       </div>
                       <div className="min-w-0">
-                        <h3 className="truncate text-sm font-bold text-slate-900 leading-tight hover:underline">{row.nome_empresa || "-"}</h3>
-                        <p className="mt-0.5 truncate text-[11px] text-slate-400">{row.cnpj || "-"} · {row.banco_observado || "-"}</p>
+                        <h3 className="truncate text-sm font-bold text-foreground leading-tight hover:underline">{row.nome_empresa || "-"}</h3>
+                        <p className="mt-0.5 truncate text-[11px] text-muted-foreground">{row.cnpj || "-"} · {row.banco_observado || "-"}</p>
                       </div>
                     </button>
                     <span className={`shrink-0 rounded-full border px-2 py-1 text-[10px] font-bold ${situacaoBadgeInfo(row).classe}`}>
@@ -2664,29 +2664,29 @@ export default function AcompanhamentoBancario() {
                     </span>
                   </div>
                   {pendente && (
-                    <span className="mt-2 inline-flex w-fit items-center gap-1 rounded-full bg-orange-100 px-2 py-0.5 text-[10px] font-semibold text-orange-700">
+                    <span className="mt-2 inline-flex w-fit items-center gap-1 rounded-full bg-warning/20 px-2 py-0.5 text-[10px] font-semibold text-warning">
                       ⚠️ {row.dias_sem_atualizacao > 0 ? `Parado há ${row.dias_sem_atualizacao} dia(s)` : "Pendente hoje"}
                     </span>
                   )}
                   <dl className="mt-3 grid grid-cols-2 gap-2 text-xs">
                     <div>
-                      <dt className="text-[10px] text-slate-400">Rating</dt>
-                      <dd className="font-semibold text-slate-700">{row.rating_interno_atual || row.rating_bacen_atual || "-"}</dd>
+                      <dt className="text-[10px] text-muted-foreground">Rating</dt>
+                      <dd className="font-semibold text-muted-foreground">{row.rating_interno_atual || row.rating_bacen_atual || "-"}</dd>
                     </div>
                     <div>
-                      <dt className="text-[10px] text-slate-400">Responsável</dt>
-                      <dd className="font-semibold text-slate-700">{row.responsavel_nome || "-"}</dd>
+                      <dt className="text-[10px] text-muted-foreground">Responsável</dt>
+                      <dd className="font-semibold text-muted-foreground">{row.responsavel_nome || "-"}</dd>
                     </div>
                     <div>
-                      <dt className="text-[10px] text-slate-400">Próxima atualização</dt>
-                      <dd className="font-semibold text-slate-700">{formatDateBR(row.proxima_atualizacao)}</dd>
+                      <dt className="text-[10px] text-muted-foreground">Próxima atualização</dt>
+                      <dd className="font-semibold text-muted-foreground">{formatDateBR(row.proxima_atualizacao)}</dd>
                     </div>
                     <div>
-                      <dt className="text-[10px] text-slate-400">Saldo semana</dt>
-                      <dd className={`font-bold ${saldo < 0 ? "text-red-600" : saldo > 0 ? "text-green-700" : "text-slate-700"}`}>{moneyBR(saldo)}</dd>
+                      <dt className="text-[10px] text-muted-foreground">Saldo semana</dt>
+                      <dd className={`font-bold ${saldo < 0 ? "text-destructive" : saldo > 0 ? "text-success" : "text-muted-foreground"}`}>{moneyBR(saldo)}</dd>
                     </div>
                   </dl>
-                  <div className="mt-3 border-t border-slate-100 pt-3">{renderActionButtons(row)}</div>
+                  <div className="mt-3 border-t border-border pt-3">{renderActionButtons(row)}</div>
                 </article>
               );
             })
@@ -2697,54 +2697,54 @@ export default function AcompanhamentoBancario() {
       {/* Mobile */}
       <div className="grid gap-3 p-3 lg:hidden">
         {loading ? (
-          <div className="rounded-lg border border-gray-200 p-4 text-sm text-gray-500">Carregando acompanhamentos...</div>
+          <div className="rounded-lg border border-border p-4 text-sm text-muted-foreground">Carregando acompanhamentos...</div>
         ) : lista.length === 0 ? (
-          <div className="rounded-lg border border-gray-200 p-4 text-sm text-gray-500">Nenhum acompanhamento cadastrado.</div>
+          <div className="rounded-lg border border-border p-4 text-sm text-muted-foreground">Nenhum acompanhamento cadastrado.</div>
         ) : (
           lista.map((row) => {
             const pendente = row.status_pendente || row.atualizacao_pendente;
             const saldo = Number(row.saldo_semanal || row.saldo_ultima_semana || 0);
             return (
-              <article key={row.id} className="rounded-xl border border-gray-200 bg-white p-4 shadow-sm">
+              <article key={row.id} className="rounded-xl border border-border bg-white p-4 shadow-sm">
                 <div className="flex items-start justify-between gap-3">
                   <div>
-                    <h3 className="font-semibold leading-snug text-gray-900">{row.nome_empresa || "-"}</h3>
-                    <p className="mt-1 text-xs text-gray-500">{row.cnpj || "-"} · {row.banco_observado || "-"}</p>
+                    <h3 className="font-semibold leading-snug text-foreground">{row.nome_empresa || "-"}</h3>
+                    <p className="mt-1 text-xs text-muted-foreground">{row.cnpj || "-"} · {row.banco_observado || "-"}</p>
                   </div>
                   <span className={`shrink-0 rounded-full border px-2 py-1 text-xs font-medium ${situacaoBadgeInfo(row).classe}`}>
                     {situacaoBadgeInfo(row).label}
                   </span>
                 </div>
                 {pendente && (
-                  <div className="mt-3 rounded-lg border border-orange-200 bg-orange-50 px-3 py-2 text-xs font-medium text-orange-700">
+                  <div className="mt-3 rounded-lg border border-warning/20 bg-warning/10 px-3 py-2 text-xs font-medium text-warning">
                     Atualização pendente
                   </div>
                 )}
                 <dl className="mt-4 grid grid-cols-2 gap-3 text-sm">
                   <div>
-                    <dt className="text-xs text-gray-500">Rating</dt>
+                    <dt className="text-xs text-muted-foreground">Rating</dt>
                     <dd className="font-semibold">{row.rating_interno_atual || row.rating_bacen_atual || "-"}</dd>
                   </div>
                   <div>
-                    <dt className="text-xs text-gray-500">Responsável</dt>
+                    <dt className="text-xs text-muted-foreground">Responsável</dt>
                     <dd className="font-semibold">{row.responsavel_nome || "-"}</dd>
                   </div>
                   <div>
-                    <dt className="text-xs text-gray-500">Última atualização</dt>
+                    <dt className="text-xs text-muted-foreground">Última atualização</dt>
                     <dd className="font-semibold">{formatDateBR(row.ultima_atualizacao_em || row.ultimo_update_em)}</dd>
                   </div>
                   <div>
-                    <dt className="text-xs text-gray-500">Próxima atualização</dt>
+                    <dt className="text-xs text-muted-foreground">Próxima atualização</dt>
                     <dd className="font-semibold">{formatDateBR(row.proxima_atualizacao)}</dd>
                   </div>
                   <div className="col-span-2">
-                    <dt className="text-xs text-gray-500">Saldo última semana</dt>
-                    <dd className={`font-bold ${saldo < 0 ? "text-red-600" : saldo > 0 ? "text-green-700" : "text-gray-700"}`}>
+                    <dt className="text-xs text-muted-foreground">Saldo última semana</dt>
+                    <dd className={`font-bold ${saldo < 0 ? "text-destructive" : saldo > 0 ? "text-success" : "text-foreground"}`}>
                       {moneyBR(saldo)}
                     </dd>
                   </div>
                 </dl>
-                <div className="mt-4 border-t border-gray-100 pt-3">{renderActionButtons(row)}</div>
+                <div className="mt-4 border-t border-border pt-3">{renderActionButtons(row)}</div>
               </article>
             );
           })
@@ -2758,9 +2758,9 @@ export default function AcompanhamentoBancario() {
     return (
       <ColaboradorLayout title="Acompanhamento Bancário">
         <div className="p-6">
-          <div className="rounded-lg border border-red-200 bg-red-50 p-4">
-            <h2 className="text-lg font-semibold text-red-700">Acesso restrito</h2>
-            <p className="mt-1 text-sm text-red-600">
+          <div className="rounded-lg border border-destructive/20 bg-destructive/10 p-4">
+            <h2 className="text-lg font-semibold text-destructive">Acesso restrito</h2>
+            <p className="mt-1 text-sm text-destructive">
               Este módulo é exclusivo para Gestor de Crédito ou superior.
             </p>
           </div>
@@ -2775,15 +2775,15 @@ export default function AcompanhamentoBancario() {
       <div className="w-full space-y-3 overflow-x-hidden p-3 md:p-4">
 
         {/* Header */}
-        <div className="flex flex-col items-start justify-between gap-3 rounded-xl border border-slate-200 bg-white px-4 py-3 shadow-sm md:flex-row md:items-center">
+        <div className="flex flex-col items-start justify-between gap-3 rounded-xl border border-border bg-white px-4 py-3 shadow-sm md:flex-row md:items-center">
           <div>
-            <h1 className="text-lg font-black text-slate-900 tracking-tight">Acompanhamento Bancário</h1>
-            <p className="text-xs text-slate-500 mt-0.5">
+            <h1 className="text-lg font-black text-foreground tracking-tight">Acompanhamento Bancário</h1>
+            <p className="text-xs text-muted-foreground mt-0.5">
               Monitoramento semanal · evolução de rating · preparação para crédito
             </p>
           </div>
           <button
-            className="inline-flex items-center gap-1.5 rounded-xl bg-blue-600 px-3 py-2 text-xs font-bold text-white hover:bg-blue-700 transition-colors shadow-sm shadow-blue-200 shrink-0"
+            className="inline-flex items-center gap-1.5 rounded-xl bg-primary px-3 py-2 text-xs font-bold text-white hover:bg-primary/90 transition-colors shadow-sm shadow-blue-200 shrink-0"
             onClick={() => {
               setEditandoId(null);
               setNovo({ nome_empresa: "", banco_observado: "", data_inicio: hojeISO() });
@@ -2794,12 +2794,12 @@ export default function AcompanhamentoBancario() {
 
         {/* Alertas */}
         {hojeEhQuarta() && (
-          <div className="rounded border border-amber-200 bg-amber-50 p-3 text-sm font-medium text-amber-800">
+          <div className="rounded border border-warning/20 bg-warning/10 p-3 text-sm font-medium text-warning">
             Hoje é quarta-feira: dia de atualizar os acompanhamentos bancários.
           </div>
         )}
         {resumo.pendentes > 0 && (
-          <div className="rounded border border-orange-200 bg-orange-50 p-3 text-sm font-medium text-orange-800">
+          <div className="rounded border border-warning/20 bg-warning/10 p-3 text-sm font-medium text-warning">
             Existem {resumo.pendentes} acompanhamento(s) pendente(s) de atualização.
           </div>
         )}
@@ -2808,38 +2808,38 @@ export default function AcompanhamentoBancario() {
         <div className="grid grid-cols-3 gap-2 md:grid-cols-6">
           {(
             [
-              { label: "Ativos", value: resumo.acompanhamento, color: "text-blue-700", bg: "bg-blue-50", border: "border-blue-100" },
-              { label: "Pendentes", value: resumo.pendentes, color: "text-orange-700", bg: "bg-orange-50", border: "border-orange-100" },
-              { label: "Positivas", value: resumo.positivas, color: "text-emerald-700", bg: "bg-emerald-50", border: "border-emerald-100" },
-              { label: "Negativas", value: resumo.negativas, color: "text-red-700", bg: "bg-red-50", border: "border-red-100" },
-              { label: "Prontos", value: resumo.prontos, color: "text-violet-700", bg: "bg-violet-50", border: "border-violet-100" },
-              { label: "Prorrogados", value: resumo.prorrogados, color: "text-slate-700", bg: "bg-slate-50", border: "border-slate-200" },
+              { label: "Ativos", value: resumo.acompanhamento, color: "text-primary", bg: "bg-primary/10", border: "border-primary/20" },
+              { label: "Pendentes", value: resumo.pendentes, color: "text-warning", bg: "bg-warning/10", border: "border-warning/20" },
+              { label: "Positivas", value: resumo.positivas, color: "text-success", bg: "bg-success/10", border: "border-success/20" },
+              { label: "Negativas", value: resumo.negativas, color: "text-destructive", bg: "bg-destructive/10", border: "border-destructive/20" },
+              { label: "Prontos", value: resumo.prontos, color: "text-primary", bg: "bg-primary/10", border: "border-primary/20" },
+              { label: "Prorrogados", value: resumo.prorrogados, color: "text-muted-foreground", bg: "bg-muted", border: "border-border" },
             ]
           ).map(({ label, value, color, bg, border }) => (
             <div key={label} className={`rounded-xl border ${border} ${bg} px-3 py-2.5`}>
-              <div className="text-[9px] font-bold uppercase tracking-wide text-slate-500">{label}</div>
+              <div className="text-[9px] font-bold uppercase tracking-wide text-muted-foreground">{label}</div>
               <div className={`mt-0.5 text-xl font-black ${color}`}>{value}</div>
             </div>
           ))}
         </div>
 
         {/* Filtros */}
-        <div className="rounded-xl border border-slate-200 bg-white px-3 py-2.5">
+        <div className="rounded-xl border border-border bg-white px-3 py-2.5">
           <div className="flex flex-wrap gap-2 items-center">
             <input
-              className="h-8 rounded-lg border border-slate-200 px-3 text-xs bg-white focus:outline-none focus:ring-2 focus:ring-blue-500 w-full sm:w-48"
+              className="h-8 rounded-lg border border-border px-3 text-xs bg-white focus:outline-none focus:ring-2 focus:ring-primary w-full sm:w-48"
               placeholder="Buscar empresa/CNPJ..."
               value={search}
               onChange={(e) => setSearch(e.target.value)}
             />
             <input
-              className="h-8 rounded-lg border border-slate-200 px-3 text-xs bg-white focus:outline-none focus:ring-2 focus:ring-blue-500 w-full sm:w-36"
+              className="h-8 rounded-lg border border-border px-3 text-xs bg-white focus:outline-none focus:ring-2 focus:ring-primary w-full sm:w-36"
               placeholder="Banco..."
               value={banco}
               onChange={(e) => setBanco(e.target.value)}
             />
             <select
-              className="h-8 rounded-lg border border-slate-200 px-2.5 text-xs bg-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+              className="h-8 rounded-lg border border-border px-2.5 text-xs bg-white focus:outline-none focus:ring-2 focus:ring-primary"
               value={bancoIdFiltro}
               onChange={(e) => { setBancoIdFiltro(e.target.value); setGerenteIdFiltro(""); }}
               title="Filtrar por banco parceiro cadastrado"
@@ -2848,7 +2848,7 @@ export default function AcompanhamentoBancario() {
               {bancosCatalogo.map((b) => <option key={b.id} value={b.id}>{b.nome}</option>)}
             </select>
             <select
-              className="h-8 rounded-lg border border-slate-200 px-2.5 text-xs bg-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+              className="h-8 rounded-lg border border-border px-2.5 text-xs bg-white focus:outline-none focus:ring-2 focus:ring-primary"
               value={gerenteIdFiltro}
               onChange={(e) => setGerenteIdFiltro(e.target.value)}
               title="Filtrar por gerente responsável"
@@ -2859,7 +2859,7 @@ export default function AcompanhamentoBancario() {
                 .map((g) => <option key={g.id} value={g.id}>{g.nome}{g.regiao ? ` — ${g.regiao}` : ""}</option>)}
             </select>
             <select
-              className="h-8 rounded-lg border border-slate-200 px-2.5 text-xs bg-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+              className="h-8 rounded-lg border border-border px-2.5 text-xs bg-white focus:outline-none focus:ring-2 focus:ring-primary"
               value={statusFiltro}
               onChange={(e) => setStatusFiltro(e.target.value)}
             >
@@ -2874,7 +2874,7 @@ export default function AcompanhamentoBancario() {
               <option value="encerrado::cancelado">↳ Cancelado</option>
               <option value="todos_incluindo_encerrados">Tudo junto (ativos + encerrados)</option>
             </select>
-            <label className="flex items-center gap-1.5 text-xs text-slate-600 cursor-pointer">
+            <label className="flex items-center gap-1.5 text-xs text-muted-foreground cursor-pointer">
               <input
                 type="checkbox"
                 className="rounded"
@@ -2884,31 +2884,31 @@ export default function AcompanhamentoBancario() {
               Apenas pendentes
             </label>
             <button
-              className="h-8 rounded-lg border border-slate-200 px-3 text-xs font-semibold text-slate-600 hover:bg-slate-50 transition-colors"
+              className="h-8 rounded-lg border border-border px-3 text-xs font-semibold text-muted-foreground hover:bg-muted transition-colors"
               onClick={fetchData}
             >Filtrar</button>
           </div>
         </div>
 
         {/* Bloco principal: em acompanhamento */}
-        <div className="rounded-xl border border-slate-200 bg-white shadow-sm">
-          <div className="border-b border-slate-100 px-4 py-2.5 flex items-center justify-between gap-3">
+        <div className="rounded-xl border border-border bg-white shadow-sm">
+          <div className="border-b border-border px-4 py-2.5 flex items-center justify-between gap-3">
             <div>
-              <h2 className="text-sm font-bold text-slate-900">Acompanhamentos cadastrados</h2>
-              <p className="text-[10px] text-slate-400">{listaEmAndamento.length} registro(s) · ações disponíveis em cada linha</p>
+              <h2 className="text-sm font-bold text-foreground">Acompanhamentos cadastrados</h2>
+              <p className="text-[10px] text-muted-foreground">{listaEmAndamento.length} registro(s) · ações disponíveis em cada linha</p>
             </div>
             {/* Alterna tabela × blocos -- só afeta telas >= lg (no celular já é sempre em cards) */}
-            <div className="hidden shrink-0 items-center gap-0.5 rounded-lg border border-slate-200 bg-slate-50 p-0.5 lg:flex">
+            <div className="hidden shrink-0 items-center gap-0.5 rounded-lg border border-border bg-muted p-0.5 lg:flex">
               <button
                 type="button"
                 onClick={() => setVisualizacao("lista")}
-                className={`inline-flex items-center gap-1 rounded-md px-2 py-1 text-[11px] font-semibold transition ${visualizacao === "lista" ? "bg-white text-slate-900 shadow-sm" : "text-slate-500 hover:text-slate-700"}`}
+                className={`inline-flex items-center gap-1 rounded-md px-2 py-1 text-[11px] font-semibold transition ${visualizacao === "lista" ? "bg-white text-foreground shadow-sm" : "text-muted-foreground hover:text-muted-foreground"}`}
                 title="Ver como lista/tabela"
               ><ListIcon className="h-3 w-3" /> Lista</button>
               <button
                 type="button"
                 onClick={() => setVisualizacao("blocos")}
-                className={`inline-flex items-center gap-1 rounded-md px-2 py-1 text-[11px] font-semibold transition ${visualizacao === "blocos" ? "bg-white text-slate-900 shadow-sm" : "text-slate-500 hover:text-slate-700"}`}
+                className={`inline-flex items-center gap-1 rounded-md px-2 py-1 text-[11px] font-semibold transition ${visualizacao === "blocos" ? "bg-white text-foreground shadow-sm" : "text-muted-foreground hover:text-muted-foreground"}`}
                 title="Ver como blocos"
               ><LayoutGrid className="h-3 w-3" /> Blocos</button>
             </div>
@@ -2921,22 +2921,22 @@ export default function AcompanhamentoBancario() {
             está de fato em acompanhamento ativo. Nada é apagado nem encerrado
             automaticamente; é só onde a linha aparece por padrão. */}
         {listaSemMovimento.length > 0 && (
-          <div className="rounded-xl border border-amber-200 bg-amber-50/40 shadow-sm">
+          <div className="rounded-xl border border-warning/20 bg-warning/10/40 shadow-sm">
             <button
               type="button"
               onClick={() => setSemMovimentoAberto((v) => !v)}
               className="flex w-full items-center justify-between gap-3 px-4 py-2.5 text-left"
             >
               <div>
-                <h2 className="text-sm font-bold text-amber-900">Sem movimentação há mais de {DIAS_LIMITE_SEM_MOVIMENTO} dias</h2>
-                <p className="text-[10px] text-amber-700/80">{listaSemMovimento.length} registro(s) parado(s) — a atualização prevista já passou e nada foi feito desde então</p>
+                <h2 className="text-sm font-bold text-warning">Sem movimentação há mais de {DIAS_LIMITE_SEM_MOVIMENTO} dias</h2>
+                <p className="text-[10px] text-warning/80">{listaSemMovimento.length} registro(s) parado(s) — a atualização prevista já passou e nada foi feito desde então</p>
               </div>
-              <span className="shrink-0 rounded-lg border border-amber-200 bg-white px-2.5 py-1 text-xs font-bold text-amber-700">
+              <span className="shrink-0 rounded-lg border border-warning/20 bg-white px-2.5 py-1 text-xs font-bold text-warning">
                 {semMovimentoAberto ? "Ocultar ▲" : "Mostrar ▼"}
               </span>
             </button>
             {semMovimentoAberto && (
-              <div className="border-t border-amber-100">
+              <div className="border-t border-warning/20">
                 {renderListaAcompanhamentos(listaSemMovimento, { mostrarDivisorPendente: false })}
               </div>
             )}
@@ -2950,7 +2950,7 @@ export default function AcompanhamentoBancario() {
               <div className="mb-4 flex items-start justify-between">
                 <div>
                   <h3 className="text-lg font-bold">{editandoId ? "Editar Acompanhamento" : "Novo Acompanhamento"}</h3>
-                  <p className="text-sm text-gray-600">
+                  <p className="text-sm text-muted-foreground">
                     {editandoId
                       ? "Corrija os dados do acompanhamento já cadastrado sem alterar o visual da tela."
                       : "Cadastre a empresa, o banco observado e os dados iniciais para acompanhamento de 30 dias."}
@@ -2959,49 +2959,49 @@ export default function AcompanhamentoBancario() {
                 <button className="rounded border px-3 py-1 text-sm" onClick={limparNovo}>Fechar</button>
               </div>
 
-              <h4 className="mb-2 text-sm font-semibold text-gray-700">Empresa</h4>
+              <h4 className="mb-2 text-sm font-semibold text-foreground">Empresa</h4>
               <div className="mb-4">
                 <div ref={comboEmpresaRef} className="relative">
                   <button
                     type="button"
                     onClick={() => setComboEmpresaAberto((v) => !v)}
-                    className="w-full flex items-center gap-2.5 h-11 px-3 border border-gray-300 rounded-lg bg-white hover:border-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 text-left"
+                    className="w-full flex items-center gap-2.5 h-11 px-3 border border-input rounded-lg bg-white hover:border-input focus:outline-none focus:ring-2 focus:ring-primary text-left"
                   >
                     {novo.empresa_id ? (
                       <>
-                        <span className="flex-1 min-w-0 text-sm font-semibold text-gray-900 truncate">{novo.nome_empresa}</span>
-                        <span className="text-xs text-gray-400 shrink-0">{novo.cnpj || ""}</span>
+                        <span className="flex-1 min-w-0 text-sm font-semibold text-foreground truncate">{novo.nome_empresa}</span>
+                        <span className="text-xs text-muted-foreground shrink-0">{novo.cnpj || ""}</span>
                       </>
                     ) : (
-                      <span className="flex-1 text-sm text-gray-400">Busque e selecione uma empresa já cadastrada...</span>
+                      <span className="flex-1 text-sm text-muted-foreground">Busque e selecione uma empresa já cadastrada...</span>
                     )}
                   </button>
                   {comboEmpresaAberto && (
-                    <div className="absolute z-50 mt-1 w-full bg-white border border-gray-200 rounded-lg shadow-lg overflow-hidden">
-                      <div className="p-2 border-b border-gray-100">
+                    <div className="absolute z-50 mt-1 w-full bg-white border border-border rounded-lg shadow-lg overflow-hidden">
+                      <div className="p-2 border-b border-border">
                         <input
                           autoFocus
                           value={buscaEmpresaCombo}
                           onChange={(e) => setBuscaEmpresaCombo(e.target.value)}
                           placeholder="Buscar por nome ou CNPJ..."
-                          className="w-full h-9 rounded-md border border-gray-200 px-3 text-sm"
+                          className="w-full h-9 rounded-md border border-border px-3 text-sm"
                         />
                       </div>
                       <div className="max-h-64 overflow-y-auto p-1">
                         {carregandoEmpresas ? (
-                          <div className="py-6 text-center text-xs text-gray-400">Carregando...</div>
+                          <div className="py-6 text-center text-xs text-muted-foreground">Carregando...</div>
                         ) : empresasOpcoes.length === 0 ? (
-                          <div className="py-6 text-center text-xs text-gray-400">Nenhuma empresa encontrada no cadastro.</div>
+                          <div className="py-6 text-center text-xs text-muted-foreground">Nenhuma empresa encontrada no cadastro.</div>
                         ) : (
                           empresasOpcoes.map((emp) => (
                             <button
                               key={emp.id}
                               type="button"
                               onClick={() => selecionarEmpresaAcompanhamento(emp)}
-                              className="w-full text-left px-3 py-2 rounded-md hover:bg-gray-50 text-sm"
+                              className="w-full text-left px-3 py-2 rounded-md hover:bg-muted text-sm"
                             >
-                              <p className="font-semibold text-gray-800 truncate">{emp.razao_social || emp.nome_fantasia}</p>
-                              <p className="text-xs text-gray-400">{emp.cnpj}</p>
+                              <p className="font-semibold text-foreground truncate">{emp.razao_social || emp.nome_fantasia}</p>
+                              <p className="text-xs text-muted-foreground">{emp.cnpj}</p>
                             </button>
                           ))
                         )}
@@ -3009,7 +3009,7 @@ export default function AcompanhamentoBancario() {
                     </div>
                   )}
                 </div>
-                <p className="mt-1.5 text-[11px] text-gray-400">
+                <p className="mt-1.5 text-[11px] text-muted-foreground">
                   Não cadastramos empresa nova por aqui — se ela ainda não existe, cadastre primeiro em Clientes → Clientes PJ.
                 </p>
               </div>
@@ -3020,7 +3020,7 @@ export default function AcompanhamentoBancario() {
                 ))}
               </div>
 
-              <h4 className="mb-2 text-sm font-semibold text-gray-700">Dados bancários</h4>
+              <h4 className="mb-2 text-sm font-semibold text-foreground">Dados bancários</h4>
               <div className="mb-4 grid grid-cols-1 gap-3 md:grid-cols-3">
                 {NOVO_FIELDS.filter((f) => f.group === "banco").map((field) =>
                   field.type === "banco" ? (
@@ -3054,21 +3054,21 @@ export default function AcompanhamentoBancario() {
                 )}
               </div>
 
-              <h4 className="mb-2 text-sm font-semibold text-gray-700">Objetivo</h4>
+              <h4 className="mb-2 text-sm font-semibold text-foreground">Objetivo</h4>
               <div className="mb-4 grid grid-cols-1 gap-3 md:grid-cols-3">
                 {NOVO_FIELDS.filter((f) => f.group === "objetivo").map((field) => (
                   <FieldInput key={field.key} field={field} value={novo[field.key]} onChange={(v) => setNovo((p) => ({ ...p, [field.key]: v }))} />
                 ))}
               </div>
 
-              <h4 className="mb-2 text-sm font-semibold text-gray-700">Rating e faturamento</h4>
+              <h4 className="mb-2 text-sm font-semibold text-foreground">Rating e faturamento</h4>
               <div className="mb-4 grid grid-cols-1 gap-3 md:grid-cols-3">
                 {NOVO_FIELDS.filter((f) => f.group === "rating").map((field) => (
                   <FieldInput key={field.key} field={field} value={novo[field.key]} onChange={(v) => setNovo((p) => ({ ...p, [field.key]: v }))} />
                 ))}
               </div>
 
-              <h4 className="mb-2 text-sm font-semibold text-gray-700">Gestão</h4>
+              <h4 className="mb-2 text-sm font-semibold text-foreground">Gestão</h4>
               <div className="mb-4 grid grid-cols-1 gap-3 md:grid-cols-3">
                 {NOVO_FIELDS.filter((f) => f.group === "gestao").map((field) => (
                   <FieldInput key={field.key} field={field} value={novo[field.key]} onChange={(v) => setNovo((p) => ({ ...p, [field.key]: v }))} />
@@ -3077,7 +3077,7 @@ export default function AcompanhamentoBancario() {
 
               {editandoId && (
                 <>
-                  <h4 className="mb-2 text-sm font-semibold text-gray-700">Controle do acompanhamento</h4>
+                  <h4 className="mb-2 text-sm font-semibold text-foreground">Controle do acompanhamento</h4>
                   <div className="mb-4 grid grid-cols-1 gap-3 md:grid-cols-3">
                     {EDIT_FIELDS.map((field) => (
                       <FieldInput key={field.key} field={field} value={novo[field.key]} onChange={(v) => setNovo((p) => ({ ...p, [field.key]: v }))} />
@@ -3087,7 +3087,7 @@ export default function AcompanhamentoBancario() {
               )}
 
               <div className="mt-4 flex gap-2">
-                <button className="rounded bg-blue-600 px-4 py-2 text-sm font-semibold text-white disabled:opacity-60" disabled={saving} onClick={salvarNovo}>
+                <button className="rounded bg-primary px-4 py-2 text-sm font-semibold text-white disabled:opacity-60" disabled={saving} onClick={salvarNovo}>
                   {saving ? "Salvando..." : editandoId ? "Salvar alterações" : "Salvar acompanhamento"}
                 </button>
                 <button className="rounded border px-4 py-2 text-sm" onClick={limparNovo}>Cancelar</button>
@@ -3103,18 +3103,18 @@ export default function AcompanhamentoBancario() {
               <div className="mb-2 flex items-start justify-between">
                 <div>
                   <h3 className="text-lg font-bold">{editandoSemanaNumero ? `Editar Semana ${editandoSemanaNumero}` : "Atualização Semanal"}</h3>
-                  <p className="text-sm font-medium text-gray-700">
+                  <p className="text-sm font-medium text-foreground">
                     {updOpen.nome_empresa} — {updOpen.banco_observado}
                   </p>
                   {editandoSemanaNumero && (
-                    <p className="mt-1 max-w-3xl text-xs font-semibold text-amber-700">
+                    <p className="mt-1 max-w-3xl text-xs font-semibold text-warning">
                       Modo edição: corrija entradas, saídas, saldos, rating, restrições, datas, análise, orientação e próxima ação da semana já salva.
                     </p>
                   )}
                 </div>
                 <div className="flex flex-wrap items-center gap-2">
                   <button
-                    className="rounded-lg border border-indigo-200 bg-indigo-50 px-3 py-1.5 text-xs font-semibold text-indigo-700 transition hover:bg-indigo-100"
+                    className="rounded-lg border border-primary/20 bg-primary/10 px-3 py-1.5 text-xs font-semibold text-primary transition hover:bg-primary/10"
                     onClick={() => adicionarOutroBanco(updOpen)}
                   >+ Outro banco</button>
                   <button className="rounded border px-3 py-1 text-sm" onClick={() => { setUpdOpen(null); setEditandoSemanaNumero(null); }}>Fechar</button>
@@ -3124,8 +3124,8 @@ export default function AcompanhamentoBancario() {
               {/* Banner de contexto */}
               <div className={`mb-4 rounded-lg border px-4 py-2 text-sm ${
                 editandoSemanaNumero
-                  ? "border-amber-200 bg-amber-50 text-amber-900"
-                  : "border-blue-100 bg-blue-50 text-blue-800"
+                  ? "border-warning/20 bg-warning/10 text-warning"
+                  : "border-primary/20 bg-primary/10 text-primary"
               }`}>
                 <strong>{editandoSemanaNumero ? "Editando" : "Nova atualização"} — Semana {upd.numero_semana}</strong>
                 {" | "}Período: {formatDateBR(upd.data_referencia_inicio)} a {formatDateBR(upd.data_referencia_fim)}
@@ -3134,7 +3134,7 @@ export default function AcompanhamentoBancario() {
               </div>
 
               {/* Bloco A — Período */}
-              <h4 className="mb-2 text-sm font-semibold text-gray-700">
+              <h4 className="mb-2 text-sm font-semibold text-foreground">
                 A — Período da semana {editandoSemanaNumero ? "(editável)" : "(automático)"}
               </h4>
               {editandoSemanaNumero ? (
@@ -3177,7 +3177,7 @@ export default function AcompanhamentoBancario() {
               )}
 
               {/* Bloco B — Entradas */}
-              <h4 className="mb-2 text-sm font-semibold text-gray-700">B — Entradas da semana</h4>
+              <h4 className="mb-2 text-sm font-semibold text-foreground">B — Entradas da semana</h4>
               <div className="mb-4 grid grid-cols-1 gap-3 md:grid-cols-3">
                 {(["entrada_maquininha", "entrada_pix", "entrada_boleto", "entrada_ted", "entrada_dinheiro", "outras_entradas"] as const).map((key) => (
                   <CurrencyField
@@ -3196,7 +3196,7 @@ export default function AcompanhamentoBancario() {
               </div>
 
               {/* Bloco C — Saídas e saldos */}
-              <h4 className="mb-2 text-sm font-semibold text-gray-700">C — Saídas e saldos</h4>
+              <h4 className="mb-2 text-sm font-semibold text-foreground">C — Saídas e saldos</h4>
               <div className="mb-4 grid grid-cols-1 gap-3 md:grid-cols-3">
                 <CurrencyField
                   label="Total de saídas"
@@ -3229,7 +3229,7 @@ export default function AcompanhamentoBancario() {
               </div>
 
               {/* Bloco D — Rating e conformidade */}
-              <h4 className="mb-2 text-sm font-semibold text-gray-700">D — Rating e conformidade</h4>
+              <h4 className="mb-2 text-sm font-semibold text-foreground">D — Rating e conformidade</h4>
               <div className="mb-4 grid grid-cols-1 gap-3 md:grid-cols-4">
                 {(["rating_bacen", "rating_interno", "scr_status", "cenprot_status", "serasa_status", "cnd_status", "pld_aml_status", "coaf_status"] as const).map((key) => (
                   <TextFieldSimple
@@ -3242,7 +3242,7 @@ export default function AcompanhamentoBancario() {
               </div>
 
               {/* Bloco E — Ocorrências */}
-              <h4 className="mb-2 text-sm font-semibold text-gray-700">E — Ocorrências</h4>
+              <h4 className="mb-2 text-sm font-semibold text-foreground">E — Ocorrências</h4>
               <div className="mb-4 grid grid-cols-2 gap-3 md:grid-cols-4">
                 {(
                   [
@@ -3252,7 +3252,7 @@ export default function AcompanhamentoBancario() {
                     ["ocorrencia_negativa", "Ocorrência negativa?"],
                   ] as [keyof AtualizacaoForm, string][]
                 ).map(([key, label]) => (
-                  <label key={key} className="flex items-center gap-2 rounded border border-gray-200 p-2 text-sm">
+                  <label key={key} className="flex items-center gap-2 rounded border border-border p-2 text-sm">
                     <input
                       type="checkbox"
                       checked={Boolean(upd[key])}
@@ -3264,7 +3264,7 @@ export default function AcompanhamentoBancario() {
               </div>
 
               {/* Bloco F — Análise */}
-              <h4 className="mb-2 text-sm font-semibold text-gray-700">F — Análise</h4>
+              <h4 className="mb-2 text-sm font-semibold text-foreground">F — Análise</h4>
               <div className="mb-4 grid grid-cols-1 gap-3 md:grid-cols-3">
                 <TextareaField label="Análise da semana" value={upd.analise_semana} onChange={(v) => setUpd((p) => ({ ...p, analise_semana: v }))} />
                 <TextareaField label="Orientação ao cliente" value={upd.orientacao_cliente} onChange={(v) => setUpd((p) => ({ ...p, orientacao_cliente: v }))} />
@@ -3272,19 +3272,19 @@ export default function AcompanhamentoBancario() {
               </div>
 
               {/* Painel de resumo calculado */}
-              <div className="mt-2 grid grid-cols-3 gap-3 rounded-xl border border-gray-200 bg-gray-50 p-4">
+              <div className="mt-2 grid grid-cols-3 gap-3 rounded-xl border border-border bg-muted p-4">
                 <div className="text-center">
-                  <div className="text-xs font-semibold uppercase tracking-wide text-gray-500">Total de entradas</div>
-                  <div className="mt-1 text-lg font-bold text-emerald-700">{moneyBR(totalEntradas)}</div>
+                  <div className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Total de entradas</div>
+                  <div className="mt-1 text-lg font-bold text-success">{moneyBR(totalEntradas)}</div>
                 </div>
                 <div className="text-center">
-                  <div className="text-xs font-semibold uppercase tracking-wide text-gray-500">Saldo semanal</div>
-                  <div className={`mt-1 text-lg font-bold ${saldoSemanal < 0 ? "text-red-600" : "text-emerald-700"}`}>
+                  <div className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Saldo semanal</div>
+                  <div className={`mt-1 text-lg font-bold ${saldoSemanal < 0 ? "text-destructive" : "text-success"}`}>
                     {moneyBR(saldoSemanal)}
                   </div>
                 </div>
                 <div className="text-center">
-                  <div className="text-xs font-semibold uppercase tracking-wide text-gray-500">Status estimado</div>
+                  <div className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Status estimado</div>
                   <div className="mt-1">
                     <span className={`rounded-full border px-3 py-1 text-sm font-semibold ${statusBadge(statusSemanaCalculado)}`}>
                       {labelStatus(statusSemanaCalculado)}
@@ -3295,14 +3295,14 @@ export default function AcompanhamentoBancario() {
 
               <div className="mt-4 flex gap-2">
                 <button
-                  className="rounded bg-blue-600 px-4 py-2 text-sm font-semibold text-white disabled:opacity-60"
+                  className="rounded bg-primary px-4 py-2 text-sm font-semibold text-white disabled:opacity-60"
                   disabled={saving}
                   onClick={salvarAtualizacao}
                 >
                   {saving ? "Salvando..." : editandoSemanaNumero ? "Salvar correção da semana" : "Salvar atualização semanal"}
                 </button>
                 <button
-                  className="rounded border border-indigo-200 bg-indigo-50 px-4 py-2 text-sm font-semibold text-indigo-700"
+                  className="rounded border border-primary/20 bg-primary/10 px-4 py-2 text-sm font-semibold text-primary"
                   onClick={() => adicionarOutroBanco(updOpen)}
                 >+ Outro banco</button>
                 <button className="rounded border px-4 py-2 text-sm" onClick={() => { setUpdOpen(null); setEditandoSemanaNumero(null); }}>Cancelar</button>
@@ -3313,38 +3313,38 @@ export default function AcompanhamentoBancario() {
 
         {/* ── Modal — Detalhes ─────────────────────────────────────────────── */}
         {encerrandoRow && (
-          <div className="fixed inset-0 z-50 bg-slate-900/70 p-4 flex items-center justify-center" onClick={() => !salvandoEncerramento && setEncerrandoRow(null)}>
+          <div className="fixed inset-0 z-50 bg-overlay p-4 flex items-center justify-center" onClick={() => !salvandoEncerramento && setEncerrandoRow(null)}>
             <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md overflow-hidden" onClick={(e) => e.stopPropagation()}>
-              <div className="px-5 py-4 border-b border-slate-200">
-                <h3 className="text-base font-bold text-slate-800">Encerrar acompanhamento</h3>
-                <p className="text-xs text-slate-500 mt-0.5">{encerrandoRow.nome_empresa} — {encerrandoRow.banco_observado}</p>
+              <div className="px-5 py-4 border-b border-border">
+                <h3 className="text-base font-bold text-foreground">Encerrar acompanhamento</h3>
+                <p className="text-xs text-muted-foreground mt-0.5">{encerrandoRow.nome_empresa} — {encerrandoRow.banco_observado}</p>
               </div>
               <div className="px-5 py-4 space-y-4">
                 <div>
-                  <label className="block text-xs font-semibold text-slate-600 mb-1.5">Motivo do encerramento <span className="text-red-500">*</span></label>
+                  <label className="block text-xs font-semibold text-muted-foreground mb-1.5">Motivo do encerramento <span className="text-destructive">*</span></label>
                   <select
                     value={motivoEncerramento}
                     onChange={(e) => setMotivoEncerramento(e.target.value)}
-                    className="w-full h-10 rounded-lg border border-slate-300 px-3 text-sm"
+                    className="w-full h-10 rounded-lg border border-input px-3 text-sm"
                   >
                     <option value="">Selecione...</option>
                     {MOTIVOS_ENCERRAMENTO.map((m) => <option key={m.value} value={m.value}>{m.label}</option>)}
                   </select>
                 </div>
                 <div>
-                  <label className="block text-xs font-semibold text-slate-600 mb-1.5">Relatório do encerramento <span className="text-red-500">*</span></label>
+                  <label className="block text-xs font-semibold text-muted-foreground mb-1.5">Relatório do encerramento <span className="text-destructive">*</span></label>
                   <textarea
                     value={observacaoEncerramento}
                     onChange={(e) => setObservacaoEncerramento(e.target.value)}
                     rows={4}
                     placeholder="Descreva o motivo com detalhes -- este relatório fica registrado permanentemente com o acompanhamento."
-                    className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
+                    className="w-full rounded-lg border border-input px-3 py-2 text-sm"
                   />
                 </div>
               </div>
-              <div className="px-5 py-4 border-t border-slate-200 flex justify-end gap-2">
-                <button type="button" onClick={() => setEncerrandoRow(null)} disabled={salvandoEncerramento} className="h-9 px-4 rounded-lg border border-slate-200 text-sm font-semibold text-slate-600 hover:bg-slate-50 disabled:opacity-50">Cancelar</button>
-                <button type="button" onClick={confirmarEncerramento} disabled={salvandoEncerramento} className="h-9 px-4 rounded-lg bg-red-600 text-white text-sm font-semibold hover:bg-red-700 disabled:opacity-50">
+              <div className="px-5 py-4 border-t border-border flex justify-end gap-2">
+                <button type="button" onClick={() => setEncerrandoRow(null)} disabled={salvandoEncerramento} className="h-9 px-4 rounded-lg border border-border text-sm font-semibold text-muted-foreground hover:bg-muted disabled:opacity-50">Cancelar</button>
+                <button type="button" onClick={confirmarEncerramento} disabled={salvandoEncerramento} className="h-9 px-4 rounded-lg bg-destructive text-white text-sm font-semibold hover:bg-destructive/90 disabled:opacity-50">
                   {salvandoEncerramento ? "Encerrando..." : "Confirmar encerramento"}
                 </button>
               </div>
@@ -3353,22 +3353,22 @@ export default function AcompanhamentoBancario() {
         )}
 
         {detalhe && (
-          <div className="fixed inset-0 z-[9999] overflow-y-auto bg-slate-900/50 p-3 sm:p-5">
+          <div className="fixed inset-0 z-[9999] overflow-y-auto bg-overlay p-3 sm:p-5">
             <div className="mx-auto flex min-h-[calc(100vh-40px)] w-full max-w-7xl flex-col overflow-hidden rounded-2xl bg-white shadow-2xl">
-              <div className="sticky top-0 z-10 border-b border-slate-200 bg-white/95 px-4 py-4 backdrop-blur sm:px-6">
+              <div className="sticky top-0 z-10 border-b border-border bg-white/95 px-4 py-4 backdrop-blur sm:px-6">
                 <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
                   <div>
-                    <p className="text-xs font-semibold uppercase tracking-[0.18em] text-blue-700">Relatório operacional</p>
-                    <h3 className="mt-0.5 text-xl font-bold text-slate-950">Detalhes do Acompanhamento</h3>
-                    <p className="mt-0.5 text-sm text-slate-500">
+                    <p className="text-xs font-semibold uppercase tracking-[0.18em] text-primary">Relatório operacional</p>
+                    <h3 className="mt-0.5 text-xl font-bold text-foreground">Detalhes do Acompanhamento</h3>
+                    <p className="mt-0.5 text-sm text-muted-foreground">
                       {detalhe.nome_empresa} — CNPJ {detalhe.cnpj || "-"} — {detalhe.banco_observado}
                     </p>
                   </div>
                   <div className="flex flex-wrap items-center gap-2">
-                    <label className="flex items-center gap-1 rounded-xl border border-slate-200 bg-white px-2 py-1 text-[11px] font-semibold text-slate-600">
+                    <label className="flex items-center gap-1 rounded-xl border border-border bg-white px-2 py-1 text-[11px] font-semibold text-muted-foreground">
                       Prestadora
                       <select
-                        className="rounded-md border border-slate-200 bg-white px-2 py-1 text-[11px] text-slate-700"
+                        className="rounded-md border border-border bg-white px-2 py-1 text-[11px] text-muted-foreground"
                         value={prestadoraRelatorio}
                         onChange={(e) => setPrestadoraRelatorio(e.target.value as PrestadoraKey)}
                       >
@@ -3380,7 +3380,7 @@ export default function AcompanhamentoBancario() {
                       {situacaoBadgeInfo(detalhe).label}
                     </span>
                     {String(detalhe.status || "").toLowerCase() !== "encerrado" && (
-                      <button className="rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-xs font-semibold text-amber-700 transition hover:bg-amber-100" onClick={() => abrirEditarAcompanhamento(detalhe)}>Editar acompanhamento</button>
+                      <button className="rounded-xl border border-warning/20 bg-warning/10 px-3 py-2 text-xs font-semibold text-warning transition hover:bg-warning/20" onClick={() => abrirEditarAcompanhamento(detalhe)}>Editar acompanhamento</button>
                     )}
                     {/* Botão Atualizar semana: só ativo se a próxima semana já iniciou, e só pra acompanhamento ainda ativo */}
                     {String(detalhe.status || "").toLowerCase() !== "encerrado" && (() => {
@@ -3392,8 +3392,8 @@ export default function AcompanhamentoBancario() {
                         <button
                           className={`rounded-xl border px-3 py-2 text-xs font-semibold transition ${
                             bloqueado
-                              ? 'border-slate-200 bg-slate-100 text-slate-400 cursor-not-allowed'
-                              : 'border-blue-200 bg-blue-50 text-blue-700 hover:bg-blue-100'
+                              ? 'border-border bg-muted text-muted-foreground cursor-not-allowed'
+                              : 'border-primary/20 bg-primary/10 text-primary hover:bg-primary/20'
                           }`}
                           onClick={() => { if (!bloqueado) abrirAtualizacao(detalhe); }}
                           title={bloqueado
@@ -3406,24 +3406,24 @@ export default function AcompanhamentoBancario() {
                       );
                     })()}
                     {String(detalhe.status || "").toLowerCase() !== "encerrado" && (
-                      <button className="rounded-xl border border-indigo-200 bg-indigo-50 px-3 py-2 text-xs font-semibold text-indigo-700 transition hover:bg-indigo-100" onClick={() => adicionarOutroBanco(detalhe)}>+ Outro banco</button>
+                      <button className="rounded-xl border border-primary/20 bg-primary/10 px-3 py-2 text-xs font-semibold text-primary transition hover:bg-primary/10" onClick={() => adicionarOutroBanco(detalhe)}>+ Outro banco</button>
                     )}
-                    <button className="rounded-xl border border-teal-200 bg-teal-50 px-3 py-2 text-xs font-semibold text-teal-700 transition hover:bg-teal-100" onClick={() => exportarCSV(detalhe, prestadoraRelatorio)}>Exportar XLS</button>
-                    <button className="rounded-xl border border-blue-200 bg-blue-50 px-3 py-2 text-xs font-semibold text-blue-700 transition hover:bg-blue-100" onClick={() => abrirRelatorio(detalhe)}>Gerar relatório</button>
-                    <button className="rounded-xl border border-purple-200 bg-purple-50 px-3 py-2 text-xs font-semibold text-purple-700 transition hover:bg-purple-100" onClick={() => { setImprimirOpen(detalhe); setDetalhe(null); }}>Imprimir</button>
-                    <button className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-700 transition hover:bg-slate-50" onClick={() => { setDetalhe(null); setInteligenciaAcompanhamento(null); setErroInteligenciaAcompanhamento(""); }}>Fechar</button>
+                    <button className="rounded-xl border border-success/20 bg-success/10 px-3 py-2 text-xs font-semibold text-success transition hover:bg-success/20" onClick={() => exportarCSV(detalhe, prestadoraRelatorio)}>Exportar XLS</button>
+                    <button className="rounded-xl border border-primary/20 bg-primary/10 px-3 py-2 text-xs font-semibold text-primary transition hover:bg-primary/20" onClick={() => abrirRelatorio(detalhe)}>Gerar relatório</button>
+                    <button className="rounded-xl border border-primary/20 bg-primary/10 px-3 py-2 text-xs font-semibold text-primary transition hover:bg-primary/10" onClick={() => { setImprimirOpen(detalhe); setDetalhe(null); }}>Imprimir</button>
+                    <button className="rounded-xl border border-border bg-white px-3 py-2 text-xs font-semibold text-muted-foreground transition hover:bg-muted" onClick={() => { setDetalhe(null); setInteligenciaAcompanhamento(null); setErroInteligenciaAcompanhamento(""); }}>Fechar</button>
                   </div>
                 </div>
               </div>
 
-              <div className="space-y-5 overflow-y-auto bg-slate-50 px-4 py-5 sm:px-6">
+              <div className="space-y-5 overflow-y-auto bg-muted px-4 py-5 sm:px-6">
                 {String(detalhe.status || "").toLowerCase() === "encerrado" && (
-                  <div className="rounded-2xl border border-slate-300 bg-slate-100 px-4 py-3 text-sm text-slate-600">
-                    <span className="font-bold text-slate-700">Acompanhamento encerrado</span> — somente consulta. Edição, atualização semanal e vínculo de outro banco ficam disponíveis apenas enquanto o acompanhamento está ativo.
+                  <div className="rounded-2xl border border-input bg-muted px-4 py-3 text-sm text-muted-foreground">
+                    <span className="font-bold text-muted-foreground">Acompanhamento encerrado</span> — somente consulta. Edição, atualização semanal e vínculo de outro banco ficam disponíveis apenas enquanto o acompanhamento está ativo.
                   </div>
                 )}
-                <section className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
-                  <h4 className="mb-3 text-sm font-bold uppercase tracking-wide text-slate-500">Resumo geral</h4>
+                <section className="rounded-2xl border border-border bg-white p-4 shadow-sm">
+                  <h4 className="mb-3 text-sm font-bold uppercase tracking-wide text-muted-foreground">Resumo geral</h4>
                   <div className="grid grid-cols-2 gap-x-6 gap-y-0 sm:grid-cols-3 lg:grid-cols-6">
                     {[
                       { label: "Banco observado", value: detalhe.banco_observado },
@@ -3433,17 +3433,17 @@ export default function AcompanhamentoBancario() {
                       { label: "Próxima atualização", value: formatDateBR(detalhe.proxima_atualizacao) },
                       { label: "Prorrogado", value: detalhe.prorrogado ? "Sim" : "Não" },
                     ].map(({ label, value }) => (
-                      <div key={label} className="border-b border-slate-100 py-2">
-                        <div className="text-[10px] font-semibold uppercase tracking-wide text-slate-400">{label}</div>
-                        <div className="mt-0.5 text-sm font-semibold text-slate-800">{value || "-"}</div>
+                      <div key={label} className="border-b border-border py-2">
+                        <div className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">{label}</div>
+                        <div className="mt-0.5 text-sm font-semibold text-foreground">{value || "-"}</div>
                       </div>
                     ))}
                   </div>
                 </section>
 
                 <section className="grid grid-cols-1 gap-4 xl:grid-cols-3">
-                  <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm xl:col-span-2">
-                    <h4 className="mb-3 text-sm font-bold uppercase tracking-wide text-slate-500">Indicadores financeiros e rating</h4>
+                  <div className="rounded-2xl border border-border bg-white p-4 shadow-sm xl:col-span-2">
+                    <h4 className="mb-3 text-sm font-bold uppercase tracking-wide text-muted-foreground">Indicadores financeiros e rating</h4>
                     <div className="grid grid-cols-2 gap-x-6 gap-y-0 sm:grid-cols-3">
                       {[
                         { label: "Indicador SCR atual", value: detalhe.rating_bacen_atual || detalhe.rating_bacen_inicial },
@@ -3453,17 +3453,17 @@ export default function AcompanhamentoBancario() {
                         { label: "Média mensal", value: moneyBR(detalhe.media_mensal) },
                         { label: "Margem ±30%", value: moneyBR(detalhe.margem_seguranca_30) },
                       ].map(({ label, value }) => (
-                        <div key={label} className="border-b border-slate-100 py-2">
-                          <div className="text-[10px] font-semibold uppercase tracking-wide text-slate-400">{label}</div>
-                          <div className="mt-0.5 text-sm font-semibold text-slate-800">{value || "-"}</div>
+                        <div key={label} className="border-b border-border py-2">
+                          <div className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">{label}</div>
+                          <div className="mt-0.5 text-sm font-semibold text-foreground">{value || "-"}</div>
                         </div>
                       ))}
                     </div>
                   </div>
-                  <div className="rounded-2xl border border-blue-100 bg-blue-50 p-4 shadow-sm">
-                    <h4 className="text-sm font-bold uppercase tracking-wide text-blue-700">Recomendação operacional</h4>
-                    <p className="mt-2 text-sm leading-6 text-blue-900">{calcularRecomendacao(detalhe)}</p>
-                    <div className="mt-4 rounded-xl border border-blue-200 bg-white/70 p-3">
+                  <div className="rounded-2xl border border-primary/20 bg-primary/10 p-4 shadow-sm">
+                    <h4 className="text-sm font-bold uppercase tracking-wide text-primary">Recomendação operacional</h4>
+                    <p className="mt-2 text-sm leading-6 text-primary">{calcularRecomendacao(detalhe)}</p>
+                    <div className="mt-4 rounded-xl border border-primary/20 bg-white/70 p-3">
                       {(() => {
                         // Mostrar saldo da última semana COM DADOS REAIS
                         // Se a semana atual está zerada (não alimentada), usa a anterior
@@ -3483,14 +3483,14 @@ export default function AcompanhamentoBancario() {
                         const naoAlimentada = entradasAtual === 0 && semAtual && semAtual !== semanaComSaldo;
                         return (
                           <>
-                            <div className="text-[10px] font-semibold uppercase tracking-wide text-blue-600">
+                            <div className="text-[10px] font-semibold uppercase tracking-wide text-primary">
                               {naoAlimentada ? `Saldo S${semanaComSaldo?.numero_semana || ''} (última com dados)` : 'Saldo semana atual'}
                             </div>
-                            <div className={`mt-1 text-lg font-bold ${saldoExibir < 0 ? "text-red-600" : "text-emerald-700"}`}>
+                            <div className={`mt-1 text-lg font-bold ${saldoExibir < 0 ? "text-destructive" : "text-success"}`}>
                               {moneyBR(saldoExibir)}
                             </div>
                             {naoAlimentada && (
-                              <div className="mt-1 text-[10px] text-amber-700 font-medium">
+                              <div className="mt-1 text-[10px] text-warning font-medium">
                                 ⏳ S{semAtual?.numero_semana} aguardando alimentação (quarta-feira)
                               </div>
                             )}
@@ -3508,11 +3508,11 @@ export default function AcompanhamentoBancario() {
                   const saldoAtual = Number(semanaAtual?.saldo_semanal || 0);
                   return (
                     <section className="grid grid-cols-1 gap-4 xl:grid-cols-3">
-                      <div className="rounded-2xl border-2 border-amber-200 bg-gradient-to-br from-amber-50 to-white p-4 shadow-sm xl:col-span-2">
+                      <div className="rounded-2xl border-2 border-warning/20 bg-gradient-to-br from-amber-50 to-white p-4 shadow-sm xl:col-span-2">
                         <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
                           <div>
-                            <h4 className="text-sm font-bold uppercase tracking-wide text-amber-700">Semana atual em evidência</h4>
-                            <p className="text-xs text-amber-700/80">Semana da data de hoje. Semanas futuras nunca aparecem. Alimentação toda quarta-feira.</p>
+                            <h4 className="text-sm font-bold uppercase tracking-wide text-warning">Semana atual em evidência</h4>
+                            <p className="text-xs text-warning/80">Semana da data de hoje. Semanas futuras nunca aparecem. Alimentação toda quarta-feira.</p>
                           </div>
                           <span className={`rounded-full border px-3 py-1 text-xs font-semibold ${statusBadge(semanaAtual?.status_semana || semanaAtual?.status)}`}>
                             {labelStatus(semanaAtual?.status_semana || semanaAtual?.status)}
@@ -3526,7 +3526,7 @@ export default function AcompanhamentoBancario() {
                             const hj = todayLocal();
                             const emAndamento = ini && fim && ini <= hj && hj <= fim;
                             return emAndamento ? (
-                              <div className="mb-3 rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-xs font-medium text-amber-800">
+                              <div className="mb-3 rounded-xl border border-warning/20 bg-warning/10 px-3 py-2 text-xs font-medium text-warning">
                                 ⏳ Semana {semanaAtual.numero_semana} em andamento — dados serão alimentados na próxima quarta-feira
                               </div>
                             ) : null;
@@ -3543,14 +3543,14 @@ export default function AcompanhamentoBancario() {
                           </div>
                           </>
                         ) : (
-                          <div className="rounded-xl border border-dashed border-amber-300 bg-white/70 p-4 text-sm text-amber-800">
+                          <div className="rounded-xl border border-dashed border-warning/30 bg-white/70 p-4 text-sm text-warning">
                             Nenhuma semana preenchida ainda. Clique em <strong>Atualizar semana</strong> para registrar a primeira atualização.
                           </div>
                         )}
                       </div>
-                      <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
-                        <h4 className="text-sm font-bold uppercase tracking-wide text-slate-500">Evolução</h4>
-                        <p className="mt-2 text-sm leading-6 text-slate-700">{evolucao.leitura}</p>
+                      <div className="rounded-2xl border border-border bg-white p-4 shadow-sm">
+                        <h4 className="text-sm font-bold uppercase tracking-wide text-muted-foreground">Evolução</h4>
+                        <p className="mt-2 text-sm leading-6 text-muted-foreground">{evolucao.leitura}</p>
                         <div className="mt-4 grid grid-cols-1 gap-3">
                           <InfoCard label="Variação de entradas" value={moneyBR(evolucao.variacaoEntradas)} negative={evolucao.variacaoEntradas < 0} positive={evolucao.variacaoEntradas > 0} />
                           <InfoCard label="Variação de saldo" value={moneyBR(evolucao.variacaoSaldo)} negative={evolucao.variacaoSaldo < 0} positive={evolucao.variacaoSaldo > 0} />
@@ -3610,16 +3610,16 @@ export default function AcompanhamentoBancario() {
                   const corStatus = naoAlimentada ? 'amber' : (statusAd === 'dentro_da_faixa' ? 'emerald' : statusAd === 'abaixo_da_referencia' ? 'amber' : 'red');
                   const labelAd = naoAlimentada ? '⏳ Aguardando alimentação' : (statusAd === 'dentro_da_faixa' ? 'Dentro da faixa' : statusAd === 'abaixo_da_referencia' ? 'Abaixo da referência' : statusAd === 'acima_do_teto' ? 'Acima do teto' : statusAd === 'critico' ? 'Crítico' : 'Aguardando');
                   return (
-                    <section className={`rounded-2xl border-2 p-4 shadow-sm ${ naoAlimentada ? 'border-amber-300 bg-amber-50/60' : alerta ? 'border-red-300 bg-red-50' : 'border-emerald-200 bg-emerald-50/40' }`}>
+                    <section className={`rounded-2xl border-2 p-4 shadow-sm ${ naoAlimentada ? 'border-warning/30 bg-warning/10' : alerta ? 'border-destructive/30 bg-destructive/10' : 'border-success/20 bg-success/10/40' }`}>
                       <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
                         <div>
-                          <h4 className="text-sm font-bold uppercase tracking-wide text-slate-700">Aderência Financeira — Semana {semanaAtual.numero_semana}</h4>
-                          <p className="text-xs text-slate-500">Referência: faturamento anual × 130% ÷ 12 ÷ semanas do mês</p>
+                          <h4 className="text-sm font-bold uppercase tracking-wide text-muted-foreground">Aderência Financeira — Semana {semanaAtual.numero_semana}</h4>
+                          <p className="text-xs text-muted-foreground">Referência: faturamento anual × 130% ÷ 12 ÷ semanas do mês</p>
                         </div>
                         <span className={`rounded-full border px-3 py-1 text-xs font-semibold bg-${corStatus}-50 text-${corStatus}-700 border-${corStatus}-200`}>{labelAd}</span>
                       </div>
                       {motivo && (
-                        <div className={`mb-3 rounded-xl border p-3 text-xs ${naoAlimentada ? 'border-amber-200 bg-white/80 text-amber-800' : 'border-red-200 bg-white/80 text-red-800'}`}>{motivo}</div>
+                        <div className={`mb-3 rounded-xl border p-3 text-xs ${naoAlimentada ? 'border-warning/20 bg-white/80 text-warning' : 'border-destructive/20 bg-white/80 text-destructive'}`}>{motivo}</div>
                       )}
                       <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
                         <InfoCard label="Ref. semanal base" value={moneyBR(refSemanal)} />
@@ -3639,36 +3639,36 @@ export default function AcompanhamentoBancario() {
                         </div>
                       )}
                       {diagnostico && (
-                        <div className="mt-3 rounded-xl border border-slate-200 bg-white/70 p-3 text-xs text-slate-700">
-                          <strong className="text-slate-500">Diagnóstico técnico:</strong> {diagnostico}
+                        <div className="mt-3 rounded-xl border border-border bg-white/70 p-3 text-xs text-muted-foreground">
+                          <strong className="text-muted-foreground">Diagnóstico técnico:</strong> {diagnostico}
                         </div>
                       )}
                     </section>
                   );
                 })()}
-                <section className="overflow-hidden rounded-2xl border border-indigo-200 bg-white shadow-sm">
-                  <div className="flex flex-col gap-3 border-b border-indigo-100 bg-gradient-to-r from-indigo-50 via-white to-blue-50 px-4 py-4 lg:flex-row lg:items-center lg:justify-between">
+                <section className="overflow-hidden rounded-2xl border border-primary/20 bg-white shadow-sm">
+                  <div className="flex flex-col gap-3 border-b border-primary/20 bg-gradient-to-r from-indigo-50 via-white to-primary/10 px-4 py-4 lg:flex-row lg:items-center lg:justify-between">
                     <div>
-                      <p className="text-xs font-bold uppercase tracking-[0.18em] text-indigo-600">Assessoria inteligente de crédito</p>
-                      <h4 className="mt-1 text-lg font-black text-slate-950">Inteligência do Acompanhamento Bancário</h4>
-                      <p className="text-xs text-slate-500">Camada consultiva: preserva a lógica semanal/mensal já existente e interpreta os dados para rating, crédito e plano de ação.</p>
+                      <p className="text-xs font-bold uppercase tracking-[0.18em] text-primary">Assessoria inteligente de crédito</p>
+                      <h4 className="mt-1 text-lg font-black text-foreground">Inteligência do Acompanhamento Bancário</h4>
+                      <p className="text-xs text-muted-foreground">Camada consultiva: preserva a lógica semanal/mensal já existente e interpreta os dados para rating, crédito e plano de ação.</p>
                     </div>
                     <div className="flex flex-wrap items-center gap-2">
                       <button
-                        className="rounded-xl border border-indigo-200 bg-white px-3 py-2 text-xs font-semibold text-indigo-700 transition hover:bg-indigo-50 disabled:cursor-wait disabled:opacity-60"
+                        className="rounded-xl border border-primary/20 bg-white px-3 py-2 text-xs font-semibold text-primary transition hover:bg-primary/10 disabled:cursor-wait disabled:opacity-60"
                         disabled={loadingInteligenciaAcompanhamento}
                         onClick={() => detalhe?.id && carregarInteligenciaAcompanhamento(detalhe.id)}
                       >{loadingInteligenciaAcompanhamento ? "Analisando..." : "Atualizar análise"}</button>
                       <button
-                        className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-700 transition hover:bg-slate-50"
+                        className="rounded-xl border border-border bg-white px-3 py-2 text-xs font-semibold text-muted-foreground transition hover:bg-muted"
                         onClick={() => copiarTextoInteligencia(inteligenciaAcompanhamento?.parecerTecnico)}
                       >Copiar parecer</button>
                       <button
-                        className="rounded-xl border border-emerald-200 bg-emerald-50 px-3 py-2 text-xs font-semibold text-emerald-700 transition hover:bg-emerald-100"
+                        className="rounded-xl border border-success/20 bg-success/10 px-3 py-2 text-xs font-semibold text-success transition hover:bg-success/20"
                         onClick={() => copiarTextoInteligencia(inteligenciaAcompanhamento?.orientacaoCliente)}
                       >Copiar orientação</button>
                       <button
-                        className="rounded-xl border border-blue-200 bg-blue-50 px-3 py-2 text-xs font-semibold text-blue-700 transition hover:bg-blue-100 disabled:cursor-not-allowed disabled:opacity-50"
+                        className="rounded-xl border border-primary/20 bg-primary/10 px-3 py-2 text-xs font-semibold text-primary transition hover:bg-primary/20 disabled:cursor-not-allowed disabled:opacity-50"
                         disabled={!detalhe?.empresa_id}
                         onClick={() => detalhe?.empresa_id && (window.location.href = `/colaborador/empresas?empresa=${detalhe.empresa_id}&aba=proposta_bancaria`)}
                         title={detalhe?.empresa_id ? "Abrir empresa para usar esta leitura na proposta bancária" : "Acompanhamento sem empresa vinculada"}
@@ -3678,45 +3678,45 @@ export default function AcompanhamentoBancario() {
 
                   <div className="p-4">
                     {erroInteligenciaAcompanhamento && (
-                      <div className="mb-3 rounded-xl border border-red-200 bg-red-50 px-3 py-2 text-xs font-semibold text-red-700">
+                      <div className="mb-3 rounded-xl border border-destructive/20 bg-destructive/10 px-3 py-2 text-xs font-semibold text-destructive">
                         {erroInteligenciaAcompanhamento}
                       </div>
                     )}
 
                     {loadingInteligenciaAcompanhamento && !inteligenciaAcompanhamento ? (
-                      <div className="rounded-xl border border-dashed border-indigo-200 bg-indigo-50/50 p-4 text-sm text-indigo-700">
+                      <div className="rounded-xl border border-dashed border-primary/20 bg-primary/10/50 p-4 text-sm text-primary">
                         Gerando diagnóstico consultivo com base nos dados do acompanhamento...
                       </div>
                     ) : inteligenciaAcompanhamento ? (
                       <div className="space-y-4">
                         <div className="grid grid-cols-1 gap-3 md:grid-cols-4">
-                          <div className="rounded-xl border border-slate-200 bg-slate-50 p-3">
-                            <div className="text-[10px] font-bold uppercase tracking-wide text-slate-400">Status inteligente</div>
+                          <div className="rounded-xl border border-border bg-muted p-3">
+                            <div className="text-[10px] font-bold uppercase tracking-wide text-muted-foreground">Status inteligente</div>
                             <div className={`mt-2 inline-flex rounded-full border px-3 py-1 text-xs font-bold ${chipInteligenciaClass(inteligenciaAcompanhamento.statusInteligente)}`}>
                               {statusInteligenciaLabel(inteligenciaAcompanhamento.statusInteligente)}
                             </div>
                           </div>
-                          <div className="rounded-xl border border-slate-200 bg-slate-50 p-3">
-                            <div className="text-[10px] font-bold uppercase tracking-wide text-slate-400">Impacto no rating</div>
+                          <div className="rounded-xl border border-border bg-muted p-3">
+                            <div className="text-[10px] font-bold uppercase tracking-wide text-muted-foreground">Impacto no rating</div>
                             <div className={`mt-2 inline-flex rounded-full border px-3 py-1 text-xs font-bold ${chipInteligenciaClass(inteligenciaAcompanhamento.impactoNoRating)}`}>
                               {impactoRatingLabel(inteligenciaAcompanhamento.impactoNoRating)}
                             </div>
                           </div>
-                          <div className="rounded-xl border border-slate-200 bg-slate-50 p-3">
-                            <div className="text-[10px] font-bold uppercase tracking-wide text-slate-400">Prontidão para crédito</div>
+                          <div className="rounded-xl border border-border bg-muted p-3">
+                            <div className="text-[10px] font-bold uppercase tracking-wide text-muted-foreground">Prontidão para crédito</div>
                             <div className={`mt-2 inline-flex rounded-full border px-3 py-1 text-xs font-bold ${chipInteligenciaClass(inteligenciaAcompanhamento.prontidaoCredito)}`}>
                               {prontidaoCreditoLabel(inteligenciaAcompanhamento.prontidaoCredito)}
                             </div>
                           </div>
-                          <div className="rounded-xl border border-blue-200 bg-blue-50 p-3">
-                            <div className="text-[10px] font-bold uppercase tracking-wide text-blue-500">Próxima melhor ação</div>
-                            <div className="mt-2 text-xs font-semibold leading-5 text-blue-900">{inteligenciaAcompanhamento.proximaMelhorAcao || "Manter acompanhamento semanal."}</div>
+                          <div className="rounded-xl border border-primary/20 bg-primary/10 p-3">
+                            <div className="text-[10px] font-bold uppercase tracking-wide text-primary">Próxima melhor ação</div>
+                            <div className="mt-2 text-xs font-semibold leading-5 text-primary">{inteligenciaAcompanhamento.proximaMelhorAcao || "Manter acompanhamento semanal."}</div>
                           </div>
                         </div>
 
-                        <div className="rounded-2xl border border-slate-200 bg-white p-4">
-                          <h5 className="text-sm font-black text-slate-900">Resumo executivo</h5>
-                          <p className="mt-2 text-sm leading-6 text-slate-700">{inteligenciaAcompanhamento.resumoExecutivo}</p>
+                        <div className="rounded-2xl border border-border bg-white p-4">
+                          <h5 className="text-sm font-black text-foreground">Resumo executivo</h5>
+                          <p className="mt-2 text-sm leading-6 text-muted-foreground">{inteligenciaAcompanhamento.resumoExecutivo}</p>
                         </div>
 
                         {inteligenciaAcompanhamento.metricas && (
@@ -3730,83 +3730,83 @@ export default function AcompanhamentoBancario() {
                         )}
 
                         <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
-                          <div className="rounded-2xl border border-red-100 bg-red-50/40 p-4">
-                            <h5 className="text-sm font-black text-red-800">Alertas e riscos</h5>
+                          <div className="rounded-2xl border border-destructive/20 bg-destructive/10/40 p-4">
+                            <h5 className="text-sm font-black text-destructive">Alertas e riscos</h5>
                             <div className="mt-3 space-y-2">
                               {[...listaItensInteligencia(inteligenciaAcompanhamento.alertas), ...listaItensInteligencia(inteligenciaAcompanhamento.riscos)].length ? (
                                 [...listaItensInteligencia(inteligenciaAcompanhamento.alertas), ...listaItensInteligencia(inteligenciaAcompanhamento.riscos)].slice(0, 6).map((item: any, idx: number) => (
-                                  <div key={`alerta-${idx}`} className="rounded-xl border border-red-100 bg-white p-3">
+                                  <div key={`alerta-${idx}`} className="rounded-xl border border-destructive/20 bg-white p-3">
                                     <div className="flex items-center justify-between gap-2">
-                                      <strong className="text-xs text-slate-900">{item.titulo}</strong>
+                                      <strong className="text-xs text-foreground">{item.titulo}</strong>
                                       {item.prioridade && <span className={`rounded-full border px-2 py-0.5 text-[10px] font-bold ${chipInteligenciaClass(item.prioridade)}`}>{labelStatus(item.prioridade)}</span>}
                                     </div>
-                                    <p className="mt-1 text-xs leading-5 text-slate-600">{item.descricao}</p>
+                                    <p className="mt-1 text-xs leading-5 text-muted-foreground">{item.descricao}</p>
                                   </div>
                                 ))
                               ) : (
-                                <p className="text-xs text-slate-500">Nenhum alerta crítico identificado com os dados atuais.</p>
+                                <p className="text-xs text-muted-foreground">Nenhum alerta crítico identificado com os dados atuais.</p>
                               )}
                             </div>
                           </div>
 
-                          <div className="rounded-2xl border border-emerald-100 bg-emerald-50/40 p-4">
-                            <h5 className="text-sm font-black text-emerald-800">Pontos fortes e atenção</h5>
+                          <div className="rounded-2xl border border-success/20 bg-success/10/40 p-4">
+                            <h5 className="text-sm font-black text-success">Pontos fortes e atenção</h5>
                             <div className="mt-3 space-y-2">
                               {[...listaItensInteligencia(inteligenciaAcompanhamento.pontosFortes), ...listaItensInteligencia(inteligenciaAcompanhamento.pontosAtencao)].length ? (
                                 [...listaItensInteligencia(inteligenciaAcompanhamento.pontosFortes), ...listaItensInteligencia(inteligenciaAcompanhamento.pontosAtencao)].slice(0, 6).map((item: any, idx: number) => (
-                                  <div key={`ponto-${idx}`} className="rounded-xl border border-slate-100 bg-white p-3">
+                                  <div key={`ponto-${idx}`} className="rounded-xl border border-border bg-white p-3">
                                     <div className="flex items-center justify-between gap-2">
-                                      <strong className="text-xs text-slate-900">{item.titulo}</strong>
+                                      <strong className="text-xs text-foreground">{item.titulo}</strong>
                                       {item.prioridade && <span className={`rounded-full border px-2 py-0.5 text-[10px] font-bold ${chipInteligenciaClass(item.prioridade)}`}>{labelStatus(item.prioridade)}</span>}
                                     </div>
-                                    <p className="mt-1 text-xs leading-5 text-slate-600">{item.descricao}</p>
+                                    <p className="mt-1 text-xs leading-5 text-muted-foreground">{item.descricao}</p>
                                   </div>
                                 ))
                               ) : (
-                                <p className="text-xs text-slate-500">Acompanhe novas semanas para identificar pontos fortes consistentes.</p>
+                                <p className="text-xs text-muted-foreground">Acompanhe novas semanas para identificar pontos fortes consistentes.</p>
                               )}
                             </div>
                           </div>
                         </div>
 
                         <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
-                          <div className="rounded-2xl border border-blue-100 bg-blue-50/40 p-4">
-                            <h5 className="text-sm font-black text-blue-800">Plano de ação para melhorar rating</h5>
+                          <div className="rounded-2xl border border-primary/20 bg-primary/10/40 p-4">
+                            <h5 className="text-sm font-black text-primary">Plano de ação para melhorar rating</h5>
                             <ol className="mt-3 space-y-2">
                               {listaItensInteligencia(inteligenciaAcompanhamento.planoAcao).slice(0, 6).map((item: any, idx: number) => (
-                                <li key={`acao-${idx}`} className="rounded-xl border border-blue-100 bg-white p-3 text-xs leading-5 text-slate-700">
-                                  <strong className="text-blue-800">{idx + 1}. {item.titulo}</strong>
+                                <li key={`acao-${idx}`} className="rounded-xl border border-primary/20 bg-white p-3 text-xs leading-5 text-muted-foreground">
+                                  <strong className="text-primary">{idx + 1}. {item.titulo}</strong>
                                   <p className="mt-1">{item.descricao}</p>
-                                  {item.impactoEsperado && <p className="mt-1 font-semibold text-emerald-700">Impacto esperado: {item.impactoEsperado}</p>}
+                                  {item.impactoEsperado && <p className="mt-1 font-semibold text-success">Impacto esperado: {item.impactoEsperado}</p>}
                                 </li>
                               ))}
                             </ol>
                           </div>
-                          <div className="rounded-2xl border border-slate-200 bg-white p-4">
-                            <h5 className="text-sm font-black text-slate-900">Parecer técnico consultivo</h5>
-                            <p className="mt-2 text-sm leading-6 text-slate-700">{inteligenciaAcompanhamento.parecerTecnico}</p>
-                            <div className="mt-4 rounded-xl border border-amber-100 bg-amber-50 p-3">
-                              <div className="text-xs font-black uppercase tracking-wide text-amber-700">Orientação ao cliente</div>
-                              <p className="mt-1 text-xs leading-5 text-amber-900">{inteligenciaAcompanhamento.orientacaoCliente}</p>
+                          <div className="rounded-2xl border border-border bg-white p-4">
+                            <h5 className="text-sm font-black text-foreground">Parecer técnico consultivo</h5>
+                            <p className="mt-2 text-sm leading-6 text-muted-foreground">{inteligenciaAcompanhamento.parecerTecnico}</p>
+                            <div className="mt-4 rounded-xl border border-warning/20 bg-warning/10 p-3">
+                              <div className="text-xs font-black uppercase tracking-wide text-warning">Orientação ao cliente</div>
+                              <p className="mt-1 text-xs leading-5 text-warning">{inteligenciaAcompanhamento.orientacaoCliente}</p>
                             </div>
                           </div>
                         </div>
                       </div>
                     ) : (
-                      <div className="rounded-xl border border-dashed border-slate-200 bg-slate-50 p-4 text-sm text-slate-600">
+                      <div className="rounded-xl border border-dashed border-border bg-muted p-4 text-sm text-muted-foreground">
                         Clique em <strong>Atualizar análise</strong> para gerar a inteligência consultiva deste acompanhamento.
                       </div>
                     )}
                   </div>
                 </section>
 
-                <section className="rounded-2xl border border-slate-200 bg-white shadow-sm">
-                  <div className="flex items-center justify-between border-b border-slate-100 px-4 py-3">
+                <section className="rounded-2xl border border-border bg-white shadow-sm">
+                  <div className="flex items-center justify-between border-b border-border px-4 py-3">
                     <div>
-                      <h4 className="text-sm font-bold uppercase tracking-wide text-slate-500">Histórico semanal</h4>
-                      <p className="text-xs text-slate-400">Evolução semana a semana — entradas, saídas, saldos e conformidade</p>
+                      <h4 className="text-sm font-bold uppercase tracking-wide text-muted-foreground">Histórico semanal</h4>
+                      <p className="text-xs text-muted-foreground">Evolução semana a semana — entradas, saídas, saldos e conformidade</p>
                     </div>
-                    <span className="text-xs font-medium text-slate-400">
+                    <span className="text-xs font-medium text-muted-foreground">
                       {Array.isArray(detalhe.atualizacoes)
                         ? detalhe.atualizacoes.filter((s: any) => {
                             const ini = parseDateLocal(s?.data_referencia_inicio);
@@ -3821,35 +3821,35 @@ export default function AcompanhamentoBancario() {
                       <table className="w-full min-w-[900px] text-xs">
                         {/* REGRA: semanas futuras nunca aparecem no histórico */}
                         <thead>
-                          <tr className="border-b border-slate-200 bg-slate-50">
-                            <th className="px-3 py-2.5 text-left font-semibold text-slate-500" rowSpan={2}>Semana</th>
-                            <th className="px-3 py-2.5 text-left font-semibold text-slate-500" rowSpan={2}>Período</th>
-                            <th className="border-l border-slate-200 px-3 py-1.5 text-center text-[10px] font-bold uppercase tracking-wider text-emerald-700" colSpan={7}>Entradas</th>
-                            <th className="border-l border-slate-200 px-3 py-1.5 text-center text-[10px] font-bold uppercase tracking-wider text-red-600" colSpan={5}>Saídas e Saldos</th>
-                            <th className="border-l border-slate-200 px-3 py-1.5 text-center text-[10px] font-bold uppercase tracking-wider text-blue-700" colSpan={8}>Rating e Conformidade</th>
-                            <th className="border-l border-slate-200 px-3 py-1.5 text-center text-[10px] font-bold uppercase tracking-wider text-slate-500" rowSpan={2}>Status</th>
+                          <tr className="border-b border-border bg-muted">
+                            <th className="px-3 py-2.5 text-left font-semibold text-muted-foreground" rowSpan={2}>Semana</th>
+                            <th className="px-3 py-2.5 text-left font-semibold text-muted-foreground" rowSpan={2}>Período</th>
+                            <th className="border-l border-border px-3 py-1.5 text-center text-[10px] font-bold uppercase tracking-wider text-success" colSpan={7}>Entradas</th>
+                            <th className="border-l border-border px-3 py-1.5 text-center text-[10px] font-bold uppercase tracking-wider text-destructive" colSpan={5}>Saídas e Saldos</th>
+                            <th className="border-l border-border px-3 py-1.5 text-center text-[10px] font-bold uppercase tracking-wider text-primary" colSpan={8}>Rating e Conformidade</th>
+                            <th className="border-l border-border px-3 py-1.5 text-center text-[10px] font-bold uppercase tracking-wider text-muted-foreground" rowSpan={2}>Status</th>
                           </tr>
-                          <tr className="border-b-2 border-slate-300 bg-slate-50">
-                            <th className="border-l border-slate-200 px-3 py-2 text-right font-medium text-slate-500">Maquininha</th>
-                            <th className="px-3 py-2 text-right font-medium text-slate-500">Pix</th>
-                            <th className="px-3 py-2 text-right font-medium text-slate-500">Boleto</th>
-                            <th className="px-3 py-2 text-right font-medium text-slate-500">TED</th>
-                            <th className="px-3 py-2 text-right font-medium text-slate-500">Dinheiro</th>
-                            <th className="px-3 py-2 text-right font-medium text-slate-500">Outras</th>
-                            <th className="px-3 py-2 text-right font-bold text-emerald-700">Total</th>
-                            <th className="border-l border-slate-200 px-3 py-2 text-right font-medium text-slate-500">Saídas</th>
-                            <th className="px-3 py-2 text-right font-medium text-slate-500">Saldo sem.</th>
-                            <th className="px-3 py-2 text-right font-medium text-slate-500">Saldo médio</th>
-                            <th className="px-3 py-2 text-right font-medium text-slate-500">Saldo final</th>
-                            <th className="px-3 py-2 text-right font-medium text-slate-500">Transações</th>
-                            <th className="border-l border-slate-200 px-3 py-2 text-center font-medium text-slate-500">Bacen</th>
-                            <th className="px-3 py-2 text-center font-medium text-slate-500">Interno</th>
-                            <th className="px-3 py-2 text-center font-medium text-slate-500">SCR</th>
-                            <th className="px-3 py-2 text-center font-medium text-slate-500">Cenprot</th>
-                            <th className="px-3 py-2 text-center font-medium text-slate-500">Serasa</th>
-                            <th className="px-3 py-2 text-center font-medium text-slate-500">CND</th>
-                            <th className="px-3 py-2 text-center font-medium text-slate-500">PLD/AML</th>
-                            <th className="px-3 py-2 text-center font-medium text-slate-500">COAF</th>
+                          <tr className="border-b-2 border-input bg-muted">
+                            <th className="border-l border-border px-3 py-2 text-right font-medium text-muted-foreground">Maquininha</th>
+                            <th className="px-3 py-2 text-right font-medium text-muted-foreground">Pix</th>
+                            <th className="px-3 py-2 text-right font-medium text-muted-foreground">Boleto</th>
+                            <th className="px-3 py-2 text-right font-medium text-muted-foreground">TED</th>
+                            <th className="px-3 py-2 text-right font-medium text-muted-foreground">Dinheiro</th>
+                            <th className="px-3 py-2 text-right font-medium text-muted-foreground">Outras</th>
+                            <th className="px-3 py-2 text-right font-bold text-success">Total</th>
+                            <th className="border-l border-border px-3 py-2 text-right font-medium text-muted-foreground">Saídas</th>
+                            <th className="px-3 py-2 text-right font-medium text-muted-foreground">Saldo sem.</th>
+                            <th className="px-3 py-2 text-right font-medium text-muted-foreground">Saldo médio</th>
+                            <th className="px-3 py-2 text-right font-medium text-muted-foreground">Saldo final</th>
+                            <th className="px-3 py-2 text-right font-medium text-muted-foreground">Transações</th>
+                            <th className="border-l border-border px-3 py-2 text-center font-medium text-muted-foreground">Bacen</th>
+                            <th className="px-3 py-2 text-center font-medium text-muted-foreground">Interno</th>
+                            <th className="px-3 py-2 text-center font-medium text-muted-foreground">SCR</th>
+                            <th className="px-3 py-2 text-center font-medium text-muted-foreground">Cenprot</th>
+                            <th className="px-3 py-2 text-center font-medium text-muted-foreground">Serasa</th>
+                            <th className="px-3 py-2 text-center font-medium text-muted-foreground">CND</th>
+                            <th className="px-3 py-2 text-center font-medium text-muted-foreground">PLD/AML</th>
+                            <th className="px-3 py-2 text-center font-medium text-muted-foreground">COAF</th>
                           </tr>
                         </thead>
                         <tbody>
@@ -3873,21 +3873,21 @@ export default function AcompanhamentoBancario() {
                             const isEven = idx % 2 === 0;
                             const isAtual = Number(item.numero_semana) === Number(getSemanaAtual(detalhe)?.numero_semana);
                             return (
-                              <tr key={item.id || item.numero_semana} className={`border-b border-slate-100 transition hover:bg-blue-50/40 ${isAtual ? "bg-amber-50/80 ring-1 ring-amber-200" : isEven ? "bg-white" : "bg-slate-50/50"}`}>
-                                <td className="px-3 py-2.5 font-bold text-slate-700">
+                              <tr key={item.id || item.numero_semana} className={`border-b border-border transition hover:bg-primary/10/40 ${isAtual ? "bg-warning/10/80 ring-1 ring-warning/30" : isEven ? "bg-white" : "bg-muted/50"}`}>
+                                <td className="px-3 py-2.5 font-bold text-muted-foreground">
                                   <div className="flex items-center gap-1">
                                     <span>S{item.numero_semana}</span>
-                                    {isAtual && <span className="rounded-full bg-amber-200 px-1.5 py-0.5 text-[9px] font-bold text-amber-900">Atual</span>}
+                                    {isAtual && <span className="rounded-full bg-warning/20 px-1.5 py-0.5 text-[9px] font-bold text-warning">Atual</span>}
                                   </div>
                                   <button
-                                    className="mt-1 rounded-md border border-amber-300 bg-amber-50 px-2.5 py-1 text-[10px] font-bold text-amber-800 shadow-sm hover:bg-amber-100"
+                                    className="mt-1 rounded-md border border-warning/30 bg-warning/10 px-2.5 py-1 text-[10px] font-bold text-warning shadow-sm hover:bg-warning/20"
                                     onClick={() => abrirEditarSemana(detalhe, item)}
                                     title="Editar todos os valores, entradas, saídas, rating e análise desta semana"
                                   >
                                     Editar valores
                                   </button>
                                   <button
-                                    className="mt-1 rounded-md border border-red-300 bg-red-50 px-2.5 py-1 text-[10px] font-bold text-red-700 shadow-sm hover:bg-red-100 disabled:opacity-60"
+                                    className="mt-1 rounded-md border border-destructive/30 bg-destructive/10 px-2.5 py-1 text-[10px] font-bold text-destructive shadow-sm hover:bg-destructive/20 disabled:opacity-60"
                                     onClick={() => apagarSemana(detalhe, item)}
                                     title="Apagar esta semana e recalcular o acompanhamento"
                                     disabled={saving}
@@ -3895,36 +3895,36 @@ export default function AcompanhamentoBancario() {
                                     Apagar semana
                                   </button>
                                 </td>
-                                <td className="whitespace-nowrap px-3 py-2.5 text-slate-500">
+                                <td className="whitespace-nowrap px-3 py-2.5 text-muted-foreground">
                                   {formatDateBR(item.data_referencia_inicio)}<br/>
                                   <span className="text-[10px]">a {formatDateBR(item.data_referencia_fim)}</span>
                                 </td>
-                                <td className="border-l border-slate-100 px-3 py-2.5 text-right text-slate-700">{moneyBR(item.entrada_maquininha)}</td>
-                                <td className="px-3 py-2.5 text-right text-slate-700">{moneyBR(item.entrada_pix)}</td>
-                                <td className="px-3 py-2.5 text-right text-slate-700">{moneyBR(item.entrada_boleto)}</td>
-                                <td className="px-3 py-2.5 text-right text-slate-700">{moneyBR(item.entrada_ted)}</td>
-                                <td className="px-3 py-2.5 text-right text-slate-700">{moneyBR(item.entrada_dinheiro)}</td>
-                                <td className="px-3 py-2.5 text-right text-slate-700">{moneyBR(item.outras_entradas)}</td>
-                                <td className="px-3 py-2.5 text-right font-bold text-emerald-700">{moneyBR(entradas)}</td>
-                                <td className="border-l border-slate-100 px-3 py-2.5 text-right text-red-600">{moneyBR(item.total_saidas)}</td>
-                                <td className={`px-3 py-2.5 text-right font-bold ${saldo < 0 ? "text-red-600" : "text-emerald-700"}`}>{moneyBR(item.saldo_semanal)}</td>
-                                <td className="px-3 py-2.5 text-right text-slate-700">{moneyBR(item.saldo_medio)}</td>
-                                <td className="px-3 py-2.5 text-right text-slate-700">{moneyBR(item.saldo_final)}</td>
-                                <td className="px-3 py-2.5 text-right text-slate-600">{item.quantidade_transacoes || 0}</td>
-                                <td className="border-l border-slate-100 px-3 py-2.5 text-center font-bold text-slate-800">{item.rating_bacen || "-"}</td>
-                                <td className="px-3 py-2.5 text-center font-bold text-blue-700">{item.rating_interno || "-"}</td>
+                                <td className="border-l border-border px-3 py-2.5 text-right text-muted-foreground">{moneyBR(item.entrada_maquininha)}</td>
+                                <td className="px-3 py-2.5 text-right text-muted-foreground">{moneyBR(item.entrada_pix)}</td>
+                                <td className="px-3 py-2.5 text-right text-muted-foreground">{moneyBR(item.entrada_boleto)}</td>
+                                <td className="px-3 py-2.5 text-right text-muted-foreground">{moneyBR(item.entrada_ted)}</td>
+                                <td className="px-3 py-2.5 text-right text-muted-foreground">{moneyBR(item.entrada_dinheiro)}</td>
+                                <td className="px-3 py-2.5 text-right text-muted-foreground">{moneyBR(item.outras_entradas)}</td>
+                                <td className="px-3 py-2.5 text-right font-bold text-success">{moneyBR(entradas)}</td>
+                                <td className="border-l border-border px-3 py-2.5 text-right text-destructive">{moneyBR(item.total_saidas)}</td>
+                                <td className={`px-3 py-2.5 text-right font-bold ${saldo < 0 ? "text-destructive" : "text-success"}`}>{moneyBR(item.saldo_semanal)}</td>
+                                <td className="px-3 py-2.5 text-right text-muted-foreground">{moneyBR(item.saldo_medio)}</td>
+                                <td className="px-3 py-2.5 text-right text-muted-foreground">{moneyBR(item.saldo_final)}</td>
+                                <td className="px-3 py-2.5 text-right text-muted-foreground">{item.quantidade_transacoes || 0}</td>
+                                <td className="border-l border-border px-3 py-2.5 text-center font-bold text-foreground">{item.rating_bacen || "-"}</td>
+                                <td className="px-3 py-2.5 text-center font-bold text-primary">{item.rating_interno || "-"}</td>
                                 <td className="px-3 py-2.5 text-center">{item.scr_status || item.restricao_scr || "-"}</td>
                                 <td className="px-3 py-2.5 text-center">{item.cenprot_status || item.restricao_cenprot || "-"}</td>
                                 <td className="px-3 py-2.5 text-center">{item.serasa_status || item.restricao_serasa || "-"}</td>
                                 <td className="px-3 py-2.5 text-center">{item.cnd_status || item.cnd_regular || "-"}</td>
                                 <td className="px-3 py-2.5 text-center">{item.pld_aml_status || item.pld_aml || "-"}</td>
                                 <td className="px-3 py-2.5 text-center">{item.coaf_status || item.operacao_suspeita_coaf || "-"}</td>
-                                <td className="border-l border-slate-100 px-3 py-2.5">
+                                <td className="border-l border-border px-3 py-2.5">
                                   <span className={`whitespace-nowrap rounded-full border px-2 py-0.5 text-[10px] font-semibold ${statusBadge(item.status_semana || item.status)}`}>
                                     {labelStatus(item.status_semana || item.status)}
                                   </span>
                                   <button
-                                    className="mt-2 block whitespace-nowrap rounded-md border border-amber-300 bg-white px-2 py-1 text-[10px] font-bold text-amber-700 hover:bg-amber-50"
+                                    className="mt-2 block whitespace-nowrap rounded-md border border-warning/30 bg-white px-2 py-1 text-[10px] font-bold text-warning hover:bg-warning/10"
                                     onClick={() => abrirEditarSemana(detalhe, item)}
                                   >
                                     Corrigir semana
@@ -3937,22 +3937,22 @@ export default function AcompanhamentoBancario() {
                       </table>
                     </div>
                   ) : (
-                    <div className="m-4 rounded-xl border border-dashed border-slate-300 bg-slate-50 p-6 text-center text-sm text-slate-500">
+                    <div className="m-4 rounded-xl border border-dashed border-input bg-muted p-6 text-center text-sm text-muted-foreground">
                       Nenhuma atualização semanal registrada.
                     </div>
                   )}
                 </section>
 
-                <section className="rounded-2xl border border-violet-200 bg-white shadow-sm">
-                  <div className="border-b border-violet-100 bg-violet-50/60 px-4 py-4">
+                <section className="rounded-2xl border border-primary/20 bg-white shadow-sm">
+                  <div className="border-b border-primary/20 bg-primary/10 px-4 py-4">
                     <div className="flex flex-col gap-2 lg:flex-row lg:items-start lg:justify-between">
                       <div>
-                        <h4 className="text-sm font-bold uppercase tracking-wide text-violet-800">Extratos e comprovantes bancários</h4>
-                        <p className="mt-1 max-w-3xl text-xs leading-5 text-violet-900/80">
+                        <h4 className="text-sm font-bold uppercase tracking-wide text-primary">Extratos e comprovantes bancários</h4>
+                        <p className="mt-1 max-w-3xl text-xs leading-5 text-primary">
                           Anexe um extrato em PDF ou imagem para extrair entradas e saídas deste acompanhamento. Os dados ficam em revisão e não alteram o histórico até uma aprovação explícita.
                         </p>
                       </div>
-                      <span className="rounded-full border border-violet-200 bg-white px-3 py-1 text-[11px] font-semibold text-violet-700">
+                      <span className="rounded-full border border-primary/20 bg-white px-3 py-1 text-[11px] font-semibold text-primary">
                         {lancamentosImportados.filter((item) => item.status === "pendente" && !item.aplicado_em).length} pendente(s)
                       </span>
                     </div>
@@ -3961,9 +3961,9 @@ export default function AcompanhamentoBancario() {
                   <div className="space-y-4 p-4">
                     <div className="grid grid-cols-1 gap-3 lg:grid-cols-[minmax(0,1fr)_minmax(0,1.5fr)_auto] lg:items-end">
                       <label className="block">
-                        <span className="mb-1 block text-xs font-semibold text-slate-600">Semana bancária de destino</span>
+                        <span className="mb-1 block text-xs font-semibold text-muted-foreground">Semana bancária de destino</span>
                         <select
-                          className="h-10 w-full rounded-lg border border-slate-300 bg-white px-3 text-sm text-slate-700"
+                          className="h-10 w-full rounded-lg border border-input bg-white px-3 text-sm text-muted-foreground"
                           value={semanaImportacaoId}
                           onChange={async (e) => {
                             const value = e.target.value;
@@ -3989,7 +3989,7 @@ export default function AcompanhamentoBancario() {
                       </label>
 
                       <label className="block">
-                        <span className="mb-1 block text-xs font-semibold text-slate-600">Extrato ou comprovante (PDF ou imagem)</span>
+                        <span className="mb-1 block text-xs font-semibold text-muted-foreground">Extrato ou comprovante (PDF ou imagem)</span>
                         <input
                           type="file"
                           accept=".pdf,application/pdf,.jpg,.jpeg,.png,.webp,image/jpeg,image/png,image/webp"
@@ -3999,7 +3999,7 @@ export default function AcompanhamentoBancario() {
                             setMensagemImportacao("");
                           }}
                           disabled={analisandoExtrato || aplicandoImportados}
-                          className="block h-10 w-full cursor-pointer rounded-lg border border-slate-300 bg-white text-xs text-slate-600 file:mr-3 file:h-10 file:border-0 file:border-r file:border-slate-200 file:bg-slate-50 file:px-3 file:text-xs file:font-semibold file:text-slate-700"
+                          className="block h-10 w-full cursor-pointer rounded-lg border border-input bg-white text-xs text-muted-foreground file:mr-3 file:h-10 file:border-0 file:border-r file:border-border file:bg-muted file:px-3 file:text-xs file:font-semibold file:text-muted-foreground"
                         />
                       </label>
 
@@ -4007,25 +4007,25 @@ export default function AcompanhamentoBancario() {
                         type="button"
                         onClick={analisarExtratoBancario}
                         disabled={analisandoExtrato || aplicandoImportados || !arquivoExtrato || !semanaImportacaoId}
-                        className="h-10 rounded-lg bg-violet-600 px-4 text-xs font-bold text-white transition hover:bg-violet-700 disabled:cursor-not-allowed disabled:opacity-50"
+                        className="h-10 rounded-lg bg-primary px-4 text-xs font-bold text-white transition hover:bg-primary disabled:cursor-not-allowed disabled:opacity-50"
                       >
                         {analisandoExtrato ? "Analisando..." : "Anexar e analisar"}
                       </button>
                     </div>
 
                     {arquivoExtrato && (
-                      <p className="text-xs text-slate-500">Arquivo selecionado: <strong>{arquivoExtrato.name}</strong></p>
+                      <p className="text-xs text-muted-foreground">Arquivo selecionado: <strong>{arquivoExtrato.name}</strong></p>
                     )}
                     {!detalhe.atualizacoes?.length && (
-                      <div className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs leading-5 text-amber-800">
+                      <div className="rounded-lg border border-warning/20 bg-warning/10 px-3 py-2 text-xs leading-5 text-warning">
                         Primeiro registre uma atualização semanal em <strong>Atualizar semana</strong> para definir o destino dos lançamentos importados.
                       </div>
                     )}
-                    {erroImportacao && <div className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-xs leading-5 text-red-700">{erroImportacao}</div>}
-                    {mensagemImportacao && <div className="rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-xs leading-5 text-emerald-700">{mensagemImportacao}</div>}
+                    {erroImportacao && <div className="rounded-lg border border-destructive/20 bg-destructive/10 px-3 py-2 text-xs leading-5 text-destructive">{erroImportacao}</div>}
+                    {mensagemImportacao && <div className="rounded-lg border border-success/20 bg-success/10 px-3 py-2 text-xs leading-5 text-success">{mensagemImportacao}</div>}
 
                     {carregandoImportados ? (
-                      <div className="rounded-lg border border-dashed border-slate-300 bg-slate-50 p-4 text-center text-xs text-slate-500">Carregando lançamentos importados...</div>
+                      <div className="rounded-lg border border-dashed border-input bg-muted p-4 text-center text-xs text-muted-foreground">Carregando lançamentos importados...</div>
                     ) : lancamentosImportados.length ? (
                       <div className="space-y-3">
                         {(() => {
@@ -4034,13 +4034,13 @@ export default function AcompanhamentoBancario() {
                           const totalSaidasModalidades = resumoModalidades.reduce((acc, linha) => acc + linha.saidas, 0);
                           const totalLancamentosModalidades = resumoModalidades.reduce((acc, linha) => acc + linha.quantidade, 0);
                           return (
-                            <div className="overflow-hidden rounded-xl border border-violet-200">
-                              <div className="border-b border-violet-100 bg-violet-50/60 px-3 py-2 text-[11px] font-semibold uppercase tracking-wide text-violet-700">
+                            <div className="overflow-hidden rounded-xl border border-primary/20">
+                              <div className="border-b border-primary/20 bg-primary/10 px-3 py-2 text-[11px] font-semibold uppercase tracking-wide text-primary">
                                 Total por modalidade — semana selecionada
                               </div>
                               <table className="w-full border-collapse text-xs">
                                 <thead>
-                                  <tr className="text-[10px] font-semibold uppercase tracking-wide text-slate-500">
+                                  <tr className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
                                     <th className="px-3 py-2 text-left">Modalidade</th>
                                     <th className="px-3 py-2 text-right">Entradas</th>
                                     <th className="px-3 py-2 text-right">Saídas</th>
@@ -4050,39 +4050,39 @@ export default function AcompanhamentoBancario() {
                                 <tbody className="divide-y divide-slate-100">
                                   {resumoModalidades.map((linha) => (
                                     <tr key={linha.modalidade}>
-                                      <td className="px-3 py-2 text-slate-700">{linha.label}</td>
-                                      <td className="px-3 py-2 text-right text-emerald-700">{linha.entradas > 0 ? moneyBR(linha.entradas) : "-"}</td>
-                                      <td className="px-3 py-2 text-right text-red-600">{linha.saidas > 0 ? moneyBR(linha.saidas) : "-"}</td>
-                                      <td className="px-3 py-2 text-right text-slate-500">{linha.quantidade}</td>
+                                      <td className="px-3 py-2 text-muted-foreground">{linha.label}</td>
+                                      <td className="px-3 py-2 text-right text-success">{linha.entradas > 0 ? moneyBR(linha.entradas) : "-"}</td>
+                                      <td className="px-3 py-2 text-right text-destructive">{linha.saidas > 0 ? moneyBR(linha.saidas) : "-"}</td>
+                                      <td className="px-3 py-2 text-right text-muted-foreground">{linha.quantidade}</td>
                                     </tr>
                                   ))}
                                   {!resumoModalidades.length && (
                                     <tr>
-                                      <td colSpan={4} className="px-3 py-3 text-center text-slate-400">Nenhum lançamento válido nesta semana (todos descartados).</td>
+                                      <td colSpan={4} className="px-3 py-3 text-center text-muted-foreground">Nenhum lançamento válido nesta semana (todos descartados).</td>
                                     </tr>
                                   )}
                                 </tbody>
                                 <tfoot>
-                                  <tr className="border-t border-violet-200 bg-violet-50/40 font-bold">
-                                    <td className="px-3 py-2 text-slate-700">Total da semana</td>
-                                    <td className="px-3 py-2 text-right text-emerald-700">{moneyBR(totalEntradasModalidades)}</td>
-                                    <td className="px-3 py-2 text-right text-red-600">{moneyBR(totalSaidasModalidades)}</td>
-                                    <td className="px-3 py-2 text-right text-slate-600">{totalLancamentosModalidades}</td>
+                                  <tr className="border-t border-primary/20 bg-primary/10/40 font-bold">
+                                    <td className="px-3 py-2 text-muted-foreground">Total da semana</td>
+                                    <td className="px-3 py-2 text-right text-success">{moneyBR(totalEntradasModalidades)}</td>
+                                    <td className="px-3 py-2 text-right text-destructive">{moneyBR(totalSaidasModalidades)}</td>
+                                    <td className="px-3 py-2 text-right text-muted-foreground">{totalLancamentosModalidades}</td>
                                   </tr>
                                 </tfoot>
                               </table>
-                              <div className="border-t border-violet-100 bg-white px-3 py-1.5 text-[10px] leading-4 text-slate-400">
+                              <div className="border-t border-primary/20 bg-white px-3 py-1.5 text-[10px] leading-4 text-muted-foreground">
                                 Dinheiro (depósito em espécie) não entra neste total automático — lance manualmente no Histórico Semanal.
                               </div>
                             </div>
                           );
                         })()}
 
-                        <div className="flex flex-col gap-2 rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-600 sm:flex-row sm:items-center sm:justify-between">
+                        <div className="flex flex-col gap-2 rounded-lg border border-border bg-muted px-3 py-2 text-xs text-muted-foreground sm:flex-row sm:items-center sm:justify-between">
                           <button
                             type="button"
                             onClick={() => setMostrarLancamentosDetalhados((v) => !v)}
-                            className="text-left font-semibold text-violet-700 underline decoration-dotted underline-offset-2"
+                            className="text-left font-semibold text-primary underline decoration-dotted underline-offset-2"
                           >
                             {mostrarLancamentosDetalhados ? "Ocultar lançamentos detalhados" : `Ver e revisar lançamentos individuais (${lancamentosImportados.length})`}
                           </button>
@@ -4091,7 +4091,7 @@ export default function AcompanhamentoBancario() {
                               type="button"
                               onClick={aplicarLancamentosImportados}
                               disabled={aplicandoImportados || !lancamentosImportados.some((item) => item.status === "aprovado" && !item.aplicado_em) || !semanaImportacaoId}
-                              className="rounded-lg border border-emerald-300 bg-white px-3 py-2 text-xs font-semibold text-emerald-700 hover:bg-emerald-50 disabled:cursor-not-allowed disabled:opacity-50"
+                              className="rounded-lg border border-success/30 bg-white px-3 py-2 text-xs font-semibold text-success hover:bg-success/10 disabled:cursor-not-allowed disabled:opacity-50"
                               title="Aplica apenas os lançamentos que você já marcou como 'Aprovado' individualmente na lista detalhada."
                             >
                               {aplicandoImportados ? "Aplicando..." : "Aplicar só os aprovados"}
@@ -4100,7 +4100,7 @@ export default function AcompanhamentoBancario() {
                               type="button"
                               onClick={aplicarTodosLancamentosDaSemana}
                               disabled={aplicandoImportados || !lancamentosImportados.some((item) => item.status !== "descartado" && !item.aplicado_em) || !semanaImportacaoId}
-                              className="rounded-lg bg-emerald-600 px-3 py-2 text-xs font-bold text-white hover:bg-emerald-700 disabled:cursor-not-allowed disabled:opacity-50"
+                              className="rounded-lg bg-success px-3 py-2 text-xs font-bold text-white hover:bg-success/90 disabled:cursor-not-allowed disabled:opacity-50"
                               title="Soma o total de todos os lançamentos lidos do extrato (exceto os descartados) direto na semana, somando ao que já existir de outras origens."
                             >
                               {aplicandoImportados ? "Aplicando..." : "Aplicar tudo (somar total da semana)"}
@@ -4110,47 +4110,47 @@ export default function AcompanhamentoBancario() {
 
                         {mostrarLancamentosDetalhados && (
                         <div className="space-y-2">
-                          <p className="text-[11px] text-slate-500">Revise cada lançamento. Aprovar não aplica o dado automaticamente.</p>
+                          <p className="text-[11px] text-muted-foreground">Revise cada lançamento. Aprovar não aplica o dado automaticamente.</p>
                           {lancamentosImportados.map((item) => {
                             const dataValue = String(item.data_movimento_iso || item.data_movimento || "").slice(0, 10);
                             const aplicado = Boolean(item.aplicado_em);
                             return (
-                              <div key={item.id} className={`rounded-xl border p-3 ${aplicado ? "border-emerald-200 bg-emerald-50/40" : item.status === "descartado" ? "border-slate-200 bg-slate-50 opacity-70" : "border-slate-200 bg-white"}`}>
+                              <div key={item.id} className={`rounded-xl border p-3 ${aplicado ? "border-success/20 bg-success/10/40" : item.status === "descartado" ? "border-border bg-muted opacity-70" : "border-border bg-white"}`}>
                                 <div className="grid grid-cols-1 gap-2 md:grid-cols-[130px_110px_minmax(0,1fr)_145px_auto] md:items-end">
                                   <label className="block">
-                                    <span className="mb-1 block text-[10px] font-semibold uppercase text-slate-400">Data</span>
+                                    <span className="mb-1 block text-[10px] font-semibold uppercase text-muted-foreground">Data</span>
                                     <input
                                       type="date"
                                       value={dataValue}
                                       disabled={aplicado}
                                       onChange={(e) => revisarLancamentoImportado(item, { data_movimento: e.target.value })}
-                                      className="h-9 w-full rounded-md border border-slate-300 px-2 text-xs"
+                                      className="h-9 w-full rounded-md border border-input px-2 text-xs"
                                     />
                                   </label>
                                   <label className="block">
-                                    <span className="mb-1 block text-[10px] font-semibold uppercase text-slate-400">Tipo</span>
+                                    <span className="mb-1 block text-[10px] font-semibold uppercase text-muted-foreground">Tipo</span>
                                     <select
                                       value={item.tipo}
                                       disabled={aplicado}
                                       onChange={(e) => revisarLancamentoImportado(item, { tipo: e.target.value })}
-                                      className="h-9 w-full rounded-md border border-slate-300 bg-white px-2 text-xs"
+                                      className="h-9 w-full rounded-md border border-input bg-white px-2 text-xs"
                                     >
                                       <option value="entrada">Entrada</option>
                                       <option value="saida">Saída</option>
                                     </select>
                                   </label>
                                   <label className="block">
-                                    <span className="mb-1 block text-[10px] font-semibold uppercase text-slate-400">Descrição</span>
+                                    <span className="mb-1 block text-[10px] font-semibold uppercase text-muted-foreground">Descrição</span>
                                     <input
                                       type="text"
                                       value={item.descricao || ""}
                                       disabled={aplicado}
                                       onBlur={(e) => revisarLancamentoImportado(item, { descricao: e.target.value })}
-                                      className="h-9 w-full rounded-md border border-slate-300 px-2 text-xs"
+                                      className="h-9 w-full rounded-md border border-input px-2 text-xs"
                                     />
                                   </label>
                                   <label className="block">
-                                    <span className="mb-1 block text-[10px] font-semibold uppercase text-slate-400">Valor</span>
+                                    <span className="mb-1 block text-[10px] font-semibold uppercase text-muted-foreground">Valor</span>
                                     <input
                                       type="number"
                                       min="0.01"
@@ -4158,23 +4158,23 @@ export default function AcompanhamentoBancario() {
                                       value={Number(item.valor || 0).toFixed(2)}
                                       disabled={aplicado}
                                       onBlur={(e) => revisarLancamentoImportado(item, { valor: Number(e.target.value) })}
-                                      className="h-9 w-full rounded-md border border-slate-300 px-2 text-right text-xs"
+                                      className="h-9 w-full rounded-md border border-input px-2 text-right text-xs"
                                     />
                                   </label>
                                   <div className="flex flex-wrap items-center gap-1.5 md:justify-end">
-                                    <span className={`rounded-full border px-2 py-1 text-[10px] font-bold ${item.status === "aprovado" ? "border-emerald-200 bg-emerald-50 text-emerald-700" : item.status === "descartado" ? "border-slate-200 bg-slate-100 text-slate-500" : "border-amber-200 bg-amber-50 text-amber-700"}`}>
+                                    <span className={`rounded-full border px-2 py-1 text-[10px] font-bold ${item.status === "aprovado" ? "border-success/20 bg-success/10 text-success" : item.status === "descartado" ? "border-border bg-muted text-muted-foreground" : "border-warning/20 bg-warning/10 text-warning"}`}>
                                       {aplicado ? "Aplicado" : item.status === "aprovado" ? "Aprovado" : item.status === "descartado" ? "Descartado" : "Pendente"}
                                     </span>
                                     {!aplicado && item.status !== "aprovado" && (
-                                      <button type="button" onClick={() => revisarLancamentoImportado(item, { status: "aprovado" })} className="rounded-md border border-emerald-200 bg-emerald-50 px-2 py-1 text-[10px] font-bold text-emerald-700 hover:bg-emerald-100">Aprovar</button>
+                                      <button type="button" onClick={() => revisarLancamentoImportado(item, { status: "aprovado" })} className="rounded-md border border-success/20 bg-success/10 px-2 py-1 text-[10px] font-bold text-success hover:bg-success/20">Aprovar</button>
                                     )}
                                     {!aplicado && item.status !== "descartado" && (
-                                      <button type="button" onClick={() => revisarLancamentoImportado(item, { status: "descartado" })} className="rounded-md border border-red-200 bg-red-50 px-2 py-1 text-[10px] font-bold text-red-700 hover:bg-red-100">Descartar</button>
+                                      <button type="button" onClick={() => revisarLancamentoImportado(item, { status: "descartado" })} className="rounded-md border border-destructive/20 bg-destructive/10 px-2 py-1 text-[10px] font-bold text-destructive hover:bg-destructive/20">Descartar</button>
                                     )}
                                   </div>
                                 </div>
-                                {item.evidencia && <p className="mt-2 rounded-md bg-slate-50 px-2 py-1 text-[10px] leading-4 text-slate-500">Evidência: {item.evidencia}</p>}
-                                {item.arquivo_nome && <p className="mt-1 text-[10px] text-slate-400">Origem: {item.arquivo_nome}{item.confianca != null ? ` · confiança ${Math.round(Number(item.confianca) * 100)}%` : ""}</p>}
+                                {item.evidencia && <p className="mt-2 rounded-md bg-muted px-2 py-1 text-[10px] leading-4 text-muted-foreground">Evidência: {item.evidencia}</p>}
+                                {item.arquivo_nome && <p className="mt-1 text-[10px] text-muted-foreground">Origem: {item.arquivo_nome}{item.confianca != null ? ` · confiança ${Math.round(Number(item.confianca) * 100)}%` : ""}</p>}
                               </div>
                             );
                           })}
@@ -4182,7 +4182,7 @@ export default function AcompanhamentoBancario() {
                         )}
                       </div>
                     ) : (
-                      <div className="rounded-lg border border-dashed border-slate-300 bg-slate-50 p-4 text-center text-xs text-slate-500">
+                      <div className="rounded-lg border border-dashed border-input bg-muted p-4 text-center text-xs text-muted-foreground">
                         Nenhum lançamento importado para a semana selecionada. Anexe um extrato ou comprovante para iniciar a análise.
                       </div>
                     )}
@@ -4190,27 +4190,27 @@ export default function AcompanhamentoBancario() {
                 </section>
 
                 {Array.isArray(detalhe.atualizacoes) && detalhe.atualizacoes.some((i: any) => i.analise_semana || i.orientacao_cliente || i.proxima_acao) && (
-                  <section className="rounded-2xl border border-slate-200 bg-white shadow-sm">
-                    <div className="border-b border-slate-100 px-4 py-3">
-                      <h4 className="text-sm font-bold uppercase tracking-wide text-slate-500">Análises e orientações por semana</h4>
+                  <section className="rounded-2xl border border-border bg-white shadow-sm">
+                    <div className="border-b border-border px-4 py-3">
+                      <h4 className="text-sm font-bold uppercase tracking-wide text-muted-foreground">Análises e orientações por semana</h4>
                     </div>
                     <div className="divide-y divide-slate-100">
                       {detalhe.atualizacoes.filter((i: any) => i.analise_semana || i.orientacao_cliente || i.proxima_acao).map((item: any) => (
                         <div key={`analise-${item.id || item.numero_semana}`} className="px-4 py-3">
                           <div className="mb-2 flex flex-wrap items-center gap-2">
-                            <span className="text-xs font-bold text-slate-700">Semana {item.numero_semana}</span>
-                            <span className="text-[10px] text-slate-400">{formatDateBR(item.data_referencia_inicio)} a {formatDateBR(item.data_referencia_fim)}</span>
+                            <span className="text-xs font-bold text-muted-foreground">Semana {item.numero_semana}</span>
+                            <span className="text-[10px] text-muted-foreground">{formatDateBR(item.data_referencia_inicio)} a {formatDateBR(item.data_referencia_fim)}</span>
                             <button
-                              className="rounded-md border border-amber-200 bg-amber-50 px-2 py-1 text-[10px] font-semibold text-amber-700 hover:bg-amber-100"
+                              className="rounded-md border border-warning/20 bg-warning/10 px-2 py-1 text-[10px] font-semibold text-warning hover:bg-warning/20"
                               onClick={() => abrirEditarSemana(detalhe, item)}
                             >
                               Editar análise/semana
                             </button>
                           </div>
-                          <div className="grid grid-cols-1 gap-3 text-xs text-slate-700 sm:grid-cols-3">
-                            {item.analise_semana && <div><span className="font-semibold text-slate-500">Análise: </span>{item.analise_semana}</div>}
-                            {item.orientacao_cliente && <div><span className="font-semibold text-slate-500">Orientação: </span>{item.orientacao_cliente}</div>}
-                            {item.proxima_acao && <div><span className="font-semibold text-slate-500">Próxima ação: </span>{item.proxima_acao}</div>}
+                          <div className="grid grid-cols-1 gap-3 text-xs text-muted-foreground sm:grid-cols-3">
+                            {item.analise_semana && <div><span className="font-semibold text-muted-foreground">Análise: </span>{item.analise_semana}</div>}
+                            {item.orientacao_cliente && <div><span className="font-semibold text-muted-foreground">Orientação: </span>{item.orientacao_cliente}</div>}
+                            {item.proxima_acao && <div><span className="font-semibold text-muted-foreground">Próxima ação: </span>{item.proxima_acao}</div>}
                           </div>
                         </div>
                       ))}
@@ -4219,8 +4219,8 @@ export default function AcompanhamentoBancario() {
                 )}
 
                 <section className="grid grid-cols-1 gap-4 xl:grid-cols-2">
-                  <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
-                    <h4 className="mb-3 text-sm font-bold uppercase tracking-wide text-slate-500">Objetivo e estratégia de crédito</h4>
+                  <div className="rounded-2xl border border-border bg-white p-4 shadow-sm">
+                    <h4 className="mb-3 text-sm font-bold uppercase tracking-wide text-muted-foreground">Objetivo e estratégia de crédito</h4>
                     <div className="grid grid-cols-2 gap-x-6 gap-y-0">
                       {[
                         { label: "Objetivo do crédito", value: detalhe.objetivo_credito },
@@ -4228,20 +4228,20 @@ export default function AcompanhamentoBancario() {
                         { label: "Valor pretendido", value: moneyBR(detalhe.valor_credito_pretendido) },
                         { label: "Status", value: labelStatus(detalhe.status) },
                       ].map(({ label, value }) => (
-                        <div key={label} className="border-b border-slate-100 py-2">
-                          <div className="text-[10px] font-semibold uppercase tracking-wide text-slate-400">{label}</div>
-                          <div className="mt-0.5 text-sm text-slate-700">{value || "-"}</div>
+                        <div key={label} className="border-b border-border py-2">
+                          <div className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">{label}</div>
+                          <div className="mt-0.5 text-sm text-muted-foreground">{value || "-"}</div>
                         </div>
                       ))}
                     </div>
                     {detalhe.observacoes_iniciais && (
-                      <div className="mt-3 rounded-xl border border-slate-200 bg-slate-50 p-3 text-xs text-slate-600">
+                      <div className="mt-3 rounded-xl border border-border bg-muted p-3 text-xs text-muted-foreground">
                         <span className="font-semibold">Observações: </span>{detalhe.observacoes_iniciais}
                       </div>
                     )}
                   </div>
-                  <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
-                    <h4 className="mb-3 text-sm font-bold uppercase tracking-wide text-slate-500">Dados bancários e relacionamento</h4>
+                  <div className="rounded-2xl border border-border bg-white p-4 shadow-sm">
+                    <h4 className="mb-3 text-sm font-bold uppercase tracking-wide text-muted-foreground">Dados bancários e relacionamento</h4>
                     <div className="grid grid-cols-2 gap-x-6 gap-y-0">
                       {[
                         { label: "Agência", value: detalhe.agencia },
@@ -4251,9 +4251,9 @@ export default function AcompanhamentoBancario() {
                         { label: "Abertura de conta", value: formatDateBR(detalhe.data_abertura_conta) },
                         { label: "E-mail", value: detalhe.email_cliente },
                       ].map(({ label, value }) => (
-                        <div key={label} className="border-b border-slate-100 py-2">
-                          <div className="text-[10px] font-semibold uppercase tracking-wide text-slate-400">{label}</div>
-                          <div className="mt-0.5 text-sm text-slate-700">{value || "-"}</div>
+                        <div key={label} className="border-b border-border py-2">
+                          <div className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">{label}</div>
+                          <div className="mt-0.5 text-sm text-muted-foreground">{value || "-"}</div>
                         </div>
                       ))}
                     </div>
@@ -4266,26 +4266,26 @@ export default function AcompanhamentoBancario() {
 
         {/* ── Modal — Gerador de relatório inteligente ─────────────────────── */}
         {relatorioOpen && (
-          <div className="fixed inset-0 z-[10000] overflow-y-auto bg-slate-900/50 p-4">
+          <div className="fixed inset-0 z-[10000] overflow-y-auto bg-overlay p-4">
             <div className="mx-auto w-full max-w-3xl rounded-2xl bg-white p-5 shadow-2xl">
-              <div className="flex flex-col gap-2 border-b border-slate-200 pb-4 sm:flex-row sm:items-start sm:justify-between">
+              <div className="flex flex-col gap-2 border-b border-border pb-4 sm:flex-row sm:items-start sm:justify-between">
                 <div>
-                  <p className="text-xs font-bold uppercase tracking-[0.18em] text-blue-700">Gerador de relatório bancário</p>
-                  <h3 className="mt-1 text-xl font-black text-slate-950">Relatório inteligente por período</h3>
-                  <p className="mt-1 text-sm text-slate-500">
+                  <p className="text-xs font-bold uppercase tracking-[0.18em] text-primary">Gerador de relatório bancário</p>
+                  <h3 className="mt-1 text-xl font-black text-foreground">Relatório inteligente por período</h3>
+                  <p className="mt-1 text-sm text-muted-foreground">
                     {relatorioOpen.nome_empresa} — {relatorioOpen.banco_observado || "Banco não informado"}
                   </p>
                 </div>
-                <button className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-50" onClick={() => setRelatorioOpen(null)}>
+                <button className="rounded-xl border border-border bg-white px-3 py-2 text-xs font-semibold text-muted-foreground hover:bg-muted" onClick={() => setRelatorioOpen(null)}>
                   Fechar
                 </button>
               </div>
 
               <div className="mt-4 grid gap-4 sm:grid-cols-2">
-                <label className="text-xs font-bold uppercase tracking-wide text-slate-500">
+                <label className="text-xs font-bold uppercase tracking-wide text-muted-foreground">
                   Tipo de relatório
                   <select
-                    className="mt-1 w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm font-semibold normal-case text-slate-700"
+                    className="mt-1 w-full rounded-xl border border-border bg-white px-3 py-2 text-sm font-semibold normal-case text-muted-foreground"
                     value={opcoesRelatorio.tipo}
                     onChange={(e) => setOpcoesRelatorio((p) => ({ ...p, tipo: e.target.value as OpcoesRelatorioBancario["tipo"] }))}
                   >
@@ -4296,10 +4296,10 @@ export default function AcompanhamentoBancario() {
                   </select>
                 </label>
 
-                <label className="text-xs font-bold uppercase tracking-wide text-slate-500">
+                <label className="text-xs font-bold uppercase tracking-wide text-muted-foreground">
                   Formato
                   <select
-                    className="mt-1 w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm font-semibold normal-case text-slate-700"
+                    className="mt-1 w-full rounded-xl border border-border bg-white px-3 py-2 text-sm font-semibold normal-case text-muted-foreground"
                     value={opcoesRelatorio.formato}
                     onChange={(e) => setOpcoesRelatorio((p) => ({ ...p, formato: e.target.value as OpcoesRelatorioBancario["formato"] }))}
                   >
@@ -4310,10 +4310,10 @@ export default function AcompanhamentoBancario() {
                   </select>
                 </label>
 
-                <label className="text-xs font-bold uppercase tracking-wide text-slate-500">
+                <label className="text-xs font-bold uppercase tracking-wide text-muted-foreground">
                   Logo / prestadora
                   <select
-                    className="mt-1 w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm font-semibold normal-case text-slate-700"
+                    className="mt-1 w-full rounded-xl border border-border bg-white px-3 py-2 text-sm font-semibold normal-case text-muted-foreground"
                     value={opcoesRelatorio.marca}
                     onChange={(e) => setOpcoesRelatorio((p) => ({ ...p, marca: e.target.value as PrestadoraKey }))}
                   >
@@ -4324,10 +4324,10 @@ export default function AcompanhamentoBancario() {
 
                 {opcoesRelatorio.tipo !== "periodo" && opcoesRelatorio.tipo !== "completo" && (
                   <>
-                    <label className="text-xs font-bold uppercase tracking-wide text-slate-500">
+                    <label className="text-xs font-bold uppercase tracking-wide text-muted-foreground">
                       Mês
                       <select
-                        className="mt-1 w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm font-semibold normal-case text-slate-700"
+                        className="mt-1 w-full rounded-xl border border-border bg-white px-3 py-2 text-sm font-semibold normal-case text-muted-foreground"
                         value={opcoesRelatorio.mes}
                         onChange={(e) => setOpcoesRelatorio((p) => ({ ...p, mes: e.target.value }))}
                       >
@@ -4336,11 +4336,11 @@ export default function AcompanhamentoBancario() {
                         ))}
                       </select>
                     </label>
-                    <label className="text-xs font-bold uppercase tracking-wide text-slate-500">
+                    <label className="text-xs font-bold uppercase tracking-wide text-muted-foreground">
                       Ano
                       <input
                         type="number"
-                        className="mt-1 w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm font-semibold normal-case text-slate-700"
+                        className="mt-1 w-full rounded-xl border border-border bg-white px-3 py-2 text-sm font-semibold normal-case text-muted-foreground"
                         value={opcoesRelatorio.ano}
                         onChange={(e) => setOpcoesRelatorio((p) => ({ ...p, ano: e.target.value }))}
                       />
@@ -4350,20 +4350,20 @@ export default function AcompanhamentoBancario() {
 
                 {opcoesRelatorio.tipo === "periodo" && (
                   <>
-                    <label className="text-xs font-bold uppercase tracking-wide text-slate-500">
+                    <label className="text-xs font-bold uppercase tracking-wide text-muted-foreground">
                       Data inicial
                       <input
                         type="date"
-                        className="mt-1 w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm font-semibold normal-case text-slate-700"
+                        className="mt-1 w-full rounded-xl border border-border bg-white px-3 py-2 text-sm font-semibold normal-case text-muted-foreground"
                         value={opcoesRelatorio.dataInicio}
                         onChange={(e) => setOpcoesRelatorio((p) => ({ ...p, dataInicio: e.target.value }))}
                       />
                     </label>
-                    <label className="text-xs font-bold uppercase tracking-wide text-slate-500">
+                    <label className="text-xs font-bold uppercase tracking-wide text-muted-foreground">
                       Data final
                       <input
                         type="date"
-                        className="mt-1 w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm font-semibold normal-case text-slate-700"
+                        className="mt-1 w-full rounded-xl border border-border bg-white px-3 py-2 text-sm font-semibold normal-case text-muted-foreground"
                         value={opcoesRelatorio.dataFim}
                         onChange={(e) => setOpcoesRelatorio((p) => ({ ...p, dataFim: e.target.value }))}
                       />
@@ -4372,31 +4372,31 @@ export default function AcompanhamentoBancario() {
                 )}
               </div>
 
-              <div className="mt-4 grid gap-3 rounded-2xl border border-blue-100 bg-blue-50 p-4 sm:grid-cols-3">
-                <label className="flex items-center gap-2 text-sm font-semibold text-slate-700">
+              <div className="mt-4 grid gap-3 rounded-2xl border border-primary/20 bg-primary/10 p-4 sm:grid-cols-3">
+                <label className="flex items-center gap-2 text-sm font-semibold text-muted-foreground">
                   <input type="checkbox" checked={opcoesRelatorio.detalhado} onChange={(e) => setOpcoesRelatorio((p) => ({ ...p, detalhado: e.target.checked }))} />
                   Detalhado
                 </label>
-                <label className="flex items-center gap-2 text-sm font-semibold text-slate-700">
+                <label className="flex items-center gap-2 text-sm font-semibold text-muted-foreground">
                   <input type="checkbox" checked={opcoesRelatorio.incluirIa} onChange={(e) => setOpcoesRelatorio((p) => ({ ...p, incluirIa: e.target.checked }))} />
                   Incluir IA/parecer
                 </label>
-                <label className="flex items-center gap-2 text-sm font-semibold text-slate-700">
+                <label className="flex items-center gap-2 text-sm font-semibold text-muted-foreground">
                   <input type="checkbox" checked={opcoesRelatorio.incluirAnexos} onChange={(e) => setOpcoesRelatorio((p) => ({ ...p, incluirAnexos: e.target.checked }))} />
                   Listar anexos/documentos
                 </label>
               </div>
 
-              <div className="mt-4 rounded-2xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900">
+              <div className="mt-4 rounded-2xl border border-warning/20 bg-warning/10 p-4 text-sm text-warning">
                 <strong>Como funciona:</strong> o relatório é mensal ou por período, alimentado pelas semanas registradas. Ele mantém a lógica financeira atual, mas adiciona análise inteligente, parecer técnico, plano de ação, alertas e documentos considerados.
               </div>
 
               <div className="mt-5 flex flex-wrap justify-end gap-2">
-                <button className="rounded-xl border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50" onClick={() => setRelatorioOpen(null)}>
+                <button className="rounded-xl border border-border bg-white px-4 py-2 text-sm font-semibold text-muted-foreground hover:bg-muted" onClick={() => setRelatorioOpen(null)}>
                   Cancelar
                 </button>
                 <button
-                  className="rounded-xl bg-blue-600 px-4 py-2 text-sm font-bold text-white shadow hover:bg-blue-700 disabled:opacity-60"
+                  className="rounded-xl bg-primary px-4 py-2 text-sm font-bold text-white shadow hover:bg-primary/90 disabled:opacity-60"
                   disabled={gerandoRelatorio || (opcoesRelatorio.tipo === "periodo" && (!opcoesRelatorio.dataInicio || !opcoesRelatorio.dataFim))}
                   onClick={gerarRelatorioConfigurado}
                 >
@@ -4410,11 +4410,11 @@ export default function AcompanhamentoBancario() {
         {/* ── Modal — Impressão ────────────────────────────────────────────── */}
         {imprimirOpen && (
           <div className="fixed inset-0 z-50 flex flex-col overflow-hidden bg-white">
-            <div className="flex flex-wrap items-center gap-3 border-b bg-gray-50 p-4 print:hidden">
-              <label className="flex items-center gap-2 text-sm font-semibold text-slate-700">
+            <div className="flex flex-wrap items-center gap-3 border-b bg-muted p-4 print:hidden">
+              <label className="flex items-center gap-2 text-sm font-semibold text-muted-foreground">
                 Prestadora
                 <select
-                  className="rounded border border-gray-300 bg-white px-3 py-2 text-sm"
+                  className="rounded border border-input bg-white px-3 py-2 text-sm"
                   value={prestadoraRelatorio}
                   onChange={(e) => setPrestadoraRelatorio(e.target.value as PrestadoraKey)}
                 >
@@ -4424,20 +4424,20 @@ export default function AcompanhamentoBancario() {
               </label>
 
               <button
-                className="rounded bg-blue-600 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-700"
+                className="rounded bg-primary px-4 py-2 text-sm font-semibold text-white hover:bg-primary/90"
                 onClick={handleImprimir}
               >
                 Imprimir / Salvar PDF
               </button>
 
               <button
-                className="rounded border border-teal-200 bg-teal-50 px-4 py-2 text-sm font-semibold text-teal-700 hover:bg-teal-100"
+                className="rounded border border-success/20 bg-success/10 px-4 py-2 text-sm font-semibold text-success hover:bg-success/20"
                 onClick={() => exportarCSV(imprimirOpen, prestadoraRelatorio)}
               >
                 Exportar XLS personalizado
               </button>
 
-              <span className="min-w-0 flex-1 break-words text-xs text-slate-500">
+              <span className="min-w-0 flex-1 break-words text-xs text-muted-foreground">
                 Arquivo: {nomeArquivoRelatorio(imprimirOpen, prestadoraRelatorio, "pdf")}
               </span>
 
@@ -4500,12 +4500,12 @@ function InfoCard({ label, value, positive, negative }: {
   return (
     <div className={`rounded-xl border p-3 ${
       negative
-        ? "border-red-100 bg-red-50 text-red-700"
+        ? "border-destructive/20 bg-destructive/10 text-destructive"
         : positive
-        ? "border-emerald-100 bg-emerald-50 text-emerald-700"
-        : "border-slate-100 bg-white text-slate-800"
+        ? "border-success/20 bg-success/10 text-success"
+        : "border-border bg-white text-foreground"
     }`}>
-      <div className="text-[10px] font-semibold uppercase tracking-wide text-slate-400">{label}</div>
+      <div className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">{label}</div>
       <div className="mt-1 text-sm font-bold leading-snug">{value || "-"}</div>
     </div>
   );
@@ -4521,9 +4521,9 @@ function BancoField({ label, required, value, onChange, sugestoesExtra }: {
   const opcoes = Array.from(new Set([...(sugestoesExtra || []), ...BANCOS_SUGERIDOS]));
   return (
     <label>
-      <span className="mb-1 block text-xs font-medium text-gray-600">{label}{required ? " *" : ""}</span>
+      <span className="mb-1 block text-xs font-medium text-muted-foreground">{label}{required ? " *" : ""}</span>
       <input
-        className="w-full rounded border border-gray-300 p-2 text-sm"
+        className="w-full rounded border border-input p-2 text-sm"
         list="bancos-sugeridos"
         type="text"
         value={value}
@@ -4542,9 +4542,9 @@ function GerenteField({ label, required, value, onChange, sugestoes }: {
 }) {
   return (
     <label>
-      <span className="mb-1 block text-xs font-medium text-gray-600">{label}{required ? " *" : ""}</span>
+      <span className="mb-1 block text-xs font-medium text-muted-foreground">{label}{required ? " *" : ""}</span>
       <input
-        className="w-full rounded border border-gray-300 p-2 text-sm"
+        className="w-full rounded border border-input p-2 text-sm"
         list="gerentes-sugeridos"
         type="text"
         value={value}
@@ -4566,8 +4566,8 @@ function FieldInput({ field, value, onChange }: {
   if (field.textarea) {
     return (
       <label className="md:col-span-3">
-        <span className="mb-1 block text-xs font-medium text-gray-600">{field.label}{field.required ? " *" : ""}</span>
-        <textarea className="min-h-20 w-full rounded border border-gray-300 p-2 text-sm" value={value || ""} onChange={(e) => onChange(e.target.value)} />
+        <span className="mb-1 block text-xs font-medium text-muted-foreground">{field.label}{field.required ? " *" : ""}</span>
+        <textarea className="min-h-20 w-full rounded border border-input p-2 text-sm" value={value || ""} onChange={(e) => onChange(e.target.value)} />
       </label>
     );
   }
@@ -4576,7 +4576,7 @@ function FieldInput({ field, value, onChange }: {
     const numericValue = typeof value === "number" ? value : (parseFloat(String(value || "0")) || 0);
     return (
       <label>
-        <span className="mb-1 block text-xs font-medium text-gray-600">{field.label}{field.required ? " *" : ""}</span>
+        <span className="mb-1 block text-xs font-medium text-muted-foreground">{field.label}{field.required ? " *" : ""}</span>
         <FieldCurrencyInput
           value={numericValue}
           onChange={(num) => onChange(num)}
@@ -4586,9 +4586,9 @@ function FieldInput({ field, value, onChange }: {
   }
   return (
     <label>
-      <span className="mb-1 block text-xs font-medium text-gray-600">{field.label}{field.required ? " *" : ""}</span>
+      <span className="mb-1 block text-xs font-medium text-muted-foreground">{field.label}{field.required ? " *" : ""}</span>
       <input
-        className="w-full rounded border border-gray-300 p-2 text-sm"
+        className="w-full rounded border border-input p-2 text-sm"
         type={field.type || "text"}
         value={value || ""}
         onChange={(e) => onChange(e.target.value)}
@@ -4603,9 +4603,9 @@ function DateEditField({ label, value, onChange }: {
 }) {
   return (
     <label>
-      <span className="mb-1 block text-xs font-medium text-gray-600">{label}</span>
+      <span className="mb-1 block text-xs font-medium text-muted-foreground">{label}</span>
       <input
-        className="w-full rounded border border-amber-200 bg-amber-50/40 p-2 text-sm font-semibold text-gray-800 outline-none transition focus:border-amber-400 focus:ring-2 focus:ring-amber-100"
+        className="w-full rounded border border-warning/20 bg-warning/10/40 p-2 text-sm font-semibold text-foreground outline-none transition focus:border-warning/50 focus:ring-2 focus:ring-warning/30"
         type="date"
         value={String(value || "").slice(0, 10)}
         onChange={(e) => onChange(e.target.value)}
@@ -4619,13 +4619,13 @@ function ReadonlyField({ label, value, highlight, negative }: {
 }) {
   return (
     <div>
-      <span className="mb-1 block text-xs font-medium text-gray-600">{label}</span>
+      <span className="mb-1 block text-xs font-medium text-muted-foreground">{label}</span>
       <div className={`w-full rounded border p-2 text-sm font-semibold ${
         negative
-          ? "border-red-200 bg-red-50 text-red-700"
+          ? "border-destructive/20 bg-destructive/10 text-destructive"
           : highlight
-          ? "border-blue-200 bg-blue-50 text-blue-800"
-          : "border-gray-200 bg-gray-50 text-gray-700"
+          ? "border-primary/20 bg-primary/10 text-primary"
+          : "border-border bg-muted text-foreground"
       }`}>
         {value}
       </div>
@@ -4659,7 +4659,7 @@ function FieldCurrencyInput({ value, onChange }: {
   };
   return (
     <input
-      className="w-full rounded border border-gray-300 p-2 text-right font-mono text-sm tabular-nums focus:border-blue-400 focus:outline-none focus:ring-1 focus:ring-blue-400"
+      className="w-full rounded border border-input p-2 text-right font-mono text-sm tabular-nums focus:border-primary/50 focus:outline-none focus:ring-1 focus:ring-primary"
       type="text"
       inputMode="numeric"
       value={displayValue}
@@ -4756,9 +4756,9 @@ function CurrencyField({ label, value, onChange }: {
 
   return (
     <label>
-      <span className="mb-1 block text-xs font-medium text-gray-600">{label}</span>
+      <span className="mb-1 block text-xs font-medium text-muted-foreground">{label}</span>
       <input
-        className="w-full rounded border border-gray-300 p-2 text-right font-mono text-sm tabular-nums focus:border-blue-400 focus:outline-none focus:ring-1 focus:ring-blue-400"
+        className="w-full rounded border border-input p-2 text-right font-mono text-sm tabular-nums focus:border-primary/50 focus:outline-none focus:ring-1 focus:ring-primary"
         type="text"
         inputMode="numeric"
         value={displayValue}
@@ -4810,9 +4810,9 @@ function NumberField({ label, value, onChange, integer }: {
 
   return (
     <label>
-      <span className="mb-1 block text-xs font-medium text-gray-600">{label}</span>
+      <span className="mb-1 block text-xs font-medium text-muted-foreground">{label}</span>
       <input
-        className="w-full rounded border border-gray-300 p-2 text-right font-mono text-sm tabular-nums focus:border-blue-400 focus:outline-none focus:ring-1 focus:ring-blue-400"
+        className="w-full rounded border border-input p-2 text-right font-mono text-sm tabular-nums focus:border-primary/50 focus:outline-none focus:ring-1 focus:ring-primary"
         type="text"
         inputMode="numeric"
         value={focused ? draft : formatted}
@@ -4830,8 +4830,8 @@ function TextFieldSimple({ label, value, onChange }: {
 }) {
   return (
     <label>
-      <span className="mb-1 block text-xs font-medium text-gray-600">{label}</span>
-      <input className="w-full rounded border border-gray-300 p-2 text-sm" type="text" value={value || ""} onChange={(e) => onChange(e.target.value)} />
+      <span className="mb-1 block text-xs font-medium text-muted-foreground">{label}</span>
+      <input className="w-full rounded border border-input p-2 text-sm" type="text" value={value || ""} onChange={(e) => onChange(e.target.value)} />
     </label>
   );
 }
@@ -4841,8 +4841,8 @@ function TextareaField({ label, value, onChange }: {
 }) {
   return (
     <label>
-      <span className="mb-1 block text-xs font-medium text-gray-600">{label}</span>
-      <textarea className="min-h-20 w-full rounded border border-gray-300 p-2 text-sm" value={value || ""} onChange={(e) => onChange(e.target.value)} />
+      <span className="mb-1 block text-xs font-medium text-muted-foreground">{label}</span>
+      <textarea className="min-h-20 w-full rounded border border-input p-2 text-sm" value={value || ""} onChange={(e) => onChange(e.target.value)} />
     </label>
   );
 }

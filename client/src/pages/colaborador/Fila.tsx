@@ -36,9 +36,9 @@ const fmtDataHora = (value?: string) => value
 
 const TEMP_BADGE: Record<string, string> = {
   frio: "bg-sky-100 text-sky-700 border-sky-200",
-  morno: "bg-amber-100 text-amber-700 border-amber-200",
-  quente: "bg-orange-100 text-orange-700 border-orange-200",
-  urgente: "bg-red-100 text-red-700 border-red-200",
+  morno: "bg-warning/20 text-warning border-warning/20",
+  quente: "bg-warning/20 text-warning border-warning/20",
+  urgente: "bg-destructive/20 text-destructive border-destructive/20",
 };
 
 function getScopeFromUrl(podeVerTudo: boolean): "meus" | "sem_responsavel" | "todos" {
@@ -150,19 +150,19 @@ export default function Fila() {
       <div className="max-w-6xl mx-auto p-6 space-y-6">
         <div className="flex items-start justify-between gap-4 flex-wrap">
           <div>
-            <h1 className="text-2xl font-bold text-gray-900">{titulo}</h1>
-            <p className="text-sm text-gray-500 mt-1">{descricao}</p>
+            <h1 className="text-2xl font-bold text-foreground">{titulo}</h1>
+            <p className="text-sm text-muted-foreground mt-1">{descricao}</p>
           </div>
           <div className="flex items-center gap-2 flex-wrap">
-            <Link href="/colaborador/fila?scope=meus" className={`inline-flex items-center rounded-lg border px-3 py-2 text-sm font-medium ${scope === "meus" ? "bg-blue-600 text-white border-blue-600" : "bg-white text-gray-700 border-gray-200 hover:bg-gray-50"}`}>
+            <Link href="/colaborador/fila?scope=meus" className={`inline-flex items-center rounded-lg border px-3 py-2 text-sm font-medium ${scope === "meus" ? "bg-primary text-primary-foreground border-blue-600" : "bg-card text-foreground border-border hover:bg-muted"}`}>
                 Minha fila
               </Link>
             {podeVerTudo && (
               <>
-                <Link href="/colaborador/fila?scope=sem_responsavel" className={`inline-flex items-center rounded-lg border px-3 py-2 text-sm font-medium ${scope === "sem_responsavel" ? "bg-blue-600 text-white border-blue-600" : "bg-white text-gray-700 border-gray-200 hover:bg-gray-50"}`}>
+                <Link href="/colaborador/fila?scope=sem_responsavel" className={`inline-flex items-center rounded-lg border px-3 py-2 text-sm font-medium ${scope === "sem_responsavel" ? "bg-primary text-primary-foreground border-blue-600" : "bg-card text-foreground border-border hover:bg-muted"}`}>
                     Sem responsável
                   </Link>
-                <Link href="/colaborador/fila" className={`inline-flex items-center rounded-lg border px-3 py-2 text-sm font-medium ${scope === "todos" ? "bg-blue-600 text-white border-blue-600" : "bg-white text-gray-700 border-gray-200 hover:bg-gray-50"}`}>
+                <Link href="/colaborador/fila" className={`inline-flex items-center rounded-lg border px-3 py-2 text-sm font-medium ${scope === "todos" ? "bg-primary text-primary-foreground border-blue-600" : "bg-card text-foreground border-border hover:bg-muted"}`}>
                     Fila geral
                   </Link>
               </>
@@ -175,29 +175,29 @@ export default function Fila() {
         </div>
 
         <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-          <div className="bg-white rounded-xl border border-gray-200 p-4">
-            <div className="flex items-center gap-2 text-gray-500 text-xs font-medium mb-1">
+          <div className="bg-card rounded-xl border border-border p-4">
+            <div className="flex items-center gap-2 text-muted-foreground text-xs font-medium mb-1">
               <Users className="h-4 w-4" /> Total na fila
             </div>
-            <p className="text-2xl font-bold text-gray-900">{metricas.total}</p>
+            <p className="text-2xl font-bold text-foreground">{metricas.total}</p>
           </div>
-          <div className="bg-red-50 rounded-xl border border-red-200 p-4">
-            <div className="flex items-center gap-2 text-red-700 text-xs font-medium mb-1">
+          <div className="bg-destructive/10 rounded-xl border border-destructive/20 p-4">
+            <div className="flex items-center gap-2 text-destructive text-xs font-medium mb-1">
               <AlertTriangle className="h-4 w-4" /> {podeVerTudo ? "Sem responsável" : "Sem follow-up no prazo"}
             </div>
-            <p className="text-2xl font-bold text-red-700">{podeVerTudo ? metricas.semResponsavel : metricas.comFollowupAtrasado}</p>
+            <p className="text-2xl font-bold text-destructive">{podeVerTudo ? metricas.semResponsavel : metricas.comFollowupAtrasado}</p>
           </div>
-          <div className="bg-amber-50 rounded-xl border border-amber-200 p-4">
-            <div className="flex items-center gap-2 text-amber-700 text-xs font-medium mb-1">
+          <div className="bg-warning/10 rounded-xl border border-warning/20 p-4">
+            <div className="flex items-center gap-2 text-warning text-xs font-medium mb-1">
               <Clock className="h-4 w-4" /> Follow-up atrasado
             </div>
-            <p className="text-2xl font-bold text-amber-700">{metricas.comFollowupAtrasado}</p>
+            <p className="text-2xl font-bold text-warning">{metricas.comFollowupAtrasado}</p>
           </div>
-          <div className="bg-orange-50 rounded-xl border border-orange-200 p-4">
-            <div className="flex items-center gap-2 text-orange-700 text-xs font-medium mb-1">
+          <div className="bg-warning/10 rounded-xl border border-warning/20 p-4">
+            <div className="flex items-center gap-2 text-warning text-xs font-medium mb-1">
               <Thermometer className="h-4 w-4" /> Quentes / urgentes
             </div>
-            <p className="text-2xl font-bold text-orange-700">{metricas.quentes}</p>
+            <p className="text-2xl font-bold text-warning">{metricas.quentes}</p>
           </div>
         </div>
 
@@ -206,58 +206,58 @@ export default function Fila() {
             <div className="w-8 h-8 border-4 border-blue-600 border-t-transparent rounded-full animate-spin" />
           </div>
         ) : leads.length === 0 ? (
-          <div className="bg-white rounded-xl border border-gray-200 py-16 px-6 text-center">
+          <div className="bg-card rounded-xl border border-border py-16 px-6 text-center">
             <Target className="h-10 w-10 text-gray-300 mx-auto mb-3" />
-            <p className="text-gray-700 font-medium">Nenhum lead disponível no recorte atual.</p>
-            <p className="text-sm text-gray-400 mt-1">Os leads ativos aparecerão aqui conforme entram no pipeline.</p>
+            <p className="text-foreground font-medium">Nenhum lead disponível no recorte atual.</p>
+            <p className="text-sm text-muted-foreground mt-1">Os leads ativos aparecerão aqui conforme entram no pipeline.</p>
           </div>
         ) : (
           <div className="space-y-3">
             {leadsOrdenados.map((lead, index) => {
-              const badgeTemp = TEMP_BADGE[lead.temperatura || ""] || "bg-gray-100 text-gray-700 border-gray-200";
+              const badgeTemp = TEMP_BADGE[lead.temperatura || ""] || "bg-muted text-foreground border-border";
               const atrasado = Boolean(lead.proximo_followup && new Date(lead.proximo_followup) < new Date());
               return (
-                <div key={lead.id} className="bg-white rounded-xl border border-gray-200 p-4 hover:shadow-sm transition-shadow">
+                <div key={lead.id} className="bg-card rounded-xl border border-border p-4 hover:shadow-sm transition-shadow">
                   <div className="flex items-start justify-between gap-4 flex-wrap">
                     <div className="min-w-0 flex-1">
                       <div className="flex items-center gap-2 flex-wrap mb-1">
                         <Badge variant="outline">#{index + 1}</Badge>
-                        <p className="font-semibold text-gray-900">{lead.nome}</p>
+                        <p className="font-semibold text-foreground">{lead.nome}</p>
                         <Badge variant="secondary">{ETAPAS_FUNIL_LABELS[lead.etapa_funil as EtapaFunil] || lead.etapa_funil}</Badge>
                         <span className={`inline-flex items-center rounded-full border px-2 py-0.5 text-xs font-medium ${badgeTemp}`}>
                           {lead.temperatura || "sem temperatura"}
                         </span>
                         {atrasado && <Badge variant="destructive">Atrasado</Badge>}
                       </div>
-                      <p className="text-sm text-gray-500">
+                      <p className="text-sm text-muted-foreground">
                         {[lead.empresa, lead.produto_interesse, lead.telefone].filter(Boolean).join(" • ") || "Sem dados complementares"}
                       </p>
                     </div>
                     <div className="text-right min-w-[220px]">
-                      <p className="text-xs text-gray-500">Score IA</p>
-                      <p className="text-lg font-bold text-gray-900">{lead.score_ia ?? 0}</p>
+                      <p className="text-xs text-muted-foreground">Score IA</p>
+                      <p className="text-lg font-bold text-foreground">{lead.score_ia ?? 0}</p>
                     </div>
                   </div>
 
                   <div className="grid grid-cols-1 md:grid-cols-4 gap-3 mt-4 text-sm">
                     <div>
-                      <p className="text-xs text-gray-400">Responsável</p>
-                      <p className="font-medium text-gray-800 flex items-center gap-1">
-                        <User className="h-3.5 w-3.5 text-gray-400" />
+                      <p className="text-xs text-muted-foreground">Responsável</p>
+                      <p className="font-medium text-foreground flex items-center gap-1">
+                        <User className="h-3.5 w-3.5 text-muted-foreground" />
                         {lead.responsavel_nome || "Não atribuído"}
                       </p>
                     </div>
                     <div>
-                      <p className="text-xs text-gray-400">Follow-up</p>
-                      <p className={`font-medium ${atrasado ? "text-red-600" : "text-gray-800"}`}>{fmtDataHora(lead.proximo_followup)}</p>
+                      <p className="text-xs text-muted-foreground">Follow-up</p>
+                      <p className={`font-medium ${atrasado ? "text-destructive" : "text-foreground"}`}>{fmtDataHora(lead.proximo_followup)}</p>
                     </div>
                     <div>
-                      <p className="text-xs text-gray-400">Valor potencial</p>
-                      <p className="font-medium text-gray-800">{lead.valor_solicitado ? fmtBRL.format(lead.valor_solicitado) : "Não informado"}</p>
+                      <p className="text-xs text-muted-foreground">Valor potencial</p>
+                      <p className="font-medium text-foreground">{lead.valor_solicitado ? fmtBRL.format(lead.valor_solicitado) : "Não informado"}</p>
                     </div>
                     <div>
-                      <p className="text-xs text-gray-400">Criado em</p>
-                      <p className="font-medium text-gray-800">{fmtDataHora(lead.created_at)}</p>
+                      <p className="text-xs text-muted-foreground">Criado em</p>
+                      <p className="font-medium text-foreground">{fmtDataHora(lead.created_at)}</p>
                     </div>
                   </div>
 
@@ -271,7 +271,7 @@ export default function Fila() {
                         {savingId === lead.id ? "Atribuindo..." : "Assumir lead"}
                       </Button>
                     )}
-                    <Link href={`${podeVerTudo ? "/colaborador/crm" : "/colaborador/meu-crm"}?leadId=${encodeURIComponent(lead.id)}`} className="inline-flex items-center gap-2 text-sm font-medium text-blue-600 hover:text-blue-700">
+                    <Link href={`${podeVerTudo ? "/colaborador/crm" : "/colaborador/meu-crm"}?leadId=${encodeURIComponent(lead.id)}`} className="inline-flex items-center gap-2 text-sm font-medium text-primary hover:text-primary">
                         {podeVerTudo ? "Abrir CRM geral" : "Abrir visão do agente"}
                         <ArrowRight className="h-4 w-4" />
                       </Link>

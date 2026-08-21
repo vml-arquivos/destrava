@@ -40,10 +40,10 @@ export default function ConsentBanner() {
   return (
     <aside
       aria-label="Preferências de privacidade"
-      className="fixed inset-x-3 bottom-3 z-[100] mx-auto max-w-4xl rounded-2xl border border-slate-200 bg-white p-4 shadow-2xl md:p-5"
+      className="fixed inset-x-3 bottom-3 z-[100] mx-auto max-w-4xl rounded-2xl border border-border bg-card p-4 shadow-2xl md:p-5"
     >
       <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
-        <p className="text-sm leading-relaxed text-slate-700">
+        <p className="text-sm leading-relaxed text-foreground">
           Usamos cookies essenciais para o site funcionar. Com sua permissão, usamos dados de medição para entender o desempenho das páginas e melhorar a experiência. Saiba mais na{" "}
           <Link href="/politica-privacidade" className="font-semibold text-[#0033A0] underline">
             Política de Privacidade

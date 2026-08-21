@@ -386,10 +386,10 @@ export function ContratoAssessoria({ dados, documentosAnexos = [], onClose, onGe
 
   // ── Render ───────────────────────────────────────────────────────────────
   return (
-    <div className="fixed inset-0 z-50 flex flex-col bg-slate-100 print:bg-white print:block">
+    <div className="fixed inset-0 z-50 flex flex-col bg-muted print:bg-card print:block">
 
       {/* ── BARRA SUPERIOR ────────────────────────────────────── print:hidden */}
-      <div className="flex items-center justify-between px-5 py-2.5 bg-[#1B3A8C] text-white shadow-lg flex-shrink-0 print:hidden">
+      <div className="flex items-center justify-between px-5 py-2.5 bg-[#1B3A8C] text-primary-foreground shadow-lg flex-shrink-0 print:hidden">
         <div className="flex items-center gap-3">
           <FileDown className="w-5 h-5 text-amber-400 flex-shrink-0" />
           <div>
@@ -397,7 +397,7 @@ export function ContratoAssessoria({ dados, documentosAnexos = [], onClose, onGe
             <p className="text-xs text-blue-200">
               Textos sublinhados são editáveis · Configure valores no painel
               {documentosAnexos.length > 0 && (
-                <span className="ml-2 bg-amber-400 text-gray-900 font-semibold px-2 py-0.5 rounded-full text-[10px]">
+                <span className="ml-2 bg-amber-400 text-foreground font-semibold px-2 py-0.5 rounded-full text-[10px]">
                   {documentosAnexos.length} doc{documentosAnexos.length !== 1 ? 's' : ''} anexo{documentosAnexos.length !== 1 ? 's' : ''}
                 </span>
               )}
@@ -407,7 +407,7 @@ export function ContratoAssessoria({ dados, documentosAnexos = [], onClose, onGe
         <div className="flex items-center gap-2">
           <button
             onClick={() => window.print()}
-            className="flex items-center gap-2 px-3 py-1.5 bg-white/10 hover:bg-white/20 text-white text-sm rounded-lg transition-colors"
+            className="flex items-center gap-2 px-3 py-1.5 bg-card/10 hover:bg-card/20 text-primary-foreground text-sm rounded-lg transition-colors"
           >
             <Printer className="w-4 h-4" />
             Imprimir
@@ -415,7 +415,7 @@ export function ContratoAssessoria({ dados, documentosAnexos = [], onClose, onGe
           <button
             onClick={() => onGerarPdf(d, documentosAnexos)}
             disabled={loadingPdf}
-            className="flex items-center gap-2 px-4 py-1.5 bg-amber-400 hover:bg-amber-500 text-gray-900 text-sm font-bold rounded-lg disabled:opacity-50 transition-colors"
+            className="flex items-center gap-2 px-4 py-1.5 bg-amber-400 hover:bg-warning/100 text-foreground text-sm font-bold rounded-lg disabled:opacity-50 transition-colors"
           >
             {loadingPdf ? (
               <><Loader2 className="w-4 h-4 animate-spin" />Gerando PDF...</>
@@ -425,7 +425,7 @@ export function ContratoAssessoria({ dados, documentosAnexos = [], onClose, onGe
           </button>
           <button
             onClick={onClose}
-            className="p-1.5 hover:bg-white/20 rounded-lg transition-colors"
+            className="p-1.5 hover:bg-card/20 rounded-lg transition-colors"
           >
             <X className="w-5 h-5" />
           </button>
@@ -437,13 +437,13 @@ export function ContratoAssessoria({ dados, documentosAnexos = [], onClose, onGe
 
         {/* ── PAINEL LATERAL ──────────────────────────────────── print:hidden */}
         <aside
-          className="flex-shrink-0 bg-white border-r border-gray-200 flex flex-col overflow-y-auto print:hidden"
+          className="flex-shrink-0 bg-card border-r border-border flex flex-col overflow-y-auto print:hidden"
           style={{ width: '272px' }}
         >
           <button
             type="button"
             onClick={() => setPainelAberto(p => !p)}
-            className="flex items-center justify-between px-4 py-3 text-xs font-semibold text-gray-600 uppercase tracking-wide hover:bg-gray-50 border-b border-gray-200"
+            className="flex items-center justify-between px-4 py-3 text-xs font-semibold text-muted-foreground uppercase tracking-wide hover:bg-muted border-b border-border"
           >
             <span className="flex items-center gap-2"><Settings2 className="w-3.5 h-3.5" />Configurar contrato</span>
             {painelAberto ? <ChevronUp className="w-3.5 h-3.5" /> : <ChevronDown className="w-3.5 h-3.5" />}
@@ -453,97 +453,97 @@ export function ContratoAssessoria({ dados, documentosAnexos = [], onClose, onGe
             <div className="p-4 space-y-4 flex-1">
               {/* Valor de referência */}
               <div>
-                <label className="block text-xs font-medium text-gray-600 mb-1">Valor de Referência (R$)</label>
+                <label className="block text-xs font-medium text-muted-foreground mb-1">Valor de Referência (R$)</label>
                 <input
                   type="text"
                   inputMode="numeric"
                   value={formatBRLCurrency(d.valor_contrato)}
                   onChange={e => set('valor_contrato', unmaskCurrencyInput(maskCurrencyInput(e.target.value)))}
-                  className="w-full border border-gray-300 rounded px-2 py-1.5 text-sm text-right font-mono"
+                  className="w-full border border-input rounded px-2 py-1.5 text-sm text-right font-mono"
                 />
               </div>
               {/* Taxa de comissão */}
               <div>
-                <label className="block text-xs font-medium text-gray-600 mb-1">Taxa de Comissão (%)</label>
+                <label className="block text-xs font-medium text-muted-foreground mb-1">Taxa de Comissão (%)</label>
                 <input
                   type="number" min="1" max="100" step="0.1"
                   value={d.taxa_comissao}
                   onChange={e => set('taxa_comissao', toNum(e.target.value))}
-                  className="w-full border border-gray-300 rounded px-2 py-1.5 text-sm"
+                  className="w-full border border-input rounded px-2 py-1.5 text-sm"
                 />
-                <p className="text-[10px] text-gray-500 mt-0.5">Comissão estimada: {brl(valorComissao)}</p>
+                <p className="text-[10px] text-muted-foreground mt-0.5">Comissão estimada: {brl(valorComissao)}</p>
               </div>
               {/* Taxa desistência */}
               <div>
-                <label className="block text-xs font-medium text-gray-600 mb-1">Multa por Desistência — Cl. 4.3 (%)</label>
+                <label className="block text-xs font-medium text-muted-foreground mb-1">Multa por Desistência — Cl. 4.3 (%)</label>
                 <input
                   type="number" min="1" max="100" step="0.1"
                   value={d.taxa_desistencia}
                   onChange={e => set('taxa_desistencia', toNum(e.target.value))}
-                  className="w-full border border-gray-300 rounded px-2 py-1.5 text-sm"
+                  className="w-full border border-input rounded px-2 py-1.5 text-sm"
                 />
-                <p className="text-[10px] text-gray-500 mt-0.5">Honorário mínimo: {brl(valorDesistencia)}</p>
+                <p className="text-[10px] text-muted-foreground mt-0.5">Honorário mínimo: {brl(valorDesistencia)}</p>
               </div>
               {/* Taxa inadimplência */}
               <div>
-                <label className="block text-xs font-medium text-gray-600 mb-1">Multa por Inadimplência — Cl. 8 (%)</label>
+                <label className="block text-xs font-medium text-muted-foreground mb-1">Multa por Inadimplência — Cl. 8 (%)</label>
                 <input
                   type="number" min="1" max="100" step="0.1"
                   value={d.taxa_inadimplencia ?? d.taxa_desistencia}
                   onChange={e => set('taxa_inadimplencia', toNum(e.target.value))}
-                  className="w-full border border-gray-300 rounded px-2 py-1.5 text-sm"
+                  className="w-full border border-input rounded px-2 py-1.5 text-sm"
                 />
-                <p className="text-[10px] text-gray-500 mt-0.5">Incide se atrasar 3 parcelas seguidas ou 5 alternadas.</p>
+                <p className="text-[10px] text-muted-foreground mt-0.5">Incide se atrasar 3 parcelas seguidas ou 5 alternadas.</p>
               </div>
               {/* Custeio mensal */}
               <div>
-                <label className="block text-xs font-medium text-gray-600 mb-1">Custeio Mensal — Cl. 5.7-V (R$)</label>
+                <label className="block text-xs font-medium text-muted-foreground mb-1">Custeio Mensal — Cl. 5.7-V (R$)</label>
                 <input
                   type="text"
                   inputMode="numeric"
                   value={formatBRLCurrency(d.custeio_mensal)}
                   onChange={e => set('custeio_mensal', unmaskCurrencyInput(maskCurrencyInput(e.target.value)))}
-                  className="w-full border border-gray-300 rounded px-2 py-1.5 text-sm text-right font-mono"
+                  className="w-full border border-input rounded px-2 py-1.5 text-sm text-right font-mono"
                 />
               </div>
               {/* Prazo do contrato */}
               <div>
-                <label className="block text-xs font-medium text-gray-600 mb-1">Prazo do Contrato (meses)</label>
+                <label className="block text-xs font-medium text-muted-foreground mb-1">Prazo do Contrato (meses)</label>
                 <input
                   type="number"
                   min="1"
                   step="1"
                   value={prazoContratoMeses}
                   onChange={e => set('prazo_contrato_meses', Math.max(1, Number.parseInt(e.target.value || '1', 10)))}
-                  className="w-full border border-gray-300 rounded px-2 py-1.5 text-sm"
+                  className="w-full border border-input rounded px-2 py-1.5 text-sm"
                 />
-                <p className="text-[10px] text-gray-500 mt-0.5">O prazo informado será aplicado nas cláusulas de vigência e remuneração.</p>
+                <p className="text-[10px] text-muted-foreground mt-0.5">O prazo informado será aplicado nas cláusulas de vigência e remuneração.</p>
               </div>
 
               {/* Data de assinatura */}
               <div>
-                <label className="block text-xs font-medium text-gray-600 mb-1">Data de Assinatura</label>
+                <label className="block text-xs font-medium text-muted-foreground mb-1">Data de Assinatura</label>
                 <input
                   type="date"
                   value={d.data_assinatura}
                   onChange={e => set('data_assinatura', e.target.value)}
-                  className="w-full border border-gray-300 rounded px-2 py-1.5 text-sm"
+                  className="w-full border border-input rounded px-2 py-1.5 text-sm"
                 />
               </div>
               {/* Foro */}
               <div>
-                <label className="block text-xs font-medium text-gray-600 mb-1">Foro Eleito</label>
+                <label className="block text-xs font-medium text-muted-foreground mb-1">Foro Eleito</label>
                 <input
                   type="text"
                   value={d.foro_eleito}
                   onChange={e => set('foro_eleito', e.target.value)}
-                  className="w-full border border-gray-300 rounded px-2 py-1.5 text-sm"
+                  className="w-full border border-input rounded px-2 py-1.5 text-sm"
                 />
               </div>
 
               {/* Assinaturas da contratante */}
-              <div className="rounded-lg bg-slate-50 border border-slate-200 p-3 text-xs text-slate-700">
-                <p className="font-semibold text-slate-800 mb-1">Assinantes da CONTRATANTE</p>
+              <div className="rounded-lg bg-muted border border-border p-3 text-xs text-foreground">
+                <p className="font-semibold text-foreground mb-1">Assinantes da CONTRATANTE</p>
                 <p>{d.modo_assinatura_contratante === 'socios' && sociosAssinantes.length > 0 ? 'Sócio(s) selecionado(s) + razão social' : d.modo_assinatura_contratante === 'responsavel' ? 'Responsável principal + razão social' : 'Representante da empresa + razão social'}</p>
                 <ul className="mt-2 space-y-1 list-disc list-inside">
                   {representantesContratante.map((s, i) => (
@@ -553,30 +553,30 @@ export function ContratoAssessoria({ dados, documentosAnexos = [], onClose, onGe
               </div>
 
               {/* Resumo financeiro */}
-              <div className="rounded-lg bg-blue-50 border border-blue-100 p-3 space-y-1.5 text-xs">
-                <p className="font-semibold text-blue-800 mb-1">Resumo financeiro</p>
-                <div className="flex justify-between"><span className="text-gray-600">Valor de referência</span><span className="font-mono font-semibold">{brl(d.valor_contrato)}</span></div>
-                <div className="flex justify-between"><span className="text-gray-600">Comissão ({d.taxa_comissao}%)</span><span className="font-mono">{brl(valorComissao)}</span></div>
-                <div className="flex justify-between"><span className="text-gray-600">Honorário mín. ({d.taxa_desistencia}%)</span><span className="font-mono">{brl(valorDesistencia)}</span></div>
-                <div className="flex justify-between"><span className="text-gray-600">Custeio mensal</span><span className="font-mono">{brl(d.custeio_mensal)}</span></div>
+              <div className="rounded-lg bg-primary/10 border border-primary/20 p-3 space-y-1.5 text-xs">
+                <p className="font-semibold text-primary mb-1">Resumo financeiro</p>
+                <div className="flex justify-between"><span className="text-muted-foreground">Valor de referência</span><span className="font-mono font-semibold">{brl(d.valor_contrato)}</span></div>
+                <div className="flex justify-between"><span className="text-muted-foreground">Comissão ({d.taxa_comissao}%)</span><span className="font-mono">{brl(valorComissao)}</span></div>
+                <div className="flex justify-between"><span className="text-muted-foreground">Honorário mín. ({d.taxa_desistencia}%)</span><span className="font-mono">{brl(valorDesistencia)}</span></div>
+                <div className="flex justify-between"><span className="text-muted-foreground">Custeio mensal</span><span className="font-mono">{brl(d.custeio_mensal)}</span></div>
               </div>
 
               {/* Nota sobre local de assinatura */}
-              <div className="rounded-lg bg-amber-50 border border-amber-200 p-3 text-xs text-amber-800">
+              <div className="rounded-lg bg-warning/10 border border-warning/20 p-3 text-xs text-warning">
                 <p className="font-semibold mb-1">Local de assinatura</p>
                 <p>{d.cidade_assinatura || 'BRASÍLIA – DF'}</p>
-                <p className="text-[10px] text-amber-600 mt-1">Definido pela sede da CONTRATADA.</p>
+                <p className="text-[10px] text-warning mt-1">Definido pela sede da CONTRATADA.</p>
               </div>
 
               {/* Anexos */}
               {documentosAnexos.length > 0 && (
-                <div className="rounded-lg bg-amber-50 border border-amber-200 p-3">
-                  <p className="text-xs font-semibold text-amber-800 mb-1.5">
+                <div className="rounded-lg bg-warning/10 border border-warning/20 p-3">
+                  <p className="text-xs font-semibold text-warning mb-1.5">
                     {documentosAnexos.length} documento{documentosAnexos.length !== 1 ? 's' : ''} será{documentosAnexos.length !== 1 ? 'ão' : ''} anexado{documentosAnexos.length !== 1 ? 's' : ''} ao PDF
                   </p>
                   <ul className="space-y-0.5">
                     {documentosAnexos.map((doc, i) => (
-                      <li key={doc.id} className="text-[10px] text-amber-700 flex items-center gap-1">
+                      <li key={doc.id} className="text-[10px] text-warning flex items-center gap-1">
                         <span className="font-semibold">#{i + 1}</span>
                         <span>{doc.descricao || doc.categoria}</span>
                         <span className="text-amber-500 ml-auto">{doc.tipo === 'pdf' ? 'PDF' : 'IMG'}</span>

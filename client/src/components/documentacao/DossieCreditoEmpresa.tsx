@@ -288,32 +288,32 @@ function joinEndereco(value: any) {
 
 
 function statusClasses(status: string, completo?: boolean) {
-  if (status === "validado" || completo) return "bg-emerald-50 text-emerald-700 border-emerald-200";
-  if (status === "em_validacao" || status === "em_preenchimento") return "bg-blue-50 text-blue-700 border-blue-200";
-  if (status === "recusado") return "bg-red-50 text-red-700 border-red-200";
-  if (status === "desatualizado" || status === "pendente") return "bg-amber-50 text-amber-700 border-amber-200";
-  return "bg-slate-50 text-slate-600 border-slate-200";
+  if (status === "validado" || completo) return "bg-success/10 text-success border-success/20";
+  if (status === "em_validacao" || status === "em_preenchimento") return "bg-primary/10 text-primary border-primary/20";
+  if (status === "recusado") return "bg-destructive/10 text-destructive border-destructive/20";
+  if (status === "desatualizado" || status === "pendente") return "bg-warning/10 text-warning border-warning/20";
+  return "bg-muted text-muted-foreground border-border";
 }
 
 function severidadeClasses(severidade: Severidade) {
-  if (severidade === "alta") return "bg-red-50 text-red-700 border-red-200";
-  if (severidade === "media") return "bg-amber-50 text-amber-700 border-amber-200";
-  return "bg-blue-50 text-blue-700 border-blue-200";
+  if (severidade === "alta") return "bg-destructive/10 text-destructive border-destructive/20";
+  if (severidade === "media") return "bg-warning/10 text-warning border-warning/20";
+  return "bg-primary/10 text-primary border-primary/20";
 }
 
 function riscoCnpjClasses(risco?: string) {
-  if (risco === "baixo") return "bg-emerald-50 text-emerald-700 border-emerald-200";
-  if (risco === "medio") return "bg-amber-50 text-amber-700 border-amber-200";
-  if (risco === "alto") return "bg-orange-50 text-orange-700 border-orange-200";
-  if (risco === "critico") return "bg-red-50 text-red-700 border-red-200";
-  return "bg-slate-50 text-slate-600 border-slate-200";
+  if (risco === "baixo") return "bg-success/10 text-success border-success/20";
+  if (risco === "medio") return "bg-warning/10 text-warning border-warning/20";
+  if (risco === "alto") return "bg-warning/10 text-warning border-warning/20";
+  if (risco === "critico") return "bg-destructive/10 text-destructive border-destructive/20";
+  return "bg-muted text-muted-foreground border-border";
 }
 
 function statusCartaoClasses(status?: string) {
-  if (status === "valido") return "bg-emerald-50 text-emerald-700 border-emerald-200";
-  if (status === "vencido" || status === "divergente" || status === "ilegivel") return "bg-red-50 text-red-700 border-red-200";
-  if (status === "pendente") return "bg-amber-50 text-amber-700 border-amber-200";
-  return "bg-slate-50 text-slate-600 border-slate-200";
+  if (status === "valido") return "bg-success/10 text-success border-success/20";
+  if (status === "vencido" || status === "divergente" || status === "ilegivel") return "bg-destructive/10 text-destructive border-destructive/20";
+  if (status === "pendente") return "bg-warning/10 text-warning border-warning/20";
+  return "bg-muted text-muted-foreground border-border";
 }
 
 function normalizarRiscoLabel(risco?: string) {
@@ -323,9 +323,9 @@ function normalizarRiscoLabel(risco?: string) {
 
 function MiniCampo({ label, value }: { label: string; value: any }) {
   return (
-    <div className="rounded-lg border border-slate-100 bg-slate-50 p-2">
-      <span className="block text-[11px] font-semibold text-slate-400 uppercase tracking-wide">{label}</span>
-      <b className="block text-xs text-slate-700 truncate">{value || "Não informado"}</b>
+    <div className="rounded-lg border border-border bg-muted p-2">
+      <span className="block text-[11px] font-semibold text-muted-foreground uppercase tracking-wide">{label}</span>
+      <b className="block text-xs text-muted-foreground truncate">{value || "Não informado"}</b>
     </div>
   );
 }
@@ -333,24 +333,24 @@ function MiniCampo({ label, value }: { label: string; value: any }) {
 function DocumentosDoBloco({ documentos }: { documentos?: DocumentoBloco[] }) {
   const docs = Array.isArray(documentos) ? documentos : [];
   if (docs.length === 0) {
-    return <p className="text-xs text-slate-500">Nenhum documento vinculado a este bloco ainda.</p>;
+    return <p className="text-xs text-muted-foreground">Nenhum documento vinculado a este bloco ainda.</p>;
   }
   return (
     <div className="space-y-2">
-      <p className="text-xs font-bold text-slate-700 flex items-center gap-1"><FileText className="w-3.5 h-3.5" /> Documentos vinculados ao bloco</p>
+      <p className="text-xs font-bold text-muted-foreground flex items-center gap-1"><FileText className="w-3.5 h-3.5" /> Documentos vinculados ao bloco</p>
       <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
         {docs.map((doc) => (
-          <div key={doc.id} className="flex items-center gap-2 rounded-lg border border-slate-100 bg-slate-50 p-2">
-            <FileText className="w-4 h-4 text-slate-400 shrink-0" />
+          <div key={doc.id} className="flex items-center gap-2 rounded-lg border border-border bg-muted p-2">
+            <FileText className="w-4 h-4 text-muted-foreground shrink-0" />
             <div className="min-w-0 flex-1">
-              <p className="text-xs font-semibold text-slate-700 truncate">{doc.nome_original}</p>
-              <p className="text-[11px] text-slate-400">{doc.tipo_documento} • {doc.status}</p>
+              <p className="text-xs font-semibold text-muted-foreground truncate">{doc.nome_original}</p>
+              <p className="text-[11px] text-muted-foreground">{doc.tipo_documento} • {doc.status}</p>
             </div>
             <div className="flex items-center gap-1 shrink-0">
-              <a href={doc.view_url || `/api/documentos/${doc.id}/view`} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 rounded-lg px-2 py-1 text-[11px] font-bold text-blue-700 bg-blue-50 hover:bg-blue-100" title="Visualizar documento">
+              <a href={doc.view_url || `/api/documentos/${doc.id}/view`} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 rounded-lg px-2 py-1 text-[11px] font-bold text-primary bg-primary/10 hover:bg-primary/20" title="Visualizar documento">
                 <ExternalLink className="w-3 h-3" /> Ver
               </a>
-              <a href={doc.download_url || `/api/documentos/${doc.id}/download`} className="inline-flex items-center gap-1 rounded-lg px-2 py-1 text-[11px] font-bold text-slate-600 bg-white border border-slate-200 hover:bg-slate-100" title="Baixar documento">
+              <a href={doc.download_url || `/api/documentos/${doc.id}/download`} className="inline-flex items-center gap-1 rounded-lg px-2 py-1 text-[11px] font-bold text-muted-foreground bg-white border border-border hover:bg-muted" title="Baixar documento">
                 <Download className="w-3 h-3" /> Baixar
               </a>
             </div>
@@ -366,7 +366,7 @@ function BlocoCnpj({ bloco }: { bloco: BlocoDossie }) {
   return (
     <div className="space-y-4">
       <div>
-        <p className="text-xs font-bold text-slate-700 mb-2">Dados cadastrais e Receita Federal</p>
+        <p className="text-xs font-bold text-muted-foreground mb-2">Dados cadastrais e Receita Federal</p>
         <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-2">
           <MiniCampo label="CNPJ" value={formatCnpj(d.cnpj)} />
           <MiniCampo label="Razão social" value={d.razao_social} />
@@ -388,7 +388,7 @@ function BlocoCnpj({ bloco }: { bloco: BlocoDossie }) {
       </div>
 
       <div>
-        <p className="text-xs font-bold text-slate-700 mb-2">Endereço e contatos usados na análise</p>
+        <p className="text-xs font-bold text-muted-foreground mb-2">Endereço e contatos usados na análise</p>
         <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-2">
           <MiniCampo label="Endereço Receita" value={joinEndereco(d.endereco_receita)} />
           <MiniCampo label="E-mail empresa" value={d.contato?.email} />
@@ -421,9 +421,9 @@ function BlocoQsa({ bloco }: { bloco: BlocoDossie }) {
   };
   return (
     <div className="space-y-4">
-      <div className="rounded-xl border border-blue-100 bg-blue-50/60 p-3">
-        <p className="text-xs font-extrabold text-blue-900">Conferência da Etapa 1</p>
-        <p className="mt-1 text-[11px] leading-relaxed text-blue-800">Somente CNPJ, razão social, capital social, nomes dos sócios e identificação do Sócio-Administrador. Dados pessoais pertencem às próximas etapas e não bloqueiam esta análise.</p>
+      <div className="rounded-xl border border-primary/20 bg-primary/10 p-3">
+        <p className="text-xs font-extrabold text-primary">Conferência da Etapa 1</p>
+        <p className="mt-1 text-[11px] leading-relaxed text-primary">Somente CNPJ, razão social, capital social, nomes dos sócios e identificação do Sócio-Administrador. Dados pessoais pertencem às próximas etapas e não bloqueiam esta análise.</p>
       </div>
       <ResultadoAnaliseDocumento resultado={resultadoQsa} documento={{ codigo: "qsa", tipo_documento: "qsa", nome: "QSA / Quadro Societário" }} />
       <DocumentosDoBloco documentos={bloco.documentos} />
@@ -440,40 +440,40 @@ function BlocoCard({ bloco, aberto, onToggle }: { bloco: BlocoDossie; aberto: bo
   const docs = Array.isArray(bloco.documentos) ? bloco.documentos : [];
   const isPrioritario = bloco.codigo === "cnpj_receita" || bloco.codigo === "qsa_quadro_societario";
   return (
-    <div className={`rounded-2xl border bg-white shadow-sm overflow-hidden ${isPrioritario ? "border-blue-200" : "border-slate-200"}`}>
-      <button type="button" onClick={onToggle} className="w-full text-left p-4 hover:bg-slate-50 transition-colors">
+    <div className={`rounded-2xl border bg-white shadow-sm overflow-hidden ${isPrioritario ? "border-primary/20" : "border-border"}`}>
+      <button type="button" onClick={onToggle} className="w-full text-left p-4 hover:bg-muted transition-colors">
         <div className="flex items-start gap-3">
-          <div className={`w-10 h-10 rounded-xl flex items-center justify-center shrink-0 ${bloco.completo ? "bg-emerald-100 text-emerald-700" : isPrioritario ? "bg-blue-100 text-blue-700" : "bg-slate-100 text-slate-500"}`}>
+          <div className={`w-10 h-10 rounded-xl flex items-center justify-center shrink-0 ${bloco.completo ? "bg-success/20 text-success" : isPrioritario ? "bg-primary/20 text-primary" : "bg-muted text-muted-foreground"}`}>
             {bloco.codigo === "qsa_quadro_societario" ? <Users className="w-5 h-5" /> : bloco.completo ? <ShieldCheck className="w-5 h-5" /> : <ClipboardList className="w-5 h-5" />}
           </div>
           <div className="flex-1 min-w-0">
             <div className="flex flex-wrap items-center gap-2">
-              <h3 className="text-sm font-bold text-slate-800 truncate">{String(bloco.ordem || "").padStart(2, "0")}. {bloco.nome_amigavel}</h3>
-              {isPrioritario && <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-blue-600 text-white">IMEDIATO</span>}
-              {bloco.obrigatorio && <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-slate-100 text-slate-600">OBRIGATÓRIO</span>}
+              <h3 className="text-sm font-bold text-foreground truncate">{String(bloco.ordem || "").padStart(2, "0")}. {bloco.nome_amigavel}</h3>
+              {isPrioritario && <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-primary text-white">IMEDIATO</span>}
+              {bloco.obrigatorio && <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-muted text-muted-foreground">OBRIGATÓRIO</span>}
             </div>
-            <p className="text-xs text-slate-500 mt-0.5 line-clamp-2">{bloco.descricao}</p>
+            <p className="text-xs text-muted-foreground mt-0.5 line-clamp-2">{bloco.descricao}</p>
             <div className="flex flex-wrap items-center gap-2 mt-2">
               <span className={`text-[11px] font-bold px-2 py-0.5 rounded-full border ${statusClasses(bloco.status, bloco.completo)}`}>{STATUS_LABEL[bloco.status] || bloco.status}</span>
-              <span className="text-[11px] font-semibold px-2 py-0.5 rounded-full border border-slate-200 bg-slate-50 text-slate-500">{pendencias.length} pendência(s)</span>
-              <span className="text-[11px] font-semibold px-2 py-0.5 rounded-full border border-slate-200 bg-slate-50 text-slate-500">{docs.length} documento(s)</span>
+              <span className="text-[11px] font-semibold px-2 py-0.5 rounded-full border border-border bg-muted text-muted-foreground">{pendencias.length} pendência(s)</span>
+              <span className="text-[11px] font-semibold px-2 py-0.5 rounded-full border border-border bg-muted text-muted-foreground">{docs.length} documento(s)</span>
             </div>
           </div>
-          {aberto ? <ChevronUp className="w-4 h-4 text-slate-400" /> : <ChevronDown className="w-4 h-4 text-slate-400" />}
+          {aberto ? <ChevronUp className="w-4 h-4 text-muted-foreground" /> : <ChevronDown className="w-4 h-4 text-muted-foreground" />}
         </div>
       </button>
       {aberto && (
-        <div className="border-t border-slate-100 p-4 space-y-4 bg-white">
+        <div className="border-t border-border p-4 space-y-4 bg-white">
           {bloco.codigo === "cnpj_receita" ? <BlocoCnpj bloco={bloco} /> : bloco.codigo === "qsa_quadro_societario" ? <BlocoQsa bloco={bloco} /> : <BlocoGenerico bloco={bloco} />}
 
           {pendencias.length > 0 && (
-            <div className="rounded-xl border border-amber-100 bg-amber-50/60 p-3">
-              <p className="text-xs font-bold text-amber-800 mb-2 flex items-center gap-1"><AlertTriangle className="w-3.5 h-3.5" /> Pendências do bloco</p>
+            <div className="rounded-xl border border-warning/20 bg-warning/10 p-3">
+              <p className="text-xs font-bold text-warning mb-2 flex items-center gap-1"><AlertTriangle className="w-3.5 h-3.5" /> Pendências do bloco</p>
               <div className="space-y-1.5">
                 {pendencias.slice(0, 8).map((p, idx) => (
                   <div key={`${p.codigo}-${idx}`} className="flex items-start gap-2 text-xs">
                     <span className={`mt-0.5 shrink-0 rounded-full border px-2 py-0.5 text-[10px] font-bold ${severidadeClasses(p.severidade)}`}>{p.severidade}</span>
-                    <span className="text-slate-700">{p.mensagem}</span>
+                    <span className="text-muted-foreground">{p.mensagem}</span>
                   </div>
                 ))}
               </div>
@@ -490,22 +490,22 @@ function AnaliseCnpjCard({ analise }: { analise: AnaliseCnpjEmpresa | null }) {
   const recomendacoes = Array.isArray(analise?.recomendacoes) ? analise!.recomendacoes : [];
   const positivos = Array.isArray(analise?.pontos_positivos) ? analise!.pontos_positivos : [];
   return (
-    <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+    <div className="rounded-2xl border border-border bg-white p-4 shadow-sm">
       <div className="flex flex-col lg:flex-row lg:items-start lg:justify-between gap-3">
         <div>
           <div className="flex flex-wrap items-center gap-2">
-            <ShieldCheck className="w-4 h-4 text-blue-700" />
-            <h3 className="text-sm font-extrabold text-slate-800">Análise CNPJ — Receita + Cartão anexado</h3>
+            <ShieldCheck className="w-4 h-4 text-primary" />
+            <h3 className="text-sm font-extrabold text-foreground">Análise CNPJ — Receita + Cartão anexado</h3>
             {analise && <span className={`text-[11px] font-bold px-2 py-0.5 rounded-full border ${riscoCnpjClasses(analise.risco_cnpj)}`}>Risco {normalizarRiscoLabel(analise.risco_cnpj)}</span>}
           </div>
-          <p className="text-xs text-slate-500 mt-1 max-w-3xl">
+          <p className="text-xs text-muted-foreground mt-1 max-w-3xl">
             Primeiro diagnóstico automático: usa os dados sincronizados da Receita Federal e valida o Cartão CNPJ anexado como comprovante documental.
           </p>
         </div>
       </div>
 
       {!analise ? (
-        <div className="mt-4 rounded-xl border border-dashed border-slate-200 bg-slate-50 p-4 text-sm text-slate-500">
+        <div className="mt-4 rounded-xl border border-dashed border-border bg-muted p-4 text-sm text-muted-foreground">
           A leitura do Cartão CNPJ faz parte do relatório inicial dos três documentos. Quando o processamento terminar, os dados e divergências aparecerão aqui automaticamente.
         </div>
       ) : (
@@ -526,45 +526,45 @@ function AnaliseCnpjCard({ analise }: { analise: AnaliseCnpjEmpresa | null }) {
               Cartão CNPJ: {analise.cartao_anexado ? (analise.status_validade_cartao || "anexado") : "não anexado"}
             </span>
             {analise.dias_emissao_cartao !== undefined && analise.dias_emissao_cartao !== null && (
-              <span className="text-[11px] font-bold px-2.5 py-1 rounded-full border border-slate-200 bg-slate-50 text-slate-600">
+              <span className="text-[11px] font-bold px-2.5 py-1 rounded-full border border-border bg-muted text-muted-foreground">
                 Emissão: {analise.dias_emissao_cartao} dia(s)
               </span>
             )}
             {Array.isArray(analise.divergencias) && analise.divergencias.length > 0 && (
-              <span className="text-[11px] font-bold px-2.5 py-1 rounded-full border border-red-200 bg-red-50 text-red-700">
+              <span className="text-[11px] font-bold px-2.5 py-1 rounded-full border border-destructive/20 bg-destructive/10 text-destructive">
                 {analise.divergencias.length} divergência(s)
               </span>
             )}
           </div>
 
           {analise.diagnostico && (
-            <div className="rounded-xl border border-blue-100 bg-blue-50/60 p-3">
-              <p className="text-xs font-bold text-blue-800 mb-1">Diagnóstico inicial</p>
-              <p className="text-xs text-slate-700 whitespace-pre-line leading-relaxed">{analise.diagnostico}</p>
+            <div className="rounded-xl border border-primary/20 bg-primary/10 p-3">
+              <p className="text-xs font-bold text-primary mb-1">Diagnóstico inicial</p>
+              <p className="text-xs text-muted-foreground whitespace-pre-line leading-relaxed">{analise.diagnostico}</p>
             </div>
           )}
 
           {Array.isArray(analise.divergencias) && analise.divergencias.length > 0 && (
-            <div className="rounded-xl border border-red-200 bg-red-50/70 p-3">
-              <p className="text-xs font-black text-red-800 mb-2">Divergências encontradas com evidência</p>
+            <div className="rounded-xl border border-destructive/20 bg-destructive/10 p-3">
+              <p className="text-xs font-black text-destructive mb-2">Divergências encontradas com evidência</p>
               <div className="space-y-2">
                 {analise.divergencias.map((div: any, idx: number) => (
-                  <div key={idx} className="rounded-lg border border-red-100 bg-white p-2.5">
-                    <p className="text-xs font-black text-red-800 mb-1">{div.label || div.campo || `Divergência ${idx + 1}`}</p>
+                  <div key={idx} className="rounded-lg border border-destructive/20 bg-white p-2.5">
+                    <p className="text-xs font-black text-destructive mb-1">{div.label || div.campo || `Divergência ${idx + 1}`}</p>
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-2 text-[11px]">
-                      <div className="rounded-md bg-slate-50 border border-slate-100 p-2">
-                        <p className="font-bold text-slate-500 uppercase tracking-wide">Receita/cadastro</p>
-                        <p className="font-semibold text-slate-800 break-words">{String(div.valor_receita ?? div.receita ?? "Não informado")}</p>
-                        {div.normalizado_receita && <p className="mt-1 text-slate-400 break-words">Normalizado: {String(div.normalizado_receita)}</p>}
+                      <div className="rounded-md bg-muted border border-border p-2">
+                        <p className="font-bold text-muted-foreground uppercase tracking-wide">Receita/cadastro</p>
+                        <p className="font-semibold text-foreground break-words">{String(div.valor_receita ?? div.receita ?? "Não informado")}</p>
+                        {div.normalizado_receita && <p className="mt-1 text-muted-foreground break-words">Normalizado: {String(div.normalizado_receita)}</p>}
                       </div>
-                      <div className="rounded-md bg-slate-50 border border-slate-100 p-2">
-                        <p className="font-bold text-slate-500 uppercase tracking-wide">Cartão CNPJ</p>
-                        <p className="font-semibold text-slate-800 break-words">{String(div.valor_cartao ?? div.cartao ?? "Não informado")}</p>
-                        {div.normalizado_cartao && <p className="mt-1 text-slate-400 break-words">Normalizado: {String(div.normalizado_cartao)}</p>}
+                      <div className="rounded-md bg-muted border border-border p-2">
+                        <p className="font-bold text-muted-foreground uppercase tracking-wide">Cartão CNPJ</p>
+                        <p className="font-semibold text-foreground break-words">{String(div.valor_cartao ?? div.cartao ?? "Não informado")}</p>
+                        {div.normalizado_cartao && <p className="mt-1 text-muted-foreground break-words">Normalizado: {String(div.normalizado_cartao)}</p>}
                       </div>
                     </div>
                     {(div.motivo || div.evidencia) && (
-                      <p className="mt-2 text-[11px] text-red-700 leading-relaxed">
+                      <p className="mt-2 text-[11px] text-destructive leading-relaxed">
                         {div.motivo || div.evidencia}
                       </p>
                     )}
@@ -575,17 +575,17 @@ function AnaliseCnpjCard({ analise }: { analise: AnaliseCnpjEmpresa | null }) {
           )}
 
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-3">
-            <div className="rounded-xl border border-emerald-100 bg-emerald-50/60 p-3">
-              <p className="text-xs font-bold text-emerald-800 mb-2">Pontos positivos</p>
-              {positivos.length ? positivos.slice(0, 5).map((item, idx) => <p key={idx} className="text-xs text-emerald-800 mb-1">• {item}</p>) : <p className="text-xs text-slate-500">Nenhum ponto positivo registrado.</p>}
+            <div className="rounded-xl border border-success/20 bg-success/10 p-3">
+              <p className="text-xs font-bold text-success mb-2">Pontos positivos</p>
+              {positivos.length ? positivos.slice(0, 5).map((item, idx) => <p key={idx} className="text-xs text-success mb-1">• {item}</p>) : <p className="text-xs text-muted-foreground">Nenhum ponto positivo registrado.</p>}
             </div>
-            <div className="rounded-xl border border-amber-100 bg-amber-50/60 p-3">
-              <p className="text-xs font-bold text-amber-800 mb-2">Alertas</p>
-              {alertas.length ? alertas.slice(0, 5).map((item, idx) => <p key={idx} className="text-xs text-amber-900 mb-1">• {item.mensagem || item.codigo}</p>) : <p className="text-xs text-slate-500">Sem alertas críticos.</p>}
+            <div className="rounded-xl border border-warning/20 bg-warning/10 p-3">
+              <p className="text-xs font-bold text-warning mb-2">Alertas</p>
+              {alertas.length ? alertas.slice(0, 5).map((item, idx) => <p key={idx} className="text-xs text-warning mb-1">• {item.mensagem || item.codigo}</p>) : <p className="text-xs text-muted-foreground">Sem alertas críticos.</p>}
             </div>
-            <div className="rounded-xl border border-slate-100 bg-slate-50 p-3">
-              <p className="text-xs font-bold text-slate-800 mb-2">Recomendações</p>
-              {recomendacoes.length ? recomendacoes.slice(0, 5).map((item, idx) => <p key={idx} className="text-xs text-slate-700 mb-1">• {item}</p>) : <p className="text-xs text-slate-500">Sem recomendações registradas.</p>}
+            <div className="rounded-xl border border-border bg-muted p-3">
+              <p className="text-xs font-bold text-foreground mb-2">Recomendações</p>
+              {recomendacoes.length ? recomendacoes.slice(0, 5).map((item, idx) => <p key={idx} className="text-xs text-muted-foreground mb-1">• {item}</p>) : <p className="text-xs text-muted-foreground">Sem recomendações registradas.</p>}
             </div>
           </div>
         </div>
@@ -650,18 +650,18 @@ export function ProntidaoIdentidadeCard({
   };
 
   return (
-    <section className={`rounded-2xl border p-4 ${apto ? "border-emerald-200 bg-emerald-50/60" : falhasLeitura.length ? "border-red-200 bg-red-50/40" : "border-amber-200 bg-amber-50/50"}`}>
+    <section className={`rounded-2xl border p-4 ${apto ? "border-success/20 bg-success/10" : falhasLeitura.length ? "border-destructive/20 bg-destructive/10/40" : "border-warning/20 bg-warning/10/50"}`}>
       <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
         <div className="min-w-0">
           <div className="flex flex-wrap items-center gap-2">
-            {apto ? <ShieldCheck className="h-5 w-5 text-emerald-700" /> : falhasLeitura.length ? <ShieldAlert className="h-5 w-5 text-red-700" /> : <ShieldAlert className="h-5 w-5 text-amber-700" />}
-            <h3 className="text-sm font-extrabold text-slate-900">Relatório inicial — Identidade do CNPJ</h3>
-            <span className={`rounded-full border bg-white px-2.5 py-1 text-[11px] font-extrabold ${apto ? "border-emerald-200 text-emerald-700" : falhasLeitura.length ? "border-red-200 text-red-700" : "border-amber-200 text-amber-800"}`}>
+            {apto ? <ShieldCheck className="h-5 w-5 text-success" /> : falhasLeitura.length ? <ShieldAlert className="h-5 w-5 text-destructive" /> : <ShieldAlert className="h-5 w-5 text-warning" />}
+            <h3 className="text-sm font-extrabold text-foreground">Relatório inicial — Identidade do CNPJ</h3>
+            <span className={`rounded-full border bg-white px-2.5 py-1 text-[11px] font-extrabold ${apto ? "border-success/20 text-success" : falhasLeitura.length ? "border-destructive/20 text-destructive" : "border-warning/20 text-warning"}`}>
               {apto ? "Tudo OK — pode avançar" : processando ? "Lendo e cruzando documentos" : falhasLeitura.length ? `${falhasLeitura.length} falha(s) de leitura` : "Avanço bloqueado"}
             </span>
           </div>
-          <p className="mt-2 max-w-4xl text-xs leading-relaxed text-slate-700">{identidade.diagnostico}</p>
-          <p className="mt-1 max-w-4xl text-[11px] font-semibold text-slate-500">Nesta etapa, o QSA confere somente CNPJ, razão social, capital social, nomes dos sócios e Sócio-Administrador. Dados pessoais dos sócios pertencem às próximas etapas e não bloqueiam este resultado.</p>
+          <p className="mt-2 max-w-4xl text-xs leading-relaxed text-muted-foreground">{identidade.diagnostico}</p>
+          <p className="mt-1 max-w-4xl text-[11px] font-semibold text-muted-foreground">Nesta etapa, o QSA confere somente CNPJ, razão social, capital social, nomes dos sócios e Sócio-Administrador. Dados pessoais dos sócios pertencem às próximas etapas e não bloqueiam este resultado.</p>
         </div>
         <div className="flex shrink-0 flex-wrap gap-2">
           {/* O Enquadramento Tributário não exige upload (vem da consulta de CNPJ) --
@@ -671,7 +671,7 @@ export function ProntidaoIdentidadeCard({
               type="button"
               onClick={onTentarNovamente}
               disabled={processando}
-              className={`inline-flex items-center justify-center gap-2 rounded-xl border bg-white px-4 py-2.5 text-xs font-extrabold shadow-sm disabled:opacity-60 ${falhasLeitura.length ? "border-red-200 text-red-700 hover:bg-red-50" : "border-blue-200 text-blue-700 hover:bg-blue-50"}`}
+              className={`inline-flex items-center justify-center gap-2 rounded-xl border bg-white px-4 py-2.5 text-xs font-extrabold shadow-sm disabled:opacity-60 ${falhasLeitura.length ? "border-destructive/20 text-destructive hover:bg-destructive/10" : "border-primary/20 text-primary hover:bg-primary/10"}`}
             >
               {processando ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCw className="h-4 w-4" />}
               {processando ? "Processando..." : falhasLeitura.length ? "Tentar leitura novamente" : "Iniciar análise documental"}
@@ -681,7 +681,7 @@ export function ProntidaoIdentidadeCard({
             <button
               type="button"
               onClick={onAvancar}
-              className="inline-flex items-center justify-center gap-2 rounded-xl bg-emerald-600 px-4 py-2.5 text-xs font-extrabold text-white shadow-sm hover:bg-emerald-700"
+              className="inline-flex items-center justify-center gap-2 rounded-xl bg-success px-4 py-2.5 text-xs font-extrabold text-white shadow-sm hover:bg-success/90"
             >
               Avançar para próxima etapa <ArrowRight className="h-4 w-4" />
             </button>
@@ -690,7 +690,7 @@ export function ProntidaoIdentidadeCard({
       </div>
 
       {processando && (
-        <div className="mt-3 flex items-center gap-2 rounded-xl border border-blue-100 bg-white px-3 py-2 text-xs font-semibold text-blue-700">
+        <div className="mt-3 flex items-center gap-2 rounded-xl border border-primary/20 bg-white px-3 py-2 text-xs font-semibold text-primary">
           <Loader2 className="h-4 w-4 animate-spin" /> Análise documental em andamento. O resultado será atualizado nesta tela.
         </div>
       )}
@@ -706,20 +706,20 @@ export function ProntidaoIdentidadeCard({
             <article key={item.codigo || item.nome} className="rounded-xl border border-white/90 bg-white p-3 shadow-sm">
               <div className="flex items-start gap-2">
                 {item.consistente
-                  ? <CheckCircle className="mt-0.5 h-4 w-4 shrink-0 text-emerald-600" />
-                  : <AlertTriangle className={`mt-0.5 h-4 w-4 shrink-0 ${cor === "red" ? "text-red-600" : "text-amber-600"}`} />}
+                  ? <CheckCircle className="mt-0.5 h-4 w-4 shrink-0 text-success" />
+                  : <AlertTriangle className={`mt-0.5 h-4 w-4 shrink-0 ${cor === "red" ? "text-destructive" : "text-warning"}`} />}
                 <div className="min-w-0">
-                  <p className="text-xs font-extrabold text-slate-800">{item.nome}</p>
-                  <p className={`mt-1 text-[11px] font-bold ${cor === "emerald" ? "text-emerald-700" : cor === "red" ? "text-red-700" : "text-amber-700"}`}>{statusLabel(item)}</p>
+                  <p className="text-xs font-extrabold text-foreground">{item.nome}</p>
+                  <p className={`mt-1 text-[11px] font-bold ${cor === "emerald" ? "text-success" : cor === "red" ? "text-destructive" : "text-warning"}`}>{statusLabel(item)}</p>
                 </div>
               </div>
-              <p className="mt-2 text-[11px] leading-relaxed text-slate-600">{item.diagnostico || "Sem diagnóstico registrado."}</p>
+              <p className="mt-2 text-[11px] leading-relaxed text-muted-foreground">{item.diagnostico || "Sem diagnóstico registrado."}</p>
               {campos.length > 0 && (
-                <dl className="mt-2 space-y-1 border-t border-slate-100 pt-2">
+                <dl className="mt-2 space-y-1 border-t border-border pt-2">
                   {campos.map(({ chave, valor }) => (
                     <div key={chave} className="flex items-start justify-between gap-2 text-[10px]">
-                      <dt className="shrink-0 font-semibold text-slate-400">{campoLabel[chave] || chave.replace(/_/g, " ")}</dt>
-                      <dd className="min-w-0 truncate text-right font-bold text-slate-700" title={String(valor)}>{valor}</dd>
+                      <dt className="shrink-0 font-semibold text-muted-foreground">{campoLabel[chave] || chave.replace(/_/g, " ")}</dt>
+                      <dd className="min-w-0 truncate text-right font-bold text-muted-foreground" title={String(valor)}>{valor}</dd>
                     </div>
                   ))}
                 </dl>
@@ -730,25 +730,25 @@ export function ProntidaoIdentidadeCard({
       </div>
 
       <div className="mt-3 grid grid-cols-2 gap-2 md:grid-cols-4">
-        <div className="rounded-xl border border-white/80 bg-white p-3"><span className="text-[10px] font-bold uppercase text-slate-400">Analisados</span><b className="block text-base text-slate-900">{identidade.relatorio?.documentos_analisados ?? documentos.filter((item) => item.analisado).length}/{totalDocumentos}</b></div>
-        <div className="rounded-xl border border-white/80 bg-white p-3"><span className="text-[10px] font-bold uppercase text-slate-400">Consistentes</span><b className="block text-base text-slate-900">{identidade.relatorio?.documentos_conferidos ?? 0}/{totalDocumentos}</b></div>
-        <div className="rounded-xl border border-white/80 bg-white p-3"><span className="text-[10px] font-bold uppercase text-slate-400">Tempo de abertura</span><b className="block text-base text-slate-900">{identidade.idade_meses == null ? "Não confirmado" : `${identidade.idade_meses} meses`}</b></div>
-        <div className="rounded-xl border border-white/80 bg-white p-3"><span className="text-[10px] font-bold uppercase text-slate-400">Enquadramento</span><b className="block truncate text-sm text-slate-900">{identidade.enquadramento_tributario || "Não identificado"}</b></div>
+        <div className="rounded-xl border border-white/80 bg-white p-3"><span className="text-[10px] font-bold uppercase text-muted-foreground">Analisados</span><b className="block text-base text-foreground">{identidade.relatorio?.documentos_analisados ?? documentos.filter((item) => item.analisado).length}/{totalDocumentos}</b></div>
+        <div className="rounded-xl border border-white/80 bg-white p-3"><span className="text-[10px] font-bold uppercase text-muted-foreground">Consistentes</span><b className="block text-base text-foreground">{identidade.relatorio?.documentos_conferidos ?? 0}/{totalDocumentos}</b></div>
+        <div className="rounded-xl border border-white/80 bg-white p-3"><span className="text-[10px] font-bold uppercase text-muted-foreground">Tempo de abertura</span><b className="block text-base text-foreground">{identidade.idade_meses == null ? "Não confirmado" : `${identidade.idade_meses} meses`}</b></div>
+        <div className="rounded-xl border border-white/80 bg-white p-3"><span className="text-[10px] font-bold uppercase text-muted-foreground">Enquadramento</span><b className="block truncate text-sm text-foreground">{identidade.enquadramento_tributario || "Não identificado"}</b></div>
       </div>
 
       {(bloqueios.length > 0 || avisos.length > 0 || positivos.length > 0) && (
         <div className="mt-3 grid grid-cols-1 gap-3 lg:grid-cols-3">
-          <div className="rounded-xl border border-emerald-100 bg-white p-3">
-            <p className="text-xs font-extrabold text-emerald-800">Confirmações</p>
-            <div className="mt-2 space-y-1">{positivos.length ? positivos.slice(0, 6).map((item, index) => <p key={index} className="text-[11px] leading-relaxed text-emerald-800">• {item}</p>) : <p className="text-[11px] text-slate-500">Aguardando confirmações.</p>}</div>
+          <div className="rounded-xl border border-success/20 bg-white p-3">
+            <p className="text-xs font-extrabold text-success">Confirmações</p>
+            <div className="mt-2 space-y-1">{positivos.length ? positivos.slice(0, 6).map((item, index) => <p key={index} className="text-[11px] leading-relaxed text-success">• {item}</p>) : <p className="text-[11px] text-muted-foreground">Aguardando confirmações.</p>}</div>
           </div>
-          <div className="rounded-xl border border-red-100 bg-white p-3">
-            <p className="text-xs font-extrabold text-red-800">O que precisa ser resolvido</p>
-            <div className="mt-2 space-y-1">{bloqueios.length ? bloqueios.slice(0, 8).map((item, index) => <p key={index} className="text-[11px] leading-relaxed text-red-800">• {item}</p>) : <p className="text-[11px] text-emerald-700">Nenhuma pendência impeditiva.</p>}</div>
+          <div className="rounded-xl border border-destructive/20 bg-white p-3">
+            <p className="text-xs font-extrabold text-destructive">O que precisa ser resolvido</p>
+            <div className="mt-2 space-y-1">{bloqueios.length ? bloqueios.slice(0, 8).map((item, index) => <p key={index} className="text-[11px] leading-relaxed text-destructive">• {item}</p>) : <p className="text-[11px] text-success">Nenhuma pendência impeditiva.</p>}</div>
           </div>
-          <div className="rounded-xl border border-amber-100 bg-white p-3">
-            <p className="text-xs font-extrabold text-amber-800">Avisos estratégicos</p>
-            <div className="mt-2 space-y-1">{avisos.length ? avisos.slice(0, 6).map((item, index) => <p key={index} className="text-[11px] leading-relaxed text-amber-800">• {item}</p>) : <p className="text-[11px] text-slate-500">Sem avisos adicionais.</p>}</div>
+          <div className="rounded-xl border border-warning/20 bg-white p-3">
+            <p className="text-xs font-extrabold text-warning">Avisos estratégicos</p>
+            <div className="mt-2 space-y-1">{avisos.length ? avisos.slice(0, 6).map((item, index) => <p key={index} className="text-[11px] leading-relaxed text-warning">• {item}</p>) : <p className="text-[11px] text-muted-foreground">Sem avisos adicionais.</p>}</div>
           </div>
         </div>
       )}
@@ -775,32 +775,32 @@ function DocumentacaoSocietariaCard({
   const apto = dados.apto_para_avancar === true;
   const registros = Array.isArray(dados.registros_requeridos) ? dados.registros_requeridos : [];
   return (
-    <section className={`rounded-2xl border p-4 ${apto ? "border-emerald-200 bg-emerald-50/60" : "border-blue-200 bg-blue-50/50"}`}>
+    <section className={`rounded-2xl border p-4 ${apto ? "border-success/20 bg-success/10" : "border-primary/20 bg-primary/10/50"}`}>
       <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
         <div>
           <div className="flex flex-wrap items-center gap-2">
-            {apto ? <ShieldCheck className="h-5 w-5 text-emerald-700" /> : <FileText className="h-5 w-5 text-blue-700" />}
-            <h3 className="text-sm font-extrabold text-slate-900">{dados.atos_junta_aprovados ? "Etapa 3 — Contrato e histórico mínimo de 12 meses" : "Etapa 2 — Atos da Junta Comercial"}</h3>
-            <span className={`rounded-full border bg-white px-2.5 py-1 text-[11px] font-extrabold ${apto ? "border-emerald-200 text-emerald-700" : "border-blue-200 text-blue-700"}`}>
+            {apto ? <ShieldCheck className="h-5 w-5 text-success" /> : <FileText className="h-5 w-5 text-primary" />}
+            <h3 className="text-sm font-extrabold text-foreground">{dados.atos_junta_aprovados ? "Etapa 3 — Contrato e histórico mínimo de 12 meses" : "Etapa 2 — Atos da Junta Comercial"}</h3>
+            <span className={`rounded-full border bg-white px-2.5 py-1 text-[11px] font-extrabold ${apto ? "border-success/20 text-success" : "border-primary/20 text-primary"}`}>
               {apto ? "Continuidade comprovada" : dados.analisado ? "Documentos complementares necessários" : "Aguardando validação"}
             </span>
           </div>
-          <p className="mt-2 max-w-4xl text-xs leading-relaxed text-slate-700">{dados.diagnostico}</p>
+          <p className="mt-2 max-w-4xl text-xs leading-relaxed text-muted-foreground">{dados.diagnostico}</p>
         </div>
         <div className="flex flex-wrap gap-2">
           {(!dados.contrato_anexado || !dados.atos_junta_anexados) && onAbrirDocumentos && (
-            <button type="button" onClick={onAbrirDocumentos} className="inline-flex items-center gap-2 rounded-xl bg-blue-600 px-4 py-2.5 text-xs font-extrabold text-white hover:bg-blue-700">
+            <button type="button" onClick={onAbrirDocumentos} className="inline-flex items-center gap-2 rounded-xl bg-primary px-4 py-2.5 text-xs font-extrabold text-white hover:bg-primary/90">
               Anexar documentos societários <ArrowRight className="h-4 w-4" />
             </button>
           )}
           {dados.botao_validar_disponivel && !apto && (
-            <button type="button" onClick={onValidar} disabled={processando} className="inline-flex items-center gap-2 rounded-xl bg-blue-600 px-4 py-2.5 text-xs font-extrabold text-white hover:bg-blue-700 disabled:opacity-60">
+            <button type="button" onClick={onValidar} disabled={processando} className="inline-flex items-center gap-2 rounded-xl bg-primary px-4 py-2.5 text-xs font-extrabold text-white hover:bg-primary/90 disabled:opacity-60">
               {processando ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCw className="h-4 w-4" />}
               {processando ? "Conferindo..." : dados.atos_junta_aprovados ? "Validar contratos, datas e 12 meses" : "Analisar Atos da Junta"}
             </button>
           )}
           {apto && onAvancar && (
-            <button type="button" onClick={onAvancar} className="inline-flex items-center gap-2 rounded-xl bg-emerald-600 px-4 py-2.5 text-xs font-extrabold text-white hover:bg-emerald-700">
+            <button type="button" onClick={onAvancar} className="inline-flex items-center gap-2 rounded-xl bg-success px-4 py-2.5 text-xs font-extrabold text-white hover:bg-success/90">
               Montar mapa documental de crédito <ArrowRight className="h-4 w-4" />
             </button>
           )}
@@ -808,32 +808,32 @@ function DocumentacaoSocietariaCard({
       </div>
 
       <div className="mt-4 grid grid-cols-2 gap-3 lg:grid-cols-4">
-        <div className="rounded-xl border border-white bg-white p-3"><p className="text-[10px] font-bold uppercase text-slate-400">Atos da Junta</p><p className="mt-1 text-xs font-extrabold text-slate-800">{dados.atos_junta_aprovados ? "Analisado e aprovado" : dados.atos_junta_anexados ? "Aguardando análise" : "Não anexado"}</p></div>
-        <div className="rounded-xl border border-white bg-white p-3"><p className="text-[10px] font-bold uppercase text-slate-400">Contratos/alterações</p><p className="mt-1 text-xs font-extrabold text-slate-800">{dados.total_contratos_anexados || 0} anexado(s)</p></div>
-        <div className="rounded-xl border border-white bg-white p-3"><p className="text-[10px] font-bold uppercase text-slate-400">Último registro</p><p className="mt-1 text-xs font-extrabold text-slate-800">{formatDate(dados.ultimo_registro_junta?.data || undefined)}</p></div>
-        <div className="rounded-xl border border-white bg-white p-3"><p className="text-[10px] font-bold uppercase text-slate-400">Corte mínimo</p><p className="mt-1 text-xs font-extrabold text-slate-800">{formatDate(dados.data_corte_12_meses || undefined)}</p></div>
+        <div className="rounded-xl border border-white bg-white p-3"><p className="text-[10px] font-bold uppercase text-muted-foreground">Atos da Junta</p><p className="mt-1 text-xs font-extrabold text-foreground">{dados.atos_junta_aprovados ? "Analisado e aprovado" : dados.atos_junta_anexados ? "Aguardando análise" : "Não anexado"}</p></div>
+        <div className="rounded-xl border border-white bg-white p-3"><p className="text-[10px] font-bold uppercase text-muted-foreground">Contratos/alterações</p><p className="mt-1 text-xs font-extrabold text-foreground">{dados.total_contratos_anexados || 0} anexado(s)</p></div>
+        <div className="rounded-xl border border-white bg-white p-3"><p className="text-[10px] font-bold uppercase text-muted-foreground">Último registro</p><p className="mt-1 text-xs font-extrabold text-foreground">{formatDate(dados.ultimo_registro_junta?.data || undefined)}</p></div>
+        <div className="rounded-xl border border-white bg-white p-3"><p className="text-[10px] font-bold uppercase text-muted-foreground">Corte mínimo</p><p className="mt-1 text-xs font-extrabold text-foreground">{formatDate(dados.data_corte_12_meses || undefined)}</p></div>
       </div>
 
       {!!dados.resultado_analise_atos && (
-        <div className="mt-3 rounded-xl border border-blue-100 bg-white p-3">
-          <p className="text-xs font-extrabold text-blue-900">Análise detalhada dos Atos da Junta Comercial</p>
+        <div className="mt-3 rounded-xl border border-primary/20 bg-white p-3">
+          <p className="text-xs font-extrabold text-primary">Análise detalhada dos Atos da Junta Comercial</p>
           <ResultadoAnaliseDocumento resultado={dados.resultado_analise_atos} documento={{ nome: "Atos da Junta Comercial", bloco: "Atos da Junta Comercial" }} compacto />
         </div>
       )}
 
       {registros.length > 0 && (
-        <div className="mt-3 rounded-xl border border-blue-100 bg-white p-3">
-          <p className="text-xs font-extrabold text-slate-800">Cadeia documental exigida</p>
-          <p className="mt-1 text-[11px] text-slate-500">O sistema parte do último registro e retrocede até alcançar pelo menos 12 meses.</p>
+        <div className="mt-3 rounded-xl border border-primary/20 bg-white p-3">
+          <p className="text-xs font-extrabold text-foreground">Cadeia documental exigida</p>
+          <p className="mt-1 text-[11px] text-muted-foreground">O sistema parte do último registro e retrocede até alcançar pelo menos 12 meses.</p>
           <div className="mt-2 grid gap-2 md:grid-cols-2">
             {registros.map((registro, index) => (
-              <div key={`${registro.data}-${registro.numero}-${index}`} className={`rounded-lg border p-2.5 ${registro.comprovado ? "border-emerald-200 bg-emerald-50" : "border-amber-200 bg-amber-50"}`}>
+              <div key={`${registro.data}-${registro.numero}-${index}`} className={`rounded-lg border p-2.5 ${registro.comprovado ? "border-success/20 bg-success/10" : "border-warning/20 bg-warning/10"}`}>
                 <div className="flex items-center justify-between gap-2">
-                  <p className="text-[11px] font-extrabold text-slate-800">{registro.tipo_ato || "Registro societário"}</p>
-                  <span className={`rounded-full px-2 py-0.5 text-[9px] font-extrabold ${registro.comprovado ? "bg-emerald-100 text-emerald-700" : "bg-amber-100 text-amber-700"}`}>{registro.comprovado ? "Comprovado" : "Anexar documento"}</span>
+                  <p className="text-[11px] font-extrabold text-foreground">{registro.tipo_ato || "Registro societário"}</p>
+                  <span className={`rounded-full px-2 py-0.5 text-[9px] font-extrabold ${registro.comprovado ? "bg-success/20 text-success" : "bg-warning/20 text-warning"}`}>{registro.comprovado ? "Comprovado" : "Anexar documento"}</span>
                 </div>
-                <p className="mt-1 text-[10px] text-slate-600">Data: {formatDate(registro.data || undefined)}{registro.numero ? ` · Registro ${registro.numero}` : ""}</p>
-                {registro.documento_nome && <p className="mt-1 truncate text-[10px] font-semibold text-emerald-700">{registro.documento_nome}</p>}
+                <p className="mt-1 text-[10px] text-muted-foreground">Data: {formatDate(registro.data || undefined)}{registro.numero ? ` · Registro ${registro.numero}` : ""}</p>
+                {registro.documento_nome && <p className="mt-1 truncate text-[10px] font-semibold text-success">{registro.documento_nome}</p>}
               </div>
             ))}
           </div>
@@ -841,9 +841,9 @@ function DocumentacaoSocietariaCard({
       )}
 
       {!!dados.documentos_analisados?.length && (
-        <div className="mt-3 rounded-xl border border-indigo-100 bg-white p-3">
-          <p className="text-xs font-extrabold text-indigo-900">Análises documentais detalhadas</p>
-          <p className="mt-1 text-[11px] text-slate-500">Esta seção usa o mesmo resultado normalizado exibido no relatório consolidado e no PDF.</p>
+        <div className="mt-3 rounded-xl border border-primary/20 bg-white p-3">
+          <p className="text-xs font-extrabold text-primary">Análises documentais detalhadas</p>
+          <p className="mt-1 text-[11px] text-muted-foreground">Esta seção usa o mesmo resultado normalizado exibido no relatório consolidado e no PDF.</p>
           {dados.documentos_analisados.map((documento, documentoIndex) => {
             const documentoDados = documento as any;
             const resultado = documentoDados.resultado_analise || {
@@ -864,10 +864,10 @@ function DocumentacaoSocietariaCard({
               observacoes: documentoDados.observacoes || [],
             };
             return (
-              <div key={`${documento.nome}-${documentoIndex}`} className="mt-3 rounded-xl border border-indigo-100 bg-indigo-50/50 p-3">
+              <div key={`${documento.nome}-${documentoIndex}`} className="mt-3 rounded-xl border border-primary/20 bg-primary/10/50 p-3">
                 <div className="flex flex-wrap items-center justify-between gap-2">
-                  <p className="text-[11px] font-extrabold text-slate-900">{documento.nome || "Contrato/alteração"}</p>
-                  <span className={`rounded-full px-2 py-0.5 text-[9px] font-extrabold ${documento.consistente ? "bg-emerald-100 text-emerald-700" : "bg-amber-100 text-amber-800"}`}>
+                  <p className="text-[11px] font-extrabold text-foreground">{documento.nome || "Contrato/alteração"}</p>
+                  <span className={`rounded-full px-2 py-0.5 text-[9px] font-extrabold ${documento.consistente ? "bg-success/20 text-success" : "bg-warning/20 text-warning"}`}>
                     {documento.consistente ? "Leitura consistente" : documento.revisao_humana_necessaria ? "Revisão humana" : "Com ressalvas"}
                   </span>
                 </div>
@@ -877,19 +877,19 @@ function DocumentacaoSocietariaCard({
           })}
         </div>
       )}
-      {!!dados.avisos?.length && <div className="mt-3 rounded-xl border border-blue-100 bg-white p-3"><p className="text-xs font-extrabold text-blue-800">Avisos da análise</p>{dados.avisos.map((item, index) => <p key={index} className="mt-1 text-[11px] text-blue-800">• {item}</p>)}</div>}
+      {!!dados.avisos?.length && <div className="mt-3 rounded-xl border border-primary/20 bg-white p-3"><p className="text-xs font-extrabold text-primary">Avisos da análise</p>{dados.avisos.map((item, index) => <p key={index} className="mt-1 text-[11px] text-primary">• {item}</p>)}</div>}
       {!!dados.registros_faltantes?.length && (
-        <div className="mt-3 rounded-xl border border-amber-100 bg-white p-3">
-          <p className="text-xs font-extrabold text-amber-800">Documentos ainda faltando para completar os 12 meses</p>
+        <div className="mt-3 rounded-xl border border-warning/20 bg-white p-3">
+          <p className="text-xs font-extrabold text-warning">Documentos ainda faltando para completar os 12 meses</p>
           {dados.registros_faltantes.map((item, index) => (
-            <p key={index} className="mt-1 text-[11px] text-amber-800">
+            <p key={index} className="mt-1 text-[11px] text-warning">
               • {item.tipo_ato || "Registro societário"}{item.data ? ` — ${formatDate(item.data)}` : ""}{item.numero ? ` (Registro ${item.numero})` : ""}
             </p>
           ))}
         </div>
       )}
-      {!!dados.bloqueios?.length && <div className="mt-3 rounded-xl border border-red-100 bg-white p-3"><p className="text-xs font-extrabold text-red-800">Pendências</p>{dados.bloqueios.map((item, index) => <p key={index} className="mt-1 text-[11px] text-red-800">• {item}</p>)}</div>}
-      <p className="mt-3 text-[11px] text-slate-600">O CNPJ na certidão da Junta é complementar. A validação obrigatória usa NIRE, datas dos registros e a cadeia de documentos necessária para comprovar 12 meses.</p>
+      {!!dados.bloqueios?.length && <div className="mt-3 rounded-xl border border-destructive/20 bg-white p-3"><p className="text-xs font-extrabold text-destructive">Pendências</p>{dados.bloqueios.map((item, index) => <p key={index} className="mt-1 text-[11px] text-destructive">• {item}</p>)}</div>}
+      <p className="mt-3 text-[11px] text-muted-foreground">O CNPJ na certidão da Junta é complementar. A validação obrigatória usa NIRE, datas dos registros e a cadeia de documentos necessária para comprovar 12 meses.</p>
     </section>
   );
 }
@@ -897,34 +897,34 @@ function DocumentacaoSocietariaCard({
 function MapaDocumentalCreditoCard({ mapa }: { mapa?: MapaDocumentalCredito }) {
   if (!mapa) return null;
   return (
-    <details className="rounded-xl border border-slate-200 bg-white">
-      <summary className="flex cursor-pointer list-none items-center justify-between gap-3 p-3 hover:bg-slate-50">
+    <details className="rounded-xl border border-border bg-white">
+      <summary className="flex cursor-pointer list-none items-center justify-between gap-3 p-3 hover:bg-muted">
         <div className="flex min-w-0 items-center gap-2">
-          <ClipboardList className="h-4 w-4 shrink-0 text-indigo-700" />
+          <ClipboardList className="h-4 w-4 shrink-0 text-primary" />
           <div>
-            <p className="text-sm font-extrabold text-slate-800">Mapa documental e estratégia de crédito</p>
-            <p className="text-[11px] text-slate-500">{mapa.regime_descricao} · Etapa atual {mapa.etapa_atual} · {mapa.proxima_acao}</p>
+            <p className="text-sm font-extrabold text-foreground">Mapa documental e estratégia de crédito</p>
+            <p className="text-[11px] text-muted-foreground">{mapa.regime_descricao} · Etapa atual {mapa.etapa_atual} · {mapa.proxima_acao}</p>
           </div>
         </div>
-        <ChevronDown className="h-4 w-4 text-slate-400" />
+        <ChevronDown className="h-4 w-4 text-muted-foreground" />
       </summary>
-      <div className="space-y-4 border-t border-slate-100 p-3">
+      <div className="space-y-4 border-t border-border p-3">
         <div className="grid gap-3 lg:grid-cols-2">
           {mapa.etapas.map((etapa) => (
-            <article key={etapa.codigo} className={`rounded-xl border p-3 ${etapa.bloqueada ? "border-slate-200 bg-slate-50 opacity-70" : "border-indigo-100 bg-indigo-50/40"}`}>
+            <article key={etapa.codigo} className={`rounded-xl border p-3 ${etapa.bloqueada ? "border-border bg-muted opacity-70" : "border-primary/20 bg-primary/10/40"}`}>
               <div className="flex items-center justify-between gap-2">
-                <p className="text-xs font-extrabold text-slate-900">{etapa.numero}. {etapa.titulo}</p>
-                {etapa.bloqueada && <span className="rounded-full bg-slate-200 px-2 py-0.5 text-[9px] font-bold text-slate-600">Bloqueada</span>}
+                <p className="text-xs font-extrabold text-foreground">{etapa.numero}. {etapa.titulo}</p>
+                {etapa.bloqueada && <span className="rounded-full bg-muted px-2 py-0.5 text-[9px] font-bold text-muted-foreground">Bloqueada</span>}
               </div>
-              <p className="mt-1 text-[10px] leading-relaxed text-slate-600">{etapa.objetivo}</p>
+              <p className="mt-1 text-[10px] leading-relaxed text-muted-foreground">{etapa.objetivo}</p>
               {!!etapa.documentos.length && (
                 <div className="mt-2 space-y-1.5">
                   {etapa.documentos.map((documento) => (
                     <div key={documento.codigo} className="flex items-start gap-2 rounded-lg border border-white bg-white p-2">
-                      {documento.anexado ? <CheckCircle className="mt-0.5 h-3.5 w-3.5 shrink-0 text-emerald-600" /> : <FileText className="mt-0.5 h-3.5 w-3.5 shrink-0 text-slate-400" />}
+                      {documento.anexado ? <CheckCircle className="mt-0.5 h-3.5 w-3.5 shrink-0 text-success" /> : <FileText className="mt-0.5 h-3.5 w-3.5 shrink-0 text-muted-foreground" />}
                       <div className="min-w-0">
-                        <p className="text-[10px] font-bold text-slate-800">{documento.nome}{!documento.obrigatorio ? " (quando aplicável)" : ""}</p>
-                        <p className="text-[9px] leading-relaxed text-slate-500">{documento.finalidade}</p>
+                        <p className="text-[10px] font-bold text-foreground">{documento.nome}{!documento.obrigatorio ? " (quando aplicável)" : ""}</p>
+                        <p className="text-[9px] leading-relaxed text-muted-foreground">{documento.finalidade}</p>
                       </div>
                     </div>
                   ))}
@@ -935,40 +935,40 @@ function MapaDocumentalCreditoCard({ mapa }: { mapa?: MapaDocumentalCredito }) {
         </div>
 
         <div>
-          <p className="text-xs font-extrabold text-slate-800">Trilhas por finalidade da operação</p>
+          <p className="text-xs font-extrabold text-foreground">Trilhas por finalidade da operação</p>
           <div className="mt-2 grid gap-2 md:grid-cols-2 xl:grid-cols-3">
             {mapa.operacoes_disponiveis.map((operacao) => (
-              <article key={operacao.codigo} className="rounded-xl border border-slate-200 p-3">
-                <p className="text-[11px] font-extrabold text-slate-900">{operacao.nome}</p>
-                <p className="mt-1 text-[10px] text-slate-600">{operacao.objetivo}</p>
-                {operacao.documentos_adicionais.slice(0, 5).map((item) => <p key={item} className="mt-1 text-[9px] text-slate-500">• {item}</p>)}
+              <article key={operacao.codigo} className="rounded-xl border border-border p-3">
+                <p className="text-[11px] font-extrabold text-foreground">{operacao.nome}</p>
+                <p className="mt-1 text-[10px] text-muted-foreground">{operacao.objetivo}</p>
+                {operacao.documentos_adicionais.slice(0, 5).map((item) => <p key={item} className="mt-1 text-[9px] text-muted-foreground">• {item}</p>)}
               </article>
             ))}
           </div>
         </div>
 
         <div>
-          <p className="text-xs font-extrabold text-slate-800">Programas e rotas de referência</p>
+          <p className="text-xs font-extrabold text-foreground">Programas e rotas de referência</p>
           <div className="mt-2 grid gap-2 md:grid-cols-2 xl:grid-cols-3">
             {mapa.programas_referencia.map((programa) => (
-              <article key={programa.codigo} className="rounded-xl border border-slate-200 bg-slate-50 p-3">
-                <p className="text-[11px] font-extrabold text-slate-900">{programa.nome}</p>
-                <p className="mt-1 text-[10px] text-slate-600">{programa.publico_alvo}</p>
-                <p className="mt-2 text-[9px] font-bold uppercase text-slate-400">Pontos de preparação</p>
-                {programa.requisitos_chave.slice(0, 4).map((item) => <p key={item} className="mt-1 text-[10px] text-slate-600">• {item}</p>)}
+              <article key={programa.codigo} className="rounded-xl border border-border bg-muted p-3">
+                <p className="text-[11px] font-extrabold text-foreground">{programa.nome}</p>
+                <p className="mt-1 text-[10px] text-muted-foreground">{programa.publico_alvo}</p>
+                <p className="mt-2 text-[9px] font-bold uppercase text-muted-foreground">Pontos de preparação</p>
+                {programa.requisitos_chave.slice(0, 4).map((item) => <p key={item} className="mt-1 text-[10px] text-muted-foreground">• {item}</p>)}
               </article>
             ))}
           </div>
         </div>
 
         <div>
-          <p className="text-xs font-extrabold text-slate-800">Indicadores para capacidade de pagamento</p>
+          <p className="text-xs font-extrabold text-foreground">Indicadores para capacidade de pagamento</p>
           <div className="mt-2 grid gap-2 md:grid-cols-2 xl:grid-cols-4">
             {mapa.indicadores.map((indicador) => (
-              <article key={indicador.codigo} className="rounded-xl border border-slate-200 p-2.5">
-                <p className="text-[10px] font-extrabold text-slate-800">{indicador.nome}</p>
-                <p className="mt-1 text-[9px] font-semibold text-indigo-700">{indicador.formula}</p>
-                <p className="mt-1 text-[9px] leading-relaxed text-slate-500">{indicador.interpretacao}</p>
+              <article key={indicador.codigo} className="rounded-xl border border-border p-2.5">
+                <p className="text-[10px] font-extrabold text-foreground">{indicador.nome}</p>
+                <p className="mt-1 text-[9px] font-semibold text-primary">{indicador.formula}</p>
+                <p className="mt-1 text-[9px] leading-relaxed text-muted-foreground">{indicador.interpretacao}</p>
               </article>
             ))}
           </div>
@@ -1099,7 +1099,7 @@ export default function DossieCreditoEmpresa({ empresaId, onAtualizarReceita, on
 
   if (loading && !dossie) {
     return (
-      <div className="p-8 flex flex-col items-center justify-center gap-3 text-slate-500">
+      <div className="p-8 flex flex-col items-center justify-center gap-3 text-muted-foreground">
         <Loader2 className="w-6 h-6 animate-spin" />
         <p className="text-sm">Montando Dossiê de Crédito...</p>
       </div>
@@ -1128,31 +1128,31 @@ export default function DossieCreditoEmpresa({ empresaId, onAtualizarReceita, on
       <MapaDocumentalCreditoCard mapa={dossie?.mapa_documental_credito} />
 
       {!identidade && !recalculando && (
-        <div className="rounded-xl border border-amber-200 bg-amber-50 p-3 text-xs text-amber-900">
+        <div className="rounded-xl border border-warning/20 bg-warning/10 p-3 text-xs text-warning">
           O relatório inicial usa Cartão CNPJ, QSA e Enquadramento Tributário.
         </div>
       )}
 
-      <div className="rounded-xl border border-slate-200 bg-white">
+      <div className="rounded-xl border border-border bg-white">
         <button
           type="button"
           onClick={() => setMostrarDetalhesIniciais((v) => !v)}
-          className="flex w-full items-center justify-between gap-3 p-3 text-left hover:bg-slate-50"
+          className="flex w-full items-center justify-between gap-3 p-3 text-left hover:bg-muted"
         >
           <div className="flex min-w-0 items-center gap-2">
-            <FileText className="h-4 w-4 shrink-0 text-blue-700" />
+            <FileText className="h-4 w-4 shrink-0 text-primary" />
             <div>
-              <p className="text-sm font-extrabold text-slate-800">Detalhes técnicos da análise inicial</p>
-              <p className="text-[11px] text-slate-500">Receita, OCR/leitura local, divergências e documentos vinculados.</p>
+              <p className="text-sm font-extrabold text-foreground">Detalhes técnicos da análise inicial</p>
+              <p className="text-[11px] text-muted-foreground">Receita, OCR/leitura local, divergências e documentos vinculados.</p>
             </div>
           </div>
-          {mostrarDetalhesIniciais ? <ChevronUp className="h-4 w-4 text-slate-400" /> : <ChevronDown className="h-4 w-4 text-slate-400" />}
+          {mostrarDetalhesIniciais ? <ChevronUp className="h-4 w-4 text-muted-foreground" /> : <ChevronDown className="h-4 w-4 text-muted-foreground" />}
         </button>
         {mostrarDetalhesIniciais && (
-          <div className="space-y-3 border-t border-slate-100 p-3">
+          <div className="space-y-3 border-t border-border p-3">
             {onAtualizarReceita && (
               <div className="flex justify-end">
-                <button onClick={onAtualizarReceita} className="inline-flex items-center gap-1.5 rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-[11px] font-bold text-emerald-700 hover:bg-emerald-100">
+                <button onClick={onAtualizarReceita} className="inline-flex items-center gap-1.5 rounded-lg border border-success/20 bg-success/10 px-3 py-2 text-[11px] font-bold text-success hover:bg-success/20">
                   <RefreshCw className="h-3.5 w-3.5" /> Atualizar dados da Receita
                 </button>
               </div>
@@ -1170,29 +1170,29 @@ export default function DossieCreditoEmpresa({ empresaId, onAtualizarReceita, on
         )}
       </div>
 
-      <div className="rounded-xl border border-slate-200 bg-white">
+      <div className="rounded-xl border border-border bg-white">
         <button
           type="button"
           onClick={() => setMostrarProximasEtapas((v) => !v)}
-          className="flex w-full items-center justify-between gap-3 p-3 text-left hover:bg-slate-50"
+          className="flex w-full items-center justify-between gap-3 p-3 text-left hover:bg-muted"
         >
           <div className="flex min-w-0 items-center gap-2">
-            <ClipboardList className="h-4 w-4 shrink-0 text-slate-600" />
+            <ClipboardList className="h-4 w-4 shrink-0 text-muted-foreground" />
             <div>
-              <p className="text-sm font-extrabold text-slate-800">Próximas etapas do dossiê</p>
-              <p className="text-[11px] text-slate-500">
+              <p className="text-sm font-extrabold text-foreground">Próximas etapas do dossiê</p>
+              <p className="text-[11px] text-muted-foreground">
                 Documentos da empresa, documentos dos sócios, certidões, faturamento e demais análises.
                 {resumo ? ` ${resumo.total_blocos - blocosPrioritarios.length} bloco(s) preservado(s).` : ""}
               </p>
             </div>
           </div>
           <div className="flex items-center gap-2">
-            {!apto && <span className="rounded-full bg-slate-100 px-2 py-1 text-[10px] font-bold text-slate-500">Aguardando etapa 1</span>}
-            {mostrarProximasEtapas ? <ChevronUp className="h-4 w-4 text-slate-400" /> : <ChevronDown className="h-4 w-4 text-slate-400" />}
+            {!apto && <span className="rounded-full bg-muted px-2 py-1 text-[10px] font-bold text-muted-foreground">Aguardando etapa 1</span>}
+            {mostrarProximasEtapas ? <ChevronUp className="h-4 w-4 text-muted-foreground" /> : <ChevronDown className="h-4 w-4 text-muted-foreground" />}
           </div>
         </button>
         {mostrarProximasEtapas && (
-          <div className="space-y-3 border-t border-slate-100 p-3">
+          <div className="space-y-3 border-t border-border p-3">
             {demaisBlocos.map((bloco) => (
               <BlocoCard
                 key={bloco.id}

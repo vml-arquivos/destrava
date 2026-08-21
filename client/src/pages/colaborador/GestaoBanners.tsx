@@ -232,77 +232,77 @@ export default function GestaoBanners() {
 
   return (
     <Layout title="Gestão de Banners">
-      <div className="min-h-full bg-slate-50 p-4 sm:p-6">
+      <div className="min-h-full bg-muted p-4 sm:p-6">
         <div className="mx-auto max-w-7xl space-y-5">
-          <header className="overflow-hidden rounded-3xl bg-slate-950 px-6 py-7 text-white shadow-sm sm:px-8">
+          <header className="overflow-hidden rounded-3xl bg-slate-950 px-6 py-7 text-primary-foreground shadow-sm sm:px-8">
             <div className="flex flex-col gap-5 sm:flex-row sm:items-end sm:justify-between">
               <div>
-                <div className="mb-3 inline-flex items-center gap-2 rounded-full bg-white/10 px-3 py-1 text-xs font-bold uppercase tracking-[0.18em] text-blue-100">
+                <div className="mb-3 inline-flex items-center gap-2 rounded-full bg-card/10 px-3 py-1 text-xs font-bold uppercase tracking-[0.18em] text-blue-100">
                   <ImagePlus className="h-3.5 w-3.5" /> Mídia e conversão
                 </div>
                 <h1 className="text-2xl font-black tracking-tight sm:text-3xl">Banners do site</h1>
-                <p className="mt-2 max-w-2xl text-sm leading-6 text-slate-300">
+                <p className="mt-2 max-w-2xl text-sm leading-6 text-muted-foreground">
                   Posicione campanhas por página e período. Novos banners começam inativos por segurança.
                 </p>
               </div>
-              <Button onClick={openCreate} className="bg-blue-600 text-white hover:bg-blue-500">
+              <Button onClick={openCreate} className="bg-primary text-primary-foreground hover:bg-primary">
                 <ImagePlus className="mr-2 h-4 w-4" /> Novo banner
               </Button>
             </div>
           </header>
 
           <section className="grid gap-3 sm:grid-cols-3">
-            <div className="rounded-2xl bg-white p-5 shadow-sm ring-1 ring-slate-100">
-              <div className="text-xs font-bold uppercase tracking-wider text-slate-400">Total</div>
+            <div className="rounded-2xl bg-card p-5 shadow-sm ring-1 ring-slate-100">
+              <div className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Total</div>
               <div className="mt-1 text-3xl font-black text-slate-950">{banners.length}</div>
             </div>
-            <div className="rounded-2xl bg-white p-5 shadow-sm ring-1 ring-slate-100">
-              <div className="text-xs font-bold uppercase tracking-wider text-slate-400">Visíveis agora</div>
-              <div className="mt-1 text-3xl font-black text-emerald-600">{activeCount}</div>
+            <div className="rounded-2xl bg-card p-5 shadow-sm ring-1 ring-slate-100">
+              <div className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Visíveis agora</div>
+              <div className="mt-1 text-3xl font-black text-success">{activeCount}</div>
             </div>
-            <div className="rounded-2xl bg-white p-5 shadow-sm ring-1 ring-slate-100">
-              <div className="text-xs font-bold uppercase tracking-wider text-slate-400">Inativos ou agendados</div>
-              <div className="mt-1 text-3xl font-black text-amber-600">{banners.length - activeCount}</div>
+            <div className="rounded-2xl bg-card p-5 shadow-sm ring-1 ring-slate-100">
+              <div className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Inativos ou agendados</div>
+              <div className="mt-1 text-3xl font-black text-warning">{banners.length - activeCount}</div>
             </div>
           </section>
 
-          <section className="rounded-3xl bg-white p-4 shadow-sm ring-1 ring-slate-100 sm:p-6">
+          <section className="rounded-3xl bg-card p-4 shadow-sm ring-1 ring-slate-100 sm:p-6">
             <div className="mb-5 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
               <div>
                 <h2 className="font-black text-slate-950">Campanhas</h2>
-                <p className="text-sm text-slate-500">A exibição respeita posição, ativação e janela de datas.</p>
+                <p className="text-sm text-muted-foreground">A exibição respeita posição, ativação e janela de datas.</p>
               </div>
               <div className="relative w-full sm:w-80">
-                <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+                <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
                 <Input value={search} onChange={event => setSearch(event.target.value)} placeholder="Buscar banner ou posição" className="pl-9" />
               </div>
             </div>
 
             {loading ? (
-              <div className="flex min-h-52 items-center justify-center text-slate-500">
+              <div className="flex min-h-52 items-center justify-center text-muted-foreground">
                 <Loader2 className="mr-2 h-5 w-5 animate-spin" /> Carregando banners
               </div>
             ) : filteredBanners.length === 0 ? (
-              <div className="rounded-2xl border border-dashed border-slate-200 px-6 py-14 text-center">
-                <ImagePlus className="mx-auto h-9 w-9 text-slate-300" />
-                <p className="mt-3 font-bold text-slate-700">Nenhum banner encontrado</p>
-                <p className="mt-1 text-sm text-slate-500">Crie uma campanha ou ajuste a busca.</p>
+              <div className="rounded-2xl border border-dashed border-border px-6 py-14 text-center">
+                <ImagePlus className="mx-auto h-9 w-9 text-muted-foreground" />
+                <p className="mt-3 font-bold text-foreground">Nenhum banner encontrado</p>
+                <p className="mt-1 text-sm text-muted-foreground">Crie uma campanha ou ajuste a busca.</p>
               </div>
             ) : (
               <div className="space-y-3">
                 {filteredBanners.map(banner => (
-                  <article key={banner.id} className="rounded-2xl border border-slate-100 p-4 transition hover:border-blue-100 hover:bg-blue-50/30">
+                  <article key={banner.id} className="rounded-2xl border border-border p-4 transition hover:border-primary/20 hover:bg-primary/10/30">
                     <div className="flex flex-col gap-4 lg:flex-row lg:items-center">
-                      <img src={banner.image_url} alt="" className="h-20 w-full rounded-xl bg-slate-100 object-cover lg:w-36" loading="lazy" />
+                      <img src={banner.image_url} alt="" className="h-20 w-full rounded-xl bg-muted object-cover lg:w-36" loading="lazy" />
                       <div className="min-w-0 flex-1">
                         <div className="flex flex-wrap items-center gap-2">
-                          <span className={`rounded-full px-2.5 py-1 text-[11px] font-black uppercase tracking-wider ${isCurrentlyVisible(banner) ? "bg-emerald-50 text-emerald-700" : "bg-amber-50 text-amber-700"}`}>
+                          <span className={`rounded-full px-2.5 py-1 text-[11px] font-black uppercase tracking-wider ${isCurrentlyVisible(banner) ? "bg-success/10 text-success" : "bg-warning/10 text-warning"}`}>
                             {isCurrentlyVisible(banner) ? "Visível" : banner.is_active ? "Agendado" : "Inativo"}
                           </span>
-                          <span className="text-xs font-semibold text-slate-400">{positionLabel(banner.position)}</span>
+                          <span className="text-xs font-semibold text-muted-foreground">{positionLabel(banner.position)}</span>
                         </div>
-                        <h3 className="mt-2 truncate text-base font-black text-slate-900">{banner.title}</h3>
-                        <p className="mt-1 line-clamp-1 text-sm text-slate-500">{banner.description || "Sem descrição"}</p>
+                        <h3 className="mt-2 truncate text-base font-black text-foreground">{banner.title}</h3>
+                        <p className="mt-1 line-clamp-1 text-sm text-muted-foreground">{banner.description || "Sem descrição"}</p>
                       </div>
                       <div className="flex flex-wrap items-center gap-2">
                         <Button variant="outline" size="sm" onClick={() => toggleActive(banner)}>
@@ -311,7 +311,7 @@ export default function GestaoBanners() {
                         <Button variant="outline" size="sm" onClick={() => openEdit(banner)}>
                           <Pencil className="mr-2 h-4 w-4" /> Editar
                         </Button>
-                        <Button variant="outline" size="sm" className="text-red-600 hover:bg-red-50 hover:text-red-700" onClick={() => deleteBanner(banner)}>
+                        <Button variant="outline" size="sm" className="text-destructive hover:bg-destructive/10 hover:text-destructive" onClick={() => deleteBanner(banner)}>
                           <Trash2 className="h-4 w-4" /><span className="sr-only">Excluir {banner.title}</span>
                         </Button>
                       </div>
@@ -326,12 +326,12 @@ export default function GestaoBanners() {
 
       {editorOpen && (
         <div className="fixed inset-0 z-[100] flex items-start justify-end bg-slate-950/45 backdrop-blur-sm" role="dialog" aria-modal="true" aria-label={editingId ? "Editar banner" : "Novo banner"}>
-          <div className="h-full w-full max-w-2xl overflow-y-auto bg-white shadow-2xl">
+          <div className="h-full w-full max-w-2xl overflow-y-auto bg-card shadow-2xl">
             <form onSubmit={saveBanner} className="min-h-full">
-              <div className="sticky top-0 z-10 flex items-center justify-between border-b border-slate-100 bg-white/95 px-5 py-4 backdrop-blur sm:px-7">
+              <div className="sticky top-0 z-10 flex items-center justify-between border-b border-border bg-card/95 px-5 py-4 backdrop-blur sm:px-7">
                 <div>
                   <h2 className="text-lg font-black text-slate-950">{editingId ? "Editar banner" : "Novo banner"}</h2>
-                  <p className="text-xs text-slate-500">Revise a prévia antes de ativar.</p>
+                  <p className="text-xs text-muted-foreground">Revise a prévia antes de ativar.</p>
                 </div>
                 <Button type="button" variant="ghost" size="icon" onClick={closeEditor} aria-label="Fechar editor"><X className="h-5 w-5" /></Button>
               </div>
@@ -355,7 +355,7 @@ export default function GestaoBanners() {
                 </div>
 
                 {form.image_url && (
-                  <div className="overflow-hidden rounded-2xl border border-slate-200 bg-slate-50 p-3">
+                  <div className="overflow-hidden rounded-2xl border border-border bg-muted p-3">
                     <img src={form.image_url} alt="Pré-visualização do banner" className="max-h-52 w-full rounded-xl object-contain" />
                   </div>
                 )}
@@ -384,16 +384,16 @@ export default function GestaoBanners() {
                   </div>
                 </div>
 
-                <div className="flex items-center justify-between rounded-2xl border border-slate-200 p-4">
+                <div className="flex items-center justify-between rounded-2xl border border-border p-4">
                   <div>
-                    <div className="font-bold text-slate-900">Banner ativo</div>
-                    <p className="text-xs text-slate-500">Se ativo, ainda respeitará as datas configuradas.</p>
+                    <div className="font-bold text-foreground">Banner ativo</div>
+                    <p className="text-xs text-muted-foreground">Se ativo, ainda respeitará as datas configuradas.</p>
                   </div>
                   <Switch checked={form.is_active} onCheckedChange={checked => updateForm("is_active", checked)} />
                 </div>
               </div>
 
-              <div className="sticky bottom-0 flex justify-end gap-3 border-t border-slate-100 bg-white/95 px-5 py-4 backdrop-blur sm:px-7">
+              <div className="sticky bottom-0 flex justify-end gap-3 border-t border-border bg-card/95 px-5 py-4 backdrop-blur sm:px-7">
                 <Button type="button" variant="outline" onClick={closeEditor} disabled={saving}>Cancelar</Button>
                 <Button type="submit" disabled={saving}>
                   {saving && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}

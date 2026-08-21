@@ -53,11 +53,11 @@ export default function CargoRoute({
   if (loading) {
     return (
       <div
-        className="min-h-screen flex items-center justify-center bg-gray-50"
+        className="min-h-screen flex items-center justify-center bg-muted"
         role="status"
         aria-label="Verificando permissões…"
       >
-        <Loader2 className="h-8 w-8 animate-spin text-blue-600" aria-hidden="true" />
+        <Loader2 className="h-8 w-8 animate-spin text-primary" aria-hidden="true" />
       </div>
     );
   }
@@ -65,14 +65,14 @@ export default function CargoRoute({
   if (!temAcesso) {
     return (
       <div
-        className="min-h-screen flex items-center justify-center bg-gray-50"
+        className="min-h-screen flex items-center justify-center bg-muted"
         role="alert"
         aria-live="assertive"
       >
         <div className="text-center max-w-sm px-6">
           <ShieldX className="h-12 w-12 text-red-400 mx-auto mb-3" aria-hidden="true" />
-          <p className="text-gray-700 font-semibold text-lg">Acesso não autorizado</p>
-          <p className="text-sm text-gray-500 mt-1">
+          <p className="text-foreground font-semibold text-lg">Acesso não autorizado</p>
+          <p className="text-sm text-muted-foreground mt-1">
             Você não tem permissão para acessar esta página.
             {colaborador?.cargo && (
               <> Seu cargo atual é <strong>{colaborador.cargo}</strong>.</>
@@ -80,7 +80,7 @@ export default function CargoRoute({
           </p>
           <button
             onClick={() => setLocation("/colaborador/dashboard")}
-            className="mt-4 text-sm text-blue-600 underline hover:text-blue-800"
+            className="mt-4 text-sm text-primary underline hover:text-primary"
           >
             Voltar ao Dashboard
           </button>

@@ -710,18 +710,18 @@ export default function Orcamentos() {
 
   return (
     <Layout title="Orçamentos">
-      <div className="h-full min-h-0 overflow-y-auto bg-slate-50">
+      <div className="h-full min-h-0 overflow-y-auto bg-muted">
         <div className="mx-auto max-w-[1560px] px-4 py-4 lg:px-6 lg:py-5">
-          <div className="mb-4 flex flex-col gap-3 rounded-3xl border border-slate-200 bg-white p-4 shadow-sm lg:flex-row lg:items-center lg:justify-between">
+          <div className="mb-4 flex flex-col gap-3 rounded-3xl border border-border bg-card p-4 shadow-sm lg:flex-row lg:items-center lg:justify-between">
             <div className="flex items-center gap-3">
-              <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-blue-600 text-white shadow-lg shadow-blue-100">
+              <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-primary text-primary-foreground shadow-lg shadow-blue-100">
                 <FileSignature className="h-6 w-6" />
               </div>
               <div>
-                <h1 className="text-xl font-black tracking-tight text-slate-900">
+                <h1 className="text-xl font-black tracking-tight text-foreground">
                   Orçamentos
                 </h1>
-                <p className="text-sm text-slate-500">
+                <p className="text-sm text-muted-foreground">
                   Propostas de assessoria empresarial e financeira · valor direto ou serviços prestados com
                   cálculo automático.
                 </p>
@@ -729,7 +729,7 @@ export default function Orcamentos() {
             </div>
             <button
               onClick={novoOrcamento}
-              className="inline-flex items-center justify-center gap-2 rounded-2xl bg-blue-600 px-4 py-2.5 text-sm font-bold text-white shadow-lg shadow-blue-100 transition hover:bg-blue-700"
+              className="inline-flex items-center justify-center gap-2 rounded-2xl bg-primary px-4 py-2.5 text-sm font-bold text-primary-foreground shadow-lg shadow-blue-100 transition hover:bg-primary"
             >
               <Plus className="h-4 w-4" />
               Novo orçamento
@@ -737,10 +737,10 @@ export default function Orcamentos() {
           </div>
 
           <div className="grid grid-cols-1 gap-4 xl:grid-cols-[360px_minmax(0,1fr)]">
-            <aside className="rounded-3xl border border-slate-200 bg-white p-3 shadow-sm">
+            <aside className="rounded-3xl border border-border bg-card p-3 shadow-sm">
               <div className="mb-3 flex items-center gap-2">
                 <div className="relative flex-1">
-                  <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+                  <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
                   <input
                     value={busca}
                     onChange={(e) => setBusca(e.target.value)}
@@ -748,12 +748,12 @@ export default function Orcamentos() {
                       if (e.key === "Enter") void carregarTudo();
                     }}
                     placeholder="Buscar orçamento..."
-                    className="h-10 w-full rounded-2xl border border-slate-200 bg-slate-50 pl-9 pr-3 text-sm outline-none focus:border-blue-300 focus:ring-2 focus:ring-blue-100"
+                    className="h-10 w-full rounded-2xl border border-border bg-muted pl-9 pr-3 text-sm outline-none focus:border-primary/30 focus:ring-2 focus:ring-blue-100"
                   />
                 </div>
                 <button
                   onClick={carregarTudo}
-                  className="rounded-2xl border border-slate-200 bg-white p-2.5 text-slate-500 hover:bg-slate-50"
+                  className="rounded-2xl border border-border bg-card p-2.5 text-muted-foreground hover:bg-muted"
                 >
                   <RefreshCw
                     className={`h-4 w-4 ${loading ? "animate-spin" : ""}`}
@@ -763,7 +763,7 @@ export default function Orcamentos() {
 
               <div className="max-h-[calc(100vh-260px)] space-y-2 overflow-y-auto pr-1">
                 {orcamentos.length === 0 ? (
-                  <div className="rounded-2xl border border-dashed border-slate-200 p-8 text-center text-sm text-slate-500">
+                  <div className="rounded-2xl border border-dashed border-border p-8 text-center text-sm text-muted-foreground">
                     Nenhum orçamento encontrado.
                   </div>
                 ) : (
@@ -772,8 +772,8 @@ export default function Orcamentos() {
                       key={orc.id}
                       className={`rounded-2xl border p-3 text-left transition ${
                         selecionado?.id === orc.id
-                          ? "border-blue-200 bg-blue-50"
-                          : "border-slate-200 bg-white hover:border-slate-300 hover:bg-slate-50"
+                          ? "border-primary/20 bg-primary/10"
+                          : "border-border bg-card hover:border-input hover:bg-muted"
                       }`}
                     >
                       <button
@@ -782,42 +782,42 @@ export default function Orcamentos() {
                         className="w-full text-left"
                       >
                         <div className="mb-1 flex items-center justify-between gap-2">
-                          <span className="truncate text-xs font-bold uppercase tracking-wide text-slate-400">
+                          <span className="truncate text-xs font-bold uppercase tracking-wide text-muted-foreground">
                             {orc.numero || "Rascunho"}
                           </span>
                           <span
-                            className={`rounded-full px-2 py-0.5 text-[10px] font-black ${orc.status === "finalizado" ? "bg-emerald-100 text-emerald-700" : "bg-amber-100 text-amber-700"}`}
+                            className={`rounded-full px-2 py-0.5 text-[10px] font-black ${orc.status === "finalizado" ? "bg-success/20 text-success" : "bg-warning/20 text-warning"}`}
                           >
                             {orc.status}
                           </span>
                         </div>
-                        <p className="truncate text-sm font-black text-slate-900">
+                        <p className="truncate text-sm font-black text-foreground">
                           {orc.cliente_nome || "Cliente não informado"}
                         </p>
-                        <p className="mt-1 truncate text-xs text-slate-500">
+                        <p className="mt-1 truncate text-xs text-muted-foreground">
                           {orc.titulo}
                         </p>
                         <div className="mt-2 flex items-center justify-between text-xs">
-                          <span className="font-bold text-slate-700">
+                          <span className="font-bold text-foreground">
                             {moneyBR(orc.valor_total)}
                           </span>
-                          <span className="text-slate-400">
+                          <span className="text-muted-foreground">
                             {fmtDate(orc.atualizado_em || orc.criado_em)}
                           </span>
                         </div>
                       </button>
-                      <div className="mt-3 flex gap-2 border-t border-slate-100 pt-2">
+                      <div className="mt-3 flex gap-2 border-t border-border pt-2">
                         <button
                           type="button"
                           onClick={() => editarOrcamento(orc)}
-                          className="inline-flex flex-1 items-center justify-center gap-1.5 rounded-xl border border-blue-100 bg-white px-2 py-1.5 text-[11px] font-black text-blue-700 hover:bg-blue-50"
+                          className="inline-flex flex-1 items-center justify-center gap-1.5 rounded-xl border border-primary/20 bg-card px-2 py-1.5 text-[11px] font-black text-primary hover:bg-primary/10"
                         >
                           <Pencil className="h-3.5 w-3.5" /> Editar
                         </button>
                         <button
                           type="button"
                           onClick={() => excluirOrcamento(orc)}
-                          className="inline-flex flex-1 items-center justify-center gap-1.5 rounded-xl border border-rose-100 bg-white px-2 py-1.5 text-[11px] font-black text-rose-600 hover:bg-rose-50"
+                          className="inline-flex flex-1 items-center justify-center gap-1.5 rounded-xl border border-rose-100 bg-card px-2 py-1.5 text-[11px] font-black text-rose-600 hover:bg-rose-50"
                         >
                           <Trash2 className="h-3.5 w-3.5" /> Excluir
                         </button>
@@ -828,8 +828,8 @@ export default function Orcamentos() {
               </div>
             </aside>
 
-            <section className="min-w-0 rounded-3xl border border-slate-200 bg-white shadow-sm">
-              <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-100 p-3">
+            <section className="min-w-0 rounded-3xl border border-border bg-card shadow-sm">
+              <div className="flex flex-wrap items-center justify-between gap-3 border-b border-border p-3">
                 <div className="flex flex-wrap gap-1">
                   {[
                     ["editor", "Editor"],
@@ -840,7 +840,7 @@ export default function Orcamentos() {
                     <button
                       key={id}
                       onClick={() => setAba(id as AbaOrcamento)}
-                      className={`rounded-2xl px-3 py-2 text-xs font-black transition ${aba === id ? "bg-blue-600 text-white shadow-md shadow-blue-100" : "bg-slate-50 text-slate-600 hover:bg-slate-100"}`}
+                      className={`rounded-2xl px-3 py-2 text-xs font-black transition ${aba === id ? "bg-primary text-primary-foreground shadow-md shadow-blue-100" : "bg-muted text-muted-foreground hover:bg-muted"}`}
                     >
                       {label}
                     </button>
@@ -850,21 +850,21 @@ export default function Orcamentos() {
                   <button
                     onClick={salvar}
                     disabled={salvando || camposBloqueados}
-                    className="inline-flex items-center gap-2 rounded-2xl border border-slate-200 bg-white px-3 py-2 text-xs font-bold text-slate-700 hover:bg-slate-50 disabled:opacity-50"
+                    className="inline-flex items-center gap-2 rounded-2xl border border-border bg-card px-3 py-2 text-xs font-bold text-foreground hover:bg-muted disabled:opacity-50"
                   >
                     <Save className="h-4 w-4" /> Salvar rascunho
                   </button>
                   <button
                     onClick={finalizar}
                     disabled={salvando}
-                    className="inline-flex items-center gap-2 rounded-2xl bg-emerald-600 px-3 py-2 text-xs font-bold text-white hover:bg-emerald-700 disabled:opacity-50"
+                    className="inline-flex items-center gap-2 rounded-2xl bg-success px-3 py-2 text-xs font-bold text-primary-foreground hover:bg-success disabled:opacity-50"
                   >
                     <CheckCircle2 className="h-4 w-4" /> Finalizar
                   </button>
                   <button
                     onClick={baixarPdf}
                     disabled={salvando}
-                    className="inline-flex items-center gap-2 rounded-2xl bg-slate-900 px-3 py-2 text-xs font-bold text-white hover:bg-slate-800 disabled:opacity-50"
+                    className="inline-flex items-center gap-2 rounded-2xl bg-brand-navy px-3 py-2 text-xs font-bold text-primary-foreground hover:bg-brand-navy disabled:opacity-50"
                   >
                     <Download className="h-4 w-4" /> PDF
                   </button>
@@ -887,7 +887,7 @@ export default function Orcamentos() {
               <div className="p-4">
                 {isFinalizado && (
                   <div
-                    className={`mb-4 rounded-2xl border px-4 py-3 text-sm font-semibold ${edicaoFinalizadoLiberada ? "border-amber-200 bg-amber-50 text-amber-800" : "border-emerald-200 bg-emerald-50 text-emerald-800"}`}
+                    className={`mb-4 rounded-2xl border px-4 py-3 text-sm font-semibold ${edicaoFinalizadoLiberada ? "border-warning/20 bg-warning/10 text-warning" : "border-success/20 bg-success/10 text-success"}`}
                   >
                     {edicaoFinalizadoLiberada
                       ? "Edição liberada para este orçamento finalizado. Salve e finalize novamente para atualizar o PDF."
@@ -900,7 +900,7 @@ export default function Orcamentos() {
                     <div className="space-y-4">
                       <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
                         <label className="block">
-                          <span className="mb-1 block text-xs font-bold uppercase tracking-wide text-slate-500">
+                          <span className="mb-1 block text-xs font-bold uppercase tracking-wide text-muted-foreground">
                             Tipo de cliente
                           </span>
                           <select
@@ -916,7 +916,7 @@ export default function Orcamentos() {
                                 cliente_documento: "",
                               }))
                             }
-                            className="h-11 w-full rounded-2xl border border-slate-200 bg-white px-3 text-sm outline-none focus:border-blue-300"
+                            className="h-11 w-full rounded-2xl border border-border bg-card px-3 text-sm outline-none focus:border-primary/30"
                           >
                             <option value="empresa">
                               Cliente PJ
@@ -929,7 +929,7 @@ export default function Orcamentos() {
                         </label>
 
                         <label className="block">
-                          <span className="mb-1 block text-xs font-bold uppercase tracking-wide text-slate-500">
+                          <span className="mb-1 block text-xs font-bold uppercase tracking-wide text-muted-foreground">
                             Empresa prestadora
                           </span>
                           <select
@@ -941,7 +941,7 @@ export default function Orcamentos() {
                                 marca: e.target.value,
                               }))
                             }
-                            className="h-11 w-full rounded-2xl border border-slate-200 bg-white px-3 text-sm outline-none focus:border-blue-300"
+                            className="h-11 w-full rounded-2xl border border-border bg-card px-3 text-sm outline-none focus:border-primary/30"
                           >
                             <option value="destrava">Destrava Crédito</option>
                             <option value="permupay">PermuPay</option>
@@ -950,7 +950,7 @@ export default function Orcamentos() {
                         </label>
 
                         <label className="block">
-                          <span className="mb-1 block text-xs font-bold uppercase tracking-wide text-slate-500">
+                          <span className="mb-1 block text-xs font-bold uppercase tracking-wide text-muted-foreground">
                             Validade (dias)
                           </span>
                           <input
@@ -963,7 +963,7 @@ export default function Orcamentos() {
                                 validade_dias: Number(e.target.value || 30),
                               }))
                             }
-                            className="h-11 w-full rounded-2xl border border-slate-200 bg-white px-3 text-sm outline-none focus:border-blue-300"
+                            className="h-11 w-full rounded-2xl border border-border bg-card px-3 text-sm outline-none focus:border-primary/30"
                             min={1}
                             placeholder="30"
                           />
@@ -972,7 +972,7 @@ export default function Orcamentos() {
 
                       {form.tipo_cliente === "empresa" && (
                         <label className="block">
-                          <span className="mb-1 block text-xs font-bold uppercase tracking-wide text-slate-500">
+                          <span className="mb-1 block text-xs font-bold uppercase tracking-wide text-muted-foreground">
                             <Building2 className="mr-1 inline h-3.5 w-3.5" />{" "}
                             Selecionar cliente PJ
                           </span>
@@ -980,7 +980,7 @@ export default function Orcamentos() {
                             value={form.empresa_id}
                             disabled={camposBloqueados}
                             onChange={(e) => aplicarEmpresa(e.target.value)}
-                            className="h-11 w-full rounded-2xl border border-slate-200 bg-white px-3 text-sm outline-none focus:border-blue-300"
+                            className="h-11 w-full rounded-2xl border border-border bg-card px-3 text-sm outline-none focus:border-primary/30"
                           >
                             <option value="">Selecione um cliente PJ...</option>
                             {clientesPjFiltrados.map((e) => (
@@ -994,7 +994,7 @@ export default function Orcamentos() {
 
                       {form.tipo_cliente === "pessoa_fisica" && (
                         <label className="block">
-                          <span className="mb-1 block text-xs font-bold uppercase tracking-wide text-slate-500">
+                          <span className="mb-1 block text-xs font-bold uppercase tracking-wide text-muted-foreground">
                             <User className="mr-1 inline h-3.5 w-3.5" />{" "}
                             Selecionar cliente PF
                           </span>
@@ -1002,7 +1002,7 @@ export default function Orcamentos() {
                             value={form.cliente_pf_id}
                             disabled={camposBloqueados}
                             onChange={(e) => aplicarClientePf(e.target.value)}
-                            className="h-11 w-full rounded-2xl border border-slate-200 bg-white px-3 text-sm outline-none focus:border-blue-300"
+                            className="h-11 w-full rounded-2xl border border-border bg-card px-3 text-sm outline-none focus:border-primary/30"
                           >
                             <option value="">
                               Selecione uma pessoa física...
@@ -1026,7 +1026,7 @@ export default function Orcamentos() {
                               cliente_nome: e.target.value,
                             }))
                           }
-                          className="h-11 rounded-2xl border border-slate-200 px-3 text-sm outline-none focus:border-blue-300"
+                          className="h-11 rounded-2xl border border-border px-3 text-sm outline-none focus:border-primary/30"
                           placeholder="Nome / Razão social do cliente"
                         />
                         <input
@@ -1038,7 +1038,7 @@ export default function Orcamentos() {
                               cliente_documento: e.target.value,
                             }))
                           }
-                          className="h-11 rounded-2xl border border-slate-200 px-3 text-sm outline-none focus:border-blue-300"
+                          className="h-11 rounded-2xl border border-border px-3 text-sm outline-none focus:border-primary/30"
                           placeholder="CPF / CNPJ"
                         />
                         <input
@@ -1050,7 +1050,7 @@ export default function Orcamentos() {
                               cliente_email: e.target.value,
                             }))
                           }
-                          className="h-11 rounded-2xl border border-slate-200 px-3 text-sm outline-none focus:border-blue-300"
+                          className="h-11 rounded-2xl border border-border px-3 text-sm outline-none focus:border-primary/30"
                           placeholder="E-mail"
                         />
                         <input
@@ -1062,7 +1062,7 @@ export default function Orcamentos() {
                               cliente_telefone: e.target.value,
                             }))
                           }
-                          className="h-11 rounded-2xl border border-slate-200 px-3 text-sm outline-none focus:border-blue-300"
+                          className="h-11 rounded-2xl border border-border px-3 text-sm outline-none focus:border-primary/30"
                           placeholder="Telefone / WhatsApp"
                         />
                       </div>
@@ -1076,7 +1076,7 @@ export default function Orcamentos() {
                             titulo: e.target.value,
                           }))
                         }
-                        className="h-11 w-full rounded-2xl border border-slate-200 px-3 text-sm font-bold outline-none focus:border-blue-300"
+                        className="h-11 w-full rounded-2xl border border-border px-3 text-sm font-bold outline-none focus:border-primary/30"
                         placeholder="Título do orçamento"
                       />
 
@@ -1090,18 +1090,18 @@ export default function Orcamentos() {
                           }))
                         }
                         rows={2}
-                        className="w-full rounded-2xl border border-slate-200 px-3 py-3 text-sm outline-none focus:border-blue-300"
+                        className="w-full rounded-2xl border border-border px-3 py-3 text-sm outline-none focus:border-primary/30"
                         placeholder="Descrição curta / subtítulo do orçamento"
                       />
 
-                      <div className="rounded-3xl border border-blue-100 bg-blue-50/60 p-4">
+                      <div className="rounded-3xl border border-primary/20 bg-primary/10/60 p-4">
                         <div className="mb-3 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
                           <div>
-                            <div className="flex items-center gap-2 text-sm font-black text-slate-900">
-                              <BadgeDollarSign className="h-4 w-4 text-blue-600" />{" "}
+                            <div className="flex items-center gap-2 text-sm font-black text-foreground">
+                              <BadgeDollarSign className="h-4 w-4 text-primary" />{" "}
                               Valor do orçamento
                             </div>
-                            <p className="mt-0.5 text-xs text-slate-500">
+                            <p className="mt-0.5 text-xs text-muted-foreground">
                               Use valor direto quando a proposta não precisar
                               detalhar serviços prestados.
                             </p>
@@ -1109,7 +1109,7 @@ export default function Orcamentos() {
                           {!camposBloqueados && (
                             <button
                               onClick={adicionarServico}
-                              className="inline-flex items-center justify-center gap-1.5 rounded-2xl bg-blue-600 px-3 py-2 text-xs font-bold text-white hover:bg-blue-700"
+                              className="inline-flex items-center justify-center gap-1.5 rounded-2xl bg-primary px-3 py-2 text-xs font-bold text-primary-foreground hover:bg-primary"
                             >
                               <Plus className="h-3.5 w-3.5" /> Adicionar
                               serviços
@@ -1118,7 +1118,7 @@ export default function Orcamentos() {
                         </div>
                         <div className="grid grid-cols-1 gap-3 md:grid-cols-[1fr_auto] md:items-end">
                           <label className="block">
-                            <span className="mb-1 block text-xs font-bold uppercase tracking-wide text-slate-500">
+                            <span className="mb-1 block text-xs font-bold uppercase tracking-wide text-muted-foreground">
                               Valor direto
                             </span>
                             <input
@@ -1133,21 +1133,21 @@ export default function Orcamentos() {
                                   valor_total: e.target.value,
                                 }))
                               }
-                              className="h-11 w-full rounded-2xl border border-slate-200 bg-white px-3 text-sm font-bold outline-none focus:border-blue-300 disabled:bg-slate-100 disabled:text-slate-400"
+                              className="h-11 w-full rounded-2xl border border-border bg-card px-3 text-sm font-bold outline-none focus:border-primary/30 disabled:bg-muted disabled:text-muted-foreground"
                               placeholder="0,00"
                             />
                           </label>
                           {hasServicos && !camposBloqueados && (
                             <button
                               onClick={limparServicosUsarValorDireto}
-                              className="h-11 rounded-2xl border border-amber-200 bg-white px-4 text-xs font-bold text-amber-700 hover:bg-amber-50"
+                              className="h-11 rounded-2xl border border-warning/20 bg-card px-4 text-xs font-bold text-warning hover:bg-warning/10"
                             >
                               Usar valor direto
                             </button>
                           )}
                         </div>
                         {hasServicos && (
-                          <p className="mt-2 text-xs font-semibold text-blue-700">
+                          <p className="mt-2 text-xs font-semibold text-primary">
                             Valor calculado automaticamente pelos serviços
                             prestados: {moneyBR(totalServicos)}.
                           </p>
@@ -1156,10 +1156,10 @@ export default function Orcamentos() {
 
                       <div>
                         <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
-                          <div className="flex items-center gap-2 text-sm font-black text-slate-800">
-                            <PenLine className="h-4 w-4 text-blue-600" /> Texto livre do orçamento
+                          <div className="flex items-center gap-2 text-sm font-black text-foreground">
+                            <PenLine className="h-4 w-4 text-primary" /> Texto livre do orçamento
                           </div>
-                          <label className="flex cursor-pointer items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 py-1.5 text-xs font-semibold text-slate-600 hover:bg-slate-50">
+                          <label className="flex cursor-pointer items-center gap-2 rounded-xl border border-border bg-card px-3 py-1.5 text-xs font-semibold text-muted-foreground hover:bg-muted">
                             <input
                               type="checkbox"
                               checked={mostrarDescricao}
@@ -1183,12 +1183,12 @@ export default function Orcamentos() {
                               }))
                             }
                             rows={14}
-                            className={`w-full rounded-3xl border border-slate-200 bg-slate-50/60 px-4 py-4 text-sm leading-relaxed outline-none focus:border-blue-300 focus:bg-white ${camposBloqueados ? "cursor-default select-text opacity-70" : ""}`}
+                            className={`w-full rounded-3xl border border-border bg-muted/60 px-4 py-4 text-sm leading-relaxed outline-none focus:border-primary/30 focus:bg-card ${camposBloqueados ? "cursor-default select-text opacity-70" : ""}`}
                             placeholder="Escreva livremente o escopo, condições, observações e demais informações do orçamento..."
                           />
                         )}
                         {!mostrarDescricao && (
-                          <div className="rounded-2xl border border-dashed border-slate-200 bg-slate-50 px-4 py-3 text-xs text-slate-400">
+                          <div className="rounded-2xl border border-dashed border-border bg-muted px-4 py-3 text-xs text-muted-foreground">
                             Texto ocultado — não aparecerá no PDF do orçamento. Marque a opção acima para incluir.
                           </div>
                         )}
@@ -1196,67 +1196,67 @@ export default function Orcamentos() {
                     </div>
 
                     <div className="space-y-4">
-                      <div className="rounded-3xl border border-slate-200 bg-slate-50 p-4">
-                        <div className="mb-3 flex items-center gap-2 text-sm font-black text-slate-900">
-                          <FileText className="h-4 w-4 text-blue-600" /> Resumo
+                      <div className="rounded-3xl border border-border bg-muted p-4">
+                        <div className="mb-3 flex items-center gap-2 text-sm font-black text-foreground">
+                          <FileText className="h-4 w-4 text-primary" /> Resumo
                         </div>
                         <div className="space-y-3 text-sm">
                           <div>
-                            <span className="text-xs font-bold uppercase text-slate-400">
+                            <span className="text-xs font-bold uppercase text-muted-foreground">
                               Cliente
                             </span>
-                            <p className="font-bold text-slate-900">
+                            <p className="font-bold text-foreground">
                               {form.cliente_nome || "Não informado"}
                             </p>
                           </div>
                           <div>
-                            <span className="text-xs font-bold uppercase text-slate-400">
+                            <span className="text-xs font-bold uppercase text-muted-foreground">
                               Empresa prestadora
                             </span>
-                            <p className="font-bold text-slate-900">
+                            <p className="font-bold text-foreground">
                               {marca === "permupay"
                                 ? "PermuPay"
                                 : "Destrava Crédito"}
                             </p>
                           </div>
                           <div>
-                            <span className="text-xs font-bold uppercase text-slate-400">
+                            <span className="text-xs font-bold uppercase text-muted-foreground">
                               Modelo de valor
                             </span>
-                            <p className="font-bold text-slate-900">
+                            <p className="font-bold text-foreground">
                               {hasServicos
                                 ? "Serviços prestados"
                                 : "Valor direto"}
                             </p>
                           </div>
                           <div>
-                            <span className="text-xs font-bold uppercase text-slate-400">
+                            <span className="text-xs font-bold uppercase text-muted-foreground">
                               Valor total
                             </span>
-                            <p className="text-xl font-black text-blue-700">
+                            <p className="text-xl font-black text-primary">
                               {moneyBR(valorTotalExibicao)}
                             </p>
                           </div>
                           <div>
-                            <span className="text-xs font-bold uppercase text-slate-400">
+                            <span className="text-xs font-bold uppercase text-muted-foreground">
                               Validade
                             </span>
-                            <p className="font-bold text-slate-900">
+                            <p className="font-bold text-foreground">
                               {form.validade_dias || 30} dias
                             </p>
                           </div>
                         </div>
                       </div>
 
-                      <div className="rounded-3xl border border-slate-200 bg-white p-4">
+                      <div className="rounded-3xl border border-border bg-card p-4">
                         <div className="mb-3 flex items-center justify-between">
-                          <div className="text-sm font-black text-slate-900">
+                          <div className="text-sm font-black text-foreground">
                             Assinaturas
                           </div>
                           {!camposBloqueados && (
                             <button
                               onClick={addAssinatura}
-                              className="text-xs font-bold text-blue-600 hover:underline"
+                              className="text-xs font-bold text-primary hover:underline"
                             >
                               + adicionar
                             </button>
@@ -1267,10 +1267,10 @@ export default function Orcamentos() {
                             (a: any, idx: number) => (
                               <div
                                 key={idx}
-                                className="rounded-2xl border border-slate-200 bg-slate-50 p-3"
+                                className="rounded-2xl border border-border bg-muted p-3"
                               >
                                 <div className="mb-2 flex items-center justify-between">
-                                  <span className="text-xs font-bold uppercase text-slate-400">
+                                  <span className="text-xs font-bold uppercase text-muted-foreground">
                                     {a.tipo || "assinatura"}
                                   </span>
                                   {!camposBloqueados && idx > 1 && (
@@ -1292,7 +1292,7 @@ export default function Orcamentos() {
                                       e.target.value,
                                     )
                                   }
-                                  className="mb-2 h-9 w-full rounded-xl border border-slate-200 bg-white px-2 text-xs font-bold outline-none"
+                                  className="mb-2 h-9 w-full rounded-xl border border-border bg-card px-2 text-xs font-bold outline-none"
                                   placeholder="Nome"
                                 />
                                 <input
@@ -1305,7 +1305,7 @@ export default function Orcamentos() {
                                       e.target.value,
                                     )
                                   }
-                                  className="mb-2 h-9 w-full rounded-xl border border-slate-200 bg-white px-2 text-xs outline-none"
+                                  className="mb-2 h-9 w-full rounded-xl border border-border bg-card px-2 text-xs outline-none"
                                   placeholder="Cargo / qualificação"
                                 />
                                 <input
@@ -1318,7 +1318,7 @@ export default function Orcamentos() {
                                       e.target.value,
                                     )
                                   }
-                                  className="h-9 w-full rounded-xl border border-slate-200 bg-white px-2 text-xs outline-none"
+                                  className="h-9 w-full rounded-xl border border-border bg-card px-2 text-xs outline-none"
                                   placeholder="CPF / CNPJ"
                                 />
                               </div>
@@ -1334,11 +1334,11 @@ export default function Orcamentos() {
                   <div className="space-y-4">
                     <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                       <div>
-                        <div className="flex items-center gap-2 text-sm font-black text-slate-900">
-                          <PackagePlus className="h-5 w-5 text-blue-600" />{" "}
+                        <div className="flex items-center gap-2 text-sm font-black text-foreground">
+                          <PackagePlus className="h-5 w-5 text-primary" />{" "}
                           Serviços prestados
                         </div>
-                        <p className="mt-1 text-xs text-slate-500">
+                        <p className="mt-1 text-xs text-muted-foreground">
                           Descreva assessoria, consultoria, diagnóstico,
                           acompanhamento ou qualquer serviço contratado.
                         </p>
@@ -1346,7 +1346,7 @@ export default function Orcamentos() {
                       {!camposBloqueados && (
                         <button
                           onClick={adicionarServico}
-                          className="inline-flex items-center justify-center gap-1.5 rounded-2xl bg-blue-600 px-3 py-2 text-xs font-bold text-white hover:bg-blue-700"
+                          className="inline-flex items-center justify-center gap-1.5 rounded-2xl bg-primary px-3 py-2 text-xs font-bold text-primary-foreground hover:bg-primary"
                         >
                           <Plus className="h-3.5 w-3.5" /> Adicionar serviço
                         </button>
@@ -1354,21 +1354,21 @@ export default function Orcamentos() {
                     </div>
 
                     {servicos.length === 0 ? (
-                      <div className="rounded-3xl border border-dashed border-slate-200 bg-slate-50 p-8 text-center">
-                        <div className="mx-auto mb-3 flex h-12 w-12 items-center justify-center rounded-2xl bg-blue-50 text-blue-600">
+                      <div className="rounded-3xl border border-dashed border-border bg-muted p-8 text-center">
+                        <div className="mx-auto mb-3 flex h-12 w-12 items-center justify-center rounded-2xl bg-primary/10 text-primary">
                           <BadgeDollarSign className="h-6 w-6" />
                         </div>
-                        <p className="text-sm font-bold text-slate-800">
+                        <p className="text-sm font-bold text-foreground">
                           Nenhum serviço detalhado.
                         </p>
-                        <p className="mt-1 text-sm text-slate-500">
+                        <p className="mt-1 text-sm text-muted-foreground">
                           Você pode usar somente o valor direto no Editor ou
                           detalhar os serviços prestados aqui.
                         </p>
                         {!camposBloqueados && (
                           <button
                             onClick={adicionarServico}
-                            className="mt-4 rounded-2xl bg-blue-600 px-4 py-2 text-sm font-bold text-white hover:bg-blue-700"
+                            className="mt-4 rounded-2xl bg-primary px-4 py-2 text-sm font-bold text-primary-foreground hover:bg-primary"
                           >
                             Adicionar primeiro serviço
                           </button>
@@ -1376,7 +1376,7 @@ export default function Orcamentos() {
                       </div>
                     ) : (
                       <>
-                        <div className="hidden grid-cols-[2fr_80px_140px_80px] gap-2 rounded-xl bg-slate-100 px-3 py-2 text-xs font-bold uppercase tracking-wide text-slate-500 md:grid">
+                        <div className="hidden grid-cols-[2fr_80px_140px_80px] gap-2 rounded-xl bg-muted px-3 py-2 text-xs font-bold uppercase tracking-wide text-muted-foreground md:grid">
                           <span>Serviço prestado</span>
                           <span className="text-center">Qtd</span>
                           <span className="text-right">Valor unitário</span>
@@ -1387,10 +1387,10 @@ export default function Orcamentos() {
                           {servicos.map((servico, idx) => (
                             <div
                               key={idx}
-                              className="grid grid-cols-1 gap-2 rounded-2xl border border-slate-200 bg-slate-50 p-3 md:grid-cols-[2fr_80px_140px_80px] md:items-center"
+                              className="grid grid-cols-1 gap-2 rounded-2xl border border-border bg-muted p-3 md:grid-cols-[2fr_80px_140px_80px] md:items-center"
                             >
                               <div>
-                                <span className="mb-1 block text-[10px] font-bold uppercase text-slate-400 md:hidden">
+                                <span className="mb-1 block text-[10px] font-bold uppercase text-muted-foreground md:hidden">
                                   Serviço prestado
                                 </span>
                                 <input
@@ -1403,12 +1403,12 @@ export default function Orcamentos() {
                                       e.target.value,
                                     )
                                   }
-                                  className="h-10 w-full rounded-xl border border-slate-200 bg-white px-3 text-sm outline-none focus:border-blue-300"
+                                  className="h-10 w-full rounded-xl border border-border bg-card px-3 text-sm outline-none focus:border-primary/30"
                                   placeholder={`Ex.: Assessoria de crédito empresarial`}
                                 />
                               </div>
                               <div>
-                                <span className="mb-1 block text-[10px] font-bold uppercase text-slate-400 md:hidden">
+                                <span className="mb-1 block text-[10px] font-bold uppercase text-muted-foreground md:hidden">
                                   Qtd
                                 </span>
                                 <input
@@ -1423,11 +1423,11 @@ export default function Orcamentos() {
                                       Number(e.target.value) || 1,
                                     )
                                   }
-                                  className="h-10 w-full rounded-xl border border-slate-200 bg-white px-2 text-center text-sm font-bold outline-none focus:border-blue-300"
+                                  className="h-10 w-full rounded-xl border border-border bg-card px-2 text-center text-sm font-bold outline-none focus:border-primary/30"
                                 />
                               </div>
                               <div>
-                                <span className="mb-1 block text-[10px] font-bold uppercase text-slate-400 md:hidden">
+                                <span className="mb-1 block text-[10px] font-bold uppercase text-muted-foreground md:hidden">
                                   Valor unitário (R$)
                                 </span>
                                 <input
@@ -1443,7 +1443,7 @@ export default function Orcamentos() {
                                       Number(e.target.value) || 0,
                                     )
                                   }
-                                  className="h-10 w-full rounded-xl border border-slate-200 bg-white px-3 text-right text-sm font-bold outline-none focus:border-blue-300"
+                                  className="h-10 w-full rounded-xl border border-border bg-card px-3 text-right text-sm font-bold outline-none focus:border-primary/30"
                                   placeholder="0,00"
                                 />
                               </div>
@@ -1451,7 +1451,7 @@ export default function Orcamentos() {
                                 <button
                                   type="button"
                                   onClick={() => setAba("servicos")}
-                                  className="rounded-xl p-2 text-slate-400"
+                                  className="rounded-xl p-2 text-muted-foreground"
                                   title="Atualização automática"
                                 >
                                   <Pencil className="h-4 w-4" />
@@ -1469,7 +1469,7 @@ export default function Orcamentos() {
                               {(servico.descricao ||
                                 Number(servico.valor_unitario) > 0) && (
                                 <div className="col-span-full -mt-1 flex justify-end">
-                                  <span className="rounded-lg bg-blue-50 px-2 py-0.5 text-xs font-bold text-blue-700">
+                                  <span className="rounded-lg bg-primary/10 px-2 py-0.5 text-xs font-bold text-primary">
                                     Subtotal:{" "}
                                     {moneyBR(
                                       (Number(servico.quantidade) || 0) *
@@ -1486,17 +1486,17 @@ export default function Orcamentos() {
                           {!camposBloqueados && (
                             <button
                               onClick={adicionarServico}
-                              className="rounded-2xl border-2 border-dashed border-blue-200 px-4 py-3 text-sm font-bold text-blue-500 transition hover:border-blue-400 hover:bg-blue-50 hover:text-blue-700"
+                              className="rounded-2xl border-2 border-dashed border-primary/20 px-4 py-3 text-sm font-bold text-primary transition hover:border-blue-400 hover:bg-primary/10 hover:text-primary"
                             >
                               <Plus className="mr-1.5 inline h-4 w-4" />{" "}
                               Adicionar mais um serviço
                             </button>
                           )}
-                          <div className="rounded-2xl border border-blue-200 bg-blue-50 px-6 py-4 sm:ml-auto">
-                            <div className="text-xs font-bold uppercase text-blue-500">
+                          <div className="rounded-2xl border border-primary/20 bg-primary/10 px-6 py-4 sm:ml-auto">
+                            <div className="text-xs font-bold uppercase text-primary">
                               Total dos serviços
                             </div>
-                            <div className="text-3xl font-black text-blue-700">
+                            <div className="text-3xl font-black text-primary">
                               {moneyBR(totalServicos)}
                             </div>
                           </div>
@@ -1508,9 +1508,9 @@ export default function Orcamentos() {
 
                 {aba === "anexos" && (
                   <div className="space-y-4">
-                    <div className="rounded-3xl border border-dashed border-blue-200 bg-blue-50/60 p-4">
-                      <div className="mb-3 flex items-center gap-2 text-sm font-black text-slate-900">
-                        <Paperclip className="h-4 w-4 text-blue-600" /> Anexar
+                    <div className="rounded-3xl border border-dashed border-primary/20 bg-primary/10/60 p-4">
+                      <div className="mb-3 flex items-center gap-2 text-sm font-black text-foreground">
+                        <Paperclip className="h-4 w-4 text-primary" /> Anexar
                         documentos livremente
                       </div>
                       <input
@@ -1518,10 +1518,10 @@ export default function Orcamentos() {
                         type="file"
                         multiple
                         onChange={(e) => setArquivos(e.target.files)}
-                        className="mb-3 block w-full rounded-2xl border border-slate-200 bg-white px-3 py-2 text-sm"
+                        className="mb-3 block w-full rounded-2xl border border-border bg-card px-3 py-2 text-sm"
                       />
                       {arquivos && arquivos.length > 0 && (
-                        <div className="mb-3 rounded-xl border border-emerald-200 bg-emerald-50 px-3 py-2 text-xs text-emerald-800">
+                        <div className="mb-3 rounded-xl border border-success/20 bg-success/10 px-3 py-2 text-xs text-success">
                           <span className="font-bold">{arquivos.length === 1 ? "1 arquivo selecionado: " : `${arquivos.length} arquivos selecionados: `}</span>
                           {Array.from(arquivos).map((f) => f.name).join(", ")}
                         </div>
@@ -1530,20 +1530,20 @@ export default function Orcamentos() {
                         value={descricaoAnexo}
                         onChange={(e) => setDescricaoAnexo(e.target.value)}
                         placeholder="Descrição opcional dos anexos"
-                        className="mb-3 h-10 w-full rounded-2xl border border-slate-200 bg-white px-3 text-sm outline-none focus:border-blue-300"
+                        className="mb-3 h-10 w-full rounded-2xl border border-border bg-card px-3 text-sm outline-none focus:border-primary/30"
                       />
                       <div className="flex flex-wrap items-center gap-2">
                         <button
                           onClick={enviarAnexos}
                           disabled={salvando || !arquivos?.length}
-                          className="inline-flex items-center gap-2 rounded-2xl bg-blue-600 px-4 py-2 text-sm font-bold text-white hover:bg-blue-700 disabled:opacity-50"
+                          className="inline-flex items-center gap-2 rounded-2xl bg-primary px-4 py-2 text-sm font-bold text-primary-foreground hover:bg-primary disabled:opacity-50"
                         >
                           <Paperclip className="h-4 w-4" /> Enviar anexos
                         </button>
                         <button
                           onClick={abrirModalAcervo}
                           disabled={salvando}
-                          className="inline-flex items-center gap-2 rounded-2xl border border-blue-200 bg-white px-4 py-2 text-sm font-bold text-blue-700 hover:bg-blue-50 disabled:opacity-50"
+                          className="inline-flex items-center gap-2 rounded-2xl border border-primary/20 bg-card px-4 py-2 text-sm font-bold text-primary hover:bg-primary/10 disabled:opacity-50"
                           title="Reaproveitar documentos que já estão no Acervo Documental da empresa/cliente, sem re-enviar do computador"
                         >
                           <FolderOpen className="h-4 w-4" /> Anexar do Acervo Documental
@@ -1551,14 +1551,14 @@ export default function Orcamentos() {
                       </div>
                     </div>
 
-                    <div className="rounded-3xl border border-slate-200 bg-white">
-                      <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-100 px-4 py-3">
-                        <span className="text-sm font-black text-slate-900">Documentos anexados</span>
+                    <div className="rounded-3xl border border-border bg-card">
+                      <div className="flex flex-wrap items-center justify-between gap-2 border-b border-border px-4 py-3">
+                        <span className="text-sm font-black text-foreground">Documentos anexados</span>
                         {(selecionado?.anexos || []).length > 0 && (
                           <button
                             onClick={baixarTodosAnexos}
                             disabled={baixandoTodos}
-                            className="inline-flex items-center gap-1.5 rounded-xl border border-slate-200 px-3 py-1.5 text-xs font-bold text-slate-700 hover:bg-slate-50 disabled:opacity-50"
+                            className="inline-flex items-center gap-1.5 rounded-xl border border-border px-3 py-1.5 text-xs font-bold text-foreground hover:bg-muted disabled:opacity-50"
                           >
                             {baixandoTodos ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <DownloadCloud className="h-3.5 w-3.5" />}
                             Baixar todos ({(selecionado?.anexos || []).length})
@@ -1567,7 +1567,7 @@ export default function Orcamentos() {
                       </div>
                       <div className="divide-y divide-slate-100">
                         {(selecionado?.anexos || []).length === 0 ? (
-                          <div className="p-8 text-center text-sm text-slate-500">
+                          <div className="p-8 text-center text-sm text-muted-foreground">
                             Nenhum documento anexado a este orçamento.
                           </div>
                         ) : (
@@ -1577,10 +1577,10 @@ export default function Orcamentos() {
                               className="flex flex-col gap-2 p-4 sm:flex-row sm:items-center sm:justify-between"
                             >
                               <div className="min-w-0">
-                                <p className="truncate text-sm font-bold text-slate-900">
+                                <p className="truncate text-sm font-bold text-foreground">
                                   {anexo.nome_original}
                                 </p>
-                                <p className="text-xs text-slate-500">
+                                <p className="text-xs text-muted-foreground">
                                   {anexo.descricao || "Anexo"} ·{" "}
                                   {fmtDate(anexo.criado_em)}
                                 </p>
@@ -1590,8 +1590,8 @@ export default function Orcamentos() {
                                   onClick={() => alternarInclusaoAnexo(anexo)}
                                   className={`flex items-center gap-1.5 rounded-xl border px-3 py-2 text-xs font-bold ${
                                     (anexo.incluir_no_pdf ?? true)
-                                      ? "border-emerald-200 bg-emerald-50 text-emerald-700 hover:bg-emerald-100"
-                                      : "border-slate-200 text-slate-500 hover:bg-slate-50"
+                                      ? "border-success/20 bg-success/10 text-success hover:bg-success/20"
+                                      : "border-border text-muted-foreground hover:bg-muted"
                                   }`}
                                   title="Controla se este arquivo entra nas páginas do PDF gerado (download, e-mail e WhatsApp)"
                                 >
@@ -1599,7 +1599,7 @@ export default function Orcamentos() {
                                 </button>
                                 <button
                                   onClick={() => baixarAnexo(anexo)}
-                                  className="rounded-xl border border-slate-200 px-3 py-2 text-xs font-bold text-slate-700 hover:bg-slate-50"
+                                  className="rounded-xl border border-border px-3 py-2 text-xs font-bold text-foreground hover:bg-muted"
                                 >
                                   Baixar
                                 </button>
@@ -1619,7 +1619,7 @@ export default function Orcamentos() {
                 )}
 
                 {aba === "preview" && (
-                  <div className="mx-auto max-w-4xl rounded-3xl border border-slate-200 bg-white p-8 shadow-sm">
+                  <div className="mx-auto max-w-4xl rounded-3xl border border-border bg-card p-8 shadow-sm">
                     <div
                       className={`mb-6 flex items-center justify-between border-b-4 pb-4 ${marca === "permupay" ? "border-blue-600" : marca === "aragao" ? "border-amber-600" : "border-[#1B3A8C]"}`}
                     >
@@ -1637,29 +1637,29 @@ export default function Orcamentos() {
                         }}
                         className={`${marca === "permupay" ? "h-20 max-w-[280px]" : marca === "aragao" ? "h-16 max-w-[260px]" : "h-12 max-w-[190px]"} object-contain`}
                       />
-                      <div className="text-right text-xs text-slate-500">
-                        <div className="font-black text-slate-800">{selecionado?.numero || "Rascunho"}</div>
+                      <div className="text-right text-xs text-muted-foreground">
+                        <div className="font-black text-foreground">{selecionado?.numero || "Rascunho"}</div>
                         <div>Validade: {form.validade_dias || 30} dias</div>
                       </div>
                     </div>
 
                     {/* Título e subtítulo */}
-                    <h2 className="text-2xl font-black text-slate-900">{form.titulo}</h2>
+                    <h2 className="text-2xl font-black text-foreground">{form.titulo}</h2>
                     {form.descricao && (
-                      <p className="mt-1 text-sm font-semibold text-slate-500">{form.descricao}</p>
+                      <p className="mt-1 text-sm font-semibold text-muted-foreground">{form.descricao}</p>
                     )}
 
                     {/* Cliente */}
-                    <div className="my-5 rounded-2xl border border-slate-200 bg-slate-50 p-4">
-                      <div className="text-xs font-bold uppercase text-slate-400">Cliente</div>
-                      <div className="font-black text-slate-900">{form.cliente_nome || "Cliente não informado"}</div>
-                      <div className="text-sm text-slate-600">{form.cliente_documento}</div>
+                    <div className="my-5 rounded-2xl border border-border bg-muted p-4">
+                      <div className="text-xs font-bold uppercase text-muted-foreground">Cliente</div>
+                      <div className="font-black text-foreground">{form.cliente_nome || "Cliente não informado"}</div>
+                      <div className="text-sm text-muted-foreground">{form.cliente_documento}</div>
                     </div>
 
                     {/* Texto livre (se habilitado) */}
                     {mostrarDescricao && form.conteudo && (
-                      <div className="mb-5 border-b border-slate-200 pb-4">
-                        <div className="max-w-none whitespace-pre-wrap text-[13px] leading-6 text-slate-700">
+                      <div className="mb-5 border-b border-border pb-4">
+                        <div className="max-w-none whitespace-pre-wrap text-[13px] leading-6 text-foreground">
                           {form.conteudo}
                         </div>
                       </div>
@@ -1668,21 +1668,21 @@ export default function Orcamentos() {
                     {/* Itens / Serviços — sempre depois da descrição, antes do valor */}
                     {hasServicos ? (
                       <div className="my-5">
-                        <div className="mb-3 border-b border-slate-200 pb-2 text-sm font-black text-slate-800">
+                        <div className="mb-3 border-b border-border pb-2 text-sm font-black text-foreground">
                           Serviços prestados
                         </div>
                         <div className="space-y-2">
                           {servicosValidos.map((servico, idx) => (
                             <div
                               key={idx}
-                              className="flex items-center justify-between rounded-xl border border-slate-100 bg-slate-50 px-3 py-2"
+                              className="flex items-center justify-between rounded-xl border border-border bg-muted px-3 py-2"
                             >
-                              <span className="text-sm text-slate-700">{limparDescricaoServico(servico.descricao)}</span>
+                              <span className="text-sm text-foreground">{limparDescricaoServico(servico.descricao)}</span>
                               <div className="text-right text-sm">
-                                <span className="text-slate-400">
+                                <span className="text-muted-foreground">
                                   {servico.quantidade}x {moneyBR(servico.valor_unitario)} ={" "}
                                 </span>
-                                <span className="font-bold text-slate-900">
+                                <span className="font-bold text-foreground">
                                   {moneyBR(Number(servico.quantidade) * Number(servico.valor_unitario))}
                                 </span>
                               </div>
@@ -1691,15 +1691,15 @@ export default function Orcamentos() {
                         </div>
                       </div>
                     ) : (
-                      <div className="my-5 rounded-2xl border border-blue-100 bg-blue-50 px-4 py-3 text-sm font-semibold text-blue-800">
+                      <div className="my-5 rounded-2xl border border-primary/20 bg-primary/10 px-4 py-3 text-sm font-semibold text-primary">
                         Orçamento lançado por valor direto, sem detalhamento de serviços na proposta.
                       </div>
                     )}
 
                     {/* Valor total — sempre por último antes das assinaturas */}
-                    <div className="my-6 rounded-2xl border-2 border-blue-200 bg-blue-50 p-4">
-                      <div className="text-xs font-bold uppercase text-blue-500">Valor total do orçamento</div>
-                      <div className="text-3xl font-black text-blue-700">{moneyBR(valorTotalExibicao)}</div>
+                    <div className="my-6 rounded-2xl border-2 border-primary/20 bg-primary/10 p-4">
+                      <div className="text-xs font-bold uppercase text-primary">Valor total do orçamento</div>
+                      <div className="text-3xl font-black text-primary">{moneyBR(valorTotalExibicao)}</div>
                       {form.validade_dias && (
                         <div className="mt-1 text-xs text-blue-400">Válido por {form.validade_dias} dias</div>
                       )}
@@ -1710,9 +1710,9 @@ export default function Orcamentos() {
                       {(form.assinaturas || []).map((a: any, idx: number) => (
                         <div key={idx} className="text-center">
                           <div className="mb-2 border-t border-slate-900 pt-2" />
-                          <div className="text-sm font-black text-slate-900">{a.nome || "Assinante"}</div>
-                          <div className="text-xs text-slate-500">{a.cargo}</div>
-                          <div className="text-xs text-slate-400">{a.documento}</div>
+                          <div className="text-sm font-black text-foreground">{a.nome || "Assinante"}</div>
+                          <div className="text-xs text-muted-foreground">{a.cargo}</div>
+                          <div className="text-xs text-muted-foreground">{a.documento}</div>
                         </div>
                       ))}
                     </div>
@@ -1725,24 +1725,24 @@ export default function Orcamentos() {
       </div>
 
       {modalAcervoAberto && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/70 p-4">
-          <div className="flex max-h-[90vh] w-full max-w-3xl flex-col overflow-hidden rounded-2xl bg-white shadow-2xl">
-            <div className="flex h-14 items-center justify-between gap-3 border-b border-slate-200 px-4">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-overlay p-4">
+          <div className="flex max-h-[90vh] w-full max-w-3xl flex-col overflow-hidden rounded-2xl bg-card shadow-2xl">
+            <div className="flex h-14 items-center justify-between gap-3 border-b border-border px-4">
               <div>
-                <p className="text-sm font-bold text-slate-800">Anexar do Acervo Documental</p>
-                <p className="text-[11px] text-slate-400">Escolha documentos já armazenados no sistema para este orçamento -- nada é reenviado do zero.</p>
+                <p className="text-sm font-bold text-foreground">Anexar do Acervo Documental</p>
+                <p className="text-[11px] text-muted-foreground">Escolha documentos já armazenados no sistema para este orçamento -- nada é reenviado do zero.</p>
               </div>
-              <button onClick={fecharModalAcervo} className="rounded-lg p-2 text-slate-500 hover:bg-slate-100">
+              <button onClick={fecharModalAcervo} className="rounded-lg p-2 text-muted-foreground hover:bg-muted">
                 <X className="h-5 w-5" />
               </button>
             </div>
             <div className="flex-1 overflow-auto p-4">
               {carregandoAcervo ? (
-                <div className="flex items-center justify-center gap-2 py-10 text-sm text-slate-500">
+                <div className="flex items-center justify-center gap-2 py-10 text-sm text-muted-foreground">
                   <Loader2 className="h-4 w-4 animate-spin" /> Carregando documentos do Acervo Documental...
                 </div>
               ) : documentosAcervo.length === 0 ? (
-                <div className="py-10 text-center text-sm text-slate-500">
+                <div className="py-10 text-center text-sm text-muted-foreground">
                   Nenhum documento encontrado no Acervo Documental deste cadastro ainda.
                 </div>
               ) : (
@@ -1750,20 +1750,20 @@ export default function Orcamentos() {
                   {documentosAcervo.map((doc) => (
                     <label
                       key={doc.id}
-                      className="flex cursor-pointer items-center gap-3 rounded-xl border border-slate-100 p-3 hover:bg-slate-50"
+                      className="flex cursor-pointer items-center gap-3 rounded-xl border border-border p-3 hover:bg-muted"
                     >
                       <input
                         type="checkbox"
                         checked={Boolean(selecionadosAcervo[doc.id])}
                         onChange={() => alternarSelecaoAcervo(doc.id)}
-                        className="h-4 w-4 rounded border-slate-300"
+                        className="h-4 w-4 rounded border-input"
                       />
-                      <FileText className="h-4 w-4 shrink-0 text-blue-500" />
+                      <FileText className="h-4 w-4 shrink-0 text-primary" />
                       <div className="min-w-0 flex-1">
-                        <p className="truncate text-xs font-semibold text-slate-700">
+                        <p className="truncate text-xs font-semibold text-foreground">
                           {doc.nome_customizado || doc.nome_original}
                         </p>
-                        <p className="truncate text-[11px] text-slate-400">
+                        <p className="truncate text-[11px] text-muted-foreground">
                           {labelTipoDocumento(doc.tipo_documento)} · {formatBytes(doc.tamanho_bytes)} · {formatDate(doc.criado_em)}
                         </p>
                       </div>
@@ -1772,17 +1772,17 @@ export default function Orcamentos() {
                 </div>
               )}
             </div>
-            <div className="flex flex-col justify-end gap-2 border-t border-slate-100 p-4 sm:flex-row">
+            <div className="flex flex-col justify-end gap-2 border-t border-border p-4 sm:flex-row">
               <button
                 onClick={fecharModalAcervo}
-                className="h-10 rounded-lg border border-slate-200 bg-white px-4 text-xs font-semibold text-slate-700 hover:bg-slate-50"
+                className="h-10 rounded-lg border border-border bg-card px-4 text-xs font-semibold text-foreground hover:bg-muted"
               >
                 Cancelar
               </button>
               <button
                 onClick={anexarSelecionadosDoAcervo}
                 disabled={anexandoAcervo || documentosAcervo.length === 0}
-                className="h-10 rounded-lg bg-blue-600 px-4 text-xs font-semibold text-white hover:bg-blue-700 disabled:opacity-50"
+                className="h-10 rounded-lg bg-primary px-4 text-xs font-semibold text-primary-foreground hover:bg-primary disabled:opacity-50"
               >
                 {anexandoAcervo ? <Loader2 className="mr-1 inline h-3.5 w-3.5 animate-spin" /> : <FolderOpen className="mr-1 inline h-3.5 w-3.5" />}
                 Anexar selecionados

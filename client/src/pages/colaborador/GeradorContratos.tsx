@@ -460,15 +460,15 @@ export default function GeradorContratos() {
       <div className="p-6 max-w-6xl mx-auto space-y-6">
         {/* Cabeçalho */}
         <div className="flex items-center gap-3">
-          <FileText className="w-6 h-6 text-blue-600" />
+          <FileText className="w-6 h-6 text-primary" />
           <div>
-            <h1 className="text-xl font-bold text-gray-900">Gerador de Contratos</h1>
-            <p className="text-sm text-gray-500">Gere contratos PDF e escolha a contratada nos contratos Limpa Nome e Limpa BACEN</p>
+            <h1 className="text-xl font-bold text-foreground">Gerador de Contratos</h1>
+            <p className="text-sm text-muted-foreground">Gere contratos PDF e escolha a contratada nos contratos Limpa Nome e Limpa BACEN</p>
           </div>
         </div>
 
         {/* Abas */}
-        <div className="flex gap-1 border-b border-gray-200">
+        <div className="flex gap-1 border-b border-border">
           {[
             { key: 'gerar',     label: 'Gerar Contrato',   icon: FileText },
             { key: 'lista',       label: 'Lista de Contratos', icon: FileText },
@@ -480,8 +480,8 @@ export default function GeradorContratos() {
               onClick={() => setAbaAtiva(key as any)}
               className={`flex items-center gap-2 px-4 py-2 text-sm font-medium border-b-2 transition-colors ${
                 abaAtiva === key
-                  ? 'border-blue-600 text-blue-600'
-                  : 'border-transparent text-gray-500 hover:text-gray-700'
+                  ? 'border-blue-600 text-primary'
+                  : 'border-transparent text-muted-foreground hover:text-foreground'
               }`}
             >
               <Icon className="w-4 h-4" />
@@ -492,9 +492,9 @@ export default function GeradorContratos() {
 
         {/* Aba: Gerar Contrato */}
         {abaAtiva === 'gerar' && (
-          <div className="bg-white rounded-xl border border-gray-200 p-6">
-            <h2 className="font-semibold text-gray-800 mb-1">Novo Contrato</h2>
-            <p className="text-xs text-gray-400 mb-4">
+          <div className="bg-card rounded-xl border border-border p-6">
+            <h2 className="font-semibold text-foreground mb-1">Novo Contrato</h2>
+            <p className="text-xs text-muted-foreground mb-4">
               Preencha os dados e clique em "Gerar Contrato PDF" para gerar e baixar o documento.
             </p>
             <FormGerarContrato
@@ -507,26 +507,26 @@ export default function GeradorContratos() {
 
         {/* Aba: Lista de Contratos */}
         {abaAtiva === 'lista' && (
-          <div className="bg-white rounded-xl border border-gray-200 p-6 space-y-4">
+          <div className="bg-card rounded-xl border border-border p-6 space-y-4">
             <div className="flex items-center justify-between">
-              <h2 className="font-semibold text-gray-800">Contratos Gerados</h2>
+              <h2 className="font-semibold text-foreground">Contratos Gerados</h2>
               <button
                 onClick={() => void carregarContratos()}
                 disabled={loadingContratos}
-                className="text-xs text-blue-600 hover:underline disabled:opacity-50"
+                className="text-xs text-primary hover:underline disabled:opacity-50"
               >
                 {loadingContratos ? 'Carregando...' : 'Atualizar lista'}
               </button>
             </div>
 
             {/* Filtros */}
-            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 p-3 bg-gray-50 rounded-lg border border-gray-200">
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 p-3 bg-muted rounded-lg border border-border">
               <div>
-                <label className="block text-xs font-medium text-gray-600 mb-1">Tipo</label>
+                <label className="block text-xs font-medium text-muted-foreground mb-1">Tipo</label>
                 <select
                   value={filtroTipo}
                   onChange={e => setFiltroTipo(e.target.value)}
-                  className="w-full border border-gray-300 rounded-lg px-2 py-1.5 text-xs focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  className="w-full border border-input rounded-lg px-2 py-1.5 text-xs focus:outline-none focus:ring-2 focus:ring-primary"
                 >
                   <option value="">Todos</option>
                   <option value="assessoria">Assessoria Empresarial</option>
@@ -538,11 +538,11 @@ export default function GeradorContratos() {
                 </select>
               </div>
               <div>
-                <label className="block text-xs font-medium text-gray-600 mb-1">Status</label>
+                <label className="block text-xs font-medium text-muted-foreground mb-1">Status</label>
                 <select
                   value={filtroStatus}
                   onChange={e => setFiltroStatus(e.target.value)}
-                  className="w-full border border-gray-300 rounded-lg px-2 py-1.5 text-xs focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  className="w-full border border-input rounded-lg px-2 py-1.5 text-xs focus:outline-none focus:ring-2 focus:ring-primary"
                 >
                   <option value="">Todos</option>
                   <option value="gerado">Gerado</option>
@@ -551,39 +551,39 @@ export default function GeradorContratos() {
                 </select>
               </div>
               <div>
-                <label className="block text-xs font-medium text-gray-600 mb-1">Data início</label>
+                <label className="block text-xs font-medium text-muted-foreground mb-1">Data início</label>
                 <input
                   type="date"
                   value={filtroDataInicio}
                   onChange={e => setFiltroDataInicio(e.target.value)}
-                  className="w-full border border-gray-300 rounded-lg px-2 py-1.5 text-xs focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  className="w-full border border-input rounded-lg px-2 py-1.5 text-xs focus:outline-none focus:ring-2 focus:ring-primary"
                 />
               </div>
               <div>
-                <label className="block text-xs font-medium text-gray-600 mb-1">Data fim</label>
+                <label className="block text-xs font-medium text-muted-foreground mb-1">Data fim</label>
                 <input
                   type="date"
                   value={filtroDataFim}
                   onChange={e => setFiltroDataFim(e.target.value)}
-                  className="w-full border border-gray-300 rounded-lg px-2 py-1.5 text-xs focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  className="w-full border border-input rounded-lg px-2 py-1.5 text-xs focus:outline-none focus:ring-2 focus:ring-primary"
                 />
               </div>
               <div className="col-span-2 sm:col-span-4 flex gap-2">
                 <button
                   onClick={() => void carregarContratos()}
                   disabled={loadingContratos}
-                  className="px-3 py-1.5 bg-blue-600 text-white text-xs rounded-lg hover:bg-blue-700 disabled:opacity-50"
+                  className="px-3 py-1.5 bg-primary text-primary-foreground text-xs rounded-lg hover:bg-primary disabled:opacity-50"
                 >
                   Filtrar
                 </button>
                 <button
                   onClick={() => { setFiltroTipo(''); setFiltroStatus(''); setFiltroDataInicio(''); setFiltroDataFim(''); }}
-                  className="px-3 py-1.5 bg-gray-200 text-gray-700 text-xs rounded-lg hover:bg-gray-300"
+                  className="px-3 py-1.5 bg-border text-foreground text-xs rounded-lg hover:bg-gray-300"
                 >
                   Limpar
                 </button>
                 {!podeTudo && (
-                  <span className="ml-auto text-xs text-gray-400 self-center">
+                  <span className="ml-auto text-xs text-muted-foreground self-center">
                     Exibindo apenas seus contratos
                   </span>
                 )}
@@ -591,7 +591,7 @@ export default function GeradorContratos() {
             </div>
 
             {loadingContratos ? (
-              <div className="text-center py-6 text-gray-400 text-sm">Carregando contratos...</div>
+              <div className="text-center py-6 text-muted-foreground text-sm">Carregando contratos...</div>
             ) : (
               <ListaContratos
                 contratos={contratos}
@@ -610,23 +610,23 @@ export default function GeradorContratos() {
         {/* Aba: Contratadas / Prestadoras */}
         {abaAtiva === 'contratadas' && (
           <div className="space-y-4">
-            <div className="bg-white rounded-xl border border-gray-200 p-6 space-y-4">
-              <h2 className="font-semibold text-gray-800 flex items-center gap-2">
+            <div className="bg-card rounded-xl border border-border p-6 space-y-4">
+              <h2 className="font-semibold text-foreground flex items-center gap-2">
                 <Plus className="w-4 h-4" />
                 Cadastrar Contratada / Prestadora
               </h2>
 
-              <div className="rounded-lg border border-blue-100 bg-blue-50 px-3 py-2 text-xs text-blue-800">
+              <div className="rounded-lg border border-primary/20 bg-primary/10 px-3 py-2 text-xs text-primary">
                 Essa lista será usada somente nos contratos <strong>Limpa Nome</strong> e <strong>Limpa BACEN</strong>, no campo de quem aparece como CONTRATADA/PRESTADORA no PDF.
               </div>
 
               <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                 <div>
-                  <label className="block text-xs font-medium text-gray-600 mb-1">Tipo *</label>
+                  <label className="block text-xs font-medium text-muted-foreground mb-1">Tipo *</label>
                   <select
                     value={novoPrestador.tipo_pessoa}
                     onChange={e => setNovoPrestador(p => ({ ...p, tipo_pessoa: e.target.value as 'pj' | 'pf' }))}
-                    className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    className="w-full border border-input rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary"
                   >
                     <option value="pj">Pessoa Jurídica / Empresa</option>
                     <option value="pf">Pessoa Física</option>
@@ -636,34 +636,34 @@ export default function GeradorContratos() {
                 {novoPrestador.tipo_pessoa === 'pj' ? (
                   <>
                     <div>
-                      <label className="block text-xs font-medium text-gray-600 mb-1">Razão Social *</label>
+                      <label className="block text-xs font-medium text-muted-foreground mb-1">Razão Social *</label>
                       <input type="text" value={novoPrestador.razao_social}
                         onChange={e => setNovoPrestador(p => ({ ...p, razao_social: e.target.value }))}
-                        className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                        className="w-full border border-input rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary"
                         placeholder="Ex: DESTRAVA CREDITO LTDA" />
                     </div>
                     <div>
-                      <label className="block text-xs font-medium text-gray-600 mb-1">CNPJ *</label>
+                      <label className="block text-xs font-medium text-muted-foreground mb-1">CNPJ *</label>
                       <input type="text" value={novoPrestador.cnpj}
                         onChange={e => setNovoPrestador(p => ({ ...p, cnpj: e.target.value }))}
-                        className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                        className="w-full border border-input rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary"
                         placeholder="00.000.000/0001-00" />
                     </div>
                   </>
                 ) : (
                   <>
                     <div>
-                      <label className="block text-xs font-medium text-gray-600 mb-1">Nome *</label>
+                      <label className="block text-xs font-medium text-muted-foreground mb-1">Nome *</label>
                       <input type="text" value={novoPrestador.nome}
                         onChange={e => setNovoPrestador(p => ({ ...p, nome: e.target.value }))}
-                        className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                        className="w-full border border-input rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary"
                         placeholder="Nome completo" />
                     </div>
                     <div>
-                      <label className="block text-xs font-medium text-gray-600 mb-1">CPF *</label>
+                      <label className="block text-xs font-medium text-muted-foreground mb-1">CPF *</label>
                       <input type="text" value={novoPrestador.cpf}
                         onChange={e => setNovoPrestador(p => ({ ...p, cpf: e.target.value }))}
-                        className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                        className="w-full border border-input rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary"
                         placeholder="000.000.000-00" />
                     </div>
                   </>
@@ -672,128 +672,128 @@ export default function GeradorContratos() {
 
               <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                 <div>
-                  <label className="block text-xs font-medium text-gray-600 mb-1">Nome Fantasia</label>
+                  <label className="block text-xs font-medium text-muted-foreground mb-1">Nome Fantasia</label>
                   <input type="text" value={novoPrestador.nome_fantasia}
                     onChange={e => setNovoPrestador(p => ({ ...p, nome_fantasia: e.target.value }))}
-                    className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    className="w-full border border-input rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary"
                     placeholder="Nome comercial" />
                 </div>
                 <div>
-                  <label className="block text-xs font-medium text-gray-600 mb-1">E-mail</label>
+                  <label className="block text-xs font-medium text-muted-foreground mb-1">E-mail</label>
                   <input type="email" value={novoPrestador.email}
                     onChange={e => setNovoPrestador(p => ({ ...p, email: e.target.value }))}
-                    className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    className="w-full border border-input rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary"
                     placeholder="email@empresa.com" />
                 </div>
                 <div>
-                  <label className="block text-xs font-medium text-gray-600 mb-1">Telefone</label>
+                  <label className="block text-xs font-medium text-muted-foreground mb-1">Telefone</label>
                   <input type="text" value={novoPrestador.telefone}
                     onChange={e => setNovoPrestador(p => ({ ...p, telefone: e.target.value }))}
-                    className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    className="w-full border border-input rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary"
                     placeholder="(61) 99999-9999" />
                 </div>
               </div>
 
               <div>
-                <label className="block text-xs font-medium text-gray-600 mb-1">Endereço / Sede</label>
+                <label className="block text-xs font-medium text-muted-foreground mb-1">Endereço / Sede</label>
                 <input type="text" value={novoPrestador.endereco}
                   onChange={e => setNovoPrestador(p => ({ ...p, endereco: e.target.value }))}
-                  className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  className="w-full border border-input rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary"
                   placeholder="Rua, número, bairro" />
               </div>
 
               <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                 <div>
-                  <label className="block text-xs font-medium text-gray-600 mb-1">Cidade</label>
+                  <label className="block text-xs font-medium text-muted-foreground mb-1">Cidade</label>
                   <input type="text" value={novoPrestador.cidade}
                     onChange={e => setNovoPrestador(p => ({ ...p, cidade: e.target.value }))}
-                    className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    className="w-full border border-input rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary"
                     placeholder="Brasília" />
                 </div>
                 <div>
-                  <label className="block text-xs font-medium text-gray-600 mb-1">UF</label>
+                  <label className="block text-xs font-medium text-muted-foreground mb-1">UF</label>
                   <input type="text" maxLength={2} value={novoPrestador.uf}
                     onChange={e => setNovoPrestador(p => ({ ...p, uf: e.target.value.toUpperCase() }))}
-                    className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    className="w-full border border-input rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary"
                     placeholder="DF" />
                 </div>
                 <div>
-                  <label className="block text-xs font-medium text-gray-600 mb-1">CEP</label>
+                  <label className="block text-xs font-medium text-muted-foreground mb-1">CEP</label>
                   <input type="text" value={novoPrestador.cep}
                     onChange={e => setNovoPrestador(p => ({ ...p, cep: e.target.value }))}
-                    className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    className="w-full border border-input rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary"
                     placeholder="00000-000" />
                 </div>
               </div>
 
-              <div className="border-t border-gray-100 pt-4">
-                <p className="text-xs font-semibold text-gray-600 mb-2">Representante da contratada, quando for PJ</p>
+              <div className="border-t border-border pt-4">
+                <p className="text-xs font-semibold text-muted-foreground mb-2">Representante da contratada, quando for PJ</p>
                 <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                   <div>
-                    <label className="block text-xs font-medium text-gray-600 mb-1">Nome do representante</label>
+                    <label className="block text-xs font-medium text-muted-foreground mb-1">Nome do representante</label>
                     <input type="text" value={novoPrestador.representante_nome}
                       onChange={e => setNovoPrestador(p => ({ ...p, representante_nome: e.target.value }))}
-                      className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                      className="w-full border border-input rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary"
                       placeholder="Nome completo" />
                   </div>
                   <div>
-                    <label className="block text-xs font-medium text-gray-600 mb-1">CPF do representante</label>
+                    <label className="block text-xs font-medium text-muted-foreground mb-1">CPF do representante</label>
                     <input type="text" value={novoPrestador.representante_cpf}
                       onChange={e => setNovoPrestador(p => ({ ...p, representante_cpf: e.target.value }))}
-                      className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                      className="w-full border border-input rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary"
                       placeholder="000.000.000-00" />
                   </div>
                   <div>
-                    <label className="block text-xs font-medium text-gray-600 mb-1">Cargo</label>
+                    <label className="block text-xs font-medium text-muted-foreground mb-1">Cargo</label>
                     <input type="text" value={novoPrestador.representante_cargo}
                       onChange={e => setNovoPrestador(p => ({ ...p, representante_cargo: e.target.value }))}
-                      className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                      className="w-full border border-input rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary"
                       placeholder="Sócio Administrador" />
                   </div>
                 </div>
               </div>
 
               <div>
-                <label className="block text-xs font-medium text-gray-600 mb-1">Observações internas</label>
+                <label className="block text-xs font-medium text-muted-foreground mb-1">Observações internas</label>
                 <input type="text" value={novoPrestador.observacoes}
                   onChange={e => setNovoPrestador(p => ({ ...p, observacoes: e.target.value }))}
-                  className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  className="w-full border border-input rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary"
                   placeholder="Ex: empresa do grupo, prestador parceiro, uso apenas em BACEN..." />
               </div>
 
               <button onClick={handleSalvarPrestador} disabled={salvandoPrestador}
-                className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white text-sm rounded-lg hover:bg-blue-700 disabled:opacity-50">
+                className="flex items-center gap-2 px-4 py-2 bg-primary text-primary-foreground text-sm rounded-lg hover:bg-primary disabled:opacity-50">
                 {salvandoPrestador ? 'Salvando...' : 'Cadastrar Contratada'}
               </button>
             </div>
 
-            <div className="bg-white rounded-xl border border-gray-200 p-6">
-              <h2 className="font-semibold text-gray-800 mb-3">Contratadas / Prestadoras Cadastradas</h2>
+            <div className="bg-card rounded-xl border border-border p-6">
+              <h2 className="font-semibold text-foreground mb-3">Contratadas / Prestadoras Cadastradas</h2>
               {prestadores.length === 0 ? (
-                <p className="text-sm text-gray-400">Nenhuma contratada cadastrada.</p>
+                <p className="text-sm text-muted-foreground">Nenhuma contratada cadastrada.</p>
               ) : (
                 <div className="overflow-x-auto">
                   <table className="w-full text-sm border-collapse">
                     <thead>
-                      <tr className="bg-gray-50 border-b border-gray-200">
-                        <th className="text-left py-2 px-3 font-medium text-gray-600">Nome/Razão Social</th>
-                        <th className="text-left py-2 px-3 font-medium text-gray-600">Documento</th>
-                        <th className="text-left py-2 px-3 font-medium text-gray-600">Representante</th>
-                        <th className="text-left py-2 px-3 font-medium text-gray-600">Cidade/UF</th>
-                        <th className="text-left py-2 px-3 font-medium text-gray-600">Ações</th>
+                      <tr className="bg-muted border-b border-border">
+                        <th className="text-left py-2 px-3 font-medium text-muted-foreground">Nome/Razão Social</th>
+                        <th className="text-left py-2 px-3 font-medium text-muted-foreground">Documento</th>
+                        <th className="text-left py-2 px-3 font-medium text-muted-foreground">Representante</th>
+                        <th className="text-left py-2 px-3 font-medium text-muted-foreground">Cidade/UF</th>
+                        <th className="text-left py-2 px-3 font-medium text-muted-foreground">Ações</th>
                       </tr>
                     </thead>
                     <tbody>
                       {prestadores.map(p => (
-                        <tr key={p.id} className="border-b border-gray-100">
-                          <td className="py-2 px-3 font-medium text-gray-900">{p.nome_exibicao || p.razao_social || p.nome || '—'}</td>
-                          <td className="py-2 px-3 text-gray-600">{p.documento ? `${p.documento_label || (p.tipo_pessoa === 'pf' ? 'CPF' : 'CNPJ')}: ${p.documento}` : p.cnpj || p.cpf || '—'}</td>
-                          <td className="py-2 px-3 text-gray-600">{p.representante_nome || '—'}</td>
-                          <td className="py-2 px-3 text-gray-600">{[p.cidade, p.uf].filter(Boolean).join('/') || '—'}</td>
+                        <tr key={p.id} className="border-b border-border">
+                          <td className="py-2 px-3 font-medium text-foreground">{p.nome_exibicao || p.razao_social || p.nome || '—'}</td>
+                          <td className="py-2 px-3 text-muted-foreground">{p.documento ? `${p.documento_label || (p.tipo_pessoa === 'pf' ? 'CPF' : 'CNPJ')}: ${p.documento}` : p.cnpj || p.cpf || '—'}</td>
+                          <td className="py-2 px-3 text-muted-foreground">{p.representante_nome || '—'}</td>
+                          <td className="py-2 px-3 text-muted-foreground">{[p.cidade, p.uf].filter(Boolean).join('/') || '—'}</td>
                           <td className="py-2 px-3">
                             <button
                               onClick={() => handleDesativarPrestador(p.id)}
-                              className="inline-flex items-center gap-1 text-xs text-red-600 hover:text-red-800"
+                              className="inline-flex items-center gap-1 text-xs text-destructive hover:text-destructive"
                             >
                               <Trash2 className="w-3 h-3" />
                               Desativar
@@ -812,96 +812,96 @@ export default function GeradorContratos() {
         {/* Aba: Parceiros */}
         {abaAtiva === 'parceiros' && (
           <div className="space-y-4">
-            <div className="bg-white rounded-xl border border-gray-200 p-6 space-y-4">
-              <h2 className="font-semibold text-gray-800 flex items-center gap-2">
+            <div className="bg-card rounded-xl border border-border p-6 space-y-4">
+              <h2 className="font-semibold text-foreground flex items-center gap-2">
                 <Plus className="w-4 h-4" />
                 Cadastrar Parceiro
               </h2>
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div>
-                  <label className="block text-xs font-medium text-gray-600 mb-1">Nome *</label>
+                  <label className="block text-xs font-medium text-muted-foreground mb-1">Nome *</label>
                   <input type="text" value={novoParceiro.nome}
                     onChange={e => setNovoParceiro(p => ({ ...p, nome: e.target.value }))}
-                    className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    className="w-full border border-input rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary"
                     placeholder="Nome completo" />
                 </div>
                 <div>
-                  <label className="block text-xs font-medium text-gray-600 mb-1">CPF *</label>
+                  <label className="block text-xs font-medium text-muted-foreground mb-1">CPF *</label>
                   <input type="text" value={novoParceiro.cpf}
                     onChange={e => setNovoParceiro(p => ({ ...p, cpf: e.target.value }))}
-                    className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    className="w-full border border-input rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary"
                     placeholder="000.000.000-00" />
                 </div>
                 <div>
-                  <label className="block text-xs font-medium text-gray-600 mb-1">E-mail</label>
+                  <label className="block text-xs font-medium text-muted-foreground mb-1">E-mail</label>
                   <input type="email" value={novoParceiro.email}
                     onChange={e => setNovoParceiro(p => ({ ...p, email: e.target.value }))}
-                    className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    className="w-full border border-input rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary"
                     placeholder="email@exemplo.com" />
                 </div>
                 <div>
-                  <label className="block text-xs font-medium text-gray-600 mb-1">Telefone</label>
+                  <label className="block text-xs font-medium text-muted-foreground mb-1">Telefone</label>
                   <input type="text" value={novoParceiro.telefone}
                     onChange={e => setNovoParceiro(p => ({ ...p, telefone: e.target.value }))}
-                    className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    className="w-full border border-input rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary"
                     placeholder="(61) 99999-9999" />
                 </div>
               </div>
               <button onClick={handleSalvarParceiro} disabled={salvandoParceiro}
-                className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white text-sm rounded-lg hover:bg-blue-700 disabled:opacity-50">
+                className="flex items-center gap-2 px-4 py-2 bg-primary text-primary-foreground text-sm rounded-lg hover:bg-primary disabled:opacity-50">
                 {salvandoParceiro ? 'Salvando...' : 'Cadastrar Parceiro'}
               </button>
             </div>
 
-            <div className="bg-white rounded-xl border border-gray-200 p-6">
-              <h2 className="font-semibold text-gray-800 mb-3">Parceiros Cadastrados</h2>
+            <div className="bg-card rounded-xl border border-border p-6">
+              <h2 className="font-semibold text-foreground mb-3">Parceiros Cadastrados</h2>
               {parceiros.length === 0 ? (
-                <p className="text-sm text-gray-400">Nenhum parceiro cadastrado.</p>
+                <p className="text-sm text-muted-foreground">Nenhum parceiro cadastrado.</p>
               ) : (
                 <div className="space-y-2">
                   {parceiros.map(p => (
-                    <div key={p.id} className="border border-gray-200 rounded-lg">
+                    <div key={p.id} className="border border-border rounded-lg">
                       {editandoParceiro === p.id ? (
                         <div className="p-4 space-y-3">
                           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                             <div>
-                              <label className="block text-xs font-medium text-gray-600 mb-1">Nome *</label>
-                              <input type="text" value={editParceiro.nome || ''} onChange={e => setEditParceiro(v => ({ ...v, nome: e.target.value }))} className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm" />
+                              <label className="block text-xs font-medium text-muted-foreground mb-1">Nome *</label>
+                              <input type="text" value={editParceiro.nome || ''} onChange={e => setEditParceiro(v => ({ ...v, nome: e.target.value }))} className="w-full border border-input rounded-lg px-3 py-2 text-sm" />
                             </div>
                             <div>
-                              <label className="block text-xs font-medium text-gray-600 mb-1">CPF *</label>
-                              <input type="text" value={editParceiro.cpf || ''} onChange={e => setEditParceiro(v => ({ ...v, cpf: e.target.value }))} className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm" />
+                              <label className="block text-xs font-medium text-muted-foreground mb-1">CPF *</label>
+                              <input type="text" value={editParceiro.cpf || ''} onChange={e => setEditParceiro(v => ({ ...v, cpf: e.target.value }))} className="w-full border border-input rounded-lg px-3 py-2 text-sm" />
                             </div>
                             <div>
-                              <label className="block text-xs font-medium text-gray-600 mb-1">E-mail</label>
-                              <input type="email" value={editParceiro.email || ''} onChange={e => setEditParceiro(v => ({ ...v, email: e.target.value }))} className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm" />
+                              <label className="block text-xs font-medium text-muted-foreground mb-1">E-mail</label>
+                              <input type="email" value={editParceiro.email || ''} onChange={e => setEditParceiro(v => ({ ...v, email: e.target.value }))} className="w-full border border-input rounded-lg px-3 py-2 text-sm" />
                             </div>
                             <div>
-                              <label className="block text-xs font-medium text-gray-600 mb-1">Telefone</label>
-                              <input type="text" value={editParceiro.telefone || ''} onChange={e => setEditParceiro(v => ({ ...v, telefone: e.target.value }))} className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm" />
+                              <label className="block text-xs font-medium text-muted-foreground mb-1">Telefone</label>
+                              <input type="text" value={editParceiro.telefone || ''} onChange={e => setEditParceiro(v => ({ ...v, telefone: e.target.value }))} className="w-full border border-input rounded-lg px-3 py-2 text-sm" />
                             </div>
                             <div>
-                              <label className="block text-xs font-medium text-gray-600 mb-1">URL do Logo</label>
-                              <input type="url" value={editParceiro.logo_url || ''} onChange={e => setEditParceiro(v => ({ ...v, logo_url: e.target.value }))} className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm" placeholder="https://..." />
+                              <label className="block text-xs font-medium text-muted-foreground mb-1">URL do Logo</label>
+                              <input type="url" value={editParceiro.logo_url || ''} onChange={e => setEditParceiro(v => ({ ...v, logo_url: e.target.value }))} className="w-full border border-input rounded-lg px-3 py-2 text-sm" placeholder="https://..." />
                             </div>
                             <div>
-                              <label className="block text-xs font-medium text-gray-600 mb-1">Cor Primária</label>
-                              <input type="text" value={editParceiro.cor_primaria || ''} onChange={e => setEditParceiro(v => ({ ...v, cor_primaria: e.target.value }))} className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm" placeholder="#1B3A8C" />
+                              <label className="block text-xs font-medium text-muted-foreground mb-1">Cor Primária</label>
+                              <input type="text" value={editParceiro.cor_primaria || ''} onChange={e => setEditParceiro(v => ({ ...v, cor_primaria: e.target.value }))} className="w-full border border-input rounded-lg px-3 py-2 text-sm" placeholder="#1B3A8C" />
                             </div>
                             <div className="sm:col-span-2">
-                              <label className="block text-xs font-medium text-gray-600 mb-1">HTML do Cabeçalho (contrato)</label>
-                              <textarea value={editParceiro.cabecalho_html || ''} onChange={e => setEditParceiro(v => ({ ...v, cabecalho_html: e.target.value }))} rows={2} className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm font-mono" placeholder="<div>...</div>" />
+                              <label className="block text-xs font-medium text-muted-foreground mb-1">HTML do Cabeçalho (contrato)</label>
+                              <textarea value={editParceiro.cabecalho_html || ''} onChange={e => setEditParceiro(v => ({ ...v, cabecalho_html: e.target.value }))} rows={2} className="w-full border border-input rounded-lg px-3 py-2 text-sm font-mono" placeholder="<div>...</div>" />
                             </div>
                             <div className="sm:col-span-2">
-                              <label className="block text-xs font-medium text-gray-600 mb-1">HTML do Rodapé (contrato)</label>
-                              <textarea value={editParceiro.rodape_html || ''} onChange={e => setEditParceiro(v => ({ ...v, rodape_html: e.target.value }))} rows={2} className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm font-mono" placeholder="<div>...</div>" />
+                              <label className="block text-xs font-medium text-muted-foreground mb-1">HTML do Rodapé (contrato)</label>
+                              <textarea value={editParceiro.rodape_html || ''} onChange={e => setEditParceiro(v => ({ ...v, rodape_html: e.target.value }))} rows={2} className="w-full border border-input rounded-lg px-3 py-2 text-sm font-mono" placeholder="<div>...</div>" />
                             </div>
                           </div>
                           <div className="flex gap-2">
-                            <button onClick={() => handleEditarParceiro(p.id)} disabled={salvandoEditParceiro} className="px-4 py-2 bg-blue-600 text-white text-sm rounded-lg hover:bg-blue-700 disabled:opacity-50">
+                            <button onClick={() => handleEditarParceiro(p.id)} disabled={salvandoEditParceiro} className="px-4 py-2 bg-primary text-primary-foreground text-sm rounded-lg hover:bg-primary disabled:opacity-50">
                               {salvandoEditParceiro ? 'Salvando...' : 'Salvar'}
                             </button>
-                            <button onClick={() => setEditandoParceiro(null)} className="px-4 py-2 bg-gray-100 text-gray-700 text-sm rounded-lg hover:bg-gray-200">
+                            <button onClick={() => setEditandoParceiro(null)} className="px-4 py-2 bg-muted text-foreground text-sm rounded-lg hover:bg-border">
                               Cancelar
                             </button>
                           </div>
@@ -909,13 +909,13 @@ export default function GeradorContratos() {
                       ) : (
                         <div className="flex items-center justify-between px-4 py-3">
                           <div>
-                            <span className="font-medium text-gray-900 text-sm">{p.nome}</span>
-                            <span className="text-gray-500 text-xs ml-3">{p.cpf}</span>
-                            {p.email && <span className="text-gray-500 text-xs ml-3">{p.email}</span>}
-                            {p.telefone && <span className="text-gray-500 text-xs ml-3">{p.telefone}</span>}
-                            {p.logo_url && <span className="text-blue-500 text-xs ml-3">Logo configurado</span>}
+                            <span className="font-medium text-foreground text-sm">{p.nome}</span>
+                            <span className="text-muted-foreground text-xs ml-3">{p.cpf}</span>
+                            {p.email && <span className="text-muted-foreground text-xs ml-3">{p.email}</span>}
+                            {p.telefone && <span className="text-muted-foreground text-xs ml-3">{p.telefone}</span>}
+                            {p.logo_url && <span className="text-primary text-xs ml-3">Logo configurado</span>}
                           </div>
-                          <button onClick={() => { setEditandoParceiro(p.id); setEditParceiro({ nome: p.nome, cpf: p.cpf, email: p.email, telefone: p.telefone, logo_url: p.logo_url, cabecalho_html: p.cabecalho_html, rodape_html: p.rodape_html, cor_primaria: p.cor_primaria, cor_secundaria: p.cor_secundaria }); }} className="p-1.5 text-gray-500 hover:text-blue-600 rounded">
+                          <button onClick={() => { setEditandoParceiro(p.id); setEditParceiro({ nome: p.nome, cpf: p.cpf, email: p.email, telefone: p.telefone, logo_url: p.logo_url, cabecalho_html: p.cabecalho_html, rodape_html: p.rodape_html, cor_primaria: p.cor_primaria, cor_secundaria: p.cor_secundaria }); }} className="p-1.5 text-muted-foreground hover:text-primary rounded">
                             <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" /></svg>
                           </button>
                         </div>

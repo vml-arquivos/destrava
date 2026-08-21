@@ -125,19 +125,19 @@ interface EmpresaDocumento {
 // ─── Constantes ────────────────────────────────────────────────────────────────
 
 const STATUS_CFG: Record<string, { label: string; dot: string; badge: string }> = {
-  ativo:      { label: "Ativo",       dot: "bg-emerald-500", badge: "bg-emerald-50 text-emerald-700 ring-1 ring-emerald-200" },
-  inativo:    { label: "Inativo",     dot: "bg-slate-400",   badge: "bg-slate-100 text-slate-600 ring-1 ring-slate-200" },
-  prospecto:  { label: "Prospecto",   dot: "bg-blue-500",    badge: "bg-blue-50 text-blue-700 ring-1 ring-blue-200" },
-  cliente:    { label: "Cliente",     dot: "bg-violet-500",  badge: "bg-violet-50 text-violet-700 ring-1 ring-violet-200" },
-  ex_cliente: { label: "Ex-cliente",  dot: "bg-amber-500",   badge: "bg-amber-50 text-amber-700 ring-1 ring-amber-200" },
+  ativo:      { label: "Ativo",       dot: "bg-success/100", badge: "bg-success/10 text-success ring-1 ring-success/30" },
+  inativo:    { label: "Inativo",     dot: "bg-border",   badge: "bg-muted text-muted-foreground ring-1 ring-border" },
+  prospecto:  { label: "Prospecto",   dot: "bg-primary/100",    badge: "bg-primary/10 text-primary ring-1 ring-primary/30" },
+  cliente:    { label: "Cliente",     dot: "bg-primary/100",  badge: "bg-primary/10 text-primary ring-1 ring-primary/30" },
+  ex_cliente: { label: "Ex-cliente",  dot: "bg-warning/100",   badge: "bg-warning/10 text-warning ring-1 ring-warning/30" },
 };
 
 const PORTE_CFG: Record<string, { label: string; color: string }> = {
-  mei:    { label: "MEI",         color: "text-slate-600 bg-slate-100" },
-  me:     { label: "Micro (ME)",  color: "text-sky-700 bg-sky-50" },
-  epp:    { label: "EPP",         color: "text-indigo-700 bg-indigo-50" },
-  medio:  { label: "Médio Porte", color: "text-violet-700 bg-violet-50" },
-  grande: { label: "Grande",      color: "text-rose-700 bg-rose-50" },
+  mei:    { label: "MEI",         color: "text-muted-foreground bg-muted" },
+  me:     { label: "Micro (ME)",  color: "text-primary bg-primary/10" },
+  epp:    { label: "EPP",         color: "text-primary bg-primary/10" },
+  medio:  { label: "Médio Porte", color: "text-primary bg-primary/10" },
+  grande: { label: "Grande",      color: "text-destructive bg-destructive/10" },
 };
 
 const SEGMENTOS = [
@@ -350,11 +350,11 @@ function StatusBadge({ status }: { status: string }) {
 function FieldRow({ label, value, icon, mono }: { label: string; value?: string | null; icon?: React.ReactNode; mono?: boolean }) {
   if (!value) return null;
   return (
-    <div className="flex items-start gap-2.5 py-2.5 border-b border-slate-100 last:border-0">
-      {icon && <span className="mt-0.5 text-slate-400 shrink-0">{icon}</span>}
+    <div className="flex items-start gap-2.5 py-2.5 border-b border-border last:border-0">
+      {icon && <span className="mt-0.5 text-muted-foreground shrink-0">{icon}</span>}
       <div className="flex-1 min-w-0">
-        <p className="text-[11px] font-medium text-slate-400 uppercase tracking-wider mb-0.5">{label}</p>
-        <p className={`text-sm font-medium text-slate-800 break-words ${mono ? "font-mono" : ""}`}>{value}</p>
+        <p className="text-[11px] font-medium text-muted-foreground uppercase tracking-wider mb-0.5">{label}</p>
+        <p className={`text-sm font-medium text-foreground break-words ${mono ? "font-mono" : ""}`}>{value}</p>
       </div>
     </div>
   );
@@ -363,15 +363,15 @@ function FieldRow({ label, value, icon, mono }: { label: string; value?: string 
 function InfoTile({ label, value, icon, tone = "slate", mono = false }: { label: string; value?: string | number | null; icon?: React.ReactNode; tone?: "slate" | "blue" | "emerald" | "amber" | "violet"; mono?: boolean }) {
   if (value === undefined || value === null || value === "") return null;
   const palette = {
-    slate: "bg-white border-slate-200 text-slate-700",
-    blue: "bg-blue-50 border-blue-100 text-blue-800",
-    emerald: "bg-emerald-50 border-emerald-100 text-emerald-800",
-    amber: "bg-amber-50 border-amber-100 text-amber-800",
-    violet: "bg-violet-50 border-violet-100 text-violet-800",
+    slate: "bg-white border-border text-muted-foreground",
+    blue: "bg-primary/10 border-primary/20 text-primary",
+    emerald: "bg-success/10 border-success/20 text-success",
+    amber: "bg-warning/10 border-warning/20 text-warning",
+    violet: "bg-primary/10 border-primary/20 text-primary",
   }[tone];
   return (
     <div className={`rounded-2xl border p-4 ${palette}`}>
-      <div className="flex items-center gap-2 mb-2 text-slate-400">
+      <div className="flex items-center gap-2 mb-2 text-muted-foreground">
         {icon}
         <p className="text-[10px] font-black uppercase tracking-widest">{label}</p>
       </div>
@@ -390,10 +390,10 @@ function CopyButton({ text }: { text: string }) {
   return (
     <button
       onClick={() => { navigator.clipboard.writeText(text); setCopied(true); setTimeout(() => setCopied(false), 1500); }}
-      className="p-1 rounded hover:bg-slate-100 text-slate-400 hover:text-slate-600 transition-colors"
+      className="p-1 rounded hover:bg-muted text-muted-foreground hover:text-muted-foreground transition-colors"
       title="Copiar"
     >
-      {copied ? <CheckCheck className="w-3.5 h-3.5 text-emerald-500" /> : <Copy className="w-3.5 h-3.5" />}
+      {copied ? <CheckCheck className="w-3.5 h-3.5 text-success" /> : <Copy className="w-3.5 h-3.5" />}
     </button>
   );
 }
@@ -403,17 +403,17 @@ function SectionCard({ title, icon, children, defaultOpen = true }: {
 }) {
   const [open, setOpen] = useState(defaultOpen);
   return (
-    <div className="rounded-xl border border-slate-200 overflow-hidden bg-white">
+    <div className="rounded-xl border border-border overflow-hidden bg-white">
       <button
         type="button"
         onClick={() => setOpen(o => !o)}
-        className="w-full flex items-center justify-between px-4 py-3 bg-slate-50 hover:bg-slate-100 transition-colors"
+        className="w-full flex items-center justify-between px-4 py-3 bg-muted hover:bg-muted transition-colors"
       >
-        <span className="flex items-center gap-2 text-sm font-semibold text-slate-700">
-          <span className="text-slate-500">{icon}</span>
+        <span className="flex items-center gap-2 text-sm font-semibold text-muted-foreground">
+          <span className="text-muted-foreground">{icon}</span>
           {title}
         </span>
-        {open ? <ChevronUp className="w-4 h-4 text-slate-400" /> : <ChevronDown className="w-4 h-4 text-slate-400" />}
+        {open ? <ChevronUp className="w-4 h-4 text-muted-foreground" /> : <ChevronDown className="w-4 h-4 text-muted-foreground" />}
       </button>
       {open && <div className="px-4 pb-1">{children}</div>}
     </div>
@@ -421,10 +421,10 @@ function SectionCard({ title, icon, children, defaultOpen = true }: {
 }
 
 function ScoreBar({ score, risco }: { score: number; risco: string }) {
-  const colors = { baixo: "bg-emerald-500", medio: "bg-amber-500", alto: "bg-orange-500", critico: "bg-red-500" };
+  const colors = { baixo: "bg-success/100", medio: "bg-warning/100", alto: "bg-warning/100", critico: "bg-destructive/100" };
   const barColor = colors[risco as keyof typeof colors] || colors.critico;
   return (
-    <div className="h-2 overflow-hidden rounded-full bg-slate-100" aria-label={`Score ${score} de 100`}>
+    <div className="h-2 overflow-hidden rounded-full bg-muted" aria-label={`Score ${score} de 100`}>
       <div className={`h-full rounded-full transition-all duration-700 ${barColor}`} style={{ width: `${score}%` }} />
     </div>
   );
@@ -433,16 +433,16 @@ function ScoreBar({ score, risco }: { score: number; risco: string }) {
 
 function DetailChip({ label, value, tone = "slate" }: { label: string; value?: string | number | null; tone?: "slate" | "blue" | "emerald" | "amber" | "rose" | "violet" }) {
   const palette = {
-    slate: "border-slate-200 bg-slate-50 text-slate-700",
-    blue: "border-blue-200 bg-blue-50 text-blue-700",
-    emerald: "border-emerald-200 bg-emerald-50 text-emerald-700",
-    amber: "border-amber-200 bg-amber-50 text-amber-700",
-    rose: "border-rose-200 bg-rose-50 text-rose-700",
-    violet: "border-violet-200 bg-violet-50 text-violet-700",
+    slate: "border-border bg-muted text-muted-foreground",
+    blue: "border-primary/20 bg-primary/10 text-primary",
+    emerald: "border-success/20 bg-success/10 text-success",
+    amber: "border-warning/20 bg-warning/10 text-warning",
+    rose: "border-destructive/20 bg-destructive/10 text-destructive",
+    violet: "border-primary/20 bg-primary/10 text-primary",
   }[tone];
   return (
     <span className={`inline-flex items-center gap-1 rounded-full border px-2.5 py-1 text-[11px] font-bold ${palette}`}>
-      <span className="text-slate-400 font-black uppercase tracking-wide">{label}</span>
+      <span className="text-muted-foreground font-black uppercase tracking-wide">{label}</span>
       <span>{value || "—"}</span>
     </span>
   );
@@ -450,12 +450,12 @@ function DetailChip({ label, value, tone = "slate" }: { label: string; value?: s
 
 function DataCell({ label, value, icon, mono = false, muted = false }: { label: string; value?: string | number | null; icon?: React.ReactNode; mono?: boolean; muted?: boolean }) {
   return (
-    <div className="rounded-xl border border-slate-100 bg-slate-50/80 px-3 py-2.5 min-h-[72px]">
-      <div className="flex items-center gap-1.5 text-slate-400 mb-1">
+    <div className="rounded-xl border border-border bg-muted/80 px-3 py-2.5 min-h-[72px]">
+      <div className="flex items-center gap-1.5 text-muted-foreground mb-1">
         {icon}
         <p className="text-[10px] font-black uppercase tracking-widest">{label}</p>
       </div>
-      <p className={`text-sm font-bold break-words ${mono ? "font-mono" : ""} ${muted || !value ? "text-slate-500" : "text-slate-800"}`}>
+      <p className={`text-sm font-bold break-words ${mono ? "font-mono" : ""} ${muted || !value ? "text-muted-foreground" : "text-foreground"}`}>
         {value || "Não informado"}
       </p>
     </div>
@@ -508,15 +508,15 @@ function EmpresaDadosWorkspace({
     if (painelAtivo === "receita") {
       return (
         <div className="space-y-4">
-          <div className="rounded-2xl border border-blue-100 bg-blue-50 px-4 py-3">
+          <div className="rounded-2xl border border-primary/20 bg-primary/10 px-4 py-3">
             <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
               <div>
-                <p className="text-xs font-black uppercase tracking-[0.2em] text-blue-600">Atualização cadastral</p>
-                <p className="text-sm text-blue-900 mt-1">Dados oficiais vindos das fontes confiáveis. Atualize somente quando precisar sincronizar com a Receita Federal.</p>
-                <p className="text-xs text-blue-700 mt-1">Última atualização: {empresa.ultima_sincronizacao_receita ? new Date(empresa.ultima_sincronizacao_receita).toLocaleString("pt-BR") : "Não registrada"}</p>
+                <p className="text-xs font-black uppercase tracking-[0.2em] text-primary">Atualização cadastral</p>
+                <p className="text-sm text-primary mt-1">Dados oficiais vindos das fontes confiáveis. Atualize somente quando precisar sincronizar com a Receita Federal.</p>
+                <p className="text-xs text-primary mt-1">Última atualização: {empresa.ultima_sincronizacao_receita ? new Date(empresa.ultima_sincronizacao_receita).toLocaleString("pt-BR") : "Não registrada"}</p>
               </div>
               {empresa.cnpj && onSincronizar && (
-                <button onClick={onSincronizar} disabled={sincronizando} className="inline-flex items-center justify-center gap-2 rounded-xl bg-blue-600 px-4 py-2 text-sm font-bold text-white shadow-sm hover:bg-blue-700 disabled:opacity-50">
+                <button onClick={onSincronizar} disabled={sincronizando} className="inline-flex items-center justify-center gap-2 rounded-xl bg-primary px-4 py-2 text-sm font-bold text-white shadow-sm hover:bg-primary/90 disabled:opacity-50">
                   <RotateCw className={`w-4 h-4 ${sincronizando ? "animate-spin" : ""}`} />
                   Atualizar Receita
                 </button>
@@ -535,10 +535,10 @@ function EmpresaDadosWorkspace({
           </div>
           <DataCell label="CNAE Principal" value={empresa.cnae_principal} icon={<Tag className="w-3.5 h-3.5" />} />
           {cnaesSecundarios.length > 0 && (
-            <div className="rounded-2xl border border-slate-100 bg-slate-50/70 p-3">
-              <p className="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-2">CNAEs secundários</p>
+            <div className="rounded-2xl border border-border bg-muted p-3">
+              <p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground mb-2">CNAEs secundários</p>
               <div className="flex flex-wrap gap-1.5">
-                {cnaesSecundarios.map((cnae, i) => <span key={`${cnae}-${i}`} className="rounded-full border border-slate-200 bg-white px-2.5 py-1 text-[11px] font-semibold text-slate-600">{cnae}</span>)}
+                {cnaesSecundarios.map((cnae, i) => <span key={`${cnae}-${i}`} className="rounded-full border border-border bg-white px-2.5 py-1 text-[11px] font-semibold text-muted-foreground">{cnae}</span>)}
               </div>
             </div>
           )}
@@ -562,12 +562,12 @@ function EmpresaDadosWorkspace({
           </div>
           <div className="flex flex-wrap gap-2">
             {onEditar && (
-            <button onClick={onEditar} className="inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-2 text-sm font-bold text-slate-700 hover:bg-slate-50">
+            <button onClick={onEditar} className="inline-flex items-center gap-2 rounded-xl border border-border bg-white px-4 py-2 text-sm font-bold text-muted-foreground hover:bg-muted">
               <Edit2 className="w-4 h-4" /> Editar cadastro
             </button>
             )}
             {empresa.cnpj && onSincronizar && (
-              <button onClick={onSincronizar} disabled={sincronizando} className="inline-flex items-center gap-2 rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-2 text-sm font-bold text-emerald-700 hover:bg-emerald-100 disabled:opacity-50">
+              <button onClick={onSincronizar} disabled={sincronizando} className="inline-flex items-center gap-2 rounded-xl border border-success/20 bg-success/10 px-4 py-2 text-sm font-bold text-success hover:bg-success/20 disabled:opacity-50">
                 <RotateCw className={`w-4 h-4 ${sincronizando ? "animate-spin" : ""}`} /> Atualizar cadastro
               </button>
             )}
@@ -587,19 +587,19 @@ function EmpresaDadosWorkspace({
         <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
           {contatos.map((c) => (
             c.value ? (
-              <a key={c.label} href={c.href} target={c.href?.startsWith("http") ? "_blank" : undefined} rel="noreferrer" className="rounded-2xl border border-slate-100 bg-slate-50 p-4 hover:border-blue-200 hover:bg-blue-50 transition-all">
+              <a key={c.label} href={c.href} target={c.href?.startsWith("http") ? "_blank" : undefined} rel="noreferrer" className="rounded-2xl border border-border bg-muted p-4 hover:border-primary/20 hover:bg-primary/10 transition-all">
                 <div className="flex items-center gap-3">
-                  <div className="h-10 w-10 rounded-xl border border-slate-200 bg-white flex items-center justify-center text-slate-500">{c.icon}</div>
+                  <div className="h-10 w-10 rounded-xl border border-border bg-white flex items-center justify-center text-muted-foreground">{c.icon}</div>
                   <div className="min-w-0">
-                    <p className="text-[10px] font-black uppercase tracking-widest text-slate-400">{c.label}</p>
-                    <p className="text-sm font-bold text-slate-800 truncate">{c.value}</p>
+                    <p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">{c.label}</p>
+                    <p className="text-sm font-bold text-foreground truncate">{c.value}</p>
                   </div>
                 </div>
               </a>
             ) : (
-              <div key={c.label} className="rounded-2xl border border-dashed border-slate-200 bg-slate-50/60 p-4 text-slate-400">
+              <div key={c.label} className="rounded-2xl border border-dashed border-border bg-muted p-4 text-muted-foreground">
                 <div className="flex items-center gap-3">
-                  <div className="h-10 w-10 rounded-xl border border-slate-200 bg-white flex items-center justify-center">{c.icon}</div>
+                  <div className="h-10 w-10 rounded-xl border border-border bg-white flex items-center justify-center">{c.icon}</div>
                   <div><p className="text-[10px] font-black uppercase tracking-widest">{c.label}</p><p className="text-sm font-bold">Não informado</p></div>
                 </div>
               </div>
@@ -612,13 +612,13 @@ function EmpresaDadosWorkspace({
     if (painelAtivo === "endereco") {
       return (
         <div className="space-y-4">
-          <div className="rounded-3xl border border-slate-100 bg-slate-50 p-5">
+          <div className="rounded-3xl border border-border bg-muted p-5">
             <div className="flex items-start gap-4">
-              <div className="h-12 w-12 rounded-2xl bg-white border border-slate-200 flex items-center justify-center text-slate-500 shrink-0"><MapPin className="w-5 h-5" /></div>
+              <div className="h-12 w-12 rounded-2xl bg-white border border-border flex items-center justify-center text-muted-foreground shrink-0"><MapPin className="w-5 h-5" /></div>
               <div>
-                <p className="text-[10px] font-black uppercase tracking-widest text-slate-400">Endereço principal</p>
-                <p className="text-lg font-black text-slate-900 mt-1">{enderecoCompleto || "Não informado"}</p>
-                <p className="text-sm text-slate-500 mt-1">{empresa.cep ? `CEP ${empresa.cep}` : "CEP não informado"}</p>
+                <p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">Endereço principal</p>
+                <p className="text-lg font-black text-foreground mt-1">{enderecoCompleto || "Não informado"}</p>
+                <p className="text-sm text-muted-foreground mt-1">{empresa.cep ? `CEP ${empresa.cep}` : "CEP não informado"}</p>
               </div>
             </div>
           </div>
@@ -637,9 +637,9 @@ function EmpresaDadosWorkspace({
     if (painelAtivo === "socios") {
       return (
         <div className="space-y-4">
-          <div className="rounded-2xl border border-blue-100 bg-blue-50 p-4">
-            <p className="text-sm font-black text-slate-900">Conferência societária inicial</p>
-            <p className="mt-1 text-xs leading-relaxed text-slate-600">Nesta etapa o sistema confere somente CNPJ, razão social, capital social, nomes dos sócios e quem é Sócio-Administrador. Dados pessoais e documentos dos sócios pertencem às próximas fases e não interferem neste resultado.</p>
+          <div className="rounded-2xl border border-primary/20 bg-primary/10 p-4">
+            <p className="text-sm font-black text-foreground">Conferência societária inicial</p>
+            <p className="mt-1 text-xs leading-relaxed text-muted-foreground">Nesta etapa o sistema confere somente CNPJ, razão social, capital social, nomes dos sócios e quem é Sócio-Administrador. Dados pessoais e documentos dos sócios pertencem às próximas fases e não interferem neste resultado.</p>
           </div>
 
           <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
@@ -649,7 +649,7 @@ function EmpresaDadosWorkspace({
           </div>
 
           {socios.filter((s: any) => s?.nome && !/^(?:não|nao) identificado$/i.test(String(s.nome).trim())).length === 0 ? (
-            <div className="rounded-2xl border border-dashed border-slate-200 bg-slate-50 px-4 py-10 text-center text-sm font-semibold text-slate-500">Nenhum sócio identificado na sincronização cadastral.</div>
+            <div className="rounded-2xl border border-dashed border-border bg-muted px-4 py-10 text-center text-sm font-semibold text-muted-foreground">Nenhum sócio identificado na sincronização cadastral.</div>
           ) : (
             <div className="grid grid-cols-1 gap-3 xl:grid-cols-2">
               {socios
@@ -658,17 +658,17 @@ function EmpresaDadosWorkspace({
                   const qualificacao = s.qualificacao_socio || s.qualificacao || s.cargo || "Qualificação não informada";
                   const administrador = s.administrador === true || s.representante_legal === true || /administrador|titular|empres[aá]rio individual/i.test(String(qualificacao));
                   return (
-                    <article key={s.id || s.nome} className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+                    <article key={s.id || s.nome} className="rounded-2xl border border-border bg-white p-4 shadow-sm">
                       <div className="flex items-start gap-3">
-                        <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-blue-600 text-sm font-black text-white">{String(s.nome || "?").slice(0, 1).toUpperCase()}</div>
+                        <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-primary text-sm font-black text-white">{String(s.nome || "?").slice(0, 1).toUpperCase()}</div>
                         <div className="min-w-0 flex-1">
                           <div className="flex flex-wrap items-center gap-2">
-                            <p className="text-sm font-black text-slate-900">{s.nome}</p>
-                            <span className={`rounded-full border px-2 py-0.5 text-[11px] font-bold ${administrador ? "border-emerald-200 bg-emerald-50 text-emerald-700" : "border-slate-200 bg-slate-50 text-slate-600"}`}>
+                            <p className="text-sm font-black text-foreground">{s.nome}</p>
+                            <span className={`rounded-full border px-2 py-0.5 text-[11px] font-bold ${administrador ? "border-success/20 bg-success/10 text-success" : "border-border bg-muted text-muted-foreground"}`}>
                               {administrador ? "Sócio-Administrador" : "Sócio"}
                             </span>
                             {onEditarSocio && (
-                              <button type="button" onClick={() => onEditarSocio(s)} className="ml-auto rounded-lg border border-slate-200 bg-white px-2 py-1 text-[11px] font-bold text-slate-600 hover:bg-slate-50">Editar vínculo</button>
+                              <button type="button" onClick={() => onEditarSocio(s)} className="ml-auto rounded-lg border border-border bg-white px-2 py-1 text-[11px] font-bold text-muted-foreground hover:bg-muted">Editar vínculo</button>
                             )}
                           </div>
                         </div>
@@ -684,14 +684,14 @@ function EmpresaDadosWorkspace({
 
     if (painelAtivo === "documentos") {
       return (
-        <div className="rounded-3xl border border-blue-100 bg-gradient-to-br from-blue-50 to-white p-5">
+        <div className="rounded-3xl border border-primary/20 bg-gradient-to-br from-primary/10 to-white p-5">
           <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
             <div className="flex items-start gap-4">
-              <div className="h-14 w-14 rounded-2xl bg-blue-600 text-white flex items-center justify-center shadow-sm"><FileText className="w-7 h-7" /></div>
+              <div className="h-14 w-14 rounded-2xl bg-primary text-white flex items-center justify-center shadow-sm"><FileText className="w-7 h-7" /></div>
               <div>
-                <p className="text-[10px] font-black uppercase tracking-[0.24em] text-blue-600">Central documental</p>
-                <h3 className="text-xl font-black text-slate-900 mt-1">Anexos e documentos da empresa</h3>
-                <p className="text-sm text-slate-500 mt-1 max-w-2xl">Todos os arquivos são visualizados na página exclusiva do acervo para preservar o cadastro limpo e oferecer mais espaço ao PDF.</p>
+                <p className="text-[10px] font-black uppercase tracking-[0.24em] text-primary">Central documental</p>
+                <h3 className="text-xl font-black text-foreground mt-1">Anexos e documentos da empresa</h3>
+                <p className="text-sm text-muted-foreground mt-1 max-w-2xl">Todos os arquivos são visualizados na página exclusiva do acervo para preservar o cadastro limpo e oferecer mais espaço ao PDF.</p>
                 <div className="flex flex-wrap gap-2 mt-3">
                   <DetailChip label="Arquivos" value={documentosTotal} tone="blue" />
                   <DetailChip label="Simulações" value={simulacoesTotal} />
@@ -700,7 +700,7 @@ function EmpresaDadosWorkspace({
               </div>
             </div>
             {onAbrirAcervo && (
-            <button onClick={onAbrirAcervo} className="inline-flex items-center justify-center gap-2 rounded-2xl bg-blue-600 px-5 py-3 text-sm font-black text-white shadow-sm shadow-blue-100 hover:bg-blue-700">
+            <button onClick={onAbrirAcervo} className="inline-flex items-center justify-center gap-2 rounded-2xl bg-primary px-5 py-3 text-sm font-black text-white shadow-sm shadow-blue-100 hover:bg-primary/90">
               <ExternalLink className="w-4 h-4" /> Abrir acervo documental
             </button>
             )}
@@ -733,12 +733,12 @@ function EmpresaDadosWorkspace({
 
   return (
     <div className="p-2 sm:p-3 fade-in">
-      <div className="overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-sm">
+      <div className="overflow-hidden rounded-3xl border border-border bg-white shadow-sm">
         <div className="grid min-h-[520px] grid-cols-1 lg:grid-cols-[270px_minmax(0,1fr)] xl:grid-cols-[290px_minmax(0,1fr)]">
-          <aside className="border-b border-slate-200 bg-slate-50/70 lg:border-b-0 lg:border-r">
-            <div className="border-b border-slate-200 bg-white px-3 py-2.5">
-              <p className="text-[9px] font-black uppercase tracking-[0.22em] text-blue-600">Central de informações</p>
-              <h3 className="mt-0.5 text-base font-black text-slate-900 truncate">Dados da empresa</h3>
+          <aside className="border-b border-border bg-muted lg:border-b-0 lg:border-r">
+            <div className="border-b border-border bg-white px-3 py-2.5">
+              <p className="text-[9px] font-black uppercase tracking-[0.22em] text-primary">Central de informações</p>
+              <h3 className="mt-0.5 text-base font-black text-foreground truncate">Dados da empresa</h3>
               <div className="mt-1.5 flex flex-wrap gap-1">
                 <DetailChip label="Docs" value={documentosTotal} tone="blue" />
                 <DetailChip label="Sócios" value={socios.length} tone="emerald" />
@@ -751,16 +751,16 @@ function EmpresaDadosWorkspace({
                     key={painel.id}
                     type="button"
                     onClick={() => setPainelAtivo(painel.id)}
-                    className={`w-full rounded-xl border px-2.5 py-2 text-left transition-all ${painelAtivo === painel.id ? "border-blue-300 bg-blue-50 shadow-sm" : "border-transparent bg-white hover:border-slate-200 hover:bg-white"}`}
+                    className={`w-full rounded-xl border px-2.5 py-2 text-left transition-all ${painelAtivo === painel.id ? "border-primary/30 bg-primary/10 shadow-sm" : "border-transparent bg-white hover:border-border hover:bg-white"}`}
                   >
                     <div className="flex items-center gap-3">
-                      <div className={`h-8 w-8 rounded-lg flex items-center justify-center shrink-0 ${painelAtivo === painel.id ? "bg-blue-600 text-white" : "bg-slate-100 text-slate-500"}`}>{painel.icon}</div>
+                      <div className={`h-8 w-8 rounded-lg flex items-center justify-center shrink-0 ${painelAtivo === painel.id ? "bg-primary text-white" : "bg-muted text-muted-foreground"}`}>{painel.icon}</div>
                       <div className="min-w-0 flex-1">
                         <div className="flex items-center justify-between gap-2">
-                          <p className="text-[13px] font-black text-slate-900 truncate">{painel.label}</p>
-                          {painel.badge && <span className="shrink-0 rounded-full bg-slate-100 px-2 py-0.5 text-[10px] font-black text-slate-500 max-w-[86px] truncate">{painel.badge}</span>}
+                          <p className="text-[13px] font-black text-foreground truncate">{painel.label}</p>
+                          {painel.badge && <span className="shrink-0 rounded-full bg-muted px-2 py-0.5 text-[10px] font-black text-muted-foreground max-w-[86px] truncate">{painel.badge}</span>}
                         </div>
-                        <p className="mt-0.5 text-[11px] font-medium text-slate-400 truncate">{painel.description}</p>
+                        <p className="mt-0.5 text-[11px] font-medium text-muted-foreground truncate">{painel.description}</p>
                       </div>
                     </div>
                   </button>
@@ -774,10 +774,10 @@ function EmpresaDadosWorkspace({
                 ação dos botões já visíveis no cabeçalho da empresa, acima das abas,
                 em qualquer painel. Repeti-los aqui só duplicava a mesma ação duas
                 vezes na mesma tela. */}
-            <div className="border-b border-slate-200 px-3 sm:px-4 py-2.5">
-              <p className="text-[10px] font-black uppercase tracking-[0.24em] text-slate-400">Visualização</p>
-              <h3 className="text-lg font-black text-slate-900 truncate">{painelSelecionado.label}</h3>
-              <p className="text-sm text-slate-500 truncate">{painelSelecionado.description}</p>
+            <div className="border-b border-border px-3 sm:px-4 py-2.5">
+              <p className="text-[10px] font-black uppercase tracking-[0.24em] text-muted-foreground">Visualização</p>
+              <h3 className="text-lg font-black text-foreground truncate">{painelSelecionado.label}</h3>
+              <p className="text-sm text-muted-foreground truncate">{painelSelecionado.description}</p>
             </div>
             <div className="p-3 sm:p-4">
               {renderPainel()}
@@ -796,16 +796,16 @@ function MField({ label, required, error, children }: {
 }) {
   return (
     <div className="flex flex-col gap-1">
-      <label className="text-xs font-semibold text-slate-600">
-        {label}{required && <span className="text-red-400 ml-0.5">*</span>}
+      <label className="text-xs font-semibold text-muted-foreground">
+        {label}{required && <span className="text-destructive ml-0.5">*</span>}
       </label>
       {children}
-      {error && <span className="text-xs text-red-500">{error}</span>}
+      {error && <span className="text-xs text-destructive">{error}</span>}
     </div>
   );
 }
 
-const inputCls = "h-9 px-3 border border-slate-200 rounded-lg text-sm bg-white text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all placeholder:text-slate-300 w-full";
+const inputCls = "h-9 px-3 border border-border rounded-lg text-sm bg-white text-foreground focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent transition-all placeholder:text-muted-foreground w-full";
 const selectCls = inputCls + " cursor-pointer";
 
 
@@ -1783,18 +1783,18 @@ export default function Empresas() {
           <div className="flex flex-col gap-3 min-h-0">
 
             {/* ── BARRA SUPERIOR: seletor de empresa com busca ── */}
-            <div className={`shrink-0 rounded-2xl border border-slate-200 bg-white p-2.5 shadow-sm ${showDetail ? "hidden sm:block" : ""}`}>
+            <div className={`shrink-0 rounded-2xl border border-border bg-white p-2.5 shadow-sm ${showDetail ? "hidden sm:block" : ""}`}>
               <div className="flex items-start justify-between gap-3 mb-2.5">
                 <div className="min-w-0">
-                  <h1 className="text-xl font-black text-slate-900 tracking-tight leading-tight">Empresas</h1>
-                  <p className="text-xs font-medium text-slate-500 mt-0.5">
+                  <h1 className="text-xl font-black text-foreground tracking-tight leading-tight">Empresas</h1>
+                  <p className="text-xs font-medium text-muted-foreground mt-0.5">
                     {loading ? "Carregando..." : `${empresas.length} encontrada${empresas.length !== 1 ? "s" : ""}`}
                   </p>
                 </div>
                 <div className="flex items-center gap-1.5 shrink-0">
                   <button
                     onClick={() => exportarRelatorio('csv')}
-                    className="inline-flex items-center gap-1 bg-white hover:bg-slate-50 text-slate-600 border border-slate-200 px-2.5 py-2 rounded-xl font-bold text-xs transition-colors shrink-0"
+                    className="inline-flex items-center gap-1 bg-white hover:bg-muted text-muted-foreground border border-border px-2.5 py-2 rounded-xl font-bold text-xs transition-colors shrink-0"
                     title="Exportar relatório CSV"
                   >
                     <FileDown className="w-3.5 h-3.5" />
@@ -1802,7 +1802,7 @@ export default function Empresas() {
                   </button>
                   <button
                     onClick={abrirNova}
-                    className="inline-flex items-center gap-1.5 bg-blue-600 hover:bg-blue-700 text-white px-3 py-2 rounded-xl font-bold text-xs transition-colors shadow-sm shadow-blue-200 shrink-0"
+                    className="inline-flex items-center gap-1.5 bg-primary hover:bg-primary/90 text-white px-3 py-2 rounded-xl font-bold text-xs transition-colors shadow-sm shadow-blue-200 shrink-0"
                   >
                     <Plus className="w-3.5 h-3.5" />
                     Nova
@@ -1815,56 +1815,56 @@ export default function Empresas() {
                 <button
                   type="button"
                   onClick={() => { setComboAberto(v => !v); setTimeout(() => searchRef.current?.focus(), 0); }}
-                  className="w-full flex items-center gap-2.5 h-11 px-3 border border-slate-200 rounded-xl bg-white hover:border-slate-300 focus:outline-none focus:ring-2 focus:ring-blue-500 transition-colors text-left"
+                  className="w-full flex items-center gap-2.5 h-11 px-3 border border-border rounded-xl bg-white hover:border-input focus:outline-none focus:ring-2 focus:ring-primary transition-colors text-left"
                 >
                   {selecionada ? (
                     <>
-                      <Search className="w-4 h-4 text-blue-500 shrink-0" />
-                      <span className="flex-1 min-w-0 text-sm font-semibold text-slate-500 truncate">Trocar empresa ou buscar outra...</span>
+                      <Search className="w-4 h-4 text-primary shrink-0" />
+                      <span className="flex-1 min-w-0 text-sm font-semibold text-muted-foreground truncate">Trocar empresa ou buscar outra...</span>
                     </>
                   ) : (
                     <>
-                      <Search className="w-4 h-4 text-slate-400 shrink-0" />
-                      <span className="flex-1 text-sm text-slate-400">Selecione ou busque uma empresa...</span>
+                      <Search className="w-4 h-4 text-muted-foreground shrink-0" />
+                      <span className="flex-1 text-sm text-muted-foreground">Selecione ou busque uma empresa...</span>
                     </>
                   )}
-                  <ChevronRight className={`w-4 h-4 text-slate-400 shrink-0 transition-transform ${comboAberto ? "rotate-90" : ""}`} />
+                  <ChevronRight className={`w-4 h-4 text-muted-foreground shrink-0 transition-transform ${comboAberto ? "rotate-90" : ""}`} />
                 </button>
 
                 {comboAberto && (
-                  <div className="absolute z-30 mt-1.5 w-full bg-white border border-slate-200 rounded-xl shadow-lg overflow-hidden fade-in">
-                    <div className="p-2 border-b border-slate-100 space-y-1.5">
+                  <div className="absolute z-30 mt-1.5 w-full bg-white border border-border rounded-xl shadow-lg overflow-hidden fade-in">
+                    <div className="p-2 border-b border-border space-y-1.5">
                       <div className="relative">
-                        <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+                        <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
                         <input
                           ref={searchRef}
                           value={busca}
                           onChange={e => setBusca(e.target.value)}
                           placeholder="Buscar empresa, CNPJ..."
-                          className="w-full pl-9 pr-8 h-9 border border-slate-200 rounded-lg text-sm bg-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+                          className="w-full pl-9 pr-8 h-9 border border-border rounded-lg text-sm bg-white focus:outline-none focus:ring-2 focus:ring-primary"
                         />
                         {busca && (
                           <button onClick={() => setBusca("")} className="absolute right-2.5 top-1/2 -translate-y-1/2">
-                            <X className="w-3.5 h-3.5 text-slate-400" />
+                            <X className="w-3.5 h-3.5 text-muted-foreground" />
                           </button>
                         )}
                       </div>
                       <div className="flex gap-1.5 flex-wrap">
-                        <select value={filtroStatus} onChange={e => setFiltroStatus(e.target.value)} className="flex-1 h-8 border border-slate-200 rounded-lg px-2 text-xs bg-white focus:outline-none focus:ring-2 focus:ring-blue-500">
+                        <select value={filtroStatus} onChange={e => setFiltroStatus(e.target.value)} className="flex-1 h-8 border border-border rounded-lg px-2 text-xs bg-white focus:outline-none focus:ring-2 focus:ring-primary">
                           <option value="todos">Todos os status</option>
                           {Object.entries(STATUS_CFG).map(([k, v]) => (<option key={k} value={k}>{v.label}</option>))}
                         </select>
-                        <select value={filtroPorte} onChange={e => setFiltroPorte(e.target.value)} className="h-8 border border-slate-200 rounded-lg px-2 text-xs bg-white focus:outline-none focus:ring-2 focus:ring-blue-500">
+                        <select value={filtroPorte} onChange={e => setFiltroPorte(e.target.value)} className="h-8 border border-border rounded-lg px-2 text-xs bg-white focus:outline-none focus:ring-2 focus:ring-primary">
                           <option value="todos">Todos os portes</option>
                           <option value="MEI">MEI</option><option value="ME">ME</option><option value="EPP">EPP</option>
                           <option value="Médio">Médio</option><option value="Grande">Grande</option>
                         </select>
-                        <select value={filtroOrigem} onChange={e => setFiltroOrigem(e.target.value)} className="h-8 border border-slate-200 rounded-lg px-2 text-xs bg-white focus:outline-none focus:ring-2 focus:ring-blue-500">
+                        <select value={filtroOrigem} onChange={e => setFiltroOrigem(e.target.value)} className="h-8 border border-border rounded-lg px-2 text-xs bg-white focus:outline-none focus:ring-2 focus:ring-primary">
                           <option value="todos">Todas as origens</option>
                           <option value="simulador">Simulador</option><option value="indicacao">Indicação</option>
                           <option value="campanha">Campanha</option><option value="site">Site</option><option value="manual">Manual</option>
                         </select>
-                        <button onClick={carregarEmpresas} className="h-8 px-2 border border-slate-200 rounded-lg bg-white hover:bg-slate-50 text-slate-500 transition-colors" title="Atualizar">
+                        <button onClick={carregarEmpresas} className="h-8 px-2 border border-border rounded-lg bg-white hover:bg-muted text-muted-foreground transition-colors" title="Atualizar">
                           <RefreshCw className={`w-3.5 h-3.5 ${loading ? "animate-spin" : ""}`} />
                         </button>
                       </div>
@@ -1877,7 +1877,7 @@ export default function Empresas() {
                           preset="empresas"
                           title="Nenhuma empresa encontrada"
                           description="Cadastre a primeira empresa para começar."
-                          action={<button onClick={abrirNova} className="text-xs text-blue-600 hover:underline">+ Cadastrar primeira empresa</button>}
+                          action={<button onClick={abrirNova} className="text-xs text-primary hover:underline">+ Cadastrar primeira empresa</button>}
                           className="py-10"
                         />
                       ) : empresas.map(emp => {
@@ -1888,21 +1888,21 @@ export default function Empresas() {
                             key={emp.id}
                             onClick={() => { selecionar(emp); setComboAberto(false); }}
                             className={`list-item w-full text-left p-2.5 rounded-lg border transition-all ${
-                              ativa ? "border-blue-200 bg-blue-50" : "border-transparent hover:bg-slate-50"
+                              ativa ? "border-primary/20 bg-primary/10" : "border-transparent hover:bg-muted"
                             }`}
                           >
                             <div className="flex items-center gap-2.5">
-                              <div className={`w-8 h-8 rounded-lg flex items-center justify-center text-white text-xs font-black shrink-0 ${ativa ? "bg-blue-600" : "bg-slate-700"}`}>
+                              <div className={`w-8 h-8 rounded-lg flex items-center justify-center text-white text-xs font-black shrink-0 ${ativa ? "bg-primary" : "bg-primary"}`}>
                                 {getInitials(emp.razao_social)}
                               </div>
                               <div className="flex-1 min-w-0">
-                                <p className="text-sm font-semibold text-slate-900 truncate leading-tight">{emp.razao_social}</p>
+                                <p className="text-sm font-semibold text-foreground truncate leading-tight">{emp.razao_social}</p>
                                 <div className="flex items-center gap-1.5 mt-1">
                                   <span className={`inline-flex items-center gap-1 text-[10px] font-semibold px-1.5 py-0.5 rounded-full ${sc.badge}`}>
                                     <span className={`w-1.5 h-1.5 rounded-full ${sc.dot}`} />{sc.label}
                                   </span>
                                   {(emp.cidade || emp.estado) && (
-                                    <span className="text-[10px] text-slate-400 truncate">{[emp.cidade, emp.estado].filter(Boolean).join(", ")}</span>
+                                    <span className="text-[10px] text-muted-foreground truncate">{[emp.cidade, emp.estado].filter(Boolean).join(", ")}</span>
                                   )}
                                 </div>
                               </div>
@@ -1920,30 +1920,30 @@ export default function Empresas() {
             {/* ── Detalhe ── */}
             <div className="flex-1 min-w-0">
               {!selecionada ? (
-                <div className="rounded-2xl border border-slate-200 bg-white shadow-sm">
+                <div className="rounded-2xl border border-border bg-white shadow-sm">
                   {/* ── Filtros rápidos: status/porte/origem sempre visíveis, sem precisar
                       abrir o combobox de busca -- usam os mesmos estados dele, então
                       buscar em qualquer um dos dois lugares filtra o mesmo resultado. ── */}
-                  <div className="flex flex-col gap-2.5 border-b border-slate-100 px-4 py-3">
+                  <div className="flex flex-col gap-2.5 border-b border-border px-4 py-3">
                     <div className="flex flex-wrap items-center gap-1.5">
                       <button
                         type="button"
                         onClick={() => setFiltroStatus("todos")}
-                        className={`rounded-full px-2.5 py-1 text-[11px] font-bold transition ${filtroStatus === "todos" ? "bg-slate-900 text-white" : "bg-slate-100 text-slate-600 hover:bg-slate-200"}`}
+                        className={`rounded-full px-2.5 py-1 text-[11px] font-bold transition ${filtroStatus === "todos" ? "bg-brand-navy text-white" : "bg-muted text-muted-foreground hover:bg-muted"}`}
                       >Todos</button>
                       {Object.entries(STATUS_CFG).map(([key, cfg]) => (
                         <button
                           key={key}
                           type="button"
                           onClick={() => setFiltroStatus(key)}
-                          className={`rounded-full px-2.5 py-1 text-[11px] font-bold transition ${filtroStatus === key ? "bg-slate-900 text-white" : `${cfg.badge} hover:opacity-80`}`}
+                          className={`rounded-full px-2.5 py-1 text-[11px] font-bold transition ${filtroStatus === key ? "bg-brand-navy text-white" : `${cfg.badge} hover:opacity-80`}`}
                         >{cfg.label}</button>
                       ))}
-                      <span className="mx-1 hidden h-4 w-px bg-slate-200 sm:block" />
+                      <span className="mx-1 hidden h-4 w-px bg-muted sm:block" />
                       <select
                         value={filtroPorte}
                         onChange={e => setFiltroPorte(e.target.value)}
-                        className="h-7 rounded-full border border-slate-200 bg-white px-2.5 text-[11px] font-semibold text-slate-600 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                        className="h-7 rounded-full border border-border bg-white px-2.5 text-[11px] font-semibold text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary"
                       >
                         <option value="todos">Porte (todos)</option>
                         {Object.entries(PORTE_CFG).map(([key, cfg]) => <option key={key} value={key}>{cfg.label}</option>)}
@@ -1951,7 +1951,7 @@ export default function Empresas() {
                       <select
                         value={filtroOrigem}
                         onChange={e => setFiltroOrigem(e.target.value)}
-                        className="h-7 rounded-full border border-slate-200 bg-white px-2.5 text-[11px] font-semibold text-slate-600 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                        className="h-7 rounded-full border border-border bg-white px-2.5 text-[11px] font-semibold text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary"
                       >
                         <option value="todos">Origem (todas)</option>
                         <option value="simulador">Simulador</option>
@@ -1964,7 +1964,7 @@ export default function Empresas() {
                         <button
                           type="button"
                           onClick={() => { setFiltroStatus("todos"); setFiltroPorte("todos"); setFiltroOrigem("todos"); setBusca(""); }}
-                          className="rounded-full px-2.5 py-1 text-[11px] font-bold text-blue-600 hover:underline"
+                          className="rounded-full px-2.5 py-1 text-[11px] font-bold text-primary hover:underline"
                         >Limpar filtros</button>
                       )}
                     </div>
@@ -1973,22 +1973,22 @@ export default function Empresas() {
                   {/* ── Cabeçalho + alternância blocos/lista ── */}
                   <div className="flex items-center justify-between gap-3 px-4 py-3">
                     <div>
-                      <h2 className="text-sm font-bold text-slate-900">Empresas recentes</h2>
-                      <p className="text-[11px] text-slate-400">
+                      <h2 className="text-sm font-bold text-foreground">Empresas recentes</h2>
+                      <p className="text-[11px] text-muted-foreground">
                         {loading ? "Carregando…" : "com documentos anexados e análise iniciada · mais recentes primeiro"}
                       </p>
                     </div>
-                    <div className="flex shrink-0 items-center gap-0.5 rounded-lg border border-slate-200 bg-slate-50 p-0.5">
+                    <div className="flex shrink-0 items-center gap-0.5 rounded-lg border border-border bg-muted p-0.5">
                       <button
                         type="button"
                         onClick={() => setVisualizacaoEmpresas("blocos")}
-                        className={`inline-flex items-center gap-1 rounded-md px-2 py-1 text-[11px] font-semibold transition ${visualizacaoEmpresas === "blocos" ? "bg-white text-slate-900 shadow-sm" : "text-slate-500 hover:text-slate-700"}`}
+                        className={`inline-flex items-center gap-1 rounded-md px-2 py-1 text-[11px] font-semibold transition ${visualizacaoEmpresas === "blocos" ? "bg-white text-foreground shadow-sm" : "text-muted-foreground hover:text-muted-foreground"}`}
                         title="Ver como blocos"
                       ><LayoutGrid className="h-3 w-3" /> Blocos</button>
                       <button
                         type="button"
                         onClick={() => setVisualizacaoEmpresas("lista")}
-                        className={`inline-flex items-center gap-1 rounded-md px-2 py-1 text-[11px] font-semibold transition ${visualizacaoEmpresas === "lista" ? "bg-white text-slate-900 shadow-sm" : "text-slate-500 hover:text-slate-700"}`}
+                        className={`inline-flex items-center gap-1 rounded-md px-2 py-1 text-[11px] font-semibold transition ${visualizacaoEmpresas === "lista" ? "bg-white text-foreground shadow-sm" : "text-muted-foreground hover:text-muted-foreground"}`}
                         title="Ver como lista"
                       ><ListIcon className="h-3 w-3" /> Lista</button>
                     </div>
@@ -2003,7 +2003,7 @@ export default function Empresas() {
                         preset="empresas"
                         title="Nenhuma empresa com documentos e análise ainda"
                         description="Assim que uma empresa tiver documento anexado e análise iniciada no Acervo Documental, ela aparece aqui."
-                        action={<button onClick={abrirNova} className="text-xs text-blue-600 hover:underline">+ Cadastrar primeira empresa</button>}
+                        action={<button onClick={abrirNova} className="text-xs text-primary hover:underline">+ Cadastrar primeira empresa</button>}
                         className="py-10"
                       />
                     ) : visualizacaoEmpresas === "blocos" ? (
@@ -2013,30 +2013,30 @@ export default function Empresas() {
                             key={emp.id}
                             type="button"
                             onClick={() => selecionar(emp)}
-                            className="flex flex-col items-start rounded-2xl border border-slate-200 bg-white p-4 text-left shadow-sm transition hover:shadow-md hover:border-blue-300"
+                            className="flex flex-col items-start rounded-2xl border border-border bg-white p-4 text-left shadow-sm transition hover:shadow-md hover:border-primary/30"
                           >
                             <div className="flex w-full items-start justify-between gap-2">
                               <div className="flex min-w-0 items-start gap-2.5">
-                                <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-slate-800 text-xs font-black text-white">
+                                <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-brand-navy text-xs font-black text-white">
                                   {getInitials(emp.razao_social)}
                                 </div>
                                 <div className="min-w-0">
-                                  <h3 className="truncate text-sm font-bold text-slate-900 leading-tight">{emp.razao_social}</h3>
+                                  <h3 className="truncate text-sm font-bold text-foreground leading-tight">{emp.razao_social}</h3>
                                 </div>
                               </div>
                               <StatusBadge status={emp.status} />
                             </div>
                             <div className="mt-3 flex flex-wrap items-center gap-1.5">
-                              <span className="inline-flex items-center gap-1 rounded-full bg-violet-50 px-2 py-0.5 text-[10px] font-bold text-violet-700">
+                              <span className="inline-flex items-center gap-1 rounded-full bg-primary/10 px-2 py-0.5 text-[10px] font-bold text-primary">
                                 Análise iniciada
                               </span>
-                              <span className="text-[10px] font-semibold text-slate-500">
+                              <span className="text-[10px] font-semibold text-muted-foreground">
                                 {documentosResumo[emp.id]?.documentos_count || 0} documento{documentosResumo[emp.id]?.documentos_count === 1 ? "" : "s"} anexado{documentosResumo[emp.id]?.documentos_count === 1 ? "" : "s"}
                               </span>
                             </div>
-                            <div className="mt-3 flex w-full items-center justify-between border-t border-slate-100 pt-2">
-                              <span className="text-[10px] text-slate-400">Atualizado {fmtDate(emp.updated_at)}</span>
-                              <span className="text-[10px] font-bold text-blue-600">Abrir →</span>
+                            <div className="mt-3 flex w-full items-center justify-between border-t border-border pt-2">
+                              <span className="text-[10px] text-muted-foreground">Atualizado {fmtDate(emp.updated_at)}</span>
+                              <span className="text-[10px] font-bold text-primary">Abrir →</span>
                             </div>
                           </button>
                         ))}
@@ -2048,98 +2048,98 @@ export default function Empresas() {
                             key={emp.id}
                             type="button"
                             onClick={() => selecionar(emp)}
-                            className="emp-list-item flex w-full items-center gap-2.5 rounded-xl border border-slate-200 bg-white p-2.5 text-left hover:border-blue-300 hover:bg-blue-50/40"
+                            className="emp-list-item flex w-full items-center gap-2.5 rounded-xl border border-border bg-white p-2.5 text-left hover:border-primary/30 hover:bg-primary/10/40"
                           >
-                            <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-slate-800 text-xs font-black text-white">
+                            <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-brand-navy text-xs font-black text-white">
                               {getInitials(emp.razao_social)}
                             </div>
                             <div className="min-w-0 flex-1">
-                              <p className="truncate text-sm font-semibold text-slate-900">{emp.razao_social}</p>
+                              <p className="truncate text-sm font-semibold text-foreground">{emp.razao_social}</p>
                               <div className="mt-0.5 flex flex-wrap items-center gap-1.5">
-                                <span className="inline-flex items-center gap-1 rounded-full bg-violet-50 px-1.5 py-0.5 text-[10px] font-bold text-violet-700">
+                                <span className="inline-flex items-center gap-1 rounded-full bg-primary/10 px-1.5 py-0.5 text-[10px] font-bold text-primary">
                                   Análise iniciada
                                 </span>
-                                <span className="text-[10px] font-semibold text-slate-500">
+                                <span className="text-[10px] font-semibold text-muted-foreground">
                                   {documentosResumo[emp.id]?.documentos_count || 0} documento{documentosResumo[emp.id]?.documentos_count === 1 ? "" : "s"} anexado{documentosResumo[emp.id]?.documentos_count === 1 ? "" : "s"}
                                 </span>
                               </div>
                             </div>
-                            <span className="shrink-0 text-[10px] text-slate-400">Atualizado {fmtDate(emp.updated_at)}</span>
+                            <span className="shrink-0 text-[10px] text-muted-foreground">Atualizado {fmtDate(emp.updated_at)}</span>
                             <StatusBadge status={emp.status} />
                           </button>
                         ))}
                       </div>
                     )}
                     {!loading && empresas.filter(e => documentosResumo[e.id]).length > empresasRecentes.length && (
-                      <p className="mt-3 text-center text-[11px] text-slate-400">
+                      <p className="mt-3 text-center text-[11px] text-muted-foreground">
                         Mostrando as {empresasRecentes.length} mais recentes — refine a busca ou os filtros acima para ver outras.
                       </p>
                     )}
                   </div>
                 </div>
               ) : (
-                <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-visible slide-up flex flex-col min-w-0">
+                <div className="bg-white rounded-2xl border border-border shadow-sm overflow-visible slide-up flex flex-col min-w-0">
 
                   {/* ── Header detalhe ── */}
-                  <div className="px-3 sm:px-4 py-2 border-b border-slate-100 shrink-0 bg-white">
+                  <div className="px-3 sm:px-4 py-2 border-b border-border shrink-0 bg-white">
                     <div className="flex items-start gap-3">
                       {/* Botão voltar -- antes só existia no celular; agora aparece em qualquer
                           tamanho de tela, pra sair da empresa sem precisar clicar em "Trocar
                           empresa" (que abre a busca) nem usar o botão voltar do navegador. */}
                       <button
                         onClick={() => { setSelecionada(null); setShowDetail(false); setLocation("/colaborador/empresas"); }}
-                        className="mt-0.5 flex shrink-0 items-center gap-1 rounded-lg px-1.5 py-1.5 text-slate-500 hover:bg-slate-100 hover:text-slate-700 sm:px-2"
+                        className="mt-0.5 flex shrink-0 items-center gap-1 rounded-lg px-1.5 py-1.5 text-muted-foreground hover:bg-muted hover:text-muted-foreground sm:px-2"
                         title="Voltar para a lista de empresas"
                       >
                         <ArrowLeft className="w-4 h-4" />
                         <span className="hidden text-xs font-bold sm:inline">Voltar</span>
                       </button>
                       {/* Avatar grande */}
-                      <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-blue-600 to-blue-800 flex items-center justify-center text-white text-sm font-black shrink-0 shadow-sm shadow-blue-100">
+                      <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-primary to-primary flex items-center justify-center text-white text-sm font-black shrink-0 shadow-sm shadow-blue-100">
                         {getInitials(selecionada.razao_social)}
                       </div>
                       <div className="flex-1 min-w-0">
                         <div className="flex items-start justify-between gap-3">
                           <div className="min-w-0">
-                            <h2 className="text-base font-black text-slate-900 leading-tight truncate">{selecionada.razao_social}</h2>
+                            <h2 className="text-base font-black text-foreground leading-tight truncate">{selecionada.razao_social}</h2>
                             {selecionada.nome_fantasia && (
-                              <p className="text-xs text-slate-500 mt-0.5 truncate">{selecionada.nome_fantasia}</p>
+                              <p className="text-xs text-muted-foreground mt-0.5 truncate">{selecionada.nome_fantasia}</p>
                             )}
                             <div className="flex flex-wrap items-center gap-1.5 mt-1.5">
                               <StatusBadge status={selecionada.status} />
                               {selecionada.porte && (
-                                <span className={`text-[11px] font-semibold px-2 py-0.5 rounded-full ${PORTE_CFG[selecionada.porte]?.color || "bg-slate-100 text-slate-500"}`}>
+                                <span className={`text-[11px] font-semibold px-2 py-0.5 rounded-full ${PORTE_CFG[selecionada.porte]?.color || "bg-muted text-muted-foreground"}`}>
                                   {PORTE_CFG[selecionada.porte]?.label}
                                 </span>
                               )}
                               {selecionada.natureza_juridica && (
-                                <span className="text-[11px] font-semibold px-2 py-0.5 rounded-full bg-indigo-50 text-indigo-700">
+                                <span className="text-[11px] font-semibold px-2 py-0.5 rounded-full bg-primary/10 text-primary">
                                   {selecionada.natureza_juridica}
                                 </span>
                               )}
                               {selecionada.situacao_cadastral && (
-                                <span className="text-[11px] font-semibold px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-700">
+                                <span className="text-[11px] font-semibold px-2 py-0.5 rounded-full bg-success/10 text-success">
                                   Receita: {selecionada.situacao_cadastral}
                                 </span>
                               )}
                               {selecionada.segmento && (
-                                <span className="text-[11px] font-semibold px-2 py-0.5 rounded-full bg-slate-100 text-slate-600">
+                                <span className="text-[11px] font-semibold px-2 py-0.5 rounded-full bg-muted text-muted-foreground">
                                   {selecionada.segmento}
                                 </span>
                               )}
                             </div>
                             <div className="emp-info-grid mt-1.5 grid grid-cols-1 sm:grid-cols-3 gap-1.5 max-w-[760px]">
-                              <div className="rounded-lg border border-slate-200 bg-slate-50/80 px-2 py-1">
-                                <p className="text-[9px] font-bold uppercase tracking-wide text-slate-400">CNPJ</p>
-                                <p className="text-xs font-bold text-slate-700 mt-0.5 truncate">{selecionada.cnpj || "Não informado"}</p>
+                              <div className="rounded-lg border border-border bg-muted/80 px-2 py-1">
+                                <p className="text-[9px] font-bold uppercase tracking-wide text-muted-foreground">CNPJ</p>
+                                <p className="text-xs font-bold text-muted-foreground mt-0.5 truncate">{selecionada.cnpj || "Não informado"}</p>
                               </div>
-                              <div className="rounded-lg border border-slate-200 bg-slate-50/80 px-2 py-1">
-                                <p className="text-[9px] font-bold uppercase tracking-wide text-slate-400">Localização</p>
-                                <p className="text-xs font-bold text-slate-700 mt-0.5 truncate">{[selecionada.cidade, selecionada.estado].filter(Boolean).join(" / ") || "Não informado"}</p>
+                              <div className="rounded-lg border border-border bg-muted/80 px-2 py-1">
+                                <p className="text-[9px] font-bold uppercase tracking-wide text-muted-foreground">Localização</p>
+                                <p className="text-xs font-bold text-muted-foreground mt-0.5 truncate">{[selecionada.cidade, selecionada.estado].filter(Boolean).join(" / ") || "Não informado"}</p>
                               </div>
-                              <div className="rounded-lg border border-slate-200 bg-slate-50/80 px-2 py-1">
-                                <p className="text-[9px] font-bold uppercase tracking-wide text-slate-400">Contato principal</p>
-                                <p className="text-xs font-bold text-slate-700 mt-0.5 truncate">{selecionada.responsavel_nome || selecionada.telefone || selecionada.whatsapp || "Não informado"}</p>
+                              <div className="rounded-lg border border-border bg-muted/80 px-2 py-1">
+                                <p className="text-[9px] font-bold uppercase tracking-wide text-muted-foreground">Contato principal</p>
+                                <p className="text-xs font-bold text-muted-foreground mt-0.5 truncate">{selecionada.responsavel_nome || selecionada.telefone || selecionada.whatsapp || "Não informado"}</p>
                               </div>
                             </div>
                           </div>
@@ -2150,7 +2150,7 @@ export default function Empresas() {
                               <button
                                 onClick={() => sincronizarDados(selecionada)}
                                 disabled={sincronizando}
-                                className="flex items-center gap-1.5 text-xs font-semibold text-emerald-700 border border-emerald-200 bg-emerald-50 px-2.5 py-1.5 rounded-lg hover:bg-emerald-100 transition-colors disabled:opacity-50"
+                                className="flex items-center gap-1.5 text-xs font-semibold text-success border border-success/20 bg-success/10 px-2.5 py-1.5 rounded-lg hover:bg-success/20 transition-colors disabled:opacity-50"
                                 title="Atualizar e salvar cadastro pela Receita Federal"
                               >
                                 <RotateCw className={`w-3.5 h-3.5 ${sincronizando ? "animate-spin" : ""}`} />
@@ -2160,7 +2160,7 @@ export default function Empresas() {
                             {isFeatureEnabled("empresa-action-editar") && (
                               <button
                                 onClick={() => selecionada && abrirEditar(selecionada)}
-                                className="flex items-center gap-1.5 text-xs font-semibold text-slate-600 border border-slate-200 px-2.5 py-1.5 rounded-lg hover:bg-slate-50 transition-colors"
+                                className="flex items-center gap-1.5 text-xs font-semibold text-muted-foreground border border-border px-2.5 py-1.5 rounded-lg hover:bg-muted transition-colors"
                               >
                                 <Edit2 className="w-3.5 h-3.5" />
                                 <span className="hidden md:inline">Editar</span>
@@ -2168,11 +2168,11 @@ export default function Empresas() {
                             )}
                             {isFeatureEnabled("empresa-action-arquivar") && (confirmDelete === selecionada.id ? (
                               <div className="flex gap-1">
-                                <button onClick={() => handleExcluir(selecionada.id)} className="text-xs font-semibold bg-red-600 text-white px-3 py-1.5 rounded-lg hover:bg-red-700">Confirmar</button>
-                                <button onClick={() => setConfirmDelete(null)} className="text-xs text-slate-500 border border-slate-200 px-3 py-1.5 rounded-lg hover:bg-slate-50">Cancelar</button>
+                                <button onClick={() => handleExcluir(selecionada.id)} className="text-xs font-semibold bg-destructive text-white px-3 py-1.5 rounded-lg hover:bg-destructive/90">Confirmar</button>
+                                <button onClick={() => setConfirmDelete(null)} className="text-xs text-muted-foreground border border-border px-3 py-1.5 rounded-lg hover:bg-muted">Cancelar</button>
                               </div>
                             ) : (
-                              <button onClick={() => setConfirmDelete(selecionada.id)} className="p-1.5 text-slate-400 hover:text-red-500 hover:bg-red-50 rounded-lg transition-colors border border-transparent hover:border-red-100">
+                              <button onClick={() => setConfirmDelete(selecionada.id)} className="p-1.5 text-muted-foreground hover:text-destructive hover:bg-destructive/10 rounded-lg transition-colors border border-transparent hover:border-destructive/20">
                                 <Trash2 className="w-4 h-4" />
                               </button>
                             ))}
@@ -2183,7 +2183,7 @@ export default function Empresas() {
                   </div>
 
                   {/* ── Quick Actions ── */}
-                  <div className="px-3 sm:px-4 py-1 border-b border-slate-100 bg-slate-50/60 shrink-0">
+                  <div className="px-3 sm:px-4 py-1 border-b border-border bg-muted shrink-0">
                     <div className="flex flex-wrap gap-1.5">
                       {isFeatureEnabled("empresa-action-nova-simulacao") && isFeatureEnabled("calculadora") && (
                       <button
@@ -2196,7 +2196,7 @@ export default function Empresas() {
                           }));
                           window.location.href = "/colaborador/calculadora";
                         }}
-                        className="flex items-center gap-1 text-[10px] font-bold text-blue-700 bg-blue-50 border border-blue-200 px-2 py-1 rounded-lg hover:bg-blue-100 transition-colors"
+                        className="flex items-center gap-1 text-[10px] font-bold text-primary bg-primary/10 border border-primary/20 px-2 py-1 rounded-lg hover:bg-primary/20 transition-colors"
                         title="Nova Simulação"
                       >
                         <Calculator className="w-3.5 h-3.5" />
@@ -2206,7 +2206,7 @@ export default function Empresas() {
                       {isFeatureEnabled("empresa-action-novo-contrato") && isFeatureEnabled("contratos") && (
                       <button
                         onClick={() => window.location.href = "/colaborador/contratos"}
-                        className="flex items-center gap-1 text-[10px] font-bold text-violet-700 bg-violet-50 border border-violet-200 px-2 py-1 rounded-lg hover:bg-violet-100 transition-colors"
+                        className="flex items-center gap-1 text-[10px] font-bold text-primary bg-primary/10 border border-primary/20 px-2 py-1 rounded-lg hover:bg-primary/10 transition-colors"
                         title="Novo Contrato"
                       >
                         <FileText className="w-3.5 h-3.5" />
@@ -2216,7 +2216,7 @@ export default function Empresas() {
                       {isFeatureEnabled("empresa-action-iniciar-conversa") && abaPermitida("followup") && (
                       <button
                         onClick={() => navegarParaAba("followup", { abrirFollowup: true })}
-                        className="flex items-center gap-1 text-[10px] font-bold text-amber-700 bg-amber-50 border border-amber-200 px-2 py-1 rounded-lg hover:bg-amber-100 transition-colors"
+                        className="flex items-center gap-1 text-[10px] font-bold text-warning bg-warning/10 border border-warning/20 px-2 py-1 rounded-lg hover:bg-warning/20 transition-colors"
                         title="Iniciar conversa"
                       >
                         <Bell className="w-3.5 h-3.5" />
@@ -2225,7 +2225,7 @@ export default function Empresas() {
                       )}
                       <button
                         onClick={() => setTarefaNexusOpen(true)}
-                        className="flex items-center gap-1 text-[10px] font-bold text-blue-800 bg-blue-50 border border-blue-200 px-2 py-1 rounded-lg hover:bg-blue-100 transition-colors"
+                        className="flex items-center gap-1 text-[10px] font-bold text-primary bg-primary/10 border border-primary/20 px-2 py-1 rounded-lg hover:bg-primary/20 transition-colors"
                         title="Criar uma lista independente desta empresa no Nexus"
                       >
                         <Zap className="w-3.5 h-3.5" />
@@ -2238,11 +2238,11 @@ export default function Empresas() {
                   {(() => {
                     const { score, risco, tags } = calcularScore(selecionada);
                     const rCfg = {
-                      baixo:   { label: "Baixo",   wrap: "bg-emerald-50 border-emerald-200", badge: "bg-emerald-100 text-emerald-700", Icon: ShieldCheck, ic: "text-emerald-600" },
-                      medio:   { label: "Médio",   wrap: "bg-amber-50 border-amber-200",   badge: "bg-amber-100 text-amber-700",   Icon: ShieldAlert,  ic: "text-amber-600" },
-                      alto:    { label: "Alto",    wrap: "bg-orange-50 border-orange-200", badge: "bg-orange-100 text-orange-700", Icon: AlertTriangle,ic: "text-orange-600" },
-                      critico: { label: "Crítico", wrap: "bg-red-50 border-red-200",       badge: "bg-red-100 text-red-700",       Icon: ShieldOff,    ic: "text-red-600" },
-                    }[risco] || { label: "—", wrap: "bg-slate-50 border-slate-200", badge: "bg-slate-100 text-slate-600", Icon: ShieldCheck, ic: "text-slate-500" };
+                      baixo:   { label: "Baixo",   wrap: "bg-success/10 border-success/20", badge: "bg-success/20 text-success", Icon: ShieldCheck, ic: "text-success" },
+                      medio:   { label: "Médio",   wrap: "bg-warning/10 border-warning/20",   badge: "bg-warning/20 text-warning",   Icon: ShieldAlert,  ic: "text-warning" },
+                      alto:    { label: "Alto",    wrap: "bg-warning/10 border-warning/20", badge: "bg-warning/20 text-warning", Icon: AlertTriangle,ic: "text-warning" },
+                      critico: { label: "Crítico", wrap: "bg-destructive/10 border-destructive/20",       badge: "bg-destructive/20 text-destructive",       Icon: ShieldOff,    ic: "text-destructive" },
+                    }[risco] || { label: "—", wrap: "bg-muted border-border", badge: "bg-muted text-muted-foreground", Icon: ShieldCheck, ic: "text-muted-foreground" };
                     return (
                       <div className={`mx-3 sm:mx-4 mt-1 rounded-lg border px-2 py-1 shrink-0 ${rCfg.wrap}`}>
                         <div className="flex flex-col gap-1.5 lg:flex-row lg:items-center">
@@ -2252,17 +2252,17 @@ export default function Empresas() {
                             </div>
                             <div>
                               <div className="flex flex-wrap items-center gap-2">
-                                <span className="text-xs font-black text-slate-800">Score Destrava</span>
+                                <span className="text-xs font-black text-foreground">Score Destrava</span>
                                 <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-black ${rCfg.badge}`}>Risco {rCfg.label}</span>
                               </div>
-                              <p className="text-[10px] text-slate-500 mt-0.5 leading-none">Situação atual</p>
+                              <p className="text-[10px] text-muted-foreground mt-0.5 leading-none">Situação atual</p>
                             </div>
                           </div>
 
                           <div className="flex flex-1 items-center gap-3 min-w-0">
                             <div className="min-w-[44px]">
-                              <div className="text-base font-black text-slate-900 leading-none">{score}</div>
-                              <div className="text-[10px] font-semibold text-slate-400 mt-0.5">/100</div>
+                              <div className="text-base font-black text-foreground leading-none">{score}</div>
+                              <div className="text-[10px] font-semibold text-muted-foreground mt-0.5">/100</div>
                             </div>
                             <div className="flex-1 min-w-[140px]">
                               <ScoreBar score={score} risco={risco} />
@@ -2271,7 +2271,7 @@ export default function Empresas() {
 
                           <div className="flex flex-wrap gap-1 lg:max-w-[420px]">
                             {tags.slice(0, 3).map((t, i) => (
-                              <span key={i} className={`rounded-full px-2 py-0.5 text-[10px] font-semibold ${t.ok ? "bg-white text-slate-600 border border-slate-200" : "bg-white text-rose-600 border border-rose-200"}`}>
+                              <span key={i} className={`rounded-full px-2 py-0.5 text-[10px] font-semibold ${t.ok ? "bg-white text-muted-foreground border border-border" : "bg-white text-destructive border border-destructive/20"}`}>
                                 {t.text}
                               </span>
                             ))}
@@ -2282,7 +2282,7 @@ export default function Empresas() {
                   })()}
 
                   {/* ── Abas ── */}
-                  <div className="border-b border-slate-200 px-3 sm:px-4 py-1 bg-white shrink-0">
+                  <div className="border-b border-border px-3 sm:px-4 py-1 bg-white shrink-0">
                     <div className="flex flex-wrap gap-1">
                       {([
                         { id: "visao_geral", label: "Dados da Empresa", badge: sociosExibicao.length || undefined },
@@ -2300,14 +2300,14 @@ export default function Empresas() {
                           onClick={() => navegarParaAba(aba.id)}
                           className={`flex items-center gap-1.5 rounded-xl px-3 py-2 text-xs font-bold border transition-all whitespace-nowrap ${
                             abaAtiva === aba.id
-                              ? "border-blue-300 bg-blue-600 text-white shadow-md shadow-blue-100"
-                              : "border-slate-200 text-slate-600 bg-white hover:text-slate-800 hover:border-slate-300 hover:bg-slate-50"
+                              ? "border-primary/30 bg-primary text-white shadow-md shadow-blue-100"
+                              : "border-border text-muted-foreground bg-white hover:text-foreground hover:border-input hover:bg-muted"
                           }`}
                         >
                           {aba.label}
                           {(aba as any).badge > 0 && (
                             <span className={`text-[10px] font-black px-1.5 py-0.5 rounded-full min-w-[18px] text-center ${
-                              abaAtiva === aba.id ? "bg-white/20 text-white" : "bg-blue-100 text-blue-700"
+                              abaAtiva === aba.id ? "bg-white/20 text-white" : "bg-primary/20 text-primary"
                             }`}>{(aba as any).badge}</span>
                           )}
                         </button>
@@ -2318,7 +2318,7 @@ export default function Empresas() {
                   {/* ── Conteúdo das abas ── */}
                   <div className="min-w-0 overflow-visible pb-6">
                     {loadingDetalhe ? (
-                      <div className="flex justify-center py-12"><Loader2 className="w-5 h-5 animate-spin text-slate-300" /></div>
+                      <div className="flex justify-center py-12"><Loader2 className="w-5 h-5 animate-spin text-muted-foreground" /></div>
                     ) : (
 
                     /* ── VISÃO GERAL ── */
@@ -2351,7 +2351,7 @@ export default function Empresas() {
                     // igual ao padrão já usado na aba "Acervo Documental".
                     : (abaPermitida(abaAtiva) ? abaAtiva : primeiraAbaPermitida()) === "dossie_credito" ? (
                       <div className="p-3 fade-in">
-                        <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm flex items-center justify-center gap-3 text-slate-500">
+                        <div className="rounded-2xl border border-border bg-white p-6 shadow-sm flex items-center justify-center gap-3 text-muted-foreground">
                           <Loader2 className="h-4 w-4 animate-spin" />
                           <p className="text-sm font-semibold">Abrindo dossiê / laudo IA...</p>
                         </div>
@@ -2368,7 +2368,7 @@ export default function Empresas() {
                           }}
                         />
                       ) : (
-                        <div className="p-6 text-sm text-slate-400">Empresa não selecionada.</div>
+                        <div className="p-6 text-sm text-muted-foreground">Empresa não selecionada.</div>
                       )
                     )
 
@@ -2384,7 +2384,7 @@ export default function Empresas() {
                           />
                         </div>
                       ) : (
-                        <div className="p-6 text-sm text-slate-400">Empresa não selecionada.</div>
+                        <div className="p-6 text-sm text-muted-foreground">Empresa não selecionada.</div>
                       )
                     )
 
@@ -2393,20 +2393,20 @@ export default function Empresas() {
                       <div className="p-5 fade-in space-y-4">
                         <div className="flex items-center justify-between mb-1">
                           <div>
-                            <h3 className="text-sm font-bold text-slate-700">QSA e administração</h3>
-                            <p className="text-xs text-slate-400 mt-0.5">
+                            <h3 className="text-sm font-bold text-muted-foreground">QSA e administração</h3>
+                            <p className="text-xs text-muted-foreground mt-0.5">
                               Quadro de Sócios e Administradores da empresa.
                             </p>
                           </div>
                           <div className="flex items-center gap-2">
-                            <span className="text-xs font-semibold px-2.5 py-1 rounded-full bg-blue-100 text-blue-700">
+                            <span className="text-xs font-semibold px-2.5 py-1 rounded-full bg-primary/20 text-primary">
                               {sociosExibicao.length} sócio(s)
                             </span>
                             {selecionada.cnpj && isFeatureEnabled("empresa-action-atualizar-cadastro") && (
                               <button
                                 onClick={() => sincronizarDados(selecionada)}
                                 disabled={sincronizando}
-                                className="flex items-center gap-1 text-xs font-semibold text-emerald-700 border border-emerald-200 bg-emerald-50 px-2.5 py-1 rounded-lg hover:bg-emerald-100 transition-colors disabled:opacity-50"
+                                className="flex items-center gap-1 text-xs font-semibold text-success border border-success/20 bg-success/10 px-2.5 py-1 rounded-lg hover:bg-success/20 transition-colors disabled:opacity-50"
                                 title="Atualizar dados societários"
                               >
                                 <RotateCw className={`w-3 h-3 ${sincronizando ? "animate-spin" : ""}`} />
@@ -2416,17 +2416,17 @@ export default function Empresas() {
                           </div>
                         </div>
 
-                        <div className="rounded-xl border border-blue-100 bg-blue-50 p-3 text-xs text-blue-800 leading-relaxed">
+                        <div className="rounded-xl border border-primary/20 bg-primary/10 p-3 text-xs text-primary leading-relaxed">
                           Cadastro atualizado e salvo com dados da Receita/fontes confiáveis. Complete manualmente apenas o que não vier das fontes.
                         </div>
 
                         {sociosExibicao.length === 0 ? (
-                          <div className="flex flex-col items-center justify-center py-14 gap-3 rounded-xl border-2 border-dashed border-slate-200">
-                            <div className="w-12 h-12 rounded-xl bg-slate-100 flex items-center justify-center">
-                              <Users className="w-6 h-6 text-slate-300" />
+                          <div className="flex flex-col items-center justify-center py-14 gap-3 rounded-xl border-2 border-dashed border-border">
+                            <div className="w-12 h-12 rounded-xl bg-muted flex items-center justify-center">
+                              <Users className="w-6 h-6 text-muted-foreground" />
                             </div>
-                            <p className="text-sm text-slate-500 font-medium">Nenhum sócio cadastrado</p>
-                            <p className="text-xs text-slate-400">Nenhum sócio-administrador cadastrado. Atualize os dados ou complete manualmente o responsável da empresa.</p>
+                            <p className="text-sm text-muted-foreground font-medium">Nenhum sócio cadastrado</p>
+                            <p className="text-xs text-muted-foreground">Nenhum sócio-administrador cadastrado. Atualize os dados ou complete manualmente o responsável da empresa.</p>
                           </div>
                         ) : (
                           <div className="grid grid-cols-1 xl:grid-cols-2 gap-3">
@@ -2434,48 +2434,48 @@ export default function Empresas() {
                               const pendencias = Array.isArray(s.pendencias_contrato) ? s.pendencias_contrato : pendenciasSocioContrato(s);
                               const completo = pendencias.length === 0;
                               return (
-                                <div key={s.id} className="p-4 rounded-xl border border-slate-200 bg-white shadow-sm hover:shadow-md transition-shadow space-y-3">
+                                <div key={s.id} className="p-4 rounded-xl border border-border bg-white shadow-sm hover:shadow-md transition-shadow space-y-3">
                                   <div className="flex items-start gap-3 cursor-pointer" onClick={() => setSociosExpandidos(prev => ({ ...prev, [s.id]: !prev[s.id] }))}>
-                                    <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-blue-500 to-blue-700 text-white flex items-center justify-center font-bold text-sm shrink-0">
+                                    <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-primary to-primary/90 text-white flex items-center justify-center font-bold text-sm shrink-0">
                                       {(s.nome?.charAt(0) ?? "?").toUpperCase()}
                                     </div>
                                     <div className="flex-1 min-w-0">
-                                      <p className="text-sm font-bold text-slate-800 truncate">{s.nome}</p>
+                                      <p className="text-sm font-bold text-foreground truncate">{s.nome}</p>
                                       <div className="flex flex-wrap gap-1.5 mt-1">
-                                        {s.qualificacao_socio && <span className="text-[11px] font-semibold px-2 py-0.5 rounded-full bg-blue-50 text-blue-700 border border-blue-200">{s.qualificacao_socio}</span>}
-                                        {s.representante_legal && <span className="text-[11px] font-semibold px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-700">Representante legal</span>}
-                                        <span className={`text-[11px] font-semibold px-2 py-0.5 rounded-full border ${completo ? 'bg-emerald-50 text-emerald-700 border-emerald-200' : 'bg-amber-50 text-amber-700 border-amber-200'}`}>
+                                        {s.qualificacao_socio && <span className="text-[11px] font-semibold px-2 py-0.5 rounded-full bg-primary/10 text-primary border border-primary/20">{s.qualificacao_socio}</span>}
+                                        {s.representante_legal && <span className="text-[11px] font-semibold px-2 py-0.5 rounded-full bg-success/20 text-success">Representante legal</span>}
+                                        <span className={`text-[11px] font-semibold px-2 py-0.5 rounded-full border ${completo ? 'bg-success/10 text-success border-success/20' : 'bg-warning/10 text-warning border-warning/20'}`}>
                                           {completo ? 'Completo para contrato' : `${pendencias.length} pendência(s)`}
                                         </span>
                                       </div>
                                     </div>
-                                    <ChevronDown className={`w-4 h-4 text-slate-400 mt-2 transition-transform ${sociosExpandidos[s.id] ? 'rotate-180' : ''}`} />
+                                    <ChevronDown className={`w-4 h-4 text-muted-foreground mt-2 transition-transform ${sociosExpandidos[s.id] ? 'rotate-180' : ''}`} />
                                   </div>
 
                                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs">
-                                    <div className="rounded-lg bg-slate-50 border border-slate-100 p-2"><span className="block text-slate-400">CPF/CNPJ do sócio</span><b className="text-slate-700 font-mono">{s.cpf_cnpj || 'Não informado'}</b>{s.inferido_empresa ? <button onClick={() => selecionada && abrirEditar(selecionada)} className="block mt-1 text-[11px] font-bold text-blue-600 hover:underline">Completar no cadastro</button> : <button onClick={() => { const cpf = prompt('Informe o CPF completo do sócio'); if (cpf) atualizarCpfManualSocio(s, cpf); }} className="block mt-1 text-[11px] font-bold text-blue-600 hover:underline">Informar CPF completo</button>}</div>
-                                    <div className="rounded-lg bg-slate-50 border border-slate-100 p-2"><span className="block text-slate-400">Entrada na sociedade</span><b className="text-slate-700">{s.data_entrada_sociedade ? new Date(s.data_entrada_sociedade).toLocaleDateString('pt-BR') : 'Não informado'}</b></div>
-                                    <div className="rounded-lg bg-slate-50 border border-slate-100 p-2"><span className="block text-slate-400">País</span><b className="text-slate-700">{s.pais || 'Não informado'}</b></div>
-                                    <div className="rounded-lg bg-slate-50 border border-slate-100 p-2"><span className="block text-slate-400">Representante legal</span><b className="text-slate-700">{s.nome_representante || (s.representante_legal ? 'Sim' : 'Não informado')}</b></div>
+                                    <div className="rounded-lg bg-muted border border-border p-2"><span className="block text-muted-foreground">CPF/CNPJ do sócio</span><b className="text-muted-foreground font-mono">{s.cpf_cnpj || 'Não informado'}</b>{s.inferido_empresa ? <button onClick={() => selecionada && abrirEditar(selecionada)} className="block mt-1 text-[11px] font-bold text-primary hover:underline">Completar no cadastro</button> : <button onClick={() => { const cpf = prompt('Informe o CPF completo do sócio'); if (cpf) atualizarCpfManualSocio(s, cpf); }} className="block mt-1 text-[11px] font-bold text-primary hover:underline">Informar CPF completo</button>}</div>
+                                    <div className="rounded-lg bg-muted border border-border p-2"><span className="block text-muted-foreground">Entrada na sociedade</span><b className="text-muted-foreground">{s.data_entrada_sociedade ? new Date(s.data_entrada_sociedade).toLocaleDateString('pt-BR') : 'Não informado'}</b></div>
+                                    <div className="rounded-lg bg-muted border border-border p-2"><span className="block text-muted-foreground">País</span><b className="text-muted-foreground">{s.pais || 'Não informado'}</b></div>
+                                    <div className="rounded-lg bg-muted border border-border p-2"><span className="block text-muted-foreground">Representante legal</span><b className="text-muted-foreground">{s.nome_representante || (s.representante_legal ? 'Sim' : 'Não informado')}</b></div>
                                   </div>
 
                                   {sociosExpandidos[s.id] && (
-                                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs border-t border-slate-100 pt-3">
-                                      <div className="rounded-lg bg-slate-50 border border-slate-100 p-2"><span className="block text-slate-400">Qualificação representante</span><b className="text-slate-700">{s.qualificacao_representante || 'Não informado'}</b></div>
-                                      <div className="rounded-lg bg-slate-50 border border-slate-100 p-2"><span className="block text-slate-400">Nascimento</span><b className="text-slate-700">{s.data_nascimento ? new Date(s.data_nascimento).toLocaleDateString('pt-BR') : 'Pendente'}</b></div>
-                                      <div className="rounded-lg bg-slate-50 border border-slate-100 p-2"><span className="block text-slate-400">Gênero</span><b className="text-slate-700">{s.genero || 'Pendente'}</b></div>
-                                      <div className="rounded-lg bg-slate-50 border border-slate-100 p-2"><span className="block text-slate-400">Estado civil</span><b className="text-slate-700">{s.estado_civil || 'Pendente'}</b></div>
-                                      <div className="rounded-lg bg-slate-50 border border-slate-100 p-2"><span className="block text-slate-400">Profissão</span><b className="text-slate-700">{s.profissao || 'Pendente'}</b></div>
-                                      <div className="rounded-lg bg-slate-50 border border-slate-100 p-2"><span className="block text-slate-400">RG</span><b className="text-slate-700">{s.rg || 'Pendente'}</b></div>
-                                      <div className="rounded-lg bg-slate-50 border border-slate-100 p-2"><span className="block text-slate-400">Cônjuge</span><b className="text-slate-700">{s.conjuge_nome || 'Pendente'}</b></div>
-                                      <div className="rounded-lg bg-slate-50 border border-slate-100 p-2"><span className="block text-slate-400">Endereço</span><b className="text-slate-700">{[s.logradouro, s.numero, s.bairro, s.cidade, s.uf].filter(Boolean).join(', ') || 'Pendente'}</b></div>
-                                      <div className="rounded-lg bg-slate-50 border border-slate-100 p-2"><span className="block text-slate-400">E-mail</span><b className="text-slate-700 truncate block">{s.email || 'Pendente'}</b></div>
-                                      <div className="rounded-lg bg-slate-50 border border-slate-100 p-2"><span className="block text-slate-400">Telefone/WhatsApp</span><b className="text-slate-700">{s.whatsapp || s.telefone || 'Pendente'}</b></div>
+                                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs border-t border-border pt-3">
+                                      <div className="rounded-lg bg-muted border border-border p-2"><span className="block text-muted-foreground">Qualificação representante</span><b className="text-muted-foreground">{s.qualificacao_representante || 'Não informado'}</b></div>
+                                      <div className="rounded-lg bg-muted border border-border p-2"><span className="block text-muted-foreground">Nascimento</span><b className="text-muted-foreground">{s.data_nascimento ? new Date(s.data_nascimento).toLocaleDateString('pt-BR') : 'Pendente'}</b></div>
+                                      <div className="rounded-lg bg-muted border border-border p-2"><span className="block text-muted-foreground">Gênero</span><b className="text-muted-foreground">{s.genero || 'Pendente'}</b></div>
+                                      <div className="rounded-lg bg-muted border border-border p-2"><span className="block text-muted-foreground">Estado civil</span><b className="text-muted-foreground">{s.estado_civil || 'Pendente'}</b></div>
+                                      <div className="rounded-lg bg-muted border border-border p-2"><span className="block text-muted-foreground">Profissão</span><b className="text-muted-foreground">{s.profissao || 'Pendente'}</b></div>
+                                      <div className="rounded-lg bg-muted border border-border p-2"><span className="block text-muted-foreground">RG</span><b className="text-muted-foreground">{s.rg || 'Pendente'}</b></div>
+                                      <div className="rounded-lg bg-muted border border-border p-2"><span className="block text-muted-foreground">Cônjuge</span><b className="text-muted-foreground">{s.conjuge_nome || 'Pendente'}</b></div>
+                                      <div className="rounded-lg bg-muted border border-border p-2"><span className="block text-muted-foreground">Endereço</span><b className="text-muted-foreground">{[s.logradouro, s.numero, s.bairro, s.cidade, s.uf].filter(Boolean).join(', ') || 'Pendente'}</b></div>
+                                      <div className="rounded-lg bg-muted border border-border p-2"><span className="block text-muted-foreground">E-mail</span><b className="text-muted-foreground truncate block">{s.email || 'Pendente'}</b></div>
+                                      <div className="rounded-lg bg-muted border border-border p-2"><span className="block text-muted-foreground">Telefone/WhatsApp</span><b className="text-muted-foreground">{s.whatsapp || s.telefone || 'Pendente'}</b></div>
                                     </div>
                                   )}
 
                                   {sociosExpandidos[s.id] && !s.inferido_empresa && (
-                                    <div className="border-t border-slate-100 pt-3">
+                                    <div className="border-t border-border pt-3">
                                       <DocumentosEntidade
                                         entidadeTipo="socio"
                                         entidadeId={s.id}
@@ -2493,23 +2493,23 @@ export default function Empresas() {
                                   <div className="flex flex-wrap gap-2 pt-1">
                                     {s.inferido_empresa ? (
                                       <>
-                                        <button onClick={() => selecionada && abrirEditar(selecionada)} className="flex items-center gap-1 text-xs font-semibold px-2.5 py-1.5 rounded-lg border border-slate-200 text-slate-600 hover:bg-slate-50"><Edit2 className="w-3 h-3" /> Completar dados</button>
-                                        <button onClick={() => selecionada && sincronizarDados(selecionada)} disabled={sincronizando} className="flex items-center gap-1 text-xs font-semibold px-2.5 py-1.5 rounded-lg border border-emerald-200 text-emerald-700 bg-emerald-50 hover:bg-emerald-100 disabled:opacity-50"><RotateCw className="w-3 h-3" /> Atualizar</button>
+                                        <button onClick={() => selecionada && abrirEditar(selecionada)} className="flex items-center gap-1 text-xs font-semibold px-2.5 py-1.5 rounded-lg border border-border text-muted-foreground hover:bg-muted"><Edit2 className="w-3 h-3" /> Completar dados</button>
+                                        <button onClick={() => selecionada && sincronizarDados(selecionada)} disabled={sincronizando} className="flex items-center gap-1 text-xs font-semibold px-2.5 py-1.5 rounded-lg border border-success/20 text-success bg-success/10 hover:bg-success/20 disabled:opacity-50"><RotateCw className="w-3 h-3" /> Atualizar</button>
                                       </>
                                     ) : (
                                       <>
-                                        <button onClick={() => abrirEdicaoSocio(s)} className="flex items-center gap-1 text-xs font-semibold px-2.5 py-1.5 rounded-lg border border-slate-200 text-slate-600 hover:bg-slate-50"><Edit2 className="w-3 h-3" /> Editar</button>
-                                        <button onClick={() => atualizarSocioIndividual(s)} disabled={sincronizando} className="flex items-center gap-1 text-xs font-semibold px-2.5 py-1.5 rounded-lg border border-emerald-200 text-emerald-700 bg-emerald-50 hover:bg-emerald-100 disabled:opacity-50"><RotateCw className="w-3 h-3" /> Atualizar</button>
-                                        <button onClick={() => apagarSocio(s)} className="flex items-center gap-1 text-xs font-semibold px-2.5 py-1.5 rounded-lg border border-red-200 text-red-700 bg-red-50 hover:bg-red-100"><Trash2 className="w-3 h-3" /> Apagar</button>
+                                        <button onClick={() => abrirEdicaoSocio(s)} className="flex items-center gap-1 text-xs font-semibold px-2.5 py-1.5 rounded-lg border border-border text-muted-foreground hover:bg-muted"><Edit2 className="w-3 h-3" /> Editar</button>
+                                        <button onClick={() => atualizarSocioIndividual(s)} disabled={sincronizando} className="flex items-center gap-1 text-xs font-semibold px-2.5 py-1.5 rounded-lg border border-success/20 text-success bg-success/10 hover:bg-success/20 disabled:opacity-50"><RotateCw className="w-3 h-3" /> Atualizar</button>
+                                        <button onClick={() => apagarSocio(s)} className="flex items-center gap-1 text-xs font-semibold px-2.5 py-1.5 rounded-lg border border-destructive/20 text-destructive bg-destructive/10 hover:bg-destructive/20"><Trash2 className="w-3 h-3" /> Apagar</button>
                                       </>
                                     )}
                                   </div>
 
                                   {pendencias.length > 0 && (
-                                    <div className="rounded-lg bg-amber-50 border border-amber-100 p-2">
-                                      <p className="text-[11px] font-bold text-amber-700 mb-1">Dados para contratos e etapas futuras — não bloqueiam a Fase 1</p>
+                                    <div className="rounded-lg bg-warning/10 border border-warning/20 p-2">
+                                      <p className="text-[11px] font-bold text-warning mb-1">Dados para contratos e etapas futuras — não bloqueiam a Fase 1</p>
                                       <div className="flex flex-wrap gap-1">
-                                        {pendencias.slice(0, 8).map((p: string) => <span key={p} className="text-[11px] px-2 py-0.5 rounded-full bg-white border border-amber-200 text-amber-700">{p}</span>)}
+                                        {pendencias.slice(0, 8).map((p: string) => <span key={p} className="text-[11px] px-2 py-0.5 rounded-full bg-white border border-warning/20 text-warning">{p}</span>)}
                                       </div>
                                     </div>
                                   )}
@@ -2525,13 +2525,13 @@ export default function Empresas() {
                     : (abaPermitida(abaAtiva) ? abaAtiva : primeiraAbaPermitida()) === "followup" ? (
                       <div className="p-5 fade-in">
                         <div className="flex items-center justify-between mb-4">
-                          <h3 className="text-sm font-bold text-slate-700">Conversas</h3>
-                          <button onClick={() => setShowFollowupForm(true)} className="flex items-center gap-1.5 text-xs font-semibold bg-blue-600 text-white px-3 py-1.5 rounded-lg hover:bg-blue-700 transition-colors">
+                          <h3 className="text-sm font-bold text-muted-foreground">Conversas</h3>
+                          <button onClick={() => setShowFollowupForm(true)} className="flex items-center gap-1.5 text-xs font-semibold bg-primary text-white px-3 py-1.5 rounded-lg hover:bg-primary/90 transition-colors">
                             <PlusCircle className="w-3.5 h-3.5" /> Novo
                           </button>
                         </div>
                         {showFollowupForm && (
-                          <div className="mb-4 p-4 rounded-xl bg-blue-50 border border-blue-200 space-y-3">
+                          <div className="mb-4 p-4 rounded-xl bg-primary/10 border border-primary/20 space-y-3">
                             <input className={inputCls} placeholder="Título da conversa..." value={novoFollowup.titulo} onChange={e => setNovoFollowup(p => ({ ...p, titulo: e.target.value }))} />
                             <div className="grid grid-cols-2 gap-2">
                               <select className={selectCls} value={novoFollowup.tipo} onChange={e => setNovoFollowup(p => ({ ...p, tipo: e.target.value }))}>
@@ -2546,30 +2546,30 @@ export default function Empresas() {
                             </div>
                             <textarea className={inputCls + " resize-none h-16 py-2"} placeholder="Descrição (opcional)..." value={novoFollowup.descricao} onChange={e => setNovoFollowup(p => ({ ...p, descricao: e.target.value }))} />
                             <div className="flex gap-2">
-                              <button onClick={salvarFollowup} className="flex-1 bg-blue-600 text-white text-sm font-semibold py-2 rounded-lg hover:bg-blue-700 transition-colors">Salvar</button>
-                              <button onClick={() => setShowFollowupForm(false)} className="flex-1 bg-white border border-slate-200 text-slate-600 text-sm py-2 rounded-lg hover:bg-slate-50 transition-colors">Cancelar</button>
+                              <button onClick={salvarFollowup} className="flex-1 bg-primary text-white text-sm font-semibold py-2 rounded-lg hover:bg-primary/90 transition-colors">Salvar</button>
+                              <button onClick={() => setShowFollowupForm(false)} className="flex-1 bg-white border border-border text-muted-foreground text-sm py-2 rounded-lg hover:bg-muted transition-colors">Cancelar</button>
                             </div>
                           </div>
                         )}
                         {followups.length === 0 && !showFollowupForm ? (
-                          <div className="flex flex-col items-center justify-center py-14 gap-3 rounded-xl border-2 border-dashed border-slate-200">
-                            <Bell className="w-10 h-10 text-slate-200" />
-                            <p className="text-sm text-slate-500">Nenhuma conversa registrada</p>
+                          <div className="flex flex-col items-center justify-center py-14 gap-3 rounded-xl border-2 border-dashed border-border">
+                            <Bell className="w-10 h-10 text-muted-foreground" />
+                            <p className="text-sm text-muted-foreground">Nenhuma conversa registrada</p>
                           </div>
                         ) : (
                           <div className="space-y-2">
                             {followups.map(f => (
-                              <div key={f.id} className={`flex items-start gap-3 p-3 rounded-xl border transition-colors ${f.concluido ? "border-slate-100 bg-slate-50 opacity-60" : "border-slate-200 bg-white hover:border-blue-200"}`}>
-                                <button onClick={() => !f.concluido && concluirFollowup(f.id)} className={`mt-0.5 w-5 h-5 rounded-full border-2 flex-shrink-0 flex items-center justify-center transition-colors ${f.concluido ? "bg-emerald-500 border-emerald-500" : "border-slate-300 hover:border-emerald-400"}`}>
+                              <div key={f.id} className={`flex items-start gap-3 p-3 rounded-xl border transition-colors ${f.concluido ? "border-border bg-muted opacity-60" : "border-border bg-white hover:border-primary/20"}`}>
+                                <button onClick={() => !f.concluido && concluirFollowup(f.id)} className={`mt-0.5 w-5 h-5 rounded-full border-2 flex-shrink-0 flex items-center justify-center transition-colors ${f.concluido ? "bg-success/100 border-success/70" : "border-input hover:border-success/50"}`}>
                                   {f.concluido && <CheckCircle className="w-3 h-3 text-white" />}
                                 </button>
                                 <div className="flex-1 min-w-0">
-                                  <p className={`text-sm font-medium ${f.concluido ? "line-through text-slate-400" : "text-slate-800"}`}>{f.titulo}</p>
-                                  {f.descricao && <p className="text-xs text-slate-500 mt-0.5">{f.descricao}</p>}
+                                  <p className={`text-sm font-medium ${f.concluido ? "line-through text-muted-foreground" : "text-foreground"}`}>{f.titulo}</p>
+                                  {f.descricao && <p className="text-xs text-muted-foreground mt-0.5">{f.descricao}</p>}
                                   <div className="flex items-center gap-2 mt-1.5">
-                                    <span className="text-[11px] px-2 py-0.5 rounded-full bg-slate-100 text-slate-500 font-medium">{f.tipo}</span>
+                                    <span className="text-[11px] px-2 py-0.5 rounded-full bg-muted text-muted-foreground font-medium">{f.tipo}</span>
                                     {f.data_agendada && (
-                                      <span className={`text-[11px] px-2 py-0.5 rounded-full font-medium ${!f.concluido && new Date(f.data_agendada) < new Date() ? "bg-red-100 text-red-600" : "bg-slate-100 text-slate-500"}`}>
+                                      <span className={`text-[11px] px-2 py-0.5 rounded-full font-medium ${!f.concluido && new Date(f.data_agendada) < new Date() ? "bg-destructive/20 text-destructive" : "bg-muted text-muted-foreground"}`}>
                                         {new Date(f.data_agendada).toLocaleString("pt-BR", { day:"2-digit", month:"2-digit", hour:"2-digit", minute:"2-digit" })}
                                       </span>
                                     )}
@@ -2593,28 +2593,28 @@ export default function Empresas() {
                             onChange={e => setNovaObs(e.target.value)}
                             onKeyDown={e => { if (e.key === "Enter" && e.ctrlKey) adicionarHistorico(novaObs); }}
                           />
-                          <button onClick={() => adicionarHistorico(novaObs)} disabled={!novaObs.trim()} className="shrink-0 px-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-40 transition-colors">
+                          <button onClick={() => adicionarHistorico(novaObs)} disabled={!novaObs.trim()} className="shrink-0 px-3 bg-primary text-white rounded-lg hover:bg-primary/90 disabled:opacity-40 transition-colors">
                             <Send className="w-4 h-4" />
                           </button>
                         </div>
                         {historico.length === 0 ? (
-                          <div className="flex flex-col items-center justify-center py-14 gap-3 rounded-xl border-2 border-dashed border-slate-200">
-                            <History className="w-10 h-10 text-slate-200" />
-                            <p className="text-sm text-slate-500">Nenhum registro ainda</p>
+                          <div className="flex flex-col items-center justify-center py-14 gap-3 rounded-xl border-2 border-dashed border-border">
+                            <History className="w-10 h-10 text-muted-foreground" />
+                            <p className="text-sm text-muted-foreground">Nenhum registro ainda</p>
                           </div>
                         ) : (
                           <div className="space-y-3">
                             {historico.map(h => (
                               <div key={h.id} className="flex gap-3">
-                                <div className="w-7 h-7 rounded-full bg-blue-100 flex items-center justify-center mt-0.5 shrink-0">
-                                  <MessageSquare className="w-3.5 h-3.5 text-blue-600" />
+                                <div className="w-7 h-7 rounded-full bg-primary/20 flex items-center justify-center mt-0.5 shrink-0">
+                                  <MessageSquare className="w-3.5 h-3.5 text-primary" />
                                 </div>
-                                <div className="flex-1 bg-slate-50 rounded-xl px-3 py-2.5 border border-slate-100">
+                                <div className="flex-1 bg-muted rounded-xl px-3 py-2.5 border border-border">
                                   <div className="flex items-center justify-between mb-1">
-                                    <span className="text-xs font-semibold text-slate-600">{h.autor || "Sistema"}</span>
-                                    <span className="text-[11px] text-slate-400">{new Date(h.created_at).toLocaleString("pt-BR", { day:"2-digit", month:"2-digit", hour:"2-digit", minute:"2-digit" })}</span>
+                                    <span className="text-xs font-semibold text-muted-foreground">{h.autor || "Sistema"}</span>
+                                    <span className="text-[11px] text-muted-foreground">{new Date(h.created_at).toLocaleString("pt-BR", { day:"2-digit", month:"2-digit", hour:"2-digit", minute:"2-digit" })}</span>
                                   </div>
-                                  <p className="text-sm text-slate-700 whitespace-pre-wrap">{h.descricao}</p>
+                                  <p className="text-sm text-muted-foreground whitespace-pre-wrap">{h.descricao}</p>
                                 </div>
                               </div>
                             ))}
@@ -2646,7 +2646,7 @@ export default function Empresas() {
                     // entre o clique e o redirecionamento, para nunca aparecer em branco.
                     : (abaPermitida(abaAtiva) ? abaAtiva : primeiraAbaPermitida()) === "documentos" ? (
                       <div className="p-3 fade-in">
-                        <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm flex items-center justify-center gap-3 text-slate-500">
+                        <div className="rounded-2xl border border-border bg-white p-6 shadow-sm flex items-center justify-center gap-3 text-muted-foreground">
                           <Loader2 className="h-4 w-4 animate-spin" />
                           <p className="text-sm font-semibold">Abrindo acervo documental...</p>
                         </div>
@@ -2654,55 +2654,55 @@ export default function Empresas() {
                     ) : (abaPermitida(abaAtiva) ? abaAtiva : primeiraAbaPermitida()) === "simulacoes" ? (
                       <div className="p-4 space-y-3">
                         <div className="flex items-center justify-between mb-2">
-                          <h3 className="text-sm font-semibold text-slate-700">Simulações vinculadas</h3>
-                          <span className="text-xs text-slate-400">{simulacoesEmpresa.length} registro(s)</span>
+                          <h3 className="text-sm font-semibold text-muted-foreground">Simulações vinculadas</h3>
+                          <span className="text-xs text-muted-foreground">{simulacoesEmpresa.length} registro(s)</span>
                         </div>
                         {simulacoesEmpresa.length === 0 ? (
-                          <div className="flex flex-col items-center justify-center py-14 gap-3 rounded-xl border-2 border-dashed border-slate-200">
+                          <div className="flex flex-col items-center justify-center py-14 gap-3 rounded-xl border-2 border-dashed border-border">
                             <span className="text-4xl">🧮</span>
-                            <p className="text-sm text-slate-500">Nenhuma simulação vinculada a esta empresa</p>
+                            <p className="text-sm text-muted-foreground">Nenhuma simulação vinculada a esta empresa</p>
                           </div>
                         ) : (
                           <div className="space-y-2">
                             {simulacoesEmpresa.map((sim: any) => (
-                              <div key={sim.id} className="flex items-start gap-3 p-3 rounded-xl border border-slate-200 bg-white hover:bg-slate-50 transition-colors">
-                                <div className="w-8 h-8 rounded-lg bg-yellow-50 flex items-center justify-center shrink-0">
+                              <div key={sim.id} className="flex items-start gap-3 p-3 rounded-xl border border-border bg-white hover:bg-muted transition-colors">
+                                <div className="w-8 h-8 rounded-lg bg-warning/10 flex items-center justify-center shrink-0">
                                   <span className="text-base">🧮</span>
                                 </div>
                                 <div className="flex-1 min-w-0">
                                   <div className="flex items-center gap-2 flex-wrap">
-                                    <p className="text-sm font-medium text-slate-800">{sim.produto || "Simulação"}</p>
+                                    <p className="text-sm font-medium text-foreground">{sim.produto || "Simulação"}</p>
                                     {sim.status && (
                                       <span className={`text-[10px] px-1.5 py-0.5 rounded-full font-semibold ${
-                                        sim.status === "aprovado" ? "bg-green-100 text-green-700" :
-                                        sim.status === "reprovado" ? "bg-red-100 text-red-700" :
-                                        "bg-slate-100 text-slate-600"
+                                        sim.status === "aprovado" ? "bg-success/20 text-success" :
+                                        sim.status === "reprovado" ? "bg-destructive/20 text-destructive" :
+                                        "bg-muted text-muted-foreground"
                                       }`}>{sim.status}</span>
                                     )}
                                   </div>
                                   <div className="flex flex-wrap gap-x-3 gap-y-0.5 mt-1">
                                     {sim.valor_solicitado && (
-                                      <span className="text-xs text-slate-500">
+                                      <span className="text-xs text-muted-foreground">
                                         💰 {Number(sim.valor_solicitado).toLocaleString("pt-BR", { style: "currency", currency: "BRL" })}
                                       </span>
                                     )}
                                     {sim.prazo_meses && (
-                                      <span className="text-xs text-slate-500">📅 {sim.prazo_meses}x</span>
+                                      <span className="text-xs text-muted-foreground">📅 {sim.prazo_meses}x</span>
                                     )}
                                     {sim.taxa_juros && (
-                                      <span className="text-xs text-slate-500">📈 {sim.taxa_juros}% a.m.</span>
+                                      <span className="text-xs text-muted-foreground">📈 {sim.taxa_juros}% a.m.</span>
                                     )}
                                     {sim.valor_parcela && (
-                                      <span className="text-xs text-slate-500">
+                                      <span className="text-xs text-muted-foreground">
                                         💳 {Number(sim.valor_parcela).toLocaleString("pt-BR", { style: "currency", currency: "BRL" })}/mês
                                       </span>
                                     )}
                                   </div>
                                   <div className="flex items-center gap-2 mt-1">
                                     {sim.colaborador_nome && (
-                                      <span className="text-xs text-slate-400">👤 {sim.colaborador_nome}</span>
+                                      <span className="text-xs text-muted-foreground">👤 {sim.colaborador_nome}</span>
                                     )}
-                                    <span className="text-xs text-slate-400">
+                                    <span className="text-xs text-muted-foreground">
                                       {sim.criado_em ? new Date(sim.criado_em).toLocaleDateString("pt-BR") : "—"}
                                     </span>
                                   </div>
@@ -2716,15 +2716,15 @@ export default function Empresas() {
                       <div className="p-4 space-y-3">
                         <div className="flex items-center justify-between mb-2">
                           <div>
-                            <h3 className="text-sm font-semibold text-slate-700">Contratos Firmados</h3>
-                            <p className="text-xs text-slate-400 mt-0.5">Contrato de prestação de serviços entre a Destrava e o cliente. Ao gerar, fica "aguardando assinatura"; a prestação de serviço só começa depois que o contrato assinado é anexado aqui.</p>
+                            <h3 className="text-sm font-semibold text-muted-foreground">Contratos Firmados</h3>
+                            <p className="text-xs text-muted-foreground mt-0.5">Contrato de prestação de serviços entre a Destrava e o cliente. Ao gerar, fica "aguardando assinatura"; a prestação de serviço só começa depois que o contrato assinado é anexado aqui.</p>
                           </div>
-                          <span className="text-xs text-slate-400">{contratosEmpresa.length} registro(s)</span>
+                          <span className="text-xs text-muted-foreground">{contratosEmpresa.length} registro(s)</span>
                         </div>
                         {contratosEmpresa.length === 0 ? (
-                          <div className="flex flex-col items-center justify-center py-14 gap-3 rounded-xl border-2 border-dashed border-slate-200">
+                          <div className="flex flex-col items-center justify-center py-14 gap-3 rounded-xl border-2 border-dashed border-border">
                             <span className="text-4xl">📄</span>
-                            <p className="text-sm text-slate-500">Nenhum contrato firmado para esta empresa</p>
+                            <p className="text-sm text-muted-foreground">Nenhum contrato firmado para esta empresa</p>
                           </div>
                         ) : (
                           <div className="space-y-2">
@@ -2732,42 +2732,42 @@ export default function Empresas() {
                               const assinado = cont.status === "assinado" || cont.status === "ativo";
                               const cancelado = cont.status === "cancelado";
                               const statusLabel = assinado ? "Assinado" : cancelado ? "Cancelado" : "Aguardando assinatura";
-                              const statusCls = assinado ? "bg-green-100 text-green-700" : cancelado ? "bg-red-100 text-red-700" : "bg-amber-100 text-amber-700";
+                              const statusCls = assinado ? "bg-success/20 text-success" : cancelado ? "bg-destructive/20 text-destructive" : "bg-warning/20 text-warning";
                               return (
-                              <div key={cont.id} className={`flex items-start gap-3 p-3 rounded-xl border bg-white hover:bg-slate-50 transition-colors ${assinado ? "border-slate-200" : cancelado ? "border-red-100" : "border-amber-200"}`}>
-                                <div className={`w-8 h-8 rounded-lg flex items-center justify-center shrink-0 ${assinado ? "bg-green-50" : cancelado ? "bg-red-50" : "bg-amber-50"}`}>
+                              <div key={cont.id} className={`flex items-start gap-3 p-3 rounded-xl border bg-white hover:bg-muted transition-colors ${assinado ? "border-border" : cancelado ? "border-destructive/20" : "border-warning/20"}`}>
+                                <div className={`w-8 h-8 rounded-lg flex items-center justify-center shrink-0 ${assinado ? "bg-success/10" : cancelado ? "bg-destructive/10" : "bg-warning/10"}`}>
                                   <span className="text-base">{assinado ? "✅" : cancelado ? "🚫" : "⏳"}</span>
                                 </div>
                                 <div className="flex-1 min-w-0">
                                   <div className="flex items-center gap-2 flex-wrap">
-                                    <p className="text-sm font-medium text-slate-800">
+                                    <p className="text-sm font-medium text-foreground">
                                       {cont.numero_contrato || cont.protocolo_contrato || `Contrato #${cont.id?.slice(0,8)}`}
                                     </p>
                                     <span className={`text-[10px] px-1.5 py-0.5 rounded-full font-semibold ${statusCls}`}>{statusLabel}</span>
                                   </div>
                                   {!assinado && !cancelado && (
-                                    <p className="text-[11px] text-amber-700 mt-1">Contrato gerado, aguardando o cliente assinar. A prestação de serviço (CENPROT semanal, CND mensal) só começa depois que o contrato assinado for anexado abaixo.</p>
+                                    <p className="text-[11px] text-warning mt-1">Contrato gerado, aguardando o cliente assinar. A prestação de serviço (CENPROT semanal, CND mensal) só começa depois que o contrato assinado for anexado abaixo.</p>
                                   )}
                                   <div className="flex flex-wrap gap-x-3 gap-y-0.5 mt-1">
                                     {cont.tipo_contrato && (
-                                      <span className="text-xs text-slate-500">📋 {cont.tipo_contrato}</span>
+                                      <span className="text-xs text-muted-foreground">📋 {cont.tipo_contrato}</span>
                                     )}
                                     {cont.valor_contrato && (
-                                      <span className="text-xs text-slate-500">
+                                      <span className="text-xs text-muted-foreground">
                                         💰 {Number(cont.valor_contrato).toLocaleString("pt-BR", { style: "currency", currency: "BRL" })}
                                       </span>
                                     )}
                                     {cont.assinado_em && (
-                                      <span className="text-xs text-emerald-600 font-medium">
+                                      <span className="text-xs text-success font-medium">
                                         ✍️ Assinado em {new Date(cont.assinado_em).toLocaleDateString("pt-BR")}
                                       </span>
                                     )}
                                   </div>
                                   <div className="flex items-center gap-2 mt-1">
                                     {cont.responsavel_nome && (
-                                      <span className="text-xs text-slate-400">👤 {cont.responsavel_nome}</span>
+                                      <span className="text-xs text-muted-foreground">👤 {cont.responsavel_nome}</span>
                                     )}
-                                    <span className="text-xs text-slate-400">
+                                    <span className="text-xs text-muted-foreground">
                                       Gerado em {cont.created_at ? new Date(cont.created_at).toLocaleDateString("pt-BR") : "—"}
                                     </span>
                                   </div>
@@ -2776,14 +2776,14 @@ export default function Empresas() {
                                   <div className="flex items-center gap-1 shrink-0">
                                     <button
                                       onClick={() => handleVerContrato(cont.id)}
-                                      className="p-1.5 text-slate-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"
+                                      className="p-1.5 text-muted-foreground hover:text-primary hover:bg-primary/10 rounded-lg transition-colors"
                                       title="Visualizar PDF"
                                     >
                                       <ExternalLink className="w-3.5 h-3.5" />
                                     </button>
                                     <button
                                       onClick={() => handleBaixarContrato(cont.id, cont.numero_contrato || cont.protocolo_contrato)}
-                                      className="p-1.5 text-slate-400 hover:text-emerald-600 hover:bg-emerald-50 rounded-lg transition-colors"
+                                      className="p-1.5 text-muted-foreground hover:text-success hover:bg-success/10 rounded-lg transition-colors"
                                       title="Baixar PDF"
                                     >
                                       <Download className="w-3.5 h-3.5" />
@@ -2791,8 +2791,8 @@ export default function Empresas() {
                                     <label
                                       className={
                                         assinado
-                                          ? "inline-flex items-center gap-1.5 h-8 px-2.5 rounded-lg text-xs font-semibold cursor-pointer transition-colors text-slate-500 border border-slate-200 hover:bg-slate-50"
-                                          : "inline-flex items-center gap-1.5 h-9 px-3 rounded-lg text-xs font-bold cursor-pointer transition-colors text-white bg-amber-600 hover:bg-amber-700 shadow-sm"
+                                          ? "inline-flex items-center gap-1.5 h-8 px-2.5 rounded-lg text-xs font-semibold cursor-pointer transition-colors text-muted-foreground border border-border hover:bg-muted"
+                                          : "inline-flex items-center gap-1.5 h-9 px-3 rounded-lg text-xs font-bold cursor-pointer transition-colors text-white bg-warning hover:bg-warning/90 shadow-sm"
                                       }
                                       title={assinado ? "Substituir contrato assinado" : "Anexar contrato assinado -- ativa CENPROT semanal e CND mensal"}
                                     >
@@ -2831,14 +2831,14 @@ export default function Empresas() {
           MODAL DE CADASTRO / EDIÇÃO
       ════════════════════════════════════════════════════════════════════ */}
       {socioEditando && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/40 backdrop-blur-sm">
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-overlay backdrop-blur-sm">
           <div className="bg-white rounded-2xl shadow-2xl w-full max-w-4xl max-h-[92vh] overflow-hidden flex flex-col animate-in zoom-in-95 duration-150">
-            <div className="flex items-center justify-between px-5 py-4 border-b border-slate-200 bg-white">
+            <div className="flex items-center justify-between px-5 py-4 border-b border-border bg-white">
               <div>
-                <h2 className="text-lg font-bold text-slate-900">Sócio / Representante</h2>
-                <p className="text-xs text-slate-500">Complete os dados exigidos para contratos, análises e assinatura.</p>
+                <h2 className="text-lg font-bold text-foreground">Sócio / Representante</h2>
+                <p className="text-xs text-muted-foreground">Complete os dados exigidos para contratos, análises e assinatura.</p>
               </div>
-              <button onClick={() => setSocioEditando(null)} className="p-2 hover:bg-slate-100 rounded-lg text-slate-400"><X className="w-5 h-5" /></button>
+              <button onClick={() => setSocioEditando(null)} className="p-2 hover:bg-muted rounded-lg text-muted-foreground"><X className="w-5 h-5" /></button>
             </div>
             <div className="p-5 overflow-y-auto space-y-5">
               <SectionCard title="Dados societários importados" icon={<Users className="w-4 h-4" />}>
@@ -2848,7 +2848,7 @@ export default function Empresas() {
                   <MField label="Qualificação"><input value={socioForm.qualificacao_socio || ''} onChange={e => setSocioCampo('qualificacao_socio', e.target.value)} className={inputCls} placeholder="Sócio-administrador..." /></MField>
                   <MField label="Entrada na sociedade"><input type="date" value={socioForm.data_entrada_sociedade ? String(socioForm.data_entrada_sociedade).slice(0,10) : ''} onChange={e => setSocioCampo('data_entrada_sociedade', e.target.value)} className={inputCls} /></MField>
                   <MField label="Participação (%)"><input type="number" value={socioForm.percentual_capital || ''} onChange={e => setSocioCampo('percentual_capital', e.target.value)} className={inputCls} /></MField>
-                  <label className="flex items-center gap-2 text-sm text-slate-700 pt-6"><input type="checkbox" checked={!!socioForm.representante_legal} onChange={e => setSocioCampo('representante_legal', e.target.checked)} /> Representante legal/assinante</label>
+                  <label className="flex items-center gap-2 text-sm text-muted-foreground pt-6"><input type="checkbox" checked={!!socioForm.representante_legal} onChange={e => setSocioCampo('representante_legal', e.target.checked)} /> Representante legal/assinante</label>
                 </div>
               </SectionCard>
 
@@ -2865,7 +2865,7 @@ export default function Empresas() {
                   <MField label="E-mail" required><input value={socioForm.email || ''} onChange={e => setSocioCampo('email', e.target.value)} className={inputCls} /></MField>
                   <MField label="Telefone"><input value={socioForm.telefone || ''} onChange={e => setSocioCampo('telefone', e.target.value)} className={inputCls} /></MField>
                   <MField label="WhatsApp" required><input value={socioForm.whatsapp || ''} onChange={e => setSocioCampo('whatsapp', e.target.value)} className={inputCls} /></MField>
-                  <label className="flex items-center gap-2 text-sm text-slate-700 pt-6"><input type="checkbox" checked={!!socioForm.pep} onChange={e => setSocioCampo('pep', e.target.checked)} /> PEP</label>
+                  <label className="flex items-center gap-2 text-sm text-muted-foreground pt-6"><input type="checkbox" checked={!!socioForm.pep} onChange={e => setSocioCampo('pep', e.target.checked)} /> PEP</label>
                 </div>
               </SectionCard>
 
@@ -2894,9 +2894,9 @@ export default function Empresas() {
                 </SectionCard>
               )}
             </div>
-            <div className="flex items-center justify-end gap-2 px-5 py-4 border-t border-slate-200 bg-slate-50 shrink-0">
-              <button type="button" onClick={() => setSocioEditando(null)} className="h-9 px-4 border border-slate-200 rounded-xl text-sm text-slate-600 hover:bg-slate-100 font-medium">Cancelar</button>
-              <button type="button" onClick={salvarSocio} disabled={salvandoSocio} className="flex items-center gap-2 h-9 px-5 bg-blue-600 hover:bg-blue-700 text-white rounded-xl font-semibold text-sm disabled:opacity-50">
+            <div className="flex items-center justify-end gap-2 px-5 py-4 border-t border-border bg-muted shrink-0">
+              <button type="button" onClick={() => setSocioEditando(null)} className="h-9 px-4 border border-border rounded-xl text-sm text-muted-foreground hover:bg-muted font-medium">Cancelar</button>
+              <button type="button" onClick={salvarSocio} disabled={salvandoSocio} className="flex items-center gap-2 h-9 px-5 bg-primary hover:bg-primary/90 text-white rounded-xl font-semibold text-sm disabled:opacity-50">
                 {salvandoSocio ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
                 Salvar sócio/representante
               </button>
@@ -2910,21 +2910,21 @@ export default function Empresas() {
           <div className="bg-white w-full sm:max-w-2xl sm:rounded-2xl rounded-t-2xl shadow-2xl max-h-[95vh] flex flex-col">
 
             {/* Header do modal */}
-            <div className="flex items-center justify-between px-5 py-4 border-b border-slate-200 shrink-0">
+            <div className="flex items-center justify-between px-5 py-4 border-b border-border shrink-0">
               <div className="flex items-center gap-3">
                 {!editando && etapaModal === "form" && (
-                  <button onClick={() => { setEtapaModal("cnpj"); cnpjReset(); }} className="p-1.5 rounded-lg hover:bg-slate-100 text-slate-500">
+                  <button onClick={() => { setEtapaModal("cnpj"); cnpjReset(); }} className="p-1.5 rounded-lg hover:bg-muted text-muted-foreground">
                     <ArrowLeft className="w-4 h-4" />
                   </button>
                 )}
-                <div className="w-8 h-8 rounded-lg bg-blue-600 flex items-center justify-center">
+                <div className="w-8 h-8 rounded-lg bg-primary flex items-center justify-center">
                   <Building2 className="w-4 h-4 text-white" />
                 </div>
-                <h2 className="text-base font-bold text-slate-900">
+                <h2 className="text-base font-bold text-foreground">
                   {editando ? "Editar Empresa" : etapaModal === "cnpj" ? "Nova Empresa" : "Dados da Empresa"}
                 </h2>
               </div>
-              <button onClick={fecharModal} className="p-1.5 rounded-lg hover:bg-slate-100 text-slate-400">
+              <button onClick={fecharModal} className="p-1.5 rounded-lg hover:bg-muted text-muted-foreground">
                 <X className="w-5 h-5" />
               </button>
             </div>
@@ -2933,19 +2933,19 @@ export default function Empresas() {
             {!editando && etapaModal === "cnpj" && (
               <div className="flex flex-col items-center gap-6 p-8">
                 <div className="text-center">
-                  <div className="w-16 h-16 rounded-2xl bg-gradient-to-br from-blue-600 to-blue-800 flex items-center justify-center text-3xl mx-auto mb-4 shadow-lg shadow-blue-200">🏛️</div>
-                  <h3 className="text-base font-bold text-slate-900">Informe o CNPJ</h3>
-                  <p className="text-sm text-slate-500 mt-1">Dados preenchidos automaticamente via Receita Federal</p>
+                  <div className="w-16 h-16 rounded-2xl bg-gradient-to-br from-primary to-primary flex items-center justify-center text-3xl mx-auto mb-4 shadow-lg shadow-blue-200">🏛️</div>
+                  <h3 className="text-base font-bold text-foreground">Informe o CNPJ</h3>
+                  <p className="text-sm text-muted-foreground mt-1">Dados preenchidos automaticamente via Receita Federal</p>
                 </div>
                 <div className="w-full max-w-xs">
-                  <div className={`flex items-center gap-3 border-2 rounded-xl px-4 py-3 bg-slate-50 transition-all ${
-                    cnpjStatus === "loading" ? "border-blue-400" :
-                    cnpjStatus === "found" ? "border-emerald-400 bg-emerald-50" :
-                    cnpjStatus === "error" ? "border-red-300 bg-red-50" :
-                    "border-slate-200 focus-within:border-blue-500 focus-within:ring-2 focus-within:ring-blue-100"
+                  <div className={`flex items-center gap-3 border-2 rounded-xl px-4 py-3 bg-muted transition-all ${
+                    cnpjStatus === "loading" ? "border-primary/50" :
+                    cnpjStatus === "found" ? "border-success/50 bg-success/10" :
+                    cnpjStatus === "error" ? "border-destructive/30 bg-destructive/10" :
+                    "border-border focus-within:border-primary/70 focus-within:ring-2 focus-within:ring-primary/20"
                   }`}>
                     <span className="text-lg shrink-0">
-                      {cnpjStatus === "loading" ? <Loader2 className="w-5 h-5 animate-spin text-blue-600" /> :
+                      {cnpjStatus === "loading" ? <Loader2 className="w-5 h-5 animate-spin text-primary" /> :
                        cnpjStatus === "found" ? "✅" :
                        cnpjStatus === "error" ? "❌" : "🔍"}
                     </span>
@@ -2967,28 +2967,28 @@ export default function Empresas() {
                       placeholder="00.000.000/0000-00"
                       maxLength={18}
                       inputMode="numeric"
-                      className="flex-1 bg-transparent font-mono text-xl font-bold tracking-widest text-slate-900 focus:outline-none placeholder:text-slate-300 placeholder:text-base placeholder:tracking-wide"
+                      className="flex-1 bg-transparent font-mono text-xl font-bold tracking-widest text-foreground focus:outline-none placeholder:text-muted-foreground placeholder:text-base placeholder:tracking-wide"
                     />
                   </div>
-                  {cnpjStatus === "loading" && <p className="text-xs text-slate-400 mt-2 text-center">🔎 Buscando dados para atualizar o cadastro...</p>}
-                  {cnpjError && <p className="text-xs text-red-500 font-medium mt-2 text-center">{cnpjError}</p>}
+                  {cnpjStatus === "loading" && <p className="text-xs text-muted-foreground mt-2 text-center">🔎 Buscando dados para atualizar o cadastro...</p>}
+                  {cnpjError && <p className="text-xs text-destructive font-medium mt-2 text-center">{cnpjError}</p>}
                   {podeCadastrarManualmente && (
-                    <div className="mt-3 rounded-xl border border-amber-200 bg-amber-50 p-3 text-center">
-                      <p className="text-xs text-amber-800">
+                    <div className="mt-3 rounded-xl border border-warning/20 bg-warning/10 p-3 text-center">
+                      <p className="text-xs text-warning">
                         Não foi possível localizar os dados deste CNPJ agora. Você pode continuar e informar os dados manualmente.
                       </p>
                       <button
                         type="button"
                         onClick={continuarCadastroManual}
-                        className="mt-2 inline-flex items-center justify-center rounded-lg bg-amber-600 px-3 py-2 text-xs font-semibold text-white transition-colors hover:bg-amber-700"
+                        className="mt-2 inline-flex items-center justify-center rounded-lg bg-warning px-3 py-2 text-xs font-semibold text-white transition-colors hover:bg-warning/90"
                       >
                         Continuar cadastro manualmente
                       </button>
                     </div>
                   )}
-                  {cnpjStatus === "found" && <p className="text-xs text-emerald-600 font-medium mt-2 text-center">✓ Dados carregados para preenchimento. Ao salvar, o cadastro será atualizado no banco.</p>}
+                  {cnpjStatus === "found" && <p className="text-xs text-success font-medium mt-2 text-center">✓ Dados carregados para preenchimento. Ao salvar, o cadastro será atualizado no banco.</p>}
                 </div>
-                <p className="text-xs text-amber-600 text-center max-w-xs">
+                <p className="text-xs text-warning text-center max-w-xs">
                   CNPJ inválido continua bloqueado. Se a consulta falhar para um CNPJ válido, o cadastro manual ficará disponível.
                 </p>
               </div>
@@ -3004,7 +3004,7 @@ export default function Empresas() {
                     <div className="py-3 grid grid-cols-1 sm:grid-cols-2 gap-3">
                       <div className="sm:col-span-2">
                         <MField label="Razão Social" required error={erros.razao_social}>
-                          <input value={form.razao_social} onChange={e => set("razao_social", e.target.value)} placeholder="Razão Social Ltda." className={`${inputCls} ${erros.razao_social ? "border-red-300" : ""}`} />
+                          <input value={form.razao_social} onChange={e => set("razao_social", e.target.value)} placeholder="Razão Social Ltda." className={`${inputCls} ${erros.razao_social ? "border-destructive/30" : ""}`} />
                         </MField>
                       </div>
                       <MField label="Nome Fantasia">
@@ -3112,15 +3112,15 @@ export default function Empresas() {
                     {/* Sócios da Receita */}
                     {socios.length > 0 && (
                       <div className="pb-3 space-y-2">
-                        <p className="text-xs font-semibold text-slate-500 flex items-center gap-1.5"><Users className="w-3.5 h-3.5" /> Sócios identificados pela Receita Federal</p>
+                        <p className="text-xs font-semibold text-muted-foreground flex items-center gap-1.5"><Users className="w-3.5 h-3.5" /> Sócios identificados pela Receita Federal</p>
                         {socios.map((s, i) => (
-                          <button key={i} type="button" onClick={() => { set("responsavel_nome", s.nome_socio || ""); set("responsavel_cpf", s.cnpj_cpf_do_socio || ""); set("responsavel_cargo", s.descricao_qualificacao_socio || ""); }} className="w-full flex items-center gap-3 p-3 rounded-xl border border-slate-200 bg-slate-50 hover:border-blue-300 hover:bg-blue-50 transition-all text-left group">
-                            <div className="w-8 h-8 rounded-lg bg-blue-600 text-white flex items-center justify-center font-bold text-sm shrink-0 group-hover:bg-blue-700">{s.nome_socio?.charAt(0) ?? "?"}</div>
+                          <button key={i} type="button" onClick={() => { set("responsavel_nome", s.nome_socio || ""); set("responsavel_cpf", s.cnpj_cpf_do_socio || ""); set("responsavel_cargo", s.descricao_qualificacao_socio || ""); }} className="w-full flex items-center gap-3 p-3 rounded-xl border border-border bg-muted hover:border-primary/30 hover:bg-primary/10 transition-all text-left group">
+                            <div className="w-8 h-8 rounded-lg bg-primary text-white flex items-center justify-center font-bold text-sm shrink-0 group-hover:bg-primary/90">{s.nome_socio?.charAt(0) ?? "?"}</div>
                             <div className="flex-1 min-w-0">
-                              <p className="text-sm font-semibold text-slate-800 truncate">{s.nome_socio}</p>
-                              <p className="text-xs text-slate-500">{s.descricao_qualificacao_socio || s.qualificacao_socio}</p>
+                              <p className="text-sm font-semibold text-foreground truncate">{s.nome_socio}</p>
+                              <p className="text-xs text-muted-foreground">{s.descricao_qualificacao_socio || s.qualificacao_socio}</p>
                             </div>
-                            <span className="text-[11px] text-blue-600 font-medium opacity-0 group-hover:opacity-100">Usar</span>
+                            <span className="text-[11px] text-primary font-medium opacity-0 group-hover:opacity-100">Usar</span>
                           </button>
                         ))}
                       </div>
@@ -3145,17 +3145,17 @@ export default function Empresas() {
                   <SectionCard title="Tags e Observações" icon={<Tag className="w-4 h-4" />} defaultOpen={false}>
                     <div className="py-3 space-y-3">
                       <div>
-                        <label className="text-xs font-semibold text-slate-600 block mb-1.5">Tags</label>
+                        <label className="text-xs font-semibold text-muted-foreground block mb-1.5">Tags</label>
                         <div className="flex gap-2">
                           <input value={tagInput} onChange={e => setTagInput(e.target.value)} onKeyDown={e => { if (e.key === "Enter") { e.preventDefault(); const t = tagInput.trim(); if (t && !(form.tags||[]).includes(t)) { set("tags", [...(form.tags||[]), t]); setTagInput(""); } } }} placeholder="Adicionar tag..." className={inputCls + " flex-1"} />
-                          <button type="button" onClick={() => { const t = tagInput.trim(); if (t && !(form.tags||[]).includes(t)) { set("tags", [...(form.tags||[]), t]); setTagInput(""); } }} className="h-9 px-3 border border-slate-200 rounded-lg text-slate-500 hover:bg-slate-50"><Plus className="w-4 h-4" /></button>
+                          <button type="button" onClick={() => { const t = tagInput.trim(); if (t && !(form.tags||[]).includes(t)) { set("tags", [...(form.tags||[]), t]); setTagInput(""); } }} className="h-9 px-3 border border-border rounded-lg text-muted-foreground hover:bg-muted"><Plus className="w-4 h-4" /></button>
                         </div>
                         {(form.tags||[]).length > 0 && (
                           <div className="flex flex-wrap gap-1.5 mt-2">
                             {(form.tags||[]).map(tag => (
-                              <span key={tag} className="flex items-center gap-1 text-xs bg-blue-50 text-blue-700 px-2.5 py-1 rounded-full border border-blue-200">
+                              <span key={tag} className="flex items-center gap-1 text-xs bg-primary/10 text-primary px-2.5 py-1 rounded-full border border-primary/20">
                                 {tag}
-                                <button type="button" onClick={() => set("tags", (form.tags||[]).filter(t => t !== tag))} className="hover:text-red-500"><X className="w-3 h-3" /></button>
+                                <button type="button" onClick={() => set("tags", (form.tags||[]).filter(t => t !== tag))} className="hover:text-destructive"><X className="w-3 h-3" /></button>
                               </span>
                             ))}
                           </div>
@@ -3165,7 +3165,7 @@ export default function Empresas() {
                         <textarea value={form.observacoes || ""} onChange={e => set("observacoes", e.target.value)} placeholder="Informações adicionais..." rows={3} className={inputCls + " h-auto py-2 resize-none"} />
                       </MField>
                       {/* Equipe */}
-                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-2 border-t border-slate-100">
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-2 border-t border-border">
                         <MField label="Resp. pela Captação">
                           <select value={form.captador_id || ""} onChange={e => set("captador_id", e.target.value || undefined)} className={selectCls}>
                             <option value="">Nenhum</option>
@@ -3184,11 +3184,11 @@ export default function Empresas() {
                 </div>
 
                 {/* Footer do modal */}
-                <div className="flex items-center justify-end gap-2 px-5 py-4 border-t border-slate-200 bg-slate-50 shrink-0">
-                  <button type="button" onClick={fecharModal} className="h-9 px-4 border border-slate-200 rounded-xl text-sm text-slate-600 hover:bg-slate-100 font-medium transition-colors">
+                <div className="flex items-center justify-end gap-2 px-5 py-4 border-t border-border bg-muted shrink-0">
+                  <button type="button" onClick={fecharModal} className="h-9 px-4 border border-border rounded-xl text-sm text-muted-foreground hover:bg-muted font-medium transition-colors">
                     Cancelar
                   </button>
-                  <button type="button" onClick={handleSalvar} disabled={salvando} className="flex items-center gap-2 h-9 px-5 bg-blue-600 hover:bg-blue-700 text-white rounded-xl font-semibold text-sm disabled:opacity-50 transition-colors shadow-sm">
+                  <button type="button" onClick={handleSalvar} disabled={salvando} className="flex items-center gap-2 h-9 px-5 bg-primary hover:bg-primary/90 text-white rounded-xl font-semibold text-sm disabled:opacity-50 transition-colors shadow-sm">
                     {salvando ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
                     {editando ? "Salvar Alterações" : "Cadastrar Empresa"}
                   </button>
@@ -3206,49 +3206,49 @@ export default function Empresas() {
           Só depois de marcar a confirmação de que as assinaturas de todas as
           partes foram conferidas é que o upload de verdade acontece. */}
       {modalAnexoAssinado && (
-        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-slate-900/70 p-4">
+        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-overlay p-4">
           <div className="w-full max-w-md rounded-2xl bg-white shadow-2xl overflow-hidden">
-            <div className="px-5 py-4 border-b border-slate-100 flex items-start gap-3">
-              <div className="h-10 w-10 rounded-xl bg-amber-50 text-amber-600 flex items-center justify-center shrink-0">
+            <div className="px-5 py-4 border-b border-border flex items-start gap-3">
+              <div className="h-10 w-10 rounded-xl bg-warning/10 text-warning flex items-center justify-center shrink-0">
                 <Upload className="w-5 h-5" />
               </div>
               <div className="min-w-0">
-                <p className="text-sm font-bold text-slate-800">Confirmar contrato assinado</p>
-                <p className="text-xs text-slate-500 mt-0.5">Confira se este é o contrato certo antes de enviar.</p>
+                <p className="text-sm font-bold text-foreground">Confirmar contrato assinado</p>
+                <p className="text-xs text-muted-foreground mt-0.5">Confira se este é o contrato certo antes de enviar.</p>
               </div>
             </div>
             <div className="px-5 py-4 space-y-3">
-              <div className="rounded-xl border border-slate-200 bg-slate-50 p-3">
-                <p className="text-xs text-slate-400 uppercase font-semibold tracking-wide">Contrato que será substituído</p>
-                <p className="text-sm font-bold text-slate-800 mt-1">
+              <div className="rounded-xl border border-border bg-muted p-3">
+                <p className="text-xs text-muted-foreground uppercase font-semibold tracking-wide">Contrato que será substituído</p>
+                <p className="text-sm font-bold text-foreground mt-1">
                   {modalAnexoAssinado.contrato.numero_contrato || modalAnexoAssinado.contrato.protocolo_contrato || `Contrato #${modalAnexoAssinado.contrato.id?.slice(0, 8)}`}
                 </p>
-                <p className="text-xs text-slate-600 mt-0.5">
+                <p className="text-xs text-muted-foreground mt-0.5">
                   📋 Tipo: <strong>{modalAnexoAssinado.contrato.tipo_contrato || "não especificado"}</strong>
                 </p>
-                <p className="text-xs text-slate-500 mt-1 truncate">📄 Arquivo: {modalAnexoAssinado.file.name}</p>
+                <p className="text-xs text-muted-foreground mt-1 truncate">📄 Arquivo: {modalAnexoAssinado.file.name}</p>
               </div>
               {contratosEmpresa.length > 1 && (
-                <p className="text-[11px] text-amber-700 bg-amber-50 border border-amber-100 rounded-lg px-2.5 py-1.5">
+                <p className="text-[11px] text-warning bg-warning/10 border border-warning/20 rounded-lg px-2.5 py-1.5">
                   Esta empresa tem {contratosEmpresa.length} contratos firmados. Confirme acima que o tipo é o mesmo do contrato que o cliente assinou antes de continuar.
                 </p>
               )}
-              <label className="flex items-start gap-2 text-xs text-slate-700 cursor-pointer">
+              <label className="flex items-start gap-2 text-xs text-muted-foreground cursor-pointer">
                 <input
                   type="checkbox"
                   checked={confirmouAssinaturas}
                   onChange={(e) => setConfirmouAssinaturas(e.target.checked)}
-                  className="mt-0.5 h-4 w-4 rounded border-slate-300"
+                  className="mt-0.5 h-4 w-4 rounded border-input"
                 />
                 <span>Confirmo que revisei o PDF anexado e as assinaturas de todas as partes (contratante e contratada) estão presentes, no local correto.</span>
               </label>
             </div>
-            <div className="px-5 py-4 border-t border-slate-100 flex justify-end gap-2 bg-slate-50">
+            <div className="px-5 py-4 border-t border-border flex justify-end gap-2 bg-muted">
               <button
                 type="button"
                 onClick={() => { setModalAnexoAssinado(null); setConfirmouAssinaturas(false); }}
                 disabled={enviandoAnexoAssinado}
-                className="h-9 px-4 rounded-lg border border-slate-200 bg-white text-xs font-semibold text-slate-700 hover:bg-slate-100 disabled:opacity-50"
+                className="h-9 px-4 rounded-lg border border-border bg-white text-xs font-semibold text-muted-foreground hover:bg-muted disabled:opacity-50"
               >
                 Cancelar
               </button>
@@ -3256,7 +3256,7 @@ export default function Empresas() {
                 type="button"
                 onClick={() => handleAnexarContratoAssinado(modalAnexoAssinado.contrato.id, modalAnexoAssinado.file)}
                 disabled={!confirmouAssinaturas || enviandoAnexoAssinado}
-                className="h-9 px-4 rounded-lg bg-amber-600 text-white text-xs font-bold hover:bg-amber-700 disabled:opacity-50 inline-flex items-center gap-1.5"
+                className="h-9 px-4 rounded-lg bg-warning text-white text-xs font-bold hover:bg-warning/90 disabled:opacity-50 inline-flex items-center gap-1.5"
               >
                 {enviandoAnexoAssinado ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Upload className="w-3.5 h-3.5" />}
                 {enviandoAnexoAssinado ? "Enviando..." : "Confirmar e anexar"}

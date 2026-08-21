@@ -13,6 +13,12 @@
   --color-caixa-blue-dark: #073565;
   --color-caixa-yellow: #f2c94c;
   --color-caixa-gray: #f4f7fb;
+  /* Acentos de interface inspirados nas referências, usados apenas por função */
+  --color-brand-navy: #0d1733;
+  --color-brand-violet: #6c72ff;
+  --color-brand-cyan: #2aa9e8;
+  --color-brand-orange: #f97316;
+  --color-brand-green: #9bdc5a;
   
   --radius-sm: calc(var(--radius) - 4px);
   --radius-md: calc(var(--radius) - 2px);
@@ -54,6 +60,11 @@
   --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
   --color-sidebar-border: var(--sidebar-border);
   --color-sidebar-ring: var(--sidebar-ring);
+  --color-surface-elevated: var(--surface-elevated);
+  --color-surface-subtle: var(--surface-subtle);
+  --color-surface-inverse: var(--surface-inverse);
+  --color-overlay: var(--overlay);
+  --color-text-strong: var(--text-strong);
 }
 
 :root {
@@ -98,6 +109,11 @@
   --sidebar-accent-foreground: #17345b;
   --sidebar-border: #d7e0eb;
   --sidebar-ring: var(--color-caixa-blue);
+  --surface-elevated: #ffffff;
+  --surface-subtle: #f2f6fb;
+  --surface-inverse: #0d1733;
+  --overlay: rgba(13, 23, 51, 0.48);
+  --text-strong: #0f1e38;
 }
 
 .dark {
@@ -138,6 +154,11 @@
   --sidebar-accent-foreground: #ffffff;
   --sidebar-border: rgba(226, 232, 240, 0.18);
   --sidebar-ring: #8ab4ff;
+  --surface-elevated: #111c3b;
+  --surface-subtle: #151f42;
+  --surface-inverse: #f8fafc;
+  --overlay: rgba(3, 8, 24, 0.72);
+  --text-strong: #ffffff;
 }
 
 @layer base {

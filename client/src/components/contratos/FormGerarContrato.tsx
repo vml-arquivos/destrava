@@ -407,8 +407,8 @@ export function FormGerarContrato({ onSubmit, loading, userCargo }: Props) {
     .filter(s => sociosAssinantesIds.includes(s._key))
     .map(({ _key, ...s }) => s);
 
-  const cls = 'w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500';
-  const lbl = 'block text-sm font-medium text-gray-700 mb-1';
+  const cls = 'w-full border border-input rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary';
+  const lbl = 'block text-sm font-medium text-foreground mb-1';
 
   const validate = (): boolean => {
     const errs: Record<string, string> = {};
@@ -642,7 +642,7 @@ export function FormGerarContrato({ onSubmit, loading, userCargo }: Props) {
     errorKey: 'contratadaIdAssessoria' | 'contratadaIdAssessoriaPF' | 'contratadaIdLimpaNome' | 'contratadaIdBacen' | 'contratadaIdRating';
     obrigatoria?: boolean;
   }) => (
-    <div className="rounded-lg border border-blue-100 bg-blue-50/50 p-3 space-y-3">
+    <div className="rounded-lg border border-primary/20 bg-primary/10/50 p-3 space-y-3">
       <div>
         <label className={lbl}>Contratada / Prestadora de Serviço {obrigatoria ? "*" : "(opcional — padrão Destrava)"}</label>
         <select value={contratadaId} onChange={e => onContratadaChange(e.target.value)} className={cls}>
@@ -654,9 +654,9 @@ export function FormGerarContrato({ onSubmit, loading, userCargo }: Props) {
             </option>
           ))}
         </select>
-        {errors[errorKey] && <p className="text-red-500 text-xs mt-1">{errors[errorKey]}</p>}
+        {errors[errorKey] && <p className="text-destructive text-xs mt-1">{errors[errorKey]}</p>}
         {prestadores.length === 0 && !carregandoListas && (
-          <p className="text-xs text-amber-700 mt-1">
+          <p className="text-xs text-warning mt-1">
             Nenhuma contratada cadastrada. Use a aba "Contratadas" do gerador de contratos para cadastrar empresas do grupo ou prestadores PF.
           </p>
         )}
@@ -670,7 +670,7 @@ export function FormGerarContrato({ onSubmit, loading, userCargo }: Props) {
             <option key={r.id} value={r.id}>{r.nome}{r.cargo ? ` — ${r.cargo}` : ''}</option>
           ))}
         </select>
-        <p className="text-[11px] text-gray-500 mt-1">
+        <p className="text-[11px] text-muted-foreground mt-1">
           A contratada é a empresa/PF que assina como prestadora. O responsável é o colaborador que conduziu a assessoria.
         </p>
       </div>
@@ -681,14 +681,14 @@ export function FormGerarContrato({ onSubmit, loading, userCargo }: Props) {
     <form onSubmit={handleSubmit} className="space-y-4">
 
       {carregandoListas && (
-        <div className="flex items-center gap-2 rounded-lg border border-blue-200 bg-blue-50 px-3 py-2 text-sm text-blue-700">
+        <div className="flex items-center gap-2 rounded-lg border border-primary/20 bg-primary/10 px-3 py-2 text-sm text-primary">
           <Loader2 className="h-4 w-4 animate-spin" />
           Carregando empresas, clientes e parceiros...
         </div>
       )}
 
       {erroListas && (
-        <div className="rounded-lg border border-red-200 bg-red-50 px-3 py-3 text-sm text-red-700">
+        <div className="rounded-lg border border-destructive/20 bg-destructive/10 px-3 py-3 text-sm text-destructive">
           <div className="mb-2 flex items-start gap-2">
             <AlertCircle className="mt-0.5 h-4 w-4 shrink-0" />
             <div>
@@ -699,7 +699,7 @@ export function FormGerarContrato({ onSubmit, loading, userCargo }: Props) {
           <button
             type="button"
             onClick={() => void carregarListas()}
-            className="inline-flex items-center gap-2 rounded-md border border-red-300 bg-white px-3 py-1.5 text-xs font-medium text-red-700 hover:bg-red-100"
+            className="inline-flex items-center gap-2 rounded-md border border-destructive/30 bg-card px-3 py-1.5 text-xs font-medium text-destructive hover:bg-destructive/20"
           >
             <RefreshCw className="h-3.5 w-3.5" />
             Tentar carregar novamente
@@ -708,7 +708,7 @@ export function FormGerarContrato({ onSubmit, loading, userCargo }: Props) {
       )}
 
       {!erroListas && !carregandoListas && (
-        <div className="rounded-lg border border-gray-200 bg-gray-50 px-3 py-2 text-xs text-gray-600">
+        <div className="rounded-lg border border-border bg-muted px-3 py-2 text-xs text-muted-foreground">
           Listas carregadas: {empresas.length} empresas, {leads.length} leads, {clientesPF.length} clientes PF, {parceiros.length} parceiros, {prestadores.length} contratadas.
         </div>
       )}
@@ -738,7 +738,7 @@ export function FormGerarContrato({ onSubmit, loading, userCargo }: Props) {
                 <option key={e.id} value={e.id}>{e.razao_social}{e.cnpj ? ` — ${e.cnpj}` : ''}</option>
               ))}
             </select>
-            {errors.empresaId && <p className="text-red-500 text-xs mt-1">{errors.empresaId}</p>}
+            {errors.empresaId && <p className="text-destructive text-xs mt-1">{errors.empresaId}</p>}
           </div>
           <SelectParceiro value={parceiroIdAssessoria} onChange={setParceiroIdAssessoria} />
           <SelectContratadaResponsavel
@@ -750,7 +750,7 @@ export function FormGerarContrato({ onSubmit, loading, userCargo }: Props) {
             obrigatoria={false}
           />
 
-          <div className="rounded-lg border border-slate-200 bg-slate-50 p-3 space-y-3">
+          <div className="rounded-lg border border-border bg-muted p-3 space-y-3">
             <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
               <div>
                 <label className={lbl}>Prazo do contrato de assessoria *</label>
@@ -764,10 +764,10 @@ export function FormGerarContrato({ onSubmit, loading, userCargo }: Props) {
                     className={cls}
                     placeholder="Ex: 12"
                   />
-                  <span className="text-sm text-gray-600 whitespace-nowrap">meses</span>
+                  <span className="text-sm text-muted-foreground whitespace-nowrap">meses</span>
                 </div>
-                {errors.prazoContratoAssessoria && <p className="text-red-500 text-xs mt-1">{errors.prazoContratoAssessoria}</p>}
-                <p className="text-[11px] text-gray-500 mt-1">Este prazo será inserido nas cláusulas de vigência e remuneração do contrato.</p>
+                {errors.prazoContratoAssessoria && <p className="text-destructive text-xs mt-1">{errors.prazoContratoAssessoria}</p>}
+                <p className="text-[11px] text-muted-foreground mt-1">Este prazo será inserido nas cláusulas de vigência e remuneração do contrato.</p>
               </div>
               <div>
                 <label className={lbl}>Quem assina pela contratante?</label>
@@ -776,25 +776,25 @@ export function FormGerarContrato({ onSubmit, loading, userCargo }: Props) {
                   <option value="responsavel">Responsável principal + razão social</option>
                   <option value="socios">Sócio(s) selecionado(s) + razão social</option>
                 </select>
-                <p className="text-[11px] text-gray-500 mt-1">A assinatura da CONTRATANTE fica no mesmo bloco: representante/sócio(s) acima da razão social e CNPJ. Não cria assinatura extra separada.</p>
+                <p className="text-[11px] text-muted-foreground mt-1">A assinatura da CONTRATANTE fica no mesmo bloco: representante/sócio(s) acima da razão social e CNPJ. Não cria assinatura extra separada.</p>
               </div>
             </div>
 
             {modoAssinaturaContratante === 'socios' && (
-              <div className="rounded-lg border border-blue-100 bg-white p-3">
+              <div className="rounded-lg border border-primary/20 bg-card p-3">
                 <div className="flex items-center justify-between gap-3 mb-2">
-                  <p className="text-sm font-semibold text-gray-700">Sócios assinantes da contratante</p>
-                  {carregandoSociosAssessoria && <span className="text-xs text-blue-600">Carregando sócios...</span>}
+                  <p className="text-sm font-semibold text-foreground">Sócios assinantes da contratante</p>
+                  {carregandoSociosAssessoria && <span className="text-xs text-primary">Carregando sócios...</span>}
                 </div>
                 {sociosEmpresaAssessoria.length === 0 ? (
-                  <p className="text-xs text-amber-700">Nenhum sócio cadastrado para esta empresa. O contrato usará apenas a razão social e CNPJ da empresa como assinante.</p>
+                  <p className="text-xs text-warning">Nenhum sócio cadastrado para esta empresa. O contrato usará apenas a razão social e CNPJ da empresa como assinante.</p>
                 ) : (
                   <>
                   <div className="flex flex-wrap gap-2 mb-2">
                     <button
                       type="button"
                       onClick={() => setSociosAssinantesIds(sociosEmpresaAssessoria.map((s, idx) => s.id || `idx-${idx}`))}
-                      className="px-2.5 py-1 rounded-md border border-gray-200 text-xs font-semibold text-gray-600 hover:bg-gray-50"
+                      className="px-2.5 py-1 rounded-md border border-border text-xs font-semibold text-muted-foreground hover:bg-muted"
                     >
                       Selecionar todos
                     </button>
@@ -808,14 +808,14 @@ export function FormGerarContrato({ onSubmit, loading, userCargo }: Props) {
                         if (admins.length === 0) { toast.warning('Nenhum sócio com qualificação de administrador identificada no QSA.'); return; }
                         setSociosAssinantesIds(admins);
                       }}
-                      className="px-2.5 py-1 rounded-md border border-gray-200 text-xs font-semibold text-gray-600 hover:bg-gray-50"
+                      className="px-2.5 py-1 rounded-md border border-border text-xs font-semibold text-muted-foreground hover:bg-muted"
                     >
                       Selecionar só administrador(es)
                     </button>
                     <button
                       type="button"
                       onClick={() => setSociosAssinantesIds([])}
-                      className="px-2.5 py-1 rounded-md border border-gray-200 text-xs font-semibold text-gray-600 hover:bg-gray-50"
+                      className="px-2.5 py-1 rounded-md border border-border text-xs font-semibold text-muted-foreground hover:bg-muted"
                     >
                       Limpar seleção
                     </button>
@@ -825,7 +825,7 @@ export function FormGerarContrato({ onSubmit, loading, userCargo }: Props) {
                       const key = socio.id || `idx-${idx}`;
                       const checked = sociosAssinantesIds.includes(key);
                       return (
-                        <label key={key} className="flex items-start gap-2 rounded-lg border border-gray-200 px-3 py-2 text-sm hover:bg-blue-50">
+                        <label key={key} className="flex items-start gap-2 rounded-lg border border-border px-3 py-2 text-sm hover:bg-primary/10">
                           <input
                             type="checkbox"
                             className="mt-1"
@@ -837,8 +837,8 @@ export function FormGerarContrato({ onSubmit, loading, userCargo }: Props) {
                             }}
                           />
                           <span>
-                            <span className="font-semibold text-gray-800">{socio.nome || 'Sócio sem nome'}</span>
-                            <span className="block text-xs text-gray-500">
+                            <span className="font-semibold text-foreground">{socio.nome || 'Sócio sem nome'}</span>
+                            <span className="block text-xs text-muted-foreground">
                               {[socio.cpf || socio.documento, socio.qualificacao || socio.cargo].filter(Boolean).join(' • ') || 'Sem documento/qualificação'}
                             </span>
                           </span>
@@ -848,7 +848,7 @@ export function FormGerarContrato({ onSubmit, loading, userCargo }: Props) {
                   </div>
                   </>
                 )}
-                {errors.sociosAssinantesAssessoria && <p className="text-red-500 text-xs mt-1">{errors.sociosAssinantesAssessoria}</p>}
+                {errors.sociosAssinantesAssessoria && <p className="text-destructive text-xs mt-1">{errors.sociosAssinantesAssessoria}</p>}
               </div>
             )}
           </div>
@@ -865,7 +865,7 @@ export function FormGerarContrato({ onSubmit, loading, userCargo }: Props) {
                 autoComplete="off"
                 className={`${cls} text-right font-mono tabular-nums`}
               />
-              {errors.valorReferencia && <p className="text-red-500 text-xs mt-1">{errors.valorReferencia}</p>}
+              {errors.valorReferencia && <p className="text-destructive text-xs mt-1">{errors.valorReferencia}</p>}
             </div>
             <div>
               <label className={lbl}>Taxa de Comissão (%)</label>
@@ -878,13 +878,13 @@ export function FormGerarContrato({ onSubmit, loading, userCargo }: Props) {
               <label className={lbl}>Multa por Desistência — Cláusula 4.3 (%)</label>
               <input type="number" min="1" max="100" step="0.1" value={taxaDesistencia}
                 onChange={e => setTaxaDesistencia(e.target.value)} placeholder="Ex: 5" className={cls} />
-              <p className="text-[11px] text-gray-500 mt-1">Incide sobre o valor de referência na cláusula 4.3.</p>
+              <p className="text-[11px] text-muted-foreground mt-1">Incide sobre o valor de referência na cláusula 4.3.</p>
             </div>
             <div>
               <label className={lbl}>Multa por Inadimplência — Cláusula 8 (%)</label>
               <input type="number" min="1" max="100" step="0.1" value={taxaInadimplencia}
                 onChange={e => setTaxaInadimplencia(e.target.value)} placeholder="Ex: 5" className={cls} />
-              <p className="text-[11px] text-gray-500 mt-1">Incide sobre o crédito contratado se a CONTRATANTE atrasar 3 parcelas seguidas ou 5 alternadas.</p>
+              <p className="text-[11px] text-muted-foreground mt-1">Incide sobre o crédito contratado se a CONTRATANTE atrasar 3 parcelas seguidas ou 5 alternadas.</p>
             </div>
           </div>
           <div className="grid grid-cols-2 gap-3">
@@ -899,7 +899,7 @@ export function FormGerarContrato({ onSubmit, loading, userCargo }: Props) {
                 autoComplete="off"
                 className={`${cls} text-right font-mono tabular-nums`}
               />
-              <p className="text-[11px] text-gray-500 mt-1">Valor mensal quando Rating inferior a "C". Padrão: R$ 250,00.</p>
+              <p className="text-[11px] text-muted-foreground mt-1">Valor mensal quando Rating inferior a "C". Padrão: R$ 250,00.</p>
             </div>
           </div>
         </>
@@ -908,7 +908,7 @@ export function FormGerarContrato({ onSubmit, loading, userCargo }: Props) {
       {/* ── ASSESSORIA PESSOA FÍSICA ── */}
       {tipoContrato === 'assessoria_pf' && (
         <>
-          <div className="rounded-lg border border-blue-100 bg-blue-50 p-3 text-sm text-blue-800">
+          <div className="rounded-lg border border-primary/20 bg-primary/10 p-3 text-sm text-primary">
             <strong>Assessoria para Pessoa Física</strong> — O CONTRATANTE é uma pessoa física. Preencha os dados pessoais abaixo.
           </div>
 
@@ -942,19 +942,19 @@ export function FormGerarContrato({ onSubmit, loading, userCargo }: Props) {
                 <option key={c.id} value={c.id}>{c.nome}{c.cpf ? ` — ${c.cpf}` : ''}</option>
               ))}
             </select>
-            <p className="text-[11px] text-gray-500 mt-1">Selecionar um cliente preenche os campos abaixo automaticamente. Você pode editar antes de gerar.</p>
+            <p className="text-[11px] text-muted-foreground mt-1">Selecionar um cliente preenche os campos abaixo automaticamente. Você pode editar antes de gerar.</p>
           </div>
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
             <div>
               <label className={lbl}>Nome completo *</label>
               <input value={pfNome} onChange={e => setPfNome(e.target.value)} className={cls} placeholder="Nome conforme CPF" />
-              {errors.pfNome && <p className="text-red-500 text-xs mt-1">{errors.pfNome}</p>}
+              {errors.pfNome && <p className="text-destructive text-xs mt-1">{errors.pfNome}</p>}
             </div>
             <div>
               <label className={lbl}>CPF *</label>
               <input value={pfCpf} onChange={e => setPfCpf(e.target.value)} className={cls} placeholder="000.000.000-00" />
-              {errors.pfCpf && <p className="text-red-500 text-xs mt-1">{errors.pfCpf}</p>}
+              {errors.pfCpf && <p className="text-destructive text-xs mt-1">{errors.pfCpf}</p>}
             </div>
             <div>
               <label className={lbl}>RG (opcional)</label>
@@ -1000,15 +1000,15 @@ export function FormGerarContrato({ onSubmit, loading, userCargo }: Props) {
           />
 
           {/* Financeiro */}
-          <div className="rounded-lg border border-slate-200 bg-slate-50 p-3 space-y-3">
+          <div className="rounded-lg border border-border bg-muted p-3 space-y-3">
             <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
               <div>
                 <label className={lbl}>Prazo do contrato *</label>
                 <div className="flex items-center gap-2">
                   <input type="number" min="1" step="1" value={prazoAssessoriaPF} onChange={e => setPrazoAssessoriaPF(e.target.value)} className={cls} placeholder="12" />
-                  <span className="text-sm text-gray-600 whitespace-nowrap">meses</span>
+                  <span className="text-sm text-muted-foreground whitespace-nowrap">meses</span>
                 </div>
-                {errors.prazoAssessoriaPF && <p className="text-red-500 text-xs mt-1">{errors.prazoAssessoriaPF}</p>}
+                {errors.prazoAssessoriaPF && <p className="text-destructive text-xs mt-1">{errors.prazoAssessoriaPF}</p>}
               </div>
               <div>
                 <label className={lbl}>Valor de referência (crédito pretendido) *</label>
@@ -1020,7 +1020,7 @@ export function FormGerarContrato({ onSubmit, loading, userCargo }: Props) {
                   className={`${cls} text-right font-mono tabular-nums`}
                   placeholder="R$ 0,00"
                 />
-                {errors.valorReferenciaPF && <p className="text-red-500 text-xs mt-1">{errors.valorReferenciaPF}</p>}
+                {errors.valorReferenciaPF && <p className="text-destructive text-xs mt-1">{errors.valorReferenciaPF}</p>}
               </div>
               <div>
                 <label className={lbl}>Taxa de comissão (%)</label>
@@ -1075,9 +1075,9 @@ export function FormGerarContrato({ onSubmit, loading, userCargo }: Props) {
                   : leads.map(l => <option key={l.id} value={l.id}>{l.nome || l.razao_social || 'Lead sem nome'}{l.cpf ? ` — CPF: ${l.cpf}` : ''}</option>)
               }
             </select>
-            {errors.clienteId && <p className="text-red-500 text-xs mt-1">{errors.clienteId}</p>}
+            {errors.clienteId && <p className="text-destructive text-xs mt-1">{errors.clienteId}</p>}
             {clienteTipo === 'pf' && clientesPF.length === 0 && !carregandoListas && (
-              <p className="text-xs text-amber-600 mt-1">
+              <p className="text-xs text-warning mt-1">
                 Cadastre clientes PF em <a href="/colaborador/clientes" className="underline font-medium">Clientes</a> para selecioná-los aqui.
               </p>
             )}
@@ -1103,13 +1103,13 @@ export function FormGerarContrato({ onSubmit, loading, userCargo }: Props) {
                 autoComplete="off"
                 className={`${cls} text-right font-mono tabular-nums`}
               />
-              {errors.valorContrato && <p className="text-red-500 text-xs mt-1">{errors.valorContrato}</p>}
+              {errors.valorContrato && <p className="text-destructive text-xs mt-1">{errors.valorContrato}</p>}
             </div>
             <div>
               <label className={lbl}>Condição de Pagamento *</label>
               <input type="text" value={condicaoPgto} onChange={e => setCondicaoPgto(e.target.value)}
                 placeholder="Ex: À vista no ato da assinatura" className={cls} />
-              {errors.condicaoPgto && <p className="text-red-500 text-xs mt-1">{errors.condicaoPgto}</p>}
+              {errors.condicaoPgto && <p className="text-destructive text-xs mt-1">{errors.condicaoPgto}</p>}
             </div>
           </div>
           <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
@@ -1132,7 +1132,7 @@ export function FormGerarContrato({ onSubmit, loading, userCargo }: Props) {
               <div>
                 <label className={lbl}>Prazo de Garantia (meses)</label>
                 <input type="number" min="1" value={prazoGarantia} onChange={e => setPrazoGarantia(e.target.value)} className={cls} />
-                {errors.prazoGarantia && <p className="text-red-500 text-xs mt-1">{errors.prazoGarantia}</p>}
+                {errors.prazoGarantia && <p className="text-destructive text-xs mt-1">{errors.prazoGarantia}</p>}
               </div>
             )}
           </div>
@@ -1168,20 +1168,20 @@ export function FormGerarContrato({ onSubmit, loading, userCargo }: Props) {
                   <option value="">Selecione uma empresa...</option>
                   {empresas.map(e => <option key={e.id} value={e.id}>{e.razao_social}{e.cnpj ? ` — ${e.cnpj}` : ''}</option>)}
                 </select>
-                {errors.empresaIdBacen && <p className="text-red-500 text-xs mt-1">{errors.empresaIdBacen}</p>}
+                {errors.empresaIdBacen && <p className="text-destructive text-xs mt-1">{errors.empresaIdBacen}</p>}
               </div>
               <div className="grid grid-cols-2 gap-3">
                 <div>
                   <label className={lbl}>Nome do Representante *</label>
                   <input type="text" value={representanteNomeBacen} onChange={e => setRepresentanteNomeBacen(e.target.value)}
                     placeholder="Nome completo" className={cls} />
-                  {errors.representanteNomeBacen && <p className="text-red-500 text-xs mt-1">{errors.representanteNomeBacen}</p>}
+                  {errors.representanteNomeBacen && <p className="text-destructive text-xs mt-1">{errors.representanteNomeBacen}</p>}
                 </div>
                 <div>
                   <label className={lbl}>CPF do Representante *</label>
                   <input type="text" value={representanteCpfBacen} onChange={e => setRepresentanteCpfBacen(e.target.value)}
                     placeholder="000.000.000-00" className={cls} />
-                  {errors.representanteCpfBacen && <p className="text-red-500 text-xs mt-1">{errors.representanteCpfBacen}</p>}
+                  {errors.representanteCpfBacen && <p className="text-destructive text-xs mt-1">{errors.representanteCpfBacen}</p>}
                 </div>
               </div>
             </>
@@ -1192,7 +1192,7 @@ export function FormGerarContrato({ onSubmit, loading, userCargo }: Props) {
                 <option value="">Selecione uma pessoa física...</option>
                 {clientesPF.map(p => <option key={p.id} value={p.id}>{p.nome}{p.cpf ? ` — ${p.cpf}` : ''}</option>)}
               </select>
-              {errors.clientePfIdBacen && <p className="text-red-500 text-xs mt-1">{errors.clientePfIdBacen}</p>}
+              {errors.clientePfIdBacen && <p className="text-destructive text-xs mt-1">{errors.clientePfIdBacen}</p>}
             </div>
           )}
           <SelectContratadaResponsavel
@@ -1214,13 +1214,13 @@ export function FormGerarContrato({ onSubmit, loading, userCargo }: Props) {
                 autoComplete="off"
                 className={`${cls} text-right font-mono tabular-nums`}
               />
-              {errors.valorContratoBacen && <p className="text-red-500 text-xs mt-1">{errors.valorContratoBacen}</p>}
+              {errors.valorContratoBacen && <p className="text-destructive text-xs mt-1">{errors.valorContratoBacen}</p>}
             </div>
             <div>
               <label className={lbl}>Condição de Pagamento *</label>
               <input type="text" value={condicaoPgtoBacen} onChange={e => setCondicaoPgtoBacen(e.target.value)}
                 placeholder="Ex: À vista no ato da assinatura" className={cls} />
-              {errors.condicaoPgtoBacen && <p className="text-red-500 text-xs mt-1">{errors.condicaoPgtoBacen}</p>}
+              {errors.condicaoPgtoBacen && <p className="text-destructive text-xs mt-1">{errors.condicaoPgtoBacen}</p>}
             </div>
           </div>
           <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
@@ -1243,7 +1243,7 @@ export function FormGerarContrato({ onSubmit, loading, userCargo }: Props) {
               <div>
                 <label className={lbl}>Prazo de Garantia (meses)</label>
                 <input type="number" min="1" value={prazoGarantiaBacen} onChange={e => setPrazoGarantiaBacen(e.target.value)} className={cls} />
-                {errors.prazoGarantiaBacen && <p className="text-red-500 text-xs mt-1">{errors.prazoGarantiaBacen}</p>}
+                {errors.prazoGarantiaBacen && <p className="text-destructive text-xs mt-1">{errors.prazoGarantiaBacen}</p>}
               </div>
             )}
           </div>
@@ -1260,20 +1260,20 @@ export function FormGerarContrato({ onSubmit, loading, userCargo }: Props) {
               <option value="">Selecione uma empresa...</option>
               {empresas.map(e => <option key={e.id} value={e.id}>{e.razao_social}{e.cnpj ? ` — ${e.cnpj}` : ''}</option>)}
             </select>
-            {errors.empresaIdRating && <p className="text-red-500 text-xs mt-1">{errors.empresaIdRating}</p>}
+            {errors.empresaIdRating && <p className="text-destructive text-xs mt-1">{errors.empresaIdRating}</p>}
           </div>
           <div className="grid grid-cols-2 gap-3">
             <div>
               <label className={lbl}>Nome do Representante *</label>
               <input type="text" value={representanteNomeRating} onChange={e => setRepresentanteNomeRating(e.target.value)}
                 placeholder="Nome completo" className={cls} />
-              {errors.representanteNomeRating && <p className="text-red-500 text-xs mt-1">{errors.representanteNomeRating}</p>}
+              {errors.representanteNomeRating && <p className="text-destructive text-xs mt-1">{errors.representanteNomeRating}</p>}
             </div>
             <div>
               <label className={lbl}>CPF do Representante *</label>
               <input type="text" value={representanteCpfRating} onChange={e => setRepresentanteCpfRating(e.target.value)}
                 placeholder="000.000.000-00" className={cls} />
-              {errors.representanteCpfRating && <p className="text-red-500 text-xs mt-1">{errors.representanteCpfRating}</p>}
+              {errors.representanteCpfRating && <p className="text-destructive text-xs mt-1">{errors.representanteCpfRating}</p>}
             </div>
           </div>
           <div className="grid grid-cols-2 gap-3">
@@ -1288,13 +1288,13 @@ export function FormGerarContrato({ onSubmit, loading, userCargo }: Props) {
                 autoComplete="off"
                 className={`${cls} text-right font-mono tabular-nums`}
               />
-              {errors.valorContratoRating && <p className="text-red-500 text-xs mt-1">{errors.valorContratoRating}</p>}
+              {errors.valorContratoRating && <p className="text-destructive text-xs mt-1">{errors.valorContratoRating}</p>}
             </div>
             <div>
               <label className={lbl}>Condição de Pagamento *</label>
               <input type="text" value={condicaoPgtoRating} onChange={e => setCondicaoPgtoRating(e.target.value)}
                 placeholder="Ex: À vista no ato da assinatura" className={cls} />
-              {errors.condicaoPgtoRating && <p className="text-red-500 text-xs mt-1">{errors.condicaoPgtoRating}</p>}
+              {errors.condicaoPgtoRating && <p className="text-destructive text-xs mt-1">{errors.condicaoPgtoRating}</p>}
             </div>
           </div>
           <div className="grid grid-cols-2 gap-3">
@@ -1322,7 +1322,7 @@ export function FormGerarContrato({ onSubmit, loading, userCargo }: Props) {
       {/* ── PARCERIA COMERCIAL ── */}
       {tipoContrato === 'parceria_comercial' && (
         <>
-          <div className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800">
+          <div className="rounded-lg border border-warning/20 bg-warning/10 px-3 py-2 text-xs text-warning">
             Este contrato é restrito a administradores, diretores e gerentes.
           </div>
           <div>
@@ -1335,14 +1335,14 @@ export function FormGerarContrato({ onSubmit, loading, userCargo }: Props) {
               <option value="">Selecione o parceiro...</option>
               {parceiros.map(p => <option key={p.id} value={p.id}>{p.nome}{p.cpf ? ` — CPF: ${p.cpf}` : ''}</option>)}
             </select>
-            {errors.parceiroIdPC && <p className="text-red-500 text-xs mt-1">{errors.parceiroIdPC}</p>}
+            {errors.parceiroIdPC && <p className="text-destructive text-xs mt-1">{errors.parceiroIdPC}</p>}
           </div>
           <div className="grid grid-cols-2 gap-3">
             <div>
               <label className={lbl}>CPF do Parceiro *</label>
               <input type="text" value={parceiroCpfPC} onChange={e => setParceiroCpfPC(e.target.value)}
                 placeholder="000.000.000-00" className={cls} />
-              {errors.parceiroCpfPC && <p className="text-red-500 text-xs mt-1">{errors.parceiroCpfPC}</p>}
+              {errors.parceiroCpfPC && <p className="text-destructive text-xs mt-1">{errors.parceiroCpfPC}</p>}
             </div>
             <div>
               <label className={lbl}>CNPJ do Parceiro (opcional)</label>
@@ -1366,7 +1366,7 @@ export function FormGerarContrato({ onSubmit, loading, userCargo }: Props) {
             <label className={lbl}>Endereço do Parceiro *</label>
             <input type="text" value={parceiroEnderecoPC} onChange={e => setParceiroEnderecoPC(e.target.value)}
               placeholder="Rua, número, bairro, cidade/UF, CEP" className={cls} />
-            {errors.parceiroEnderecoPC && <p className="text-red-500 text-xs mt-1">{errors.parceiroEnderecoPC}</p>}
+            {errors.parceiroEnderecoPC && <p className="text-destructive text-xs mt-1">{errors.parceiroEnderecoPC}</p>}
           </div>
           <div className="grid grid-cols-3 gap-3">
             <div>
@@ -1399,8 +1399,8 @@ export function FormGerarContrato({ onSubmit, loading, userCargo }: Props) {
                 onChange={e => setAvisoPrevioRescisao(e.target.value)} className={cls} />
             </div>
           </div>
-          <div className="border-t border-gray-200 pt-3">
-            <p className="text-xs font-medium text-gray-600 mb-2">Testemunhas (opcional)</p>
+          <div className="border-t border-border pt-3">
+            <p className="text-xs font-medium text-muted-foreground mb-2">Testemunhas (opcional)</p>
             <div className="grid grid-cols-2 gap-3">
               <div>
                 <label className={lbl}>Testemunha 1 — Nome</label>
@@ -1428,26 +1428,26 @@ export function FormGerarContrato({ onSubmit, loading, userCargo }: Props) {
         <div>
           <label className={lbl}>Data de Assinatura *</label>
           <input type="date" value={dataAssinatura} onChange={e => setDataAssinatura(e.target.value)} className={cls} />
-          {errors.dataAssinatura && <p className="text-red-500 text-xs mt-1">{errors.dataAssinatura}</p>}
+          {errors.dataAssinatura && <p className="text-destructive text-xs mt-1">{errors.dataAssinatura}</p>}
         </div>
         <div>
           <label className={lbl}>Foro Eleito *</label>
           <input type="text" value={foroEleito} onChange={e => setForoEleito(e.target.value)}
             placeholder="Ex: Taguatinga/DF" className={cls} />
-          {errors.foroEleito && <p className="text-red-500 text-xs mt-1">{errors.foroEleito}</p>}
+          {errors.foroEleito && <p className="text-destructive text-xs mt-1">{errors.foroEleito}</p>}
         </div>
       </div>
 
       {/* ── UPLOAD DE DOCUMENTOS ── */}
-      <div className="border border-gray-200 rounded-xl overflow-hidden">
-        <div className="bg-gray-50 border-b border-gray-200 px-4 py-3 flex items-center gap-2">
-          <Paperclip className="w-4 h-4 text-gray-500" />
-          <span className="text-sm font-semibold text-gray-700">Documentos Anexos</span>
-          <span className="text-xs text-gray-400 ml-1">
+      <div className="border border-border rounded-xl overflow-hidden">
+        <div className="bg-muted border-b border-border px-4 py-3 flex items-center gap-2">
+          <Paperclip className="w-4 h-4 text-muted-foreground" />
+          <span className="text-sm font-semibold text-foreground">Documentos Anexos</span>
+          <span className="text-xs text-muted-foreground ml-1">
             — RG, CNH, Comprovante, Contrato Social, Rating SCR, Boa Vista, CEMPROT, Serasa, SPC e outros
           </span>
           {documentosAnexos.length > 0 && (
-            <span className="ml-auto text-xs font-semibold bg-blue-100 text-blue-700 px-2 py-0.5 rounded-full">
+            <span className="ml-auto text-xs font-semibold bg-primary/20 text-primary px-2 py-0.5 rounded-full">
               {documentosAnexos.length} arquivo{documentosAnexos.length !== 1 ? 's' : ''}
             </span>
           )}
@@ -1464,7 +1464,7 @@ export function FormGerarContrato({ onSubmit, loading, userCargo }: Props) {
       <button
         type="submit"
         disabled={loading || carregandoListas}
-        className="w-full flex items-center justify-center gap-2 px-4 py-3 bg-[#1B3A8C] text-white font-medium rounded-lg hover:bg-[#142d6e] disabled:opacity-50 transition-colors"
+        className="w-full flex items-center justify-center gap-2 px-4 py-3 bg-[#1B3A8C] text-primary-foreground font-medium rounded-lg hover:bg-[#142d6e] disabled:opacity-50 transition-colors"
       >
         {loading ? (
           <><Loader2 className="w-4 h-4 animate-spin" />Carregando contrato...</>

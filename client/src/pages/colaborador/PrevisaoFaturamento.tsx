@@ -668,23 +668,23 @@ export default function PrevisaoFaturamento() {
 
         {/* ── Cabeçalho ──────────────────────────────────────────────────── */}
         <div className="flex items-center gap-3">
-          <div className="w-10 h-10 rounded-xl bg-blue-100 flex items-center justify-center">
-            <TrendingUp className="w-5 h-5 text-blue-700" />
+          <div className="w-10 h-10 rounded-xl bg-primary/20 flex items-center justify-center">
+            <TrendingUp className="w-5 h-5 text-primary" />
           </div>
           <div>
-            <h1 className="text-xl font-bold text-gray-900">Faturamento</h1>
-            <p className="text-sm text-gray-500">Histórico regressivo e previsão futura por IA ou manual</p>
+            <h1 className="text-xl font-bold text-foreground">Faturamento</h1>
+            <p className="text-sm text-muted-foreground">Histórico regressivo e previsão futura por IA ou manual</p>
           </div>
         </div>
 
         {/* ── Abas: Faturamento Bruto | Previsão ─────────────────────────── */}
-        <div className="flex gap-1 bg-gray-100 rounded-xl p-1">
+        <div className="flex gap-1 bg-muted rounded-xl p-1">
           <button
             onClick={() => setSecaoAtiva('faturamento')}
             className={`flex-1 flex items-center justify-center gap-2 py-2.5 px-4 rounded-lg text-sm font-semibold transition-all ${
               secaoAtiva === 'faturamento'
-                ? 'bg-white text-blue-700 shadow-sm'
-                : 'text-gray-500 hover:text-gray-700'
+                ? 'bg-white text-primary shadow-sm'
+                : 'text-muted-foreground hover:text-foreground'
             }`}
           >
             <TrendingDown className="w-4 h-4" />
@@ -695,8 +695,8 @@ export default function PrevisaoFaturamento() {
             onClick={() => setSecaoAtiva('previsao')}
             className={`flex-1 flex items-center justify-center gap-2 py-2.5 px-4 rounded-lg text-sm font-semibold transition-all ${
               secaoAtiva === 'previsao'
-                ? 'bg-white text-emerald-700 shadow-sm'
-                : 'text-gray-500 hover:text-gray-700'
+                ? 'bg-white text-success shadow-sm'
+                : 'text-muted-foreground hover:text-foreground'
             }`}
           >
             <BarChart2 className="w-4 h-4" />
@@ -706,24 +706,24 @@ export default function PrevisaoFaturamento() {
         </div>
 
         {/* ── Configuração: empresa + contador ───────────────────────────── */}
-        <div className="bg-white rounded-xl border border-gray-200 p-5 space-y-4">
-          <h2 className="font-semibold text-gray-800">Configuração</h2>
+        <div className="bg-white rounded-xl border border-border p-5 space-y-4">
+          <h2 className="font-semibold text-foreground">Configuração</h2>
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             {/* Empresa */}
             <div>
-              <label className="block text-xs font-medium text-gray-600 mb-1">Empresa *</label>
+              <label className="block text-xs font-medium text-muted-foreground mb-1">Empresa *</label>
               <input
                 value={buscaEmpresa}
                 onChange={e => setBuscaEmpresa(e.target.value)}
-                className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 mb-2"
+                className="w-full border border-input rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary mb-2"
                 placeholder="Buscar por razão social ou CNPJ..."
                 disabled={loadingEmpresas}
               />
               <select
                 value={empresaId}
                 onChange={e => handleEmpresaChange(e.target.value)}
-                className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                className="w-full border border-input rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary"
                 disabled={loadingEmpresas}
               >
                 <option value="">
@@ -736,20 +736,20 @@ export default function PrevisaoFaturamento() {
                 ))}
               </select>
               {!loadingEmpresas && buscaEmpresa && !empresasFiltradas.length && (
-                <p className="mt-1 text-xs text-amber-700">Nenhuma empresa encontrada para esta busca.</p>
+                <p className="mt-1 text-xs text-warning">Nenhuma empresa encontrada para esta busca.</p>
               )}
             </div>
 
             {/* Contador cadastrado */}
             <div>
-              <label className="block text-xs font-medium text-gray-600 mb-1">
+              <label className="block text-xs font-medium text-muted-foreground mb-1">
                 Contador cadastrado{' '}
-                <span className="text-gray-400 font-normal">(opcional — preenche os campos abaixo)</span>
+                <span className="text-muted-foreground font-normal">(opcional — preenche os campos abaixo)</span>
               </label>
               <select
                 value={contadorId}
                 onChange={e => handleContadorChange(e.target.value)}
-                className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                className="w-full border border-input rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary"
                 disabled={loadingContadores}
               >
                 <option value="">
@@ -762,9 +762,9 @@ export default function PrevisaoFaturamento() {
                 ))}
               </select>
               {contadores.length === 0 && !loadingContadores && (
-                <p className="text-xs text-gray-400 mt-1">
+                <p className="text-xs text-muted-foreground mt-1">
                   Nenhum contador cadastrado.{' '}
-                  <a href="/colaborador/contadores" className="text-blue-500 hover:underline">
+                  <a href="/colaborador/contadores" className="text-primary hover:underline">
                     Cadastrar agora
                   </a>
                 </p>
@@ -773,28 +773,28 @@ export default function PrevisaoFaturamento() {
           </div>
 
           {/* Campos do documento (escritório + contador) */}
-          <div className="border-t border-gray-100 pt-4">
-            <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-3 flex items-center gap-1.5">
+          <div className="border-t border-border pt-4">
+            <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-3 flex items-center gap-1.5">
               <Building2 className="w-3.5 h-3.5" />
               Dados para o Documento PDF
             </p>
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
               <div>
-                <label className="block text-xs font-medium text-gray-600 mb-1 flex items-center gap-1">
+                <label className="block text-xs font-medium text-muted-foreground mb-1 flex items-center gap-1">
                   <Building2 className="w-3 h-3" />
                   Escritório de Contabilidade{' '}
-                  <span className="text-gray-400 font-normal">(opcional)</span>
+                  <span className="text-muted-foreground font-normal">(opcional)</span>
                 </label>
                 <input
                   type="text"
                   value={escritorio}
                   onChange={e => setEscritorio(e.target.value)}
                   placeholder="Ex.: Contabilidade Silva & Assoc."
-                  className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  className="w-full border border-input rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary"
                 />
               </div>
               <div>
-                <label className="block text-xs font-medium text-gray-600 mb-1 flex items-center gap-1">
+                <label className="block text-xs font-medium text-muted-foreground mb-1 flex items-center gap-1">
                   <UserCheck className="w-3 h-3" />
                   Contador Responsável *
                 </label>
@@ -803,11 +803,11 @@ export default function PrevisaoFaturamento() {
                   value={nomeContadorLivre}
                   onChange={e => setNomeContadorLivre(e.target.value)}
                   placeholder="Nome completo do contador"
-                  className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  className="w-full border border-input rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary"
                 />
               </div>
               <div>
-                <label className="block text-xs font-medium text-gray-600 mb-1 flex items-center gap-1">
+                <label className="block text-xs font-medium text-muted-foreground mb-1 flex items-center gap-1">
                   <Hash className="w-3 h-3" />
                   CRC *
                 </label>
@@ -816,11 +816,11 @@ export default function PrevisaoFaturamento() {
                   value={crcLivre}
                   onChange={e => setCrcLivre(e.target.value)}
                   placeholder="Ex.: DF-187654-0"
-                  className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  className="w-full border border-input rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary"
                 />
               </div>
             </div>
-            <p className="text-xs text-gray-400 mt-2">
+            <p className="text-xs text-muted-foreground mt-2">
               * Nome do contador e CRC são obrigatórios para gerar o PDF. O escritório é opcional e, quando cadastrado no contador, é preenchido automaticamente.
             </p>
           </div>
@@ -830,16 +830,16 @@ export default function PrevisaoFaturamento() {
             ABA: FATURAMENTO BRUTO (histórico regressivo)
         ════════════════════════════════════════════════════════════════════ */}
         {secaoAtiva === 'faturamento' && empresaId && (
-          <div className="bg-white rounded-xl border border-gray-200 p-5 space-y-5">
+          <div className="bg-white rounded-xl border border-border p-5 space-y-5">
 
             {/* Cabeçalho da seção */}
             <div className="flex items-start justify-between flex-wrap gap-3">
               <div>
-                <h2 className="font-semibold text-gray-800 flex items-center gap-2">
-                  <TrendingDown className="w-4 h-4 text-blue-600" />
+                <h2 className="font-semibold text-foreground flex items-center gap-2">
+                  <TrendingDown className="w-4 h-4 text-primary" />
                   Faturamento Bruto — Histórico Regressivo
                 </h2>
-                <p className="text-xs text-gray-500 mt-0.5">
+                <p className="text-xs text-muted-foreground mt-0.5">
                   Valores do passado até hoje. Selecione o período desejado abaixo.
                 </p>
               </div>
@@ -848,7 +848,7 @@ export default function PrevisaoFaturamento() {
                 <button
                   onClick={handleSalvarHistorico}
                   disabled={loadingSalvar}
-                  className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white text-sm rounded-lg hover:bg-blue-700 disabled:opacity-50 transition-colors"
+                  className="flex items-center gap-2 px-4 py-2 bg-primary text-white text-sm rounded-lg hover:bg-primary/90 disabled:opacity-50 transition-colors"
                 >
                   {loadingSalvar ? (
                     <Loader2 className="w-4 h-4 animate-spin" />
@@ -862,19 +862,19 @@ export default function PrevisaoFaturamento() {
 
 
             {/* ── Painel: Faturamento Bruto Anual + Rateio Inteligente ─────── */}
-            <div className="bg-emerald-50 border border-emerald-200 rounded-xl p-4 space-y-3">
-              <p className="text-xs font-semibold text-emerald-700 uppercase tracking-wide flex items-center gap-1.5">
+            <div className="bg-success/10 border border-success/20 rounded-xl p-4 space-y-3">
+              <p className="text-xs font-semibold text-success uppercase tracking-wide flex items-center gap-1.5">
                 <Sparkles className="w-3.5 h-3.5" />
                 Faturamento Bruto Anual — Rateio Automático
               </p>
-              <p className="text-xs text-emerald-600">
+              <p className="text-xs text-success">
                 Informe o faturamento bruto total do período e clique em <strong>Ratear</strong> para distribuir
                 automaticamente em {periodoEfetivo} meses com variação progressiva regressiva (meses mais antigos
                 ligeiramente maiores, meses recentes menores), garantindo que a soma seja exata.
               </p>
               <div className="flex flex-wrap items-end gap-3">
                 <div className="flex-1 min-w-[200px]">
-                  <label className="block text-xs font-medium text-emerald-700 mb-1">
+                  <label className="block text-xs font-medium text-success mb-1">
                     Faturamento Bruto Total (R$)
                   </label>
                   <input
@@ -887,20 +887,20 @@ export default function PrevisaoFaturamento() {
                       setFaturamentoBrutoNum(unmaskCurrencyInput(masked));
                     }}
                     placeholder="Ex.: 1.200.000,00"
-                    className="w-full border border-emerald-300 rounded-lg px-3 py-2 text-sm text-right font-mono tabular-nums focus:outline-none focus:ring-2 focus:ring-emerald-500 bg-white"
+                    className="w-full border border-success/30 rounded-lg px-3 py-2 text-sm text-right font-mono tabular-nums focus:outline-none focus:ring-2 focus:ring-success bg-white"
                   />
                 </div>
                 <div className="flex flex-col gap-1">
-                  <label className="text-xs font-medium text-emerald-700">Divisor</label>
-                  <div className="flex items-center gap-2 px-3 py-2 bg-white border border-emerald-200 rounded-lg text-sm text-emerald-700 font-semibold">
+                  <label className="text-xs font-medium text-success">Divisor</label>
+                  <div className="flex items-center gap-2 px-3 py-2 bg-white border border-success/20 rounded-lg text-sm text-success font-semibold">
                     <Divide className="w-3.5 h-3.5" />
                     {periodoEfetivo} meses
                   </div>
                 </div>
                 {faturamentoBrutoNum > 0 && (
                   <div className="flex flex-col gap-1">
-                    <label className="text-xs font-medium text-emerald-700">Média mensal</label>
-                    <div className="px-3 py-2 bg-white border border-emerald-200 rounded-lg text-sm text-emerald-800 font-mono tabular-nums">
+                    <label className="text-xs font-medium text-success">Média mensal</label>
+                    <div className="px-3 py-2 bg-white border border-success/20 rounded-lg text-sm text-success font-mono tabular-nums">
                       {(faturamentoBrutoNum / periodoEfetivo).toLocaleString("pt-BR", { style: "currency", currency: "BRL" })}
                     </div>
                   </div>
@@ -908,7 +908,7 @@ export default function PrevisaoFaturamento() {
                 <button
                   onClick={handleRatear}
                   disabled={faturamentoBrutoNum <= 0}
-                  className="flex items-center gap-2 px-5 py-2 bg-emerald-600 text-white text-sm rounded-lg hover:bg-emerald-700 disabled:opacity-40 disabled:cursor-not-allowed transition-colors font-semibold"
+                  className="flex items-center gap-2 px-5 py-2 bg-success text-white text-sm rounded-lg hover:bg-success/90 disabled:opacity-40 disabled:cursor-not-allowed transition-colors font-semibold"
                 >
                   <Divide className="w-4 h-4" />
                   Ratear em {periodoEfetivo} meses
@@ -916,8 +916,8 @@ export default function PrevisaoFaturamento() {
               </div>
             </div>
             {/* ── Seletor de período regressivo ─────────────────────────── */}
-            <div className="bg-blue-50 border border-blue-100 rounded-xl p-4 space-y-3">
-              <p className="text-xs font-semibold text-blue-700 uppercase tracking-wide flex items-center gap-1.5">
+            <div className="bg-primary/10 border border-primary/20 rounded-xl p-4 space-y-3">
+              <p className="text-xs font-semibold text-primary uppercase tracking-wide flex items-center gap-1.5">
                 <Calendar className="w-3.5 h-3.5" />
                 Período do Faturamento
               </p>
@@ -936,8 +936,8 @@ export default function PrevisaoFaturamento() {
                     className={`px-3 py-1.5 rounded-lg text-xs font-semibold border transition-all ${
                       (op.value === 0 && modoPersonalizado) ||
                       (op.value !== 0 && !modoPersonalizado && periodoSelecionado === op.value)
-                        ? 'bg-blue-600 text-white border-blue-600 shadow-sm'
-                        : 'bg-white text-gray-600 border-gray-200 hover:border-blue-400 hover:text-blue-600'
+                        ? 'bg-primary text-white border-primary shadow-sm'
+                        : 'bg-white text-muted-foreground border-border hover:border-primary/50 hover:text-primary'
                     }`}
                   >
                     {op.label}
@@ -953,30 +953,30 @@ export default function PrevisaoFaturamento() {
                       max={120}
                       value={periodoPersonalizado}
                       onChange={e => setPeriodoPersonalizado(e.target.value)}
-                      className="w-20 border border-blue-300 rounded-lg px-2 py-1.5 text-sm text-center focus:outline-none focus:ring-2 focus:ring-blue-500"
+                      className="w-20 border border-primary/30 rounded-lg px-2 py-1.5 text-sm text-center focus:outline-none focus:ring-2 focus:ring-primary"
                       placeholder="N"
                     />
-                    <span className="text-xs text-gray-500">meses</span>
+                    <span className="text-xs text-muted-foreground">meses</span>
                   </div>
                 )}
               </div>
 
               {/* Resumo do período */}
               <div className="flex flex-wrap gap-4 pt-1">
-                <div className="text-xs text-blue-600">
+                <div className="text-xs text-primary">
                   <span className="font-semibold">Período exibido:</span>{' '}
                   {periodoEfetivo} {periodoEfetivo === 1 ? 'mês' : 'meses'} regressivos a partir de hoje
                 </div>
                 {mesesPreenchidos > 0 && (
                   <>
-                    <div className="text-xs text-gray-600">
+                    <div className="text-xs text-muted-foreground">
                       <span className="font-semibold">Meses preenchidos:</span> {mesesPreenchidos}/{periodoEfetivo}
                     </div>
-                    <div className="text-xs text-gray-600">
+                    <div className="text-xs text-muted-foreground">
                       <span className="font-semibold">Total do período:</span>{' '}
                       {totalPeriodo.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
                     </div>
-                    <div className="text-xs text-gray-600">
+                    <div className="text-xs text-muted-foreground">
                       <span className="font-semibold">Média mensal:</span>{' '}
                       {mediaMensal.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
                     </div>
@@ -988,22 +988,22 @@ export default function PrevisaoFaturamento() {
             {/* Tabela de histórico */}
             {loadingHistorico ? (
               <div className="flex items-center justify-center py-8">
-                <Loader2 className="w-6 h-6 animate-spin text-blue-500" />
+                <Loader2 className="w-6 h-6 animate-spin text-primary" />
               </div>
             ) : (
               <TabelaHistorico registros={registros} onChange={handleRegistroChange} />
             )}
 
             {/* Ações da linha de fundo */}
-            <div className="flex items-center gap-3 pt-2 border-t border-gray-100 flex-wrap">
+            <div className="flex items-center gap-3 pt-2 border-t border-border flex-wrap">
               {/* Mês de referência */}
               <div className="flex items-center gap-2">
-                <label className="text-xs text-gray-500 whitespace-nowrap">Mês ref. declaração:</label>
+                <label className="text-xs text-muted-foreground whitespace-nowrap">Mês ref. declaração:</label>
                 <input
                   type="month"
                   value={dataReferenciaDeclaracao}
                   onChange={e => setDataReferenciaDeclaracao(e.target.value)}
-                  className="text-xs border border-gray-200 rounded px-2 py-1 focus:outline-none focus:ring-1 focus:ring-blue-400"
+                  className="text-xs border border-border rounded px-2 py-1 focus:outline-none focus:ring-1 focus:ring-primary"
                   title="Mês de referência para a declaração"
                 />
               </div>
@@ -1022,9 +1022,9 @@ export default function PrevisaoFaturamento() {
 
         {/* Placeholder quando empresa não selecionada */}
         {secaoAtiva === 'faturamento' && !empresaId && (
-          <div className="bg-white rounded-xl border border-dashed border-gray-300 p-10 text-center">
-            <TrendingDown className="w-10 h-10 text-gray-300 mx-auto mb-3" />
-            <p className="text-gray-500 text-sm">Selecione uma empresa para visualizar o histórico de faturamento.</p>
+          <div className="bg-white rounded-xl border border-dashed border-input p-10 text-center">
+            <TrendingDown className="w-10 h-10 text-muted-foreground mx-auto mb-3" />
+            <p className="text-muted-foreground text-sm">Selecione uma empresa para visualizar o histórico de faturamento.</p>
           </div>
         )}
 
@@ -1035,19 +1035,19 @@ export default function PrevisaoFaturamento() {
           <div className="space-y-5">
 
             {/* Painel de geração */}
-            <div className="bg-white rounded-xl border border-gray-200 p-5 space-y-4">
+            <div className="bg-white rounded-xl border border-border p-5 space-y-4">
               <div>
-                        <h2 className="font-semibold text-gray-800 flex items-center gap-2">
-                          <BarChart2 className="w-4 h-4 text-emerald-600" />
+                        <h2 className="font-semibold text-foreground flex items-center gap-2">
+                          <BarChart2 className="w-4 h-4 text-success" />
                           Previsão de Faturamento — Projeção Futura
                         </h2>
-                        <p className="text-xs text-gray-500 mt-0.5">
+                        <p className="text-xs text-muted-foreground mt-0.5">
                           Escolha entre uma projeção gerada pela IA ou informe manualmente o total exato dos próximos meses.
                         </p>
               </div>
 
               {!empresaId && (
-                <div className="rounded-lg bg-amber-50 border border-amber-200 px-4 py-3 text-sm text-amber-700">
+                <div className="rounded-lg bg-warning/10 border border-warning/20 px-4 py-3 text-sm text-warning">
                   Selecione uma empresa na seção de Configuração acima para gerar a previsão.
                 </div>
               )}
@@ -1056,7 +1056,7 @@ export default function PrevisaoFaturamento() {
                 <>
                   {/* Aviso sobre histórico necessário */}
                   {historicoBanco.filter(r => r.valor !== '' && !isNaN(Number(r.valor))).length < 12 && (
-                    <div className="rounded-lg bg-amber-50 border border-amber-200 px-4 py-3 text-sm text-amber-700 flex items-start gap-2">
+                    <div className="rounded-lg bg-warning/10 border border-warning/20 px-4 py-3 text-sm text-warning flex items-start gap-2">
                       <AlertCircle className="w-4 h-4 mt-0.5 flex-shrink-0" />
                       <div>
                         <p className="font-semibold">Histórico insuficiente para previsão IA</p>
@@ -1071,13 +1071,13 @@ export default function PrevisaoFaturamento() {
                   <div className="flex flex-wrap items-center gap-2">
                     <button
                       onClick={() => { setModoPrevisao('ia'); setPrevisao(null); setPreviewDados(null); }}
-                      className={`px-3 py-2 rounded-lg text-sm font-semibold border ${modoPrevisao === 'ia' ? 'bg-emerald-600 text-white border-emerald-600' : 'bg-white text-gray-600 border-gray-300'}`}
+                      className={`px-3 py-2 rounded-lg text-sm font-semibold border ${modoPrevisao === 'ia' ? 'bg-success text-white border-success' : 'bg-white text-muted-foreground border-input'}`}
                     >
                       Previsão por IA
                     </button>
                     <button
                       onClick={() => { setModoPrevisao('manual'); setPrevisao(null); setPreviewDados(null); }}
-                      className={`px-3 py-2 rounded-lg text-sm font-semibold border ${modoPrevisao === 'manual' ? 'bg-blue-600 text-white border-blue-600' : 'bg-white text-gray-600 border-gray-300'}`}
+                      className={`px-3 py-2 rounded-lg text-sm font-semibold border ${modoPrevisao === 'manual' ? 'bg-primary text-white border-primary' : 'bg-white text-muted-foreground border-input'}`}
                     >
                       Informar previsão manual
                     </button>
@@ -1085,7 +1085,7 @@ export default function PrevisaoFaturamento() {
 
                   <div className="flex items-center gap-4 flex-wrap">
                     <div className="flex items-center gap-2">
-                      <label className="text-sm text-gray-600 font-medium">Horizonte da previsão:</label>
+                      <label className="text-sm text-muted-foreground font-medium">Horizonte da previsão:</label>
                       <select
                         value={horizonte}
                         onChange={e => {
@@ -1093,7 +1093,7 @@ export default function PrevisaoFaturamento() {
                           setPrevisao(null);
                           setPreviewDados(null);
                         }}
-                        className="border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                        className="border border-input rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-success"
                       >
                         <option value={12}>Próximos 12 meses</option>
                         <option value={24}>Próximos 24 meses</option>
@@ -1105,7 +1105,7 @@ export default function PrevisaoFaturamento() {
                       <button
                         onClick={handleGerarPrevisao}
                         disabled={loadingPrevisao}
-                        className="flex items-center gap-2 px-5 py-2 bg-emerald-600 text-white text-sm rounded-lg hover:bg-emerald-700 disabled:opacity-50 transition-colors font-semibold"
+                        className="flex items-center gap-2 px-5 py-2 bg-success text-white text-sm rounded-lg hover:bg-success/90 disabled:opacity-50 transition-colors font-semibold"
                       >
                         {loadingPrevisao ? (
                           <><Loader2 className="w-4 h-4 animate-spin" /> Gerando previsão...</>
@@ -1116,7 +1116,7 @@ export default function PrevisaoFaturamento() {
                     ) : (
                       <div className="flex flex-wrap items-end gap-3 w-full">
                         <div className="flex-1 min-w-[240px]">
-                          <label className="block text-xs font-medium text-blue-700 mb-1">
+                          <label className="block text-xs font-medium text-primary mb-1">
                             Total exato dos próximos {horizonte} meses (R$)
                           </label>
                           <input
@@ -1132,24 +1132,24 @@ export default function PrevisaoFaturamento() {
                               setPreviewDados(null);
                             }}
                             placeholder="Ex.: 8.400.000,00"
-                            className="w-full border border-blue-300 rounded-lg px-3 py-2 text-sm text-right font-mono tabular-nums focus:outline-none focus:ring-2 focus:ring-blue-500"
+                            className="w-full border border-primary/30 rounded-lg px-3 py-2 text-sm text-right font-mono tabular-nums focus:outline-none focus:ring-2 focus:ring-primary"
                           />
                         </div>
                         <button
                           onClick={handleMontarPrevisaoManual}
-                          className="flex items-center gap-2 px-5 py-2 bg-blue-600 text-white text-sm rounded-lg hover:bg-blue-700 transition-colors font-semibold"
+                          className="flex items-center gap-2 px-5 py-2 bg-primary text-white text-sm rounded-lg hover:bg-primary/90 transition-colors font-semibold"
                         >
                           <Divide className="w-4 h-4" />
                           Montar previsão e ratear
                         </button>
-                        <p className="w-full text-xs text-blue-600">
+                        <p className="w-full text-xs text-primary">
                           Informe qualquer valor inteiro, sem centavos. O total será dividido igualmente por {horizonte} meses; quando necessário, a parcela mensal será exibida com centavos para preservar o total exato.
                         </p>
                       </div>
                     )}
 
                     {loadingPrevisao && (
-                      <span className="text-xs text-gray-400 flex items-center gap-1">
+                      <span className="text-xs text-muted-foreground flex items-center gap-1">
                         <AlertCircle className="w-3 h-3" />
                         Pode levar até 45s (Prophet treinando o modelo)
                       </span>
@@ -1170,38 +1170,38 @@ export default function PrevisaoFaturamento() {
                 />
                 {resumoPrevisao && (
                   <>
-                    <p className="text-xs text-gray-500">
+                    <p className="text-xs text-muted-foreground">
                       Modalidade: <strong>{modoPrevisao === 'manual' ? 'previsão informada manualmente' : 'previsão gerada por IA'}</strong>.
                     </p>
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    <div className="bg-emerald-50 border border-emerald-200 rounded-xl p-4">
-                      <p className="text-xs font-semibold text-emerald-700 uppercase tracking-wide">Total previsto no período</p>
-                      <p className="text-xl font-bold text-emerald-900 mt-1">
+                    <div className="bg-success/10 border border-success/20 rounded-xl p-4">
+                      <p className="text-xs font-semibold text-success uppercase tracking-wide">Total previsto no período</p>
+                      <p className="text-xl font-bold text-success mt-1">
                         {formatarPrevisaoInteira(resumoPrevisao.total)}
                       </p>
                     </div>
-                    <div className="bg-blue-50 border border-blue-200 rounded-xl p-4">
-                      <p className="text-xs font-semibold text-blue-700 uppercase tracking-wide">Valor mensal exato</p>
-                      <p className="text-xl font-bold text-blue-900 mt-1">
+                    <div className="bg-primary/10 border border-primary/20 rounded-xl p-4">
+                      <p className="text-xs font-semibold text-primary uppercase tracking-wide">Valor mensal exato</p>
+                      <p className="text-xl font-bold text-primary mt-1">
                         {formatarPrevisaoInteira(resumoPrevisao.mensal)}
                       </p>
-                      <p className="text-xs text-blue-600 mt-1">Total dividido igualmente por {previsao.horizonte_meses} meses.</p>
+                      <p className="text-xs text-primary mt-1">Total dividido igualmente por {previsao.horizonte_meses} meses.</p>
                     </div>
                     </div>
                   </>
                 )}
-                <div className="bg-white rounded-xl border border-gray-200 p-5">
+                <div className="bg-white rounded-xl border border-border p-5">
                   <div className="flex items-center justify-between mb-4 flex-wrap gap-3">
                     <div>
-                      <h2 className="font-semibold text-gray-800">
+                      <h2 className="font-semibold text-foreground">
                         Gráfico de Previsão — Próximos {previsao.horizonte_meses} meses
                       </h2>
-                      <p className="text-xs text-gray-400 mt-0.5">
+                      <p className="text-xs text-muted-foreground mt-0.5">
                         Linha azul = histórico real · Linha laranja tracejada = projeção futura · valores inteiros
                       </p>
                     </div>
                     <div className="flex items-center gap-3 flex-wrap">
-                      <span className="text-xs text-gray-400">
+                      <span className="text-xs text-muted-foreground">
                         Gerado em {new Date(previsao.gerada_em).toLocaleString('pt-BR')}
                       </span>
                       <button
@@ -1226,9 +1226,9 @@ export default function PrevisaoFaturamento() {
 
             {/* Placeholder sem previsão */}
             {!previsao && empresaId && !loadingPrevisao && (
-              <div className="bg-white rounded-xl border border-dashed border-gray-300 p-10 text-center">
-                <BarChart2 className="w-10 h-10 text-gray-300 mx-auto mb-3" />
-                <p className="text-gray-500 text-sm">
+              <div className="bg-white rounded-xl border border-dashed border-input p-10 text-center">
+                <BarChart2 className="w-10 h-10 text-muted-foreground mx-auto mb-3" />
+                <p className="text-muted-foreground text-sm">
                   Nenhuma previsão gerada ainda. Escolha IA ou informe uma previsão manual acima.
                 </p>
               </div>

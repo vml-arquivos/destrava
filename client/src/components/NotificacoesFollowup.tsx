@@ -79,14 +79,14 @@ export default function NotificacoesFollowup() {
       >
         <Bell className="h-4 w-4" />
         {total > 0 && (
-          <span className="absolute -top-1 -right-1 flex h-4 w-4 items-center justify-center rounded-full bg-red-500 text-[10px] font-bold text-white">
+          <span className="absolute -top-1 -right-1 flex h-4 w-4 items-center justify-center rounded-full bg-destructive text-[10px] font-bold text-primary-foreground">
             {total > 9 ? "9+" : total}
           </span>
         )}
       </button>
 
       {aberto && (
-        <div className="absolute right-0 top-11 z-50 w-80 rounded-lg border bg-white shadow-xl">
+        <div className="absolute right-0 top-11 z-50 w-80 rounded-lg border bg-card shadow-xl">
           {/* Header */}
           <div className="flex items-center justify-between px-4 py-3 border-b">
             <div className="flex items-center gap-2">
@@ -122,28 +122,28 @@ export default function NotificacoesFollowup() {
             {/* Atrasados */}
             {atrasados.length > 0 && (
               <div>
-                <div className="flex items-center gap-1.5 px-4 py-2 bg-red-50 border-b">
-                  <AlertTriangle className="h-3.5 w-3.5 text-red-500" />
-                  <span className="text-xs font-semibold text-red-700">
+                <div className="flex items-center gap-1.5 px-4 py-2 bg-destructive/10 border-b">
+                  <AlertTriangle className="h-3.5 w-3.5 text-destructive" />
+                  <span className="text-xs font-semibold text-destructive">
                     Atrasados ({atrasados.length})
                   </span>
                 </div>
                 {atrasados.slice(0, 5).map((lead) => (
                   <Link key={lead.id} href={`/colaborador/crm?lead=${lead.id}`}
-                      className="flex items-start gap-3 px-4 py-3 hover:bg-red-50 border-b border-gray-100 cursor-pointer transition-colors"
+                      className="flex items-start gap-3 px-4 py-3 hover:bg-destructive/10 border-b border-border cursor-pointer transition-colors"
                       onClick={() => setAberto(false)}
                     >
-                      <AlertTriangle className="h-4 w-4 text-red-500 mt-0.5 flex-shrink-0" />
+                      <AlertTriangle className="h-4 w-4 text-destructive mt-0.5 flex-shrink-0" />
                       <div className="flex-1 min-w-0">
-                        <p className="text-sm font-medium text-gray-900 truncate">
+                        <p className="text-sm font-medium text-foreground truncate">
                           {lead.nome_completo || lead.nome || "Lead sem nome"}
                         </p>
-                        <p className="text-xs text-red-600">
+                        <p className="text-xs text-destructive">
                           {lead.proximo_followup ? formatarDataRelativa(lead.proximo_followup) : ""}
                           {lead.etapa_funil ? ` · ${lead.etapa_funil}` : ""}
                         </p>
                       </div>
-                      <ExternalLink className="h-3.5 w-3.5 text-gray-400 flex-shrink-0 mt-0.5" />
+                      <ExternalLink className="h-3.5 w-3.5 text-muted-foreground flex-shrink-0 mt-0.5" />
                     </Link>
                 ))}
                 {atrasados.length > 5 && (
@@ -157,30 +157,30 @@ export default function NotificacoesFollowup() {
             {/* Hoje */}
             {hoje.length > 0 && (
               <div>
-                <div className="flex items-center gap-1.5 px-4 py-2 bg-amber-50 border-b">
+                <div className="flex items-center gap-1.5 px-4 py-2 bg-warning/10 border-b">
                   <Clock className="h-3.5 w-3.5 text-amber-500" />
-                  <span className="text-xs font-semibold text-amber-700">
+                  <span className="text-xs font-semibold text-warning">
                     Para hoje ({hoje.length})
                   </span>
                 </div>
                 {hoje.slice(0, 5).map((lead) => (
                   <Link key={lead.id} href={`/colaborador/crm?lead=${lead.id}`}
-                      className="flex items-start gap-3 px-4 py-3 hover:bg-amber-50 border-b border-gray-100 cursor-pointer transition-colors"
+                      className="flex items-start gap-3 px-4 py-3 hover:bg-warning/10 border-b border-border cursor-pointer transition-colors"
                       onClick={() => setAberto(false)}
                     >
                       <Clock className="h-4 w-4 text-amber-500 mt-0.5 flex-shrink-0" />
                       <div className="flex-1 min-w-0">
-                        <p className="text-sm font-medium text-gray-900 truncate">
+                        <p className="text-sm font-medium text-foreground truncate">
                           {lead.nome_completo || lead.nome || "Lead sem nome"}
                         </p>
-                        <p className="text-xs text-amber-600">
+                        <p className="text-xs text-warning">
                           {lead.proximo_followup
                             ? new Date(lead.proximo_followup).toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" })
                             : ""}
                           {lead.etapa_funil ? ` · ${lead.etapa_funil}` : ""}
                         </p>
                       </div>
-                      <ExternalLink className="h-3.5 w-3.5 text-gray-400 flex-shrink-0 mt-0.5" />
+                      <ExternalLink className="h-3.5 w-3.5 text-muted-foreground flex-shrink-0 mt-0.5" />
                     </Link>
                 ))}
                 {hoje.length > 5 && (
@@ -194,7 +194,7 @@ export default function NotificacoesFollowup() {
 
           {/* Footer */}
           {total > 0 && (
-            <div className="px-4 py-3 border-t bg-gray-50">
+            <div className="px-4 py-3 border-t bg-muted">
               <Link href="/colaborador/crm"
                   className="text-xs text-primary font-medium hover:underline"
                   onClick={() => setAberto(false)}

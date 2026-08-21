@@ -106,23 +106,23 @@ export default function Header({ ctaLabel = "Simule seu crédito", ctaHref = "/s
                     <ChevronDown className={`h-4 w-4 transition-transform ${openDropdown === item.label ? "rotate-180" : ""}`} />
                   </button>
                   {openDropdown === item.label && (
-                    <div id={`menu-${item.href.replaceAll("/", "-")}`} role="menu" className="absolute top-full left-0 mt-1 w-72 bg-white rounded-xl shadow-lg border border-gray-100 py-2 z-50">
+                    <div id={`menu-${item.href.replaceAll("/", "-")}`} role="menu" className="absolute top-full left-0 mt-1 w-72 bg-card rounded-xl shadow-lg border border-border py-2 z-50">
                       {item.children.map((child) => (
                         <Link
                           key={child.href}
                           href={child.href}
                           onClick={() => setOpenDropdown(null)}
                           role="menuitem"
-                          className="flex items-start gap-3 px-4 py-3 hover:bg-gray-50 transition-colors"
+                          className="flex items-start gap-3 px-4 py-3 hover:bg-muted transition-colors"
                         >
                           {child.icon && (
-                            <div className="w-8 h-8 rounded-lg bg-blue-50 flex items-center justify-center flex-shrink-0 mt-0.5">
+                            <div className="w-8 h-8 rounded-lg bg-primary/10 flex items-center justify-center flex-shrink-0 mt-0.5">
                               <child.icon className="h-4 w-4 text-[var(--color-caixa-blue)]" />
                             </div>
                           )}
                           <div>
-                            <p className="text-sm font-medium text-gray-900">{child.label}</p>
-                            {child.desc && <p className="text-xs text-gray-500 mt-0.5">{child.desc}</p>}
+                            <p className="text-sm font-medium text-foreground">{child.label}</p>
+                            {child.desc && <p className="text-xs text-muted-foreground mt-0.5">{child.desc}</p>}
                           </div>
                         </Link>
                       ))}
@@ -146,13 +146,13 @@ export default function Header({ ctaLabel = "Simule seu crédito", ctaHref = "/s
 
           {/* CTA Buttons Desktop */}
           <div className="hidden lg:flex items-center gap-2 flex-shrink-0">
-            <Button asChild variant="ghost" size="sm" className="text-gray-500 hover:text-gray-700 gap-1.5 text-xs">
+            <Button asChild variant="ghost" size="sm" className="text-muted-foreground hover:text-foreground gap-1.5 text-xs">
               <Link href="/colaborador/login">
                 <Lock className="h-3.5 w-3.5" />
                 Área Restrita
               </Link>
             </Button>
-            <Button asChild size="lg" className="font-semibold bg-[var(--color-caixa-blue)] hover:bg-blue-700">
+            <Button asChild size="lg" className="font-semibold bg-[var(--color-caixa-blue)] hover:bg-primary">
               <Link href={ctaHref} data-cta-position="header-desktop">
                 {ctaLabel}
               </Link>
@@ -193,7 +193,7 @@ export default function Header({ ctaLabel = "Simule seu crédito", ctaHref = "/s
                           key={child.href}
                           href={child.href}
                           onClick={() => setMobileMenuOpen(false)}
-                          className="block px-4 py-2 text-sm text-gray-600 hover:text-primary hover:bg-gray-50 rounded-lg"
+                          className="block px-4 py-2 text-sm text-muted-foreground hover:text-primary hover:bg-muted rounded-lg"
                         >
                           {child.label}
                         </Link>
@@ -203,12 +203,12 @@ export default function Header({ ctaLabel = "Simule seu crédito", ctaHref = "/s
                 </div>
               ))}
               <div className="pt-4 px-2 space-y-2">
-                <Button asChild size="lg" className="w-full font-semibold bg-[var(--color-caixa-blue)] hover:bg-blue-700">
+                <Button asChild size="lg" className="w-full font-semibold bg-[var(--color-caixa-blue)] hover:bg-primary">
                   <Link href={ctaHref} onClick={() => setMobileMenuOpen(false)} data-cta-position="header-mobile">
                     {ctaLabel}
                   </Link>
                 </Button>
-                <Button asChild variant="outline" size="sm" className="w-full text-gray-500 border-gray-200 gap-1.5">
+                <Button asChild variant="outline" size="sm" className="w-full text-muted-foreground border-border gap-1.5">
                   <Link href="/colaborador/login" onClick={() => setMobileMenuOpen(false)}>
                     <Lock className="h-3.5 w-3.5" />
                     Área Restrita — Colaboradores

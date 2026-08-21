@@ -193,16 +193,16 @@ function podeEditarPercentual(user: any): boolean {
 const STATUS_MAP: Record<string, { label: string; color: string; bg: string; border: string }> = {
   dentro_da_referencia: { label: "Dentro da Referência", color: "text-green-800", bg: "bg-green-50", border: "border-green-300" },
   atencao_leve:         { label: "Atenção Leve",         color: "text-yellow-800", bg: "bg-yellow-50", border: "border-yellow-300" },
-  atencao_media:        { label: "Atenção Média",        color: "text-orange-800", bg: "bg-orange-50", border: "border-orange-300" },
-  incompativel:         { label: "Incompatível",         color: "text-red-800",    bg: "bg-red-50",    border: "border-red-300" },
-  critico:              { label: "Crítico",              color: "text-red-900",    bg: "bg-red-100",   border: "border-red-400" },
-  sem_documentacao:     { label: "Sem Documentação",     color: "text-gray-700",   bg: "bg-gray-50",   border: "border-gray-300" },
-  aguardando_atualizacao:{ label: "Aguardando Atualização", color: "text-blue-800", bg: "bg-blue-50", border: "border-blue-300" },
-  regularizado:         { label: "Regularizado",         color: "text-emerald-800",bg: "bg-emerald-50",border: "border-emerald-300" },
+  atencao_media:        { label: "Atenção Média",        color: "text-warning", bg: "bg-warning/10", border: "border-warning/30" },
+  incompativel:         { label: "Incompatível",         color: "text-destructive",    bg: "bg-destructive/10",    border: "border-destructive/30" },
+  critico:              { label: "Crítico",              color: "text-destructive",    bg: "bg-destructive/20",   border: "border-red-400" },
+  sem_documentacao:     { label: "Sem Documentação",     color: "text-foreground",   bg: "bg-muted",   border: "border-input" },
+  aguardando_atualizacao:{ label: "Aguardando Atualização", color: "text-primary", bg: "bg-primary/10", border: "border-primary/30" },
+  regularizado:         { label: "Regularizado",         color: "text-success",bg: "bg-success/10",border: "border-success/30" },
 };
 
 function StatusBadge({ status }: { status: string }) {
-  const s = STATUS_MAP[status] || { label: status, color: "text-gray-700", bg: "bg-gray-50", border: "border-gray-300" };
+  const s = STATUS_MAP[status] || { label: status, color: "text-foreground", bg: "bg-muted", border: "border-input" };
   const Icon = ["critico","incompativel"].includes(status) ? XCircle
     : ["dentro_da_referencia","regularizado"].includes(status) ? CheckCircle2
     : AlertTriangle;
@@ -218,14 +218,14 @@ function StatusBadge({ status }: { status: string }) {
 
 function BarraProgresso({ pct, label }: { pct: number; label: string }) {
   const clamped = Math.min(pct, 200);
-  const cor = pct > 120 ? "bg-red-500" : pct > 100 ? "bg-orange-400" : "bg-green-500";
+  const cor = pct > 120 ? "bg-destructive" : pct > 100 ? "bg-orange-400" : "bg-green-500";
   return (
     <div className="w-full">
       <div className="flex justify-between text-xs mb-0.5">
-        <span className="text-gray-500">{label}</span>
-        <span className={`font-semibold ${pct > 100 ? "text-red-600" : "text-gray-700"}`}>{pctBR(pct)}</span>
+        <span className="text-muted-foreground">{label}</span>
+        <span className={`font-semibold ${pct > 100 ? "text-destructive" : "text-foreground"}`}>{pctBR(pct)}</span>
       </div>
-      <div className="h-2 bg-gray-200 rounded-full overflow-hidden">
+      <div className="h-2 bg-border rounded-full overflow-hidden">
         <div className={`h-full rounded-full transition-all ${cor}`} style={{ width: `${Math.min(clamped, 100)}%` }} />
       </div>
     </div>
@@ -251,11 +251,11 @@ function ModalConfirmacao({
     <Dialog open={aberto} onOpenChange={v => !v && onCancelar()}>
       <DialogContent className="max-w-sm">
         <DialogHeader>
-          <DialogTitle className="text-red-700 flex items-center gap-2">
+          <DialogTitle className="text-destructive flex items-center gap-2">
             <AlertTriangle className="h-5 w-5" /> Confirmar Exclusão
           </DialogTitle>
         </DialogHeader>
-        <p className="text-sm text-gray-700 py-2">{mensagem}</p>
+        <p className="text-sm text-foreground py-2">{mensagem}</p>
         <DialogFooter>
           <Button variant="outline" onClick={onCancelar} disabled={carregando}>Cancelar</Button>
           <Button variant="destructive" onClick={onConfirmar} disabled={carregando}>
@@ -348,7 +348,7 @@ function FormConfig({
             autoComplete="off"
             className="mt-1 text-right font-mono tabular-nums"
           />
-          <p className="text-xs text-gray-500 mt-1">Informe o valor bruto anual declarado</p>
+          <p className="text-xs text-muted-foreground mt-1">Informe o valor bruto anual declarado</p>
         </div>
         <div>
           <Label>Percentual Operacional (%)</Label>
@@ -359,29 +359,29 @@ function FormConfig({
             disabled={!editarPct}
             className="mt-1"
           />
-          <p className="text-xs text-gray-500 mt-1">
+          <p className="text-xs text-muted-foreground mt-1">
             {editarPct ? "Padrão: 30%" : "Somente Administrador ou Diretor pode alterar"}
           </p>
         </div>
       </div>
 
       {limites && (
-        <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 space-y-3">
-          <p className="text-xs font-semibold text-blue-700 uppercase">Limites Calculados (prévia)</p>
+        <div className="bg-primary/10 border border-primary/20 rounded-lg p-4 space-y-3">
+          <p className="text-xs font-semibold text-primary uppercase">Limites Calculados (prévia)</p>
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-            <div className="text-center bg-white rounded border border-blue-100 p-3">
-              <p className="text-xs text-blue-500 uppercase font-medium">Limite Anual</p>
-              <p className="text-base font-bold text-blue-800 mt-1">{moneyBR(limites.limite_anual)}</p>
+            <div className="text-center bg-card rounded border border-primary/20 p-3">
+              <p className="text-xs text-primary uppercase font-medium">Limite Anual</p>
+              <p className="text-base font-bold text-primary mt-1">{moneyBR(limites.limite_anual)}</p>
               <p className="text-xs text-blue-400">{pct}% de {moneyBR(fatNum)}</p>
             </div>
-            <div className="text-center bg-white rounded border border-blue-100 p-3">
-              <p className="text-xs text-blue-500 uppercase font-medium">Limite Mensal</p>
-              <p className="text-base font-bold text-blue-800 mt-1">{moneyBR(limites.limite_mensal)}</p>
+            <div className="text-center bg-card rounded border border-primary/20 p-3">
+              <p className="text-xs text-primary uppercase font-medium">Limite Mensal</p>
+              <p className="text-base font-bold text-primary mt-1">{moneyBR(limites.limite_mensal)}</p>
               <p className="text-xs text-blue-400">÷ 12 meses</p>
             </div>
-            <div className="text-center bg-white rounded border border-blue-100 p-3">
-              <p className="text-xs text-blue-500 uppercase font-medium">Limite Semanal</p>
-              <p className="text-base font-bold text-blue-800 mt-1">{moneyBR(limites.limite_semanal)}</p>
+            <div className="text-center bg-card rounded border border-primary/20 p-3">
+              <p className="text-xs text-primary uppercase font-medium">Limite Semanal</p>
+              <p className="text-base font-bold text-primary mt-1">{moneyBR(limites.limite_semanal)}</p>
               <p className="text-xs text-blue-400">÷ {limites.semanas_no_mes} semanas no mês</p>
             </div>
           </div>
@@ -529,7 +529,7 @@ function FormSemana({
 
       {/* Identificação da semana */}
       <div>
-        <h4 className="text-sm font-semibold text-gray-700 mb-3">Identificação da Semana</h4>
+        <h4 className="text-sm font-semibold text-foreground mb-3">Identificação da Semana</h4>
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
           <div>
             <Label className="text-xs">Ano</Label>
@@ -573,24 +573,24 @@ function FormSemana({
       </div>
 
       {/* Resumo calculado em tempo real */}
-      <div className="bg-gray-50 border rounded-lg p-3">
-        <p className="text-xs font-semibold text-gray-600 uppercase mb-2">Resumo Calculado em Tempo Real</p>
+      <div className="bg-muted border rounded-lg p-3">
+        <p className="text-xs font-semibold text-muted-foreground uppercase mb-2">Resumo Calculado em Tempo Real</p>
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-center">
-          <div className="bg-white rounded border p-2">
-            <p className="text-xs text-gray-500">Entradas</p>
+          <div className="bg-card rounded border p-2">
+            <p className="text-xs text-muted-foreground">Entradas</p>
             <p className="text-sm font-bold text-green-700">{moneyBR(totalEntradas)}</p>
           </div>
-          <div className="bg-white rounded border p-2">
-            <p className="text-xs text-gray-500">Saídas</p>
-            <p className="text-sm font-bold text-red-700">{moneyBR(totalSaidas)}</p>
+          <div className="bg-card rounded border p-2">
+            <p className="text-xs text-muted-foreground">Saídas</p>
+            <p className="text-sm font-bold text-destructive">{moneyBR(totalSaidas)}</p>
           </div>
-          <div className="bg-white rounded border p-2">
-            <p className="text-xs text-gray-500">Saldo Final</p>
-            <p className={`text-sm font-bold ${saldoFinal >= 0 ? "text-gray-800" : "text-red-700"}`}>{moneyBR(saldoFinal)}</p>
+          <div className="bg-card rounded border p-2">
+            <p className="text-xs text-muted-foreground">Saldo Final</p>
+            <p className={`text-sm font-bold ${saldoFinal >= 0 ? "text-foreground" : "text-destructive"}`}>{moneyBR(saldoFinal)}</p>
           </div>
-          <div className="bg-white rounded border p-2">
-            <p className="text-xs text-gray-500">Saldo Médio</p>
-            <p className="text-sm font-bold text-gray-800">{moneyBR(saldoMedio)}</p>
+          <div className="bg-card rounded border p-2">
+            <p className="text-xs text-muted-foreground">Saldo Médio</p>
+            <p className="text-sm font-bold text-foreground">{moneyBR(saldoMedio)}</p>
           </div>
         </div>
       </div>
@@ -599,11 +599,11 @@ function FormSemana({
 
       {/* Movimentações */}
       <div>
-        <h4 className="text-sm font-semibold text-gray-700 mb-3">Movimentações (Entradas e Saídas)</h4>
+        <h4 className="text-sm font-semibold text-foreground mb-3">Movimentações (Entradas e Saídas)</h4>
 
         {/* Formulário de nova movimentação */}
-        <div className="bg-blue-50 border border-blue-100 rounded-lg p-3 mb-3">
-          <p className="text-xs font-medium text-blue-700 mb-2">Adicionar Movimentação</p>
+        <div className="bg-primary/10 border border-primary/20 rounded-lg p-3 mb-3">
+          <p className="text-xs font-medium text-primary mb-2">Adicionar Movimentação</p>
           <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
             <div>
               <Label className="text-xs">Data</Label>
@@ -652,7 +652,7 @@ function FormSemana({
 
         {/* Lista de movimentações */}
         {movs.length === 0 ? (
-          <p className="text-xs text-gray-400 text-center py-3 border rounded">Nenhuma movimentação lançada.</p>
+          <p className="text-xs text-muted-foreground text-center py-3 border rounded">Nenhuma movimentação lançada.</p>
         ) : (
           <div className="space-y-2">
             {movs.map((m, i) => (
@@ -674,11 +674,11 @@ function FormSemana({
 
       {/* Saldos diários */}
       <div>
-        <h4 className="text-sm font-semibold text-gray-700 mb-1">Saldos Diários <span className="text-gray-400 font-normal">(opcional)</span></h4>
-        <p className="text-xs text-gray-500 mb-3">Quando informados, o saldo médio semanal será calculado com base nestes valores.</p>
+        <h4 className="text-sm font-semibold text-foreground mb-1">Saldos Diários <span className="text-muted-foreground font-normal">(opcional)</span></h4>
+        <p className="text-xs text-muted-foreground mb-3">Quando informados, o saldo médio semanal será calculado com base nestes valores.</p>
 
-        <div className="bg-gray-50 border rounded-lg p-3 mb-3">
-          <p className="text-xs font-medium text-gray-600 mb-2">Adicionar Saldo Diário</p>
+        <div className="bg-muted border rounded-lg p-3 mb-3">
+          <p className="text-xs font-medium text-muted-foreground mb-2">Adicionar Saldo Diário</p>
           <div className="flex flex-col sm:flex-row gap-2">
             <div className="flex-1">
               <Label className="text-xs">Data</Label>
@@ -728,7 +728,7 @@ function FormSemana({
 
       {/* Observações */}
       <div>
-        <Label className="text-sm font-semibold text-gray-700">Observações</Label>
+        <Label className="text-sm font-semibold text-foreground">Observações</Label>
         <Textarea
           value={form.observacoes}
           onChange={e => setForm(f => ({ ...f, observacoes: e.target.value }))}
@@ -772,7 +772,7 @@ function MovimentacaoItem({
 
   if (editando) {
     return (
-      <div className="border border-blue-300 rounded-lg p-3 bg-blue-50 space-y-2">
+      <div className="border border-primary/30 rounded-lg p-3 bg-primary/10 space-y-2">
         <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
           <div>
             <Label className="text-xs">Data</Label>
@@ -824,27 +824,27 @@ function MovimentacaoItem({
   }
 
   return (
-    <div className="border rounded-lg p-3 bg-white">
+    <div className="border rounded-lg p-3 bg-card">
       {/* Mobile: card empilhado */}
       <div className="flex flex-col sm:flex-row sm:items-center gap-2">
         <div className="flex-1 grid grid-cols-2 sm:grid-cols-4 gap-1 text-sm">
           <div>
-            <span className="text-xs text-gray-400 block">Data</span>
+            <span className="text-xs text-muted-foreground block">Data</span>
             <span className="font-medium">{dataBR(mov.data_movimento)}</span>
           </div>
           <div>
-            <span className="text-xs text-gray-400 block">Tipo</span>
-            <span className={`font-semibold capitalize ${mov.tipo === "entrada" ? "text-green-700" : "text-red-700"}`}>
+            <span className="text-xs text-muted-foreground block">Tipo</span>
+            <span className={`font-semibold capitalize ${mov.tipo === "entrada" ? "text-green-700" : "text-destructive"}`}>
               {mov.tipo === "entrada" ? "Entrada" : "Saída"}
             </span>
           </div>
           <div>
-            <span className="text-xs text-gray-400 block">Descrição</span>
-            <span className="text-gray-700 truncate block">{mov.descricao || mov.categoria || "—"}</span>
+            <span className="text-xs text-muted-foreground block">Descrição</span>
+            <span className="text-foreground truncate block">{mov.descricao || mov.categoria || "—"}</span>
           </div>
           <div>
-            <span className="text-xs text-gray-400 block">Valor</span>
-            <span className={`font-bold ${mov.tipo === "entrada" ? "text-green-700" : "text-red-700"}`}>{moneyBR(mov.valor)}</span>
+            <span className="text-xs text-muted-foreground block">Valor</span>
+            <span className={`font-bold ${mov.tipo === "entrada" ? "text-green-700" : "text-destructive"}`}>{moneyBR(mov.valor)}</span>
           </div>
         </div>
         <div className="flex gap-2 sm:flex-shrink-0">
@@ -852,7 +852,7 @@ function MovimentacaoItem({
             <Edit className="h-3.5 w-3.5" />
             <span className="ml-1 text-xs">Editar</span>
           </Button>
-          <Button size="sm" variant="outline" onClick={onExcluir} className="h-8 px-2 text-red-600 hover:bg-red-50 border-red-200">
+          <Button size="sm" variant="outline" onClick={onExcluir} className="h-8 px-2 text-destructive hover:bg-destructive/10 border-destructive/20">
             <Trash2 className="h-3.5 w-3.5" />
             <span className="ml-1 text-xs">Excluir</span>
           </Button>
@@ -884,7 +884,7 @@ function SaldoDiarioItem({
 
   if (editando) {
     return (
-      <div className="border border-blue-300 rounded-lg p-3 bg-blue-50">
+      <div className="border border-primary/30 rounded-lg p-3 bg-primary/10">
         <div className="flex flex-col sm:flex-row gap-2">
           <div className="flex-1">
             <Label className="text-xs">Data</Label>
@@ -915,22 +915,22 @@ function SaldoDiarioItem({
   }
 
   return (
-    <div className="border rounded-lg p-3 bg-white flex items-center justify-between gap-2">
+    <div className="border rounded-lg p-3 bg-card flex items-center justify-between gap-2">
       <div className="flex gap-4 text-sm">
         <div>
-          <span className="text-xs text-gray-400 block">Data</span>
+          <span className="text-xs text-muted-foreground block">Data</span>
           <span className="font-medium">{dataBR(saldo.data_referencia)}</span>
         </div>
         <div>
-          <span className="text-xs text-gray-400 block">Saldo do Dia</span>
-          <span className="font-bold text-gray-800">{moneyBR(saldo.saldo_dia)}</span>
+          <span className="text-xs text-muted-foreground block">Saldo do Dia</span>
+          <span className="font-bold text-foreground">{moneyBR(saldo.saldo_dia)}</span>
         </div>
       </div>
       <div className="flex gap-2 flex-shrink-0">
         <Button size="sm" variant="outline" onClick={onEditar} className="h-8 px-2">
           <Edit className="h-3.5 w-3.5" /><span className="ml-1 text-xs">Editar</span>
         </Button>
-        <Button size="sm" variant="outline" onClick={onExcluir} className="h-8 px-2 text-red-600 hover:bg-red-50 border-red-200">
+        <Button size="sm" variant="outline" onClick={onExcluir} className="h-8 px-2 text-destructive hover:bg-destructive/10 border-destructive/20">
           <Trash2 className="h-3.5 w-3.5" /><span className="ml-1 text-xs">Excluir</span>
         </Button>
       </div>
@@ -1064,25 +1064,25 @@ function ImportacaoExtratoSemana({
   const aprovados = linhas.filter((linha) => linha.status === "aprovado" && !linha.aplicado_em);
 
   return (
-    <div className="border border-blue-200 bg-blue-50/50 rounded-lg p-3 space-y-3">
+    <div className="border border-primary/20 bg-primary/10/50 rounded-lg p-3 space-y-3">
       <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-2">
         <div>
-          <p className="text-xs font-semibold text-blue-800 uppercase flex items-center gap-1.5"><FileText className="h-3.5 w-3.5" /> Importar extrato e comprovantes</p>
-          <p className="text-xs text-blue-700 mt-1">Anexe PDF ou imagem. A leitura ficará em revisão e não altera os lançamentos manuais até a aprovação.</p>
+          <p className="text-xs font-semibold text-primary uppercase flex items-center gap-1.5"><FileText className="h-3.5 w-3.5" /> Importar extrato e comprovantes</p>
+          <p className="text-xs text-primary mt-1">Anexe PDF ou imagem. A leitura ficará em revisão e não altera os lançamentos manuais até a aprovação.</p>
         </div>
         <Badge variant="secondary" className="w-fit text-xs">{pendentes.length} pendente{pendentes.length === 1 ? "" : "s"}</Badge>
       </div>
       <div className="flex flex-col sm:flex-row gap-2 items-stretch sm:items-end">
         <div className="flex-1">
-          <Label className="text-xs text-gray-600">Extrato ou comprovante</Label>
+          <Label className="text-xs text-muted-foreground">Extrato ou comprovante</Label>
           <Input
             type="file"
             accept="application/pdf,image/jpeg,image/png,image/webp"
-            className="mt-1 bg-white text-xs"
+            className="mt-1 bg-card text-xs"
             onChange={(e) => setArquivo(e.target.files?.[0] || null)}
             disabled={analisando}
           />
-          {arquivo && <p className="text-[11px] text-gray-500 mt-1 truncate">Selecionado: {arquivo.name}</p>}
+          {arquivo && <p className="text-[11px] text-muted-foreground mt-1 truncate">Selecionado: {arquivo.name}</p>}
         </div>
         <Button size="sm" onClick={analisarArquivo} disabled={!arquivo || analisando} className="sm:min-w-[140px]">
           {analisando ? <Loader2 className="h-4 w-4 mr-1 animate-spin" /> : <FileText className="h-4 w-4 mr-1" />}
@@ -1091,16 +1091,16 @@ function ImportacaoExtratoSemana({
       </div>
 
       {carregandoLinhas ? (
-        <div className="flex items-center gap-2 text-xs text-gray-500 py-3"><Loader2 className="h-4 w-4 animate-spin" /> Carregando revisão...</div>
+        <div className="flex items-center gap-2 text-xs text-muted-foreground py-3"><Loader2 className="h-4 w-4 animate-spin" /> Carregando revisão...</div>
       ) : linhas.length > 0 ? (
         <div className="space-y-2">
-          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 border-t border-blue-200 pt-3">
-            <p className="text-xs font-semibold text-gray-700">Lançamentos extraídos para revisão</p>
+          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 border-t border-primary/20 pt-3">
+            <p className="text-xs font-semibold text-foreground">Lançamentos extraídos para revisão</p>
             <div className="flex flex-wrap gap-2">
-              {pendentes.length > 0 && <Button size="sm" variant="outline" className="h-8 text-xs bg-white" onClick={() => setSelecionados(new Set(selecionados.size === pendentes.length ? [] : pendentes.map((linha) => linha.id)))}>
+              {pendentes.length > 0 && <Button size="sm" variant="outline" className="h-8 text-xs bg-card" onClick={() => setSelecionados(new Set(selecionados.size === pendentes.length ? [] : pendentes.map((linha) => linha.id)))}>
                 {selecionados.size === pendentes.length ? "Desmarcar pendentes" : "Selecionar pendentes"}
               </Button>}
-              <Button size="sm" variant="outline" className="h-8 text-xs bg-white" onClick={aprovarSelecionados} disabled={!selecionados.size}>
+              <Button size="sm" variant="outline" className="h-8 text-xs bg-card" onClick={aprovarSelecionados} disabled={!selecionados.size}>
                 <CheckCircle2 className="h-3.5 w-3.5 mr-1 text-green-600" /> Aprovar selecionados
               </Button>
               <Button size="sm" onClick={aplicarAprovados} disabled={!aprovados.length || aplicando} className="h-8 text-xs">
@@ -1113,7 +1113,7 @@ function ImportacaoExtratoSemana({
             {linhas.map((linha) => {
               const bloqueada = Boolean(linha.aplicado_em);
               return (
-                <div key={linha.id} className={`border rounded-lg p-2.5 bg-white ${linha.status === "descartado" ? "opacity-60" : ""}`}>
+                <div key={linha.id} className={`border rounded-lg p-2.5 bg-card ${linha.status === "descartado" ? "opacity-60" : ""}`}>
                   <div className="flex flex-col lg:flex-row gap-2 lg:items-end">
                     <div className="flex items-center gap-2 lg:pb-1">
                       <input
@@ -1130,21 +1130,21 @@ function ImportacaoExtratoSemana({
                     <div className="w-full lg:flex-1"><Label className="text-[11px]">Descrição</Label><Input value={linha.descricao || ""} onChange={(e) => atualizarLinhaLocal(linha.id, "descricao", e.target.value)} disabled={bloqueada} className="h-8 mt-0.5 text-xs" /></div>
                     <div className="w-full lg:w-32"><Label className="text-[11px]">Valor</Label><Input type="text" inputMode="numeric" value={linha.valor ? formatBRLCurrency(Number(linha.valor)) : ""} onChange={(e) => atualizarLinhaLocal(linha.id, "valor", unmaskCurrencyInput(maskCurrencyInput(e.target.value)))} disabled={bloqueada} className="h-8 mt-0.5 text-xs text-right" /></div>
                     <div className="flex items-center gap-1 lg:pb-0.5">
-                      <Badge variant="outline" className={`text-[10px] whitespace-nowrap ${linha.status === "aprovado" ? "border-green-300 text-green-700" : linha.status === "descartado" ? "border-gray-300 text-gray-500" : "border-amber-300 text-amber-700"}`}>{bloqueada ? "Aplicado" : linha.status === "aprovado" ? "Aprovado" : linha.status === "descartado" ? "Descartado" : "Pendente"}</Badge>
+                      <Badge variant="outline" className={`text-[10px] whitespace-nowrap ${linha.status === "aprovado" ? "border-green-300 text-green-700" : linha.status === "descartado" ? "border-input text-muted-foreground" : "border-warning/30 text-warning"}`}>{bloqueada ? "Aplicado" : linha.status === "aprovado" ? "Aprovado" : linha.status === "descartado" ? "Descartado" : "Pendente"}</Badge>
                       {!bloqueada && linha.status !== "descartado" && <Button size="sm" variant="outline" onClick={() => revisarLinha(linha, "pendente")} className="h-8 px-2 text-xs">Salvar</Button>}
                       {!bloqueada && linha.status === "pendente" && <Button size="sm" onClick={() => revisarLinha(linha, "aprovado")} className="h-8 px-2 text-xs"><CheckCircle2 className="h-3 w-3 mr-1" />Aprovar</Button>}
-                      {!bloqueada && linha.status !== "descartado" && <Button size="sm" variant="outline" onClick={() => revisarLinha(linha, "descartado")} className="h-8 px-2 text-xs text-red-600 border-red-200"><XCircle className="h-3 w-3 mr-1" />Descartar</Button>}
+                      {!bloqueada && linha.status !== "descartado" && <Button size="sm" variant="outline" onClick={() => revisarLinha(linha, "descartado")} className="h-8 px-2 text-xs text-destructive border-destructive/20"><XCircle className="h-3 w-3 mr-1" />Descartar</Button>}
                     </div>
                   </div>
-                  {linha.evidencia && <p className="text-[11px] text-gray-500 mt-2 border-t pt-1.5"><span className="font-semibold">Evidência:</span> {linha.evidencia}</p>}
-                  {linha.arquivo_nome && <p className="text-[10px] text-gray-400 mt-1">Origem: {linha.arquivo_nome}{linha.confianca !== null && linha.confianca !== undefined ? ` · confiança ${Math.round(Number(linha.confianca) * 100)}%` : ""}</p>}
+                  {linha.evidencia && <p className="text-[11px] text-muted-foreground mt-2 border-t pt-1.5"><span className="font-semibold">Evidência:</span> {linha.evidencia}</p>}
+                  {linha.arquivo_nome && <p className="text-[10px] text-muted-foreground mt-1">Origem: {linha.arquivo_nome}{linha.confianca !== null && linha.confianca !== undefined ? ` · confiança ${Math.round(Number(linha.confianca) * 100)}%` : ""}</p>}
                 </div>
               );
             })}
           </div>
         </div>
       ) : (
-        <p className="text-xs text-gray-500 border-t border-blue-200 pt-3">Nenhum lançamento importado nesta semana. Os documentos analisados aparecerão aqui para revisão.</p>
+        <p className="text-xs text-muted-foreground border-t border-primary/20 pt-3">Nenhum lançamento importado nesta semana. Os documentos analisados aparecerão aqui para revisão.</p>
       )}
     </div>
   );
@@ -1179,38 +1179,38 @@ function DetalheSemana({
       {/* Cabeçalho */}
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
         <div>
-          <p className="text-sm font-semibold text-gray-800">{nomeMes(semana.mes)}/{semana.ano} — Semana {semana.numero_semana}</p>
-          <p className="text-xs text-gray-500">{dataBR(semana.semana_inicio)} a {dataBR(semana.semana_fim)}</p>
+          <p className="text-sm font-semibold text-foreground">{nomeMes(semana.mes)}/{semana.ano} — Semana {semana.numero_semana}</p>
+          <p className="text-xs text-muted-foreground">{dataBR(semana.semana_inicio)} a {dataBR(semana.semana_fim)}</p>
         </div>
         <StatusBadge status={semana.status} />
       </div>
 
       {/* Parâmetros */}
       {(semana.faturamento_anual_declarado || 0) > 0 && (
-        <div className="bg-blue-50 border border-blue-100 rounded-lg p-3">
-          <p className="text-xs font-semibold text-blue-700 uppercase mb-2">Parâmetros de Acompanhamento</p>
+        <div className="bg-primary/10 border border-primary/20 rounded-lg p-3">
+          <p className="text-xs font-semibold text-primary uppercase mb-2">Parâmetros de Acompanhamento</p>
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
-            <div className="bg-white rounded border border-blue-100 p-2 text-center">
-              <p className="text-xs text-blue-500">Faturamento Declarado</p>
-              <p className="text-sm font-bold text-blue-800">{moneyBR(semana.faturamento_anual_declarado)}</p>
+            <div className="bg-card rounded border border-primary/20 p-2 text-center">
+              <p className="text-xs text-primary">Faturamento Declarado</p>
+              <p className="text-sm font-bold text-primary">{moneyBR(semana.faturamento_anual_declarado)}</p>
             </div>
-            <div className="bg-white rounded border border-blue-100 p-2 text-center">
-              <p className="text-xs text-blue-500">Percentual Operacional</p>
-              <p className="text-sm font-bold text-blue-800">{pctBR(semana.percentual_operacional)}</p>
+            <div className="bg-card rounded border border-primary/20 p-2 text-center">
+              <p className="text-xs text-primary">Percentual Operacional</p>
+              <p className="text-sm font-bold text-primary">{pctBR(semana.percentual_operacional)}</p>
             </div>
-            <div className="bg-white rounded border border-blue-100 p-2 text-center">
-              <p className="text-xs text-blue-500">Limite Anual</p>
-              <p className="text-sm font-bold text-blue-800">{moneyBR(semana.limite_anual_referencia)}</p>
+            <div className="bg-card rounded border border-primary/20 p-2 text-center">
+              <p className="text-xs text-primary">Limite Anual</p>
+              <p className="text-sm font-bold text-primary">{moneyBR(semana.limite_anual_referencia)}</p>
             </div>
           </div>
           <div className="grid grid-cols-2 gap-2 mt-2">
-            <div className="bg-white rounded border border-blue-100 p-2 text-center">
-              <p className="text-xs text-blue-500">Limite Mensal</p>
-              <p className="text-sm font-bold text-blue-800">{moneyBR(semana.limite_mensal_referencia)}</p>
+            <div className="bg-card rounded border border-primary/20 p-2 text-center">
+              <p className="text-xs text-primary">Limite Mensal</p>
+              <p className="text-sm font-bold text-primary">{moneyBR(semana.limite_mensal_referencia)}</p>
             </div>
-            <div className="bg-white rounded border border-blue-100 p-2 text-center">
-              <p className="text-xs text-blue-500">Limite Semanal</p>
-              <p className="text-sm font-bold text-blue-800">{moneyBR(semana.limite_semanal_referencia)}</p>
+            <div className="bg-card rounded border border-primary/20 p-2 text-center">
+              <p className="text-xs text-primary">Limite Semanal</p>
+              <p className="text-sm font-bold text-primary">{moneyBR(semana.limite_semanal_referencia)}</p>
             </div>
           </div>
         </div>
@@ -1218,34 +1218,34 @@ function DetalheSemana({
 
       {/* Resumo financeiro */}
       <div>
-        <p className="text-xs font-semibold text-gray-600 uppercase mb-2">Resumo Financeiro da Semana</p>
+        <p className="text-xs font-semibold text-muted-foreground uppercase mb-2">Resumo Financeiro da Semana</p>
         <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
           <div className="border rounded-lg p-3 text-center">
-            <p className="text-xs text-gray-500">Saldo Inicial</p>
-            <p className="text-base font-bold text-gray-800">{moneyBR(semana.saldo_inicial)}</p>
+            <p className="text-xs text-muted-foreground">Saldo Inicial</p>
+            <p className="text-base font-bold text-foreground">{moneyBR(semana.saldo_inicial)}</p>
           </div>
           <div className="border rounded-lg p-3 text-center bg-green-50 border-green-200">
             <p className="text-xs text-green-600">Total de Entradas</p>
             <p className="text-base font-bold text-green-700">{moneyBR(semana.total_entradas)}</p>
           </div>
-          <div className="border rounded-lg p-3 text-center bg-red-50 border-red-200">
-            <p className="text-xs text-red-600">Total de Saídas</p>
-            <p className="text-base font-bold text-red-700">{moneyBR(semana.total_saidas)}</p>
+          <div className="border rounded-lg p-3 text-center bg-destructive/10 border-destructive/20">
+            <p className="text-xs text-destructive">Total de Saídas</p>
+            <p className="text-base font-bold text-destructive">{moneyBR(semana.total_saidas)}</p>
           </div>
-          <div className="border rounded-lg p-3 text-center bg-gray-50">
-            <p className="text-xs text-gray-500">Saldo Final</p>
-            <p className="text-base font-bold text-gray-800">{moneyBR(semana.saldo_final)}</p>
+          <div className="border rounded-lg p-3 text-center bg-muted">
+            <p className="text-xs text-muted-foreground">Saldo Final</p>
+            <p className="text-base font-bold text-foreground">{moneyBR(semana.saldo_final)}</p>
           </div>
           <div className="border rounded-lg p-3 text-center sm:col-span-2">
-            <p className="text-xs text-gray-500">Saldo Médio Semanal</p>
-            <p className="text-base font-bold text-gray-800">{moneyBR(semana.saldo_medio)}</p>
+            <p className="text-xs text-muted-foreground">Saldo Médio Semanal</p>
+            <p className="text-base font-bold text-foreground">{moneyBR(semana.saldo_medio)}</p>
           </div>
         </div>
       </div>
 
       {/* Análise de conformidade */}
       <div>
-        <p className="text-xs font-semibold text-gray-600 uppercase mb-2">Análise de Conformidade</p>
+        <p className="text-xs font-semibold text-muted-foreground uppercase mb-2">Análise de Conformidade</p>
         <div className="space-y-3">
           <BarraProgresso pct={semana.percentual_uso_semana} label={`Semanal — ${moneyBR(semana.total_entradas)} / ${moneyBR(semana.limite_semanal_referencia)}`} />
           <BarraProgresso pct={semana.percentual_uso_mes} label={`Mensal — ${moneyBR(semana.acumulado_mensal)} / ${moneyBR(semana.limite_mensal_referencia)}`} />
@@ -1255,9 +1255,9 @@ function DetalheSemana({
 
       {/* Diagnóstico técnico */}
       {semana.diagnostico && (
-        <div className="bg-slate-50 border-l-4 border-blue-700 p-3 rounded-r">
-          <p className="text-xs font-semibold text-blue-700 uppercase mb-1">Diagnóstico Técnico</p>
-          <p className="text-xs text-gray-700 leading-relaxed text-justify">{semana.diagnostico}</p>
+        <div className="bg-muted border-l-4 border-blue-700 p-3 rounded-r">
+          <p className="text-xs font-semibold text-primary uppercase mb-1">Diagnóstico Técnico</p>
+          <p className="text-xs text-foreground leading-relaxed text-justify">{semana.diagnostico}</p>
         </div>
       )}
 
@@ -1266,28 +1266,28 @@ function DetalheSemana({
       {/* Movimentações */}
       {semana.movimentacoes && semana.movimentacoes.length > 0 && (
         <div>
-          <p className="text-xs font-semibold text-gray-600 uppercase mb-2">Movimentações</p>
+          <p className="text-xs font-semibold text-muted-foreground uppercase mb-2">Movimentações</p>
           <div className="space-y-2">
             {semana.movimentacoes.map((m, i) => (
-              <div key={i} className="border rounded-lg p-3 bg-white">
+              <div key={i} className="border rounded-lg p-3 bg-card">
                 <div className="grid grid-cols-2 sm:grid-cols-4 gap-1 text-sm">
                   <div>
-                    <span className="text-xs text-gray-400 block">Data</span>
+                    <span className="text-xs text-muted-foreground block">Data</span>
                     <span>{dataBR(m.data_movimento)}</span>
                   </div>
                   <div>
-                    <span className="text-xs text-gray-400 block">Tipo</span>
-                    <span className={`font-semibold ${m.tipo === "entrada" ? "text-green-700" : "text-red-700"}`}>
+                    <span className="text-xs text-muted-foreground block">Tipo</span>
+                    <span className={`font-semibold ${m.tipo === "entrada" ? "text-green-700" : "text-destructive"}`}>
                       {m.tipo === "entrada" ? "Entrada" : "Saída"}
                     </span>
                   </div>
                   <div>
-                    <span className="text-xs text-gray-400 block">Descrição</span>
-                    <span className="text-gray-700">{m.descricao || m.categoria || "—"}</span>
+                    <span className="text-xs text-muted-foreground block">Descrição</span>
+                    <span className="text-foreground">{m.descricao || m.categoria || "—"}</span>
                   </div>
                   <div>
-                    <span className="text-xs text-gray-400 block">Valor</span>
-                    <span className={`font-bold ${m.tipo === "entrada" ? "text-green-700" : "text-red-700"}`}>{moneyBR(m.valor)}</span>
+                    <span className="text-xs text-muted-foreground block">Valor</span>
+                    <span className={`font-bold ${m.tipo === "entrada" ? "text-green-700" : "text-destructive"}`}>{moneyBR(m.valor)}</span>
                   </div>
                 </div>
               </div>
@@ -1299,12 +1299,12 @@ function DetalheSemana({
       {/* Saldos diários */}
       {semana.saldos_diarios && semana.saldos_diarios.length > 0 && (
         <div>
-          <p className="text-xs font-semibold text-gray-600 uppercase mb-2">Saldos Diários</p>
+          <p className="text-xs font-semibold text-muted-foreground uppercase mb-2">Saldos Diários</p>
           <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
             {semana.saldos_diarios.map((s, i) => (
-              <div key={i} className="border rounded-lg p-2 bg-white text-center">
-                <p className="text-xs text-gray-500">{dataBR(s.data_referencia)}</p>
-                <p className="text-sm font-bold text-gray-800">{moneyBR(s.saldo_dia)}</p>
+              <div key={i} className="border rounded-lg p-2 bg-card text-center">
+                <p className="text-xs text-muted-foreground">{dataBR(s.data_referencia)}</p>
+                <p className="text-sm font-bold text-foreground">{moneyBR(s.saldo_dia)}</p>
               </div>
             ))}
           </div>
@@ -1315,7 +1315,7 @@ function DetalheSemana({
       {semana.observacoes && (
         <div className="bg-yellow-50 border-l-4 border-yellow-400 p-3 rounded-r">
           <p className="text-xs font-semibold text-yellow-700 uppercase mb-1">Observações</p>
-          <p className="text-xs text-gray-700 leading-relaxed">{semana.observacoes}</p>
+          <p className="text-xs text-foreground leading-relaxed">{semana.observacoes}</p>
         </div>
       )}
 
@@ -1351,51 +1351,51 @@ function CardSemana({
   const [expandido, setExpandido] = useState(false);
 
   return (
-    <div className="border rounded-lg bg-white overflow-hidden">
+    <div className="border rounded-lg bg-card overflow-hidden">
       {/* Linha principal — clicável */}
       <button
-        className="w-full text-left p-4 hover:bg-gray-50 transition-colors"
+        className="w-full text-left p-4 hover:bg-muted transition-colors"
         onClick={() => setExpandido(v => !v)}
       >
         <div className="flex items-start justify-between gap-2">
           <div className="min-w-0">
             <div className="flex items-center gap-2 flex-wrap">
-              <span className="text-sm font-semibold text-gray-800">
+              <span className="text-sm font-semibold text-foreground">
                 Semana {semana.numero_semana} — {nomeMes(semana.mes)}/{semana.ano}
               </span>
               <StatusBadge status={semana.status} />
             </div>
-            <p className="text-xs text-gray-500 mt-0.5">{dataBR(semana.semana_inicio)} a {dataBR(semana.semana_fim)}</p>
+            <p className="text-xs text-muted-foreground mt-0.5">{dataBR(semana.semana_inicio)} a {dataBR(semana.semana_fim)}</p>
           </div>
           <div className="flex-shrink-0 mt-0.5">
-            {expandido ? <ChevronUp className="h-4 w-4 text-gray-400" /> : <ChevronDown className="h-4 w-4 text-gray-400" />}
+            {expandido ? <ChevronUp className="h-4 w-4 text-muted-foreground" /> : <ChevronDown className="h-4 w-4 text-muted-foreground" />}
           </div>
         </div>
 
         {/* Resumo rápido */}
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 mt-3">
           <div>
-            <p className="text-xs text-gray-400">Entradas</p>
+            <p className="text-xs text-muted-foreground">Entradas</p>
             <p className="text-sm font-bold text-green-700">{moneyBR(semana.total_entradas)}</p>
           </div>
           <div>
-            <p className="text-xs text-gray-400">Saídas</p>
-            <p className="text-sm font-bold text-red-700">{moneyBR(semana.total_saidas)}</p>
+            <p className="text-xs text-muted-foreground">Saídas</p>
+            <p className="text-sm font-bold text-destructive">{moneyBR(semana.total_saidas)}</p>
           </div>
           <div>
-            <p className="text-xs text-gray-400">Saldo Médio</p>
-            <p className="text-sm font-bold text-gray-800">{moneyBR(semana.saldo_medio)}</p>
+            <p className="text-xs text-muted-foreground">Saldo Médio</p>
+            <p className="text-sm font-bold text-foreground">{moneyBR(semana.saldo_medio)}</p>
           </div>
           <div>
-            <p className="text-xs text-gray-400">% Semanal</p>
-            <p className={`text-sm font-bold ${semana.percentual_uso_semana > 100 ? "text-red-600" : "text-gray-800"}`}>{pctBR(semana.percentual_uso_semana)}</p>
+            <p className="text-xs text-muted-foreground">% Semanal</p>
+            <p className={`text-sm font-bold ${semana.percentual_uso_semana > 100 ? "text-destructive" : "text-foreground"}`}>{pctBR(semana.percentual_uso_semana)}</p>
           </div>
         </div>
       </button>
 
       {/* Detalhes expandidos */}
       {expandido && (
-        <div className="border-t px-4 pb-4 pt-3 space-y-3 bg-gray-50">
+        <div className="border-t px-4 pb-4 pt-3 space-y-3 bg-muted">
           <div className="space-y-2">
             <BarraProgresso pct={semana.percentual_uso_semana} label="Semanal" />
             <BarraProgresso pct={semana.percentual_uso_mes} label="Mensal" />
@@ -1403,7 +1403,7 @@ function CardSemana({
           </div>
 
           {semana.diagnostico && (
-            <div className="bg-white border-l-4 border-blue-600 p-2 rounded-r text-xs text-gray-700 leading-relaxed">
+            <div className="bg-card border-l-4 border-blue-600 p-2 rounded-r text-xs text-foreground leading-relaxed">
               {semana.diagnostico}
             </div>
           )}
@@ -1419,7 +1419,7 @@ function CardSemana({
             <Button size="sm" variant="outline" onClick={() => onExportarPdf(semana.id)} className="flex-1 sm:flex-none">
               <Download className="h-3.5 w-3.5 mr-1" /> PDF
             </Button>
-            <Button size="sm" variant="outline" onClick={() => onExcluir(semana)} className="flex-1 sm:flex-none text-red-600 hover:bg-red-50 border-red-200">
+            <Button size="sm" variant="outline" onClick={() => onExcluir(semana)} className="flex-1 sm:flex-none text-destructive hover:bg-destructive/10 border-destructive/20">
               <Trash2 className="h-3.5 w-3.5 mr-1" /> Excluir
             </Button>
           </div>
@@ -1440,8 +1440,8 @@ export default function AcompanhamentoFinanceiro() {
       <ColaboradorLayout title="Acompanhamento Financeiro">
         <div className="flex flex-col items-center justify-center min-h-[60vh] text-center p-8">
           <XCircle className="h-16 w-16 text-red-400 mb-4" />
-          <h2 className="text-xl font-bold text-gray-800 mb-2">Acesso Restrito</h2>
-          <p className="text-gray-500 max-w-sm">
+          <h2 className="text-xl font-bold text-foreground mb-2">Acesso Restrito</h2>
+          <p className="text-muted-foreground max-w-sm">
             Este módulo é exclusivo para Gestores de Crédito, Diretores e Administradores.
           </p>
         </div>
@@ -1595,11 +1595,11 @@ export default function AcompanhamentoFinanceiro() {
         {/* Cabeçalho */}
         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
           <div>
-            <h1 className="text-lg sm:text-xl font-bold text-gray-900 flex items-center gap-2">
-              <TrendingUp className="h-5 w-5 text-blue-600 flex-shrink-0" />
+            <h1 className="text-lg sm:text-xl font-bold text-foreground flex items-center gap-2">
+              <TrendingUp className="h-5 w-5 text-primary flex-shrink-0" />
               Acompanhamento Financeiro Semanal
             </h1>
-            <p className="text-xs text-gray-500 mt-0.5">
+            <p className="text-xs text-muted-foreground mt-0.5">
               Controle de coerência financeira com base no faturamento declarado
             </p>
           </div>
@@ -1622,9 +1622,9 @@ export default function AcompanhamentoFinanceiro() {
           <CardContent className="p-4">
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 items-end">
               <div className="sm:col-span-1">
-                <Label className="text-xs font-semibold text-gray-600 uppercase">Empresa</Label>
+                <Label className="text-xs font-semibold text-muted-foreground uppercase">Empresa</Label>
                 {carregandoEmpresas ? (
-                  <div className="flex items-center gap-2 mt-1 h-10 text-sm text-gray-400">
+                  <div className="flex items-center gap-2 mt-1 h-10 text-sm text-muted-foreground">
                     <Loader2 className="h-4 w-4 animate-spin" /> Carregando...
                   </div>
                 ) : (
@@ -1648,13 +1648,13 @@ export default function AcompanhamentoFinanceiro() {
                       ))}
                     </select>
                     {!empresasFiltradas.length && (
-                      <p className="text-xs text-amber-700">Nenhuma empresa encontrada para esta busca.</p>
+                      <p className="text-xs text-warning">Nenhuma empresa encontrada para esta busca.</p>
                     )}
                   </div>
                 )}
               </div>
               <div>
-                <Label className="text-xs font-semibold text-gray-600 uppercase">Mês</Label>
+                <Label className="text-xs font-semibold text-muted-foreground uppercase">Mês</Label>
                 <Select value={String(filtroMes)} onValueChange={v => setFiltroMes(Number(v))}>
                   <SelectTrigger className="mt-1">
                     <SelectValue />
@@ -1665,7 +1665,7 @@ export default function AcompanhamentoFinanceiro() {
                 </Select>
               </div>
               <div>
-                <Label className="text-xs font-semibold text-gray-600 uppercase">Ano</Label>
+                <Label className="text-xs font-semibold text-muted-foreground uppercase">Ano</Label>
                 <Input
                   type="number"
                   value={filtroAno}
@@ -1687,8 +1687,8 @@ export default function AcompanhamentoFinanceiro() {
                 <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3">
                   <div className="flex-1">
                     <div className="flex items-center gap-2 mb-3">
-                      <Settings className="h-4 w-4 text-gray-500" />
-                      <span className="text-sm font-semibold text-gray-700">Configuração de Acompanhamento</span>
+                      <Settings className="h-4 w-4 text-muted-foreground" />
+                      <span className="text-sm font-semibold text-foreground">Configuração de Acompanhamento</span>
                       {config?.configurado && (
                         <Badge variant="secondary" className="text-xs">Configurado</Badge>
                       )}
@@ -1696,34 +1696,34 @@ export default function AcompanhamentoFinanceiro() {
 
                     {config?.configurado ? (
                       <div className="grid grid-cols-2 sm:grid-cols-5 gap-3">
-                        <div className="bg-gray-50 rounded border p-2 text-center">
-                          <p className="text-xs text-gray-500">Fat. Anual Declarado</p>
-                          <p className="text-sm font-bold text-gray-800">{moneyBR(config.faturamento_anual_declarado)}</p>
+                        <div className="bg-muted rounded border p-2 text-center">
+                          <p className="text-xs text-muted-foreground">Fat. Anual Declarado</p>
+                          <p className="text-sm font-bold text-foreground">{moneyBR(config.faturamento_anual_declarado)}</p>
                         </div>
-                        <div className="bg-gray-50 rounded border p-2 text-center">
-                          <p className="text-xs text-gray-500">% Operacional</p>
-                          <p className="text-sm font-bold text-gray-800">{pctBR(config.percentual_operacional)}</p>
+                        <div className="bg-muted rounded border p-2 text-center">
+                          <p className="text-xs text-muted-foreground">% Operacional</p>
+                          <p className="text-sm font-bold text-foreground">{pctBR(config.percentual_operacional)}</p>
                         </div>
-                        <div className="bg-blue-50 rounded border border-blue-200 p-2 text-center">
-                          <p className="text-xs text-blue-500">Limite Anual</p>
-                          <p className="text-sm font-bold text-blue-800">{moneyBR(config.limite_anual)}</p>
+                        <div className="bg-primary/10 rounded border border-primary/20 p-2 text-center">
+                          <p className="text-xs text-primary">Limite Anual</p>
+                          <p className="text-sm font-bold text-primary">{moneyBR(config.limite_anual)}</p>
                         </div>
-                        <div className="bg-blue-50 rounded border border-blue-200 p-2 text-center">
-                          <p className="text-xs text-blue-500">Limite Mensal</p>
-                          <p className="text-sm font-bold text-blue-800">
+                        <div className="bg-primary/10 rounded border border-primary/20 p-2 text-center">
+                          <p className="text-xs text-primary">Limite Mensal</p>
+                          <p className="text-sm font-bold text-primary">
                             {moneyBR((config.limite_anual || 0) / 12)}
                           </p>
                         </div>
-                        <div className="bg-blue-50 rounded border border-blue-200 p-2 text-center">
-                          <p className="text-xs text-blue-500">Limite Semanal*</p>
-                          <p className="text-sm font-bold text-blue-800">
+                        <div className="bg-primary/10 rounded border border-primary/20 p-2 text-center">
+                          <p className="text-xs text-primary">Limite Semanal*</p>
+                          <p className="text-sm font-bold text-primary">
                             {semanas[0] ? moneyBR(semanas[0].limite_semanal_referencia) : "—"}
                           </p>
                           <p className="text-xs text-blue-400">*do mês atual</p>
                         </div>
                       </div>
                     ) : (
-                      <div className="flex items-center gap-2 text-sm text-amber-700 bg-amber-50 border border-amber-200 rounded-lg p-3">
+                      <div className="flex items-center gap-2 text-sm text-warning bg-warning/10 border border-warning/20 rounded-lg p-3">
                         <AlertTriangle className="h-4 w-4 flex-shrink-0" />
                         <span>Nenhuma configuração encontrada. Configure o faturamento anual para habilitar os cálculos.</span>
                       </div>
@@ -1745,30 +1745,30 @@ export default function AcompanhamentoFinanceiro() {
             {/* Resumo do período */}
             {semanas.length > 0 && (
               <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-                <div className="border rounded-lg p-3 bg-white text-center">
-                  <p className="text-xs text-gray-500">Semanas no Período</p>
-                  <p className="text-2xl font-bold text-gray-800">{semanas.length}</p>
+                <div className="border rounded-lg p-3 bg-card text-center">
+                  <p className="text-xs text-muted-foreground">Semanas no Período</p>
+                  <p className="text-2xl font-bold text-foreground">{semanas.length}</p>
                 </div>
                 <div className="border rounded-lg p-3 bg-green-50 border-green-200 text-center">
                   <p className="text-xs text-green-600">Total de Entradas</p>
                   <p className="text-base font-bold text-green-700">{moneyBR(totalEntradasPeriodo)}</p>
                 </div>
-                <div className="border rounded-lg p-3 bg-red-50 border-red-200 text-center">
-                  <p className="text-xs text-red-600">Total de Saídas</p>
-                  <p className="text-base font-bold text-red-700">{moneyBR(totalSaidasPeriodo)}</p>
+                <div className="border rounded-lg p-3 bg-destructive/10 border-destructive/20 text-center">
+                  <p className="text-xs text-destructive">Total de Saídas</p>
+                  <p className="text-base font-bold text-destructive">{moneyBR(totalSaidasPeriodo)}</p>
                 </div>
-                <div className="border rounded-lg p-3 bg-blue-50 border-blue-200 text-center">
-                  <p className="text-xs text-blue-600">% Uso Mensal</p>
-                  <p className={`text-base font-bold ${pctMensalPeriodo > 100 ? "text-red-700" : "text-blue-700"}`}>{pctBR(pctMensalPeriodo)}</p>
+                <div className="border rounded-lg p-3 bg-primary/10 border-primary/20 text-center">
+                  <p className="text-xs text-primary">% Uso Mensal</p>
+                  <p className={`text-base font-bold ${pctMensalPeriodo > 100 ? "text-destructive" : "text-primary"}`}>{pctBR(pctMensalPeriodo)}</p>
                 </div>
               </div>
             )}
 
             {/* Ações */}
             <div className="flex flex-col sm:flex-row gap-2 sm:items-center sm:justify-between">
-              <h2 className="text-sm font-semibold text-gray-700">
+              <h2 className="text-sm font-semibold text-foreground">
                 Semanas de {nomeMes(filtroMes)}/{filtroAno}
-                {semanas.length > 0 && <span className="text-gray-400 font-normal ml-1">({semanas.length} registro{semanas.length !== 1 ? "s" : ""})</span>}
+                {semanas.length > 0 && <span className="text-muted-foreground font-normal ml-1">({semanas.length} registro{semanas.length !== 1 ? "s" : ""})</span>}
               </h2>
               <Button
                 size="sm"
@@ -1783,13 +1783,13 @@ export default function AcompanhamentoFinanceiro() {
             {/* Lista de semanas */}
             {carregando ? (
               <div className="flex items-center justify-center py-12">
-                <Loader2 className="h-8 w-8 animate-spin text-blue-500" />
+                <Loader2 className="h-8 w-8 animate-spin text-primary" />
               </div>
             ) : semanas.length === 0 ? (
               <div className="text-center py-12 border-2 border-dashed rounded-lg">
                 <TrendingUp className="h-10 w-10 text-gray-300 mx-auto mb-3" />
-                <p className="text-gray-500 text-sm font-medium">Nenhuma semana registrada</p>
-                <p className="text-gray-400 text-xs mt-1">
+                <p className="text-muted-foreground text-sm font-medium">Nenhuma semana registrada</p>
+                <p className="text-muted-foreground text-xs mt-1">
                   {config?.configurado
                     ? "Clique em \"Nova Semana\" para começar o acompanhamento."
                     : "Configure o faturamento anual primeiro."}
@@ -1814,7 +1814,7 @@ export default function AcompanhamentoFinanceiro() {
 
         {!empresaSelecionada && !carregandoEmpresas && (
           <div className="text-center py-12 border-2 border-dashed rounded-lg">
-            <p className="text-gray-400 text-sm">Selecione uma empresa para iniciar o acompanhamento.</p>
+            <p className="text-muted-foreground text-sm">Selecione uma empresa para iniciar o acompanhamento.</p>
           </div>
         )}
       </div>
@@ -1824,7 +1824,7 @@ export default function AcompanhamentoFinanceiro() {
         <DialogContent className="max-w-lg w-full mx-4">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
-              <Settings className="h-5 w-5 text-blue-600" />
+              <Settings className="h-5 w-5 text-primary" />
               Configuração de Acompanhamento
             </DialogTitle>
           </DialogHeader>
@@ -1845,7 +1845,7 @@ export default function AcompanhamentoFinanceiro() {
         <DialogContent className="max-w-2xl w-full mx-4">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
-              <TrendingUp className="h-5 w-5 text-blue-600" />
+              <TrendingUp className="h-5 w-5 text-primary" />
               {semanaEditando ? "Editar Semana" : "Registrar Nova Semana"}
             </DialogTitle>
           </DialogHeader>
@@ -1865,7 +1865,7 @@ export default function AcompanhamentoFinanceiro() {
         <DialogContent className="max-w-2xl w-full mx-4">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
-              <FileText className="h-5 w-5 text-blue-600" />
+              <FileText className="h-5 w-5 text-primary" />
               Detalhe do Acompanhamento Semanal
             </DialogTitle>
           </DialogHeader>

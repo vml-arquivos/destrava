@@ -119,18 +119,18 @@ export default function HeroCarousel() {
           aria-live="polite"
         >
           <div>
-            <div className="mb-8 inline-flex items-center gap-2 rounded-full border border-white/25 bg-white/10 px-4 py-2 text-sm font-bold text-white backdrop-blur-sm">
+            <div className="mb-8 inline-flex items-center gap-2 rounded-full border border-white/25 bg-card/10 px-4 py-2 text-sm font-bold text-primary-foreground backdrop-blur-sm">
               <ShieldCheck className="h-4 w-4 text-amber-300" aria-hidden="true" />
               Condições sujeitas à análise
             </div>
             <p className="mb-3 text-sm font-black uppercase tracking-[0.18em] text-amber-300">{slides[current].label}</p>
-            <h2 className="max-w-md text-3xl font-black leading-tight text-white sm:text-4xl">{slides[current].title}</h2>
-            <p className="mt-5 max-w-md text-base leading-relaxed text-white/80 sm:text-lg">{slides[current].description}</p>
+            <h2 className="max-w-md text-3xl font-black leading-tight text-primary-foreground sm:text-4xl">{slides[current].title}</h2>
+            <p className="mt-5 max-w-md text-base leading-relaxed text-primary-foreground/80 sm:text-lg">{slides[current].description}</p>
           </div>
           <Link
             href={slides[current].href}
             data-cta-position="home-carousel"
-            className="inline-flex w-fit items-center gap-2 rounded-xl bg-white px-5 py-3 font-bold text-[#0033A0] transition hover:bg-amber-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-300"
+            className="inline-flex w-fit items-center gap-2 rounded-xl bg-card px-5 py-3 font-bold text-[#0033A0] transition hover:bg-amber-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-300"
           >
             Conhecer esta opção
             <ArrowRight className="h-4 w-4" aria-hidden="true" />
@@ -141,7 +141,7 @@ export default function HeroCarousel() {
         <button
           type="button"
           onClick={prev}
-          className="absolute left-2 top-1/2 -translate-y-1/2 z-10 bg-black/30 hover:bg-black/55 text-white rounded-full p-1.5 transition-all duration-200 backdrop-blur-sm focus:outline-none focus-visible:ring-2 focus-visible:ring-white"
+          className="absolute left-2 top-1/2 -translate-y-1/2 z-10 bg-black/30 hover:bg-black/55 text-primary-foreground rounded-full p-1.5 transition-all duration-200 backdrop-blur-sm focus:outline-none focus-visible:ring-2 focus-visible:ring-white"
           aria-label="Imagem anterior"
         >
           <ChevronLeft className="h-5 w-5" />
@@ -151,7 +151,7 @@ export default function HeroCarousel() {
         <button
           type="button"
           onClick={next}
-          className="absolute right-2 top-1/2 -translate-y-1/2 z-10 bg-black/30 hover:bg-black/55 text-white rounded-full p-1.5 transition-all duration-200 backdrop-blur-sm focus:outline-none focus-visible:ring-2 focus-visible:ring-white"
+          className="absolute right-2 top-1/2 -translate-y-1/2 z-10 bg-black/30 hover:bg-black/55 text-primary-foreground rounded-full p-1.5 transition-all duration-200 backdrop-blur-sm focus:outline-none focus-visible:ring-2 focus-visible:ring-white"
           aria-label="Próxima imagem"
         >
           <ChevronRight className="h-5 w-5" />
@@ -167,8 +167,8 @@ export default function HeroCarousel() {
               aria-label={`Ver ${slide.label}`}
               className={`rounded-full transition-all duration-300 focus:outline-none ${
                 i === current
-                  ? "bg-white w-5 h-2"
-                  : "bg-white/50 hover:bg-white/80 w-2 h-2"
+                  ? "bg-card w-5 h-2"
+                  : "bg-card/50 hover:bg-card/80 w-2 h-2"
               }`}
             />
           ))}

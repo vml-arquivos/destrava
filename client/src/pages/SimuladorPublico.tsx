@@ -351,7 +351,7 @@ export default function SimuladorPublico() {
       />
 
       {/* Hero */}
-      <section className="bg-gradient-to-br from-[#0033A0] to-[#001f6b] text-white py-12 px-4">
+      <section className="bg-gradient-to-br from-[#0033A0] to-[#001f6b] text-primary-foreground py-12 px-4">
         <div className="max-w-3xl mx-auto text-center">
           <Badge className="bg-yellow-400 text-yellow-900 mb-4 text-sm font-semibold">
             Simulação 100% Gratuita
@@ -377,7 +377,7 @@ export default function SimuladorPublico() {
       </section>
 
       {/* Indicador de passos */}
-      <div className="bg-white border-b">
+      <div className="bg-card border-b">
         <div className="max-w-3xl mx-auto px-4 py-4">
           <div className="flex items-center justify-center gap-2">
             {[
@@ -388,28 +388,28 @@ export default function SimuladorPublico() {
             ].map((s, i) => (
               <div key={s.n} className="flex items-center gap-2">
                 <div
-                  className={`flex items-center gap-2 ${step >= s.n ? "text-[#0033A0]" : "text-gray-400"}`}
+                  className={`flex items-center gap-2 ${step >= s.n ? "text-[#0033A0]" : "text-muted-foreground"}`}
                 >
                   <div
                     className={`w-8 h-8 rounded-full flex items-center justify-center text-sm font-bold border-2 transition-all ${
                       step > s.n
-                        ? "bg-green-500 border-green-500 text-white"
+                        ? "bg-green-500 border-green-500 text-primary-foreground"
                         : step === s.n
-                          ? "bg-[#0033A0] border-[#0033A0] text-white"
-                          : "border-gray-300 text-gray-400"
+                          ? "bg-[#0033A0] border-[#0033A0] text-primary-foreground"
+                          : "border-input text-muted-foreground"
                     }`}
                   >
                     {step > s.n ? <CheckCircle2 className="w-4 h-4" /> : s.n + 1}
                   </div>
                   <span
-                    className={`text-sm font-medium hidden sm:block ${step >= s.n ? "text-[#0033A0]" : "text-gray-400"}`}
+                    className={`text-sm font-medium hidden sm:block ${step >= s.n ? "text-[#0033A0]" : "text-muted-foreground"}`}
                   >
                     {s.label}
                   </span>
                 </div>
                 {i < 3 && (
                   <div
-                    className={`w-8 sm:w-16 h-0.5 ${step > s.n ? "bg-green-500" : "bg-gray-200"}`}
+                    className={`w-8 sm:w-16 h-0.5 ${step > s.n ? "bg-green-500" : "bg-border"}`}
                   />
                 )}
               </div>
@@ -418,17 +418,17 @@ export default function SimuladorPublico() {
         </div>
       </div>
 
-      <div className="bg-gray-50 min-h-screen py-10 px-4">
+      <div className="bg-muted min-h-screen py-10 px-4">
         <div className="max-w-4xl mx-auto">
           {/* ── STEP 0: Qualificação rápida (perfil + linha de interesse) ── */}
           {step === 0 && (
-            <div className="bg-white rounded-2xl shadow-sm border p-6 md:p-8">
+            <div className="bg-card rounded-2xl shadow-sm border p-6 md:p-8">
               <div className="mb-6 text-center">
-                <h2 className="text-xl font-bold text-gray-900">Antes de simular, duas perguntas rápidas</h2>
-                <p className="text-sm text-gray-500 mt-1">Sem digitar nada — é só tocar. Isso ajuda a gente a te mostrar a linha certa.</p>
+                <h2 className="text-xl font-bold text-foreground">Antes de simular, duas perguntas rápidas</h2>
+                <p className="text-sm text-muted-foreground mt-1">Sem digitar nada — é só tocar. Isso ajuda a gente a te mostrar a linha certa.</p>
               </div>
 
-              <p className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-3">Você é</p>
+              <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-3">Você é</p>
               <div className="grid sm:grid-cols-3 gap-3 mb-8">
                 {[
                   { id: "empresario" as const, icon: Building2, label: "Empresário(a)", desc: "Tenho CNPJ e busco crédito para o negócio" },
@@ -439,26 +439,26 @@ export default function SimuladorPublico() {
                     key={opt.id}
                     onClick={() => escolherPerfil(opt.id)}
                     className={`text-left p-4 rounded-xl border-2 transition-all ${
-                      perfil === opt.id ? "border-[#0033A0] bg-blue-50" : "border-gray-200 hover:border-gray-300"
+                      perfil === opt.id ? "border-[#0033A0] bg-primary/10" : "border-border hover:border-input"
                     }`}
                   >
-                    <opt.icon className={`w-5 h-5 mb-2 ${perfil === opt.id ? "text-[#0033A0]" : "text-gray-500"}`} />
-                    <p className="font-semibold text-sm text-gray-900">{opt.label}</p>
-                    <p className="text-xs text-gray-500 mt-0.5">{opt.desc}</p>
+                    <opt.icon className={`w-5 h-5 mb-2 ${perfil === opt.id ? "text-[#0033A0]" : "text-muted-foreground"}`} />
+                    <p className="font-semibold text-sm text-foreground">{opt.label}</p>
+                    <p className="text-xs text-muted-foreground mt-0.5">{opt.desc}</p>
                   </button>
                 ))}
               </div>
 
               {(perfil === "empresario" || perfil === "pf") && (
                 <>
-                  <p className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-3">O que você procura (opcional)</p>
+                  <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-3">O que você procura (opcional)</p>
                   <div className="grid sm:grid-cols-2 gap-2 mb-6">
                     {produtos.filter((p) => p.tipo === (perfil === "empresario" ? "empresa" : "pf")).map((p) => (
                       <button
                         key={p.id}
                         onClick={() => escolherLinha(p.id)}
                         className={`text-left px-4 py-2.5 rounded-lg border text-sm font-medium transition-all ${
-                          linhaInteresse === p.id ? "border-[#0033A0] bg-blue-50 text-[#0033A0]" : "border-gray-200 text-gray-600 hover:border-gray-300"
+                          linhaInteresse === p.id ? "border-[#0033A0] bg-primary/10 text-[#0033A0]" : "border-border text-muted-foreground hover:border-input"
                         }`}
                       >
                         {p.nome}
@@ -467,7 +467,7 @@ export default function SimuladorPublico() {
                   </div>
                   <Button
                     onClick={() => escolherPerfil(perfil)}
-                    className="w-full bg-[#0033A0] hover:bg-[#002280] text-white py-3 text-base font-semibold rounded-xl"
+                    className="w-full bg-[#0033A0] hover:bg-[#002280] text-primary-foreground py-3 text-base font-semibold rounded-xl"
                   >
                     Simular agora
                     <ChevronRight className="w-5 h-5 ml-1" />
@@ -477,14 +477,14 @@ export default function SimuladorPublico() {
 
               {perfil === "captador" && (
                 <>
-                  <p className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-3">O que seu cliente procura (opcional)</p>
+                  <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-3">O que seu cliente procura (opcional)</p>
                   <div className="grid sm:grid-cols-2 gap-2 mb-6">
                     {produtos.filter((p) => p.tipo === "empresa").map((p) => (
                       <button
                         key={p.id}
                         onClick={() => escolherLinha(p.id)}
                         className={`text-left px-4 py-2.5 rounded-lg border text-sm font-medium transition-all ${
-                          linhaInteresse === p.id ? "border-[#0033A0] bg-blue-50 text-[#0033A0]" : "border-gray-200 text-gray-600 hover:border-gray-300"
+                          linhaInteresse === p.id ? "border-[#0033A0] bg-primary/10 text-[#0033A0]" : "border-border text-muted-foreground hover:border-input"
                         }`}
                       >
                         {p.nome}
@@ -494,7 +494,7 @@ export default function SimuladorPublico() {
                   <div className="grid sm:grid-cols-2 gap-3">
                     <Button
                       onClick={() => { setTipoPessoa("empresa"); setTipoDocumentoParceiro("cpf"); setForm({ ...form, documento: "" }); setStep(1); }}
-                      className="w-full bg-[#0033A0] hover:bg-[#002280] text-white py-3 text-base font-semibold rounded-xl"
+                      className="w-full bg-[#0033A0] hover:bg-[#002280] text-primary-foreground py-3 text-base font-semibold rounded-xl"
                     >
                       Cadastre-se para simular
                       <ChevronRight className="w-5 h-5 ml-1" />
@@ -503,7 +503,7 @@ export default function SimuladorPublico() {
                       href={COMPANY.whatsappLinkMsg("Olá! Tenho interesse em trabalhar como parceiro da Destrava Crédito.")}
                       target="_blank"
                       rel="noopener noreferrer"
-                      className="inline-flex items-center justify-center gap-2 border border-emerald-600 text-emerald-700 hover:bg-emerald-50 font-semibold px-4 py-3 rounded-xl transition-colors"
+                      className="inline-flex items-center justify-center gap-2 border border-emerald-600 text-success hover:bg-success/10 font-semibold px-4 py-3 rounded-xl transition-colors"
                     >
                       <Users className="w-5 h-5" /> Quero trabalhar com a Destrava
                     </a>
@@ -515,16 +515,16 @@ export default function SimuladorPublico() {
 
           {/* ── STEP 1: Dados de contato ── */}
           {step === 1 && (
-            <div className="bg-white rounded-2xl shadow-sm border p-6 md:p-8">
+            <div className="bg-card rounded-2xl shadow-sm border p-6 md:p-8">
               <div className="flex items-center gap-3 mb-6">
-                <div className="w-10 h-10 bg-blue-100 rounded-xl flex items-center justify-center">
+                <div className="w-10 h-10 bg-primary/20 rounded-xl flex items-center justify-center">
                   <User className="w-5 h-5 text-[#0033A0]" />
                 </div>
                 <div>
-                  <h2 className="text-xl font-bold text-gray-900">
+                  <h2 className="text-xl font-bold text-foreground">
                     {perfil === "captador" ? "Cadastro rápido para parceiros" : "Falta pouco: confirme seus dados"}
                   </h2>
-                  <p className="text-sm text-gray-500">
+                  <p className="text-sm text-muted-foreground">
                     {perfil === "captador"
                       ? "Identifique-se antes da primeira simulação. Você poderá montar cenários empresariais e conhecer nossa parceria sem compromisso. Campos com * são obrigatórios."
                       : "O cenário é educativo. Com seus dados, um especialista poderá orientar sobre opções reais e próximos passos. Campos com * são obrigatórios."}
@@ -533,25 +533,25 @@ export default function SimuladorPublico() {
               </div>
 
               <div className="space-y-4">
-                <p className="text-xs font-semibold text-gray-400 uppercase tracking-wider">
+                <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">
                   {perfil === "captador" ? "Identificação do parceiro" : "Dados de contato"}
                 </p>
 
                 {perfil === "captador" && (
-                  <div className="rounded-xl border border-blue-200 bg-blue-50 p-4">
+                  <div className="rounded-xl border border-primary/20 bg-primary/10 p-4">
                     <p className="text-sm font-semibold text-[#0033A0] mb-2">Como você deseja se cadastrar?</p>
                     <div className="grid grid-cols-2 gap-2">
                       <button
                         type="button"
                         onClick={() => { setTipoDocumentoParceiro("cpf"); setForm({ ...form, documento: "" }); setErrors({ ...errors, documento: "" }); }}
-                        className={`rounded-lg border px-3 py-2 text-sm font-medium transition-colors ${tipoDocumentoParceiro === "cpf" ? "border-[#0033A0] bg-white text-[#0033A0]" : "border-blue-200 text-gray-600 hover:bg-white/70"}`}
+                        className={`rounded-lg border px-3 py-2 text-sm font-medium transition-colors ${tipoDocumentoParceiro === "cpf" ? "border-[#0033A0] bg-card text-[#0033A0]" : "border-primary/20 text-muted-foreground hover:bg-card/70"}`}
                       >
                         Pessoa física (CPF)
                       </button>
                       <button
                         type="button"
                         onClick={() => { setTipoDocumentoParceiro("cnpj"); setForm({ ...form, documento: "" }); setErrors({ ...errors, documento: "" }); }}
-                        className={`rounded-lg border px-3 py-2 text-sm font-medium transition-colors ${tipoDocumentoParceiro === "cnpj" ? "border-[#0033A0] bg-white text-[#0033A0]" : "border-blue-200 text-gray-600 hover:bg-white/70"}`}
+                        className={`rounded-lg border px-3 py-2 text-sm font-medium transition-colors ${tipoDocumentoParceiro === "cnpj" ? "border-[#0033A0] bg-card text-[#0033A0]" : "border-primary/20 text-muted-foreground hover:bg-card/70"}`}
                       >
                         Empresa (CNPJ)
                       </button>
@@ -584,7 +584,7 @@ export default function SimuladorPublico() {
                       }
                     />
                     {errors.documento && (
-                      <p id="documento-error" className="text-red-500 text-xs mt-1">
+                      <p id="documento-error" className="text-destructive text-xs mt-1">
                         {errors.documento}
                       </p>
                     )}
@@ -594,7 +594,7 @@ export default function SimuladorPublico() {
                       Nome Completo *
                     </Label>
                     <div className="relative">
-                      <User className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
+                      <User className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
                       <Input
                         id="nome"
                         placeholder="Seu nome completo"
@@ -606,7 +606,7 @@ export default function SimuladorPublico() {
                       />
                     </div>
                     {errors.nome && (
-                      <p className="text-red-500 text-xs mt-1">{errors.nome}</p>
+                      <p className="text-destructive text-xs mt-1">{errors.nome}</p>
                     )}
                   </div>
 
@@ -615,7 +615,7 @@ export default function SimuladorPublico() {
                       Telefone / WhatsApp *
                     </Label>
                     <div className="relative">
-                      <Phone className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
+                      <Phone className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
                       <Input
                         id="telefone"
                         placeholder="(61) 9 9999-9999"
@@ -630,7 +630,7 @@ export default function SimuladorPublico() {
                       />
                     </div>
                     {errors.telefone && (
-                      <p className="text-red-500 text-xs mt-1">
+                      <p className="text-destructive text-xs mt-1">
                         {errors.telefone}
                       </p>
                     )}
@@ -645,12 +645,12 @@ export default function SimuladorPublico() {
                         : tipoPessoa === "empresa"
                           ? "Nome da Empresa"
                           : "Empresa (opcional)"}{" "}
-                      <span className="text-gray-400 font-normal">
+                      <span className="text-muted-foreground font-normal">
                         (opcional)
                       </span>
                     </Label>
                     <div className="relative">
-                      <Building2 className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
+                      <Building2 className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
                       <Input
                         id="empresa"
                         placeholder={
@@ -672,12 +672,12 @@ export default function SimuladorPublico() {
                   <div>
                     <Label htmlFor="email" className="text-sm font-medium mb-1.5 block">
                       E-mail{" "}
-                      <span className="text-gray-400 font-normal">
+                      <span className="text-muted-foreground font-normal">
                         (opcional)
                       </span>
                     </Label>
                     <div className="relative">
-                      <Mail className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
+                      <Mail className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
                       <Input
                         id="email"
                         type="email"
@@ -692,7 +692,7 @@ export default function SimuladorPublico() {
                   </div>
                 </div>
 
-                <p className="text-xs text-gray-400 flex items-start gap-1.5 mt-2">
+                <p className="text-xs text-muted-foreground flex items-start gap-1.5 mt-2">
                   <Shield className="w-3.5 h-3.5 mt-0.5 flex-shrink-0" />
                   Seus dados são protegidos e utilizados apenas para fins de
                   atendimento. Não compartilhamos com terceiros.
@@ -702,7 +702,7 @@ export default function SimuladorPublico() {
                   <Button
                     variant="outline"
                     onClick={() => setStep(0)}
-                    className="flex-1 border-gray-300"
+                    className="flex-1 border-input"
                   >
                     <ChevronLeft className="w-4 h-4 mr-1" /> Voltar
                   </Button>
@@ -712,7 +712,7 @@ export default function SimuladorPublico() {
                       setSubmitError(null);
                       setStep(2);
                     }}
-                    className="flex-[2] bg-[#0033A0] hover:bg-[#002280] text-white py-3 text-base font-semibold rounded-xl"
+                    className="flex-[2] bg-[#0033A0] hover:bg-[#002280] text-primary-foreground py-3 text-base font-semibold rounded-xl"
                   >
                     {perfil === "captador" ? "Concluir cadastro e simular" : "Continuar para simulação"}
                     <ChevronRight className="w-5 h-5 ml-1" />
@@ -728,14 +728,14 @@ export default function SimuladorPublico() {
             <div className="space-y-4">
               <button
                 onClick={() => setStep(1)}
-                className="flex items-center gap-1 text-sm font-medium text-gray-500 hover:text-[#0033A0]"
+                className="flex items-center gap-1 text-sm font-medium text-muted-foreground hover:text-[#0033A0]"
               >
                 <ChevronLeft className="w-4 h-4" /> Voltar
               </button>
               <div className="grid md:grid-cols-3 gap-4">
                 {/* Coluna esquerda: escolha do produto */}
-                <div className="bg-white rounded-2xl shadow-sm border p-5">
-                  <p className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-3">
+                <div className="bg-card rounded-2xl shadow-sm border p-5">
+                  <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-3">
                     Você é
                   </p>
                   <div className={`grid ${perfil === "captador" ? "grid-cols-1" : "grid-cols-2"} gap-2 mb-5`}>
@@ -743,8 +743,8 @@ export default function SimuladorPublico() {
                       onClick={() => mudarTipoPessoa("empresa")}
                       className={`flex items-center justify-center gap-1.5 py-2.5 px-2 rounded-xl border-2 text-sm font-medium transition-all ${
                         tipoPessoa === "empresa"
-                          ? "border-[#0033A0] bg-blue-50 text-[#0033A0]"
-                          : "border-gray-200 text-gray-600 hover:border-gray-300"
+                          ? "border-[#0033A0] bg-primary/10 text-[#0033A0]"
+                          : "border-border text-muted-foreground hover:border-input"
                       }`}
                     >
                       <Building2 className="w-4 h-4" />
@@ -755,8 +755,8 @@ export default function SimuladorPublico() {
                         onClick={() => mudarTipoPessoa("pf")}
                         className={`flex items-center justify-center gap-1.5 py-2.5 px-2 rounded-xl border-2 text-sm font-medium transition-all ${
                           tipoPessoa === "pf"
-                            ? "border-[#0033A0] bg-blue-50 text-[#0033A0]"
-                            : "border-gray-200 text-gray-600 hover:border-gray-300"
+                            ? "border-[#0033A0] bg-primary/10 text-[#0033A0]"
+                            : "border-border text-muted-foreground hover:border-input"
                         }`}
                       >
                         <User className="w-4 h-4" />
@@ -765,7 +765,7 @@ export default function SimuladorPublico() {
                     )}
                   </div>
 
-                  <p className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-3 flex items-center gap-1.5">
+                  <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-3 flex items-center gap-1.5">
                     <TrendingUp className="w-3.5 h-3.5" /> Escolha o Produto
                   </p>
                   <div className="space-y-2">
@@ -775,21 +775,21 @@ export default function SimuladorPublico() {
                         onClick={() => selecionarProduto(prod)}
                         className={`w-full text-left p-3 rounded-xl border-2 transition-all ${
                           produtoSelecionado.id === prod.id
-                            ? "border-[#0033A0] bg-blue-50"
-                            : "border-gray-100 hover:border-gray-200"
+                            ? "border-[#0033A0] bg-primary/10"
+                            : "border-border hover:border-border"
                         }`}
                       >
-                        <p className="font-semibold text-sm text-gray-900">
+                        <p className="font-semibold text-sm text-foreground">
                           {prod.nome}
                         </p>
-                        <p className="text-xs text-gray-500 mt-0.5">
+                        <p className="text-xs text-muted-foreground mt-0.5">
                           {prod.desc}
                         </p>
                         <div className="flex flex-wrap gap-1 mt-2">
                           {prod.tags.map((t) => (
                             <span
                               key={t}
-                              className="text-xs bg-blue-100 text-blue-700 px-2 py-0.5 rounded-full font-medium"
+                              className="text-xs bg-primary/20 text-primary px-2 py-0.5 rounded-full font-medium"
                             >
                               {t}
                             </span>
@@ -801,16 +801,16 @@ export default function SimuladorPublico() {
                 </div>
 
                 {/* Coluna central: sliders */}
-                <div className="md:col-span-2 bg-white rounded-2xl shadow-sm border p-5">
-                  <div className="mb-5 rounded-lg border border-amber-200 bg-amber-50 p-3 text-xs leading-relaxed text-amber-900">
+                <div className="md:col-span-2 bg-card rounded-2xl shadow-sm border p-5">
+                  <div className="mb-5 rounded-lg border border-warning/20 bg-warning/10 p-3 text-xs leading-relaxed text-warning">
                     As faixas dos controles servem apenas à calculadora e não representam limite, taxa disponível ou elegibilidade. Se você já recebeu uma proposta, use a taxa e o prazo informados nela.
                   </div>
                   <div className="flex items-center justify-between mb-4">
                     <div>
-                      <p className="text-xs font-semibold text-gray-400 uppercase tracking-wider">
+                      <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">
                         Parâmetros da Simulação
                       </p>
-                      <p className="text-sm text-gray-600 font-medium">
+                      <p className="text-sm text-muted-foreground font-medium">
                         {produtoSelecionado.nome}
                       </p>
                     </div>
@@ -820,7 +820,7 @@ export default function SimuladorPublico() {
                   </div>
 
                   {produtoSelecionado.id === "pronampe" && selicRef && !selicRef.indisponivel && (
-                    <p className="text-xs text-blue-700 bg-blue-50 border border-blue-100 rounded-lg px-3 py-2 mb-4">
+                    <p className="text-xs text-primary bg-primary/10 border border-primary/20 rounded-lg px-3 py-2 mb-4">
                       Referência oficial: Selic ({selicRef.valor.toFixed(2)}% a.a., {selicRef.dataReferencia}) + até 6% a.a. de spread. A taxa final depende do banco e da análise de crédito.
                     </p>
                   )}
@@ -829,7 +829,7 @@ export default function SimuladorPublico() {
                     {/* Slider Valor */}
                     <div>
                       <div className="flex justify-between items-center mb-2">
-                        <Label className="text-sm font-semibold text-gray-700">
+                        <Label className="text-sm font-semibold text-foreground">
                           Valor Desejado
                         </Label>
                         <span className="text-lg font-bold text-[#0033A0]">
@@ -843,9 +843,9 @@ export default function SimuladorPublico() {
                         step={produtoSelecionado.maxValor > 100000 ? 5000 : 1000}
                         value={valor}
                         onChange={(e) => setValor(Number(e.target.value))}
-                        className="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer accent-[#0033A0]"
+                        className="w-full h-2 bg-border rounded-lg appearance-none cursor-pointer accent-[#0033A0]"
                       />
-                      <div className="flex justify-between text-xs text-gray-400 mt-1">
+                      <div className="flex justify-between text-xs text-muted-foreground mt-1">
                         <span>{formatCurrency(produtoSelecionado.minValor)}</span>
                         <span>{formatCurrency(produtoSelecionado.maxValor)}</span>
                       </div>
@@ -854,7 +854,7 @@ export default function SimuladorPublico() {
                     {/* Slider Prazo */}
                     <div>
                       <div className="flex justify-between items-center mb-2">
-                        <Label className="text-sm font-semibold text-gray-700">
+                        <Label className="text-sm font-semibold text-foreground">
                           Prazo de Pagamento
                         </Label>
                         <span className="text-lg font-bold text-[#0033A0]">
@@ -868,9 +868,9 @@ export default function SimuladorPublico() {
                         step={6}
                         value={prazo}
                         onChange={(e) => setPrazo(Number(e.target.value))}
-                        className="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer accent-[#0033A0]"
+                        className="w-full h-2 bg-border rounded-lg appearance-none cursor-pointer accent-[#0033A0]"
                       />
-                      <div className="flex justify-between text-xs text-gray-400 mt-1">
+                      <div className="flex justify-between text-xs text-muted-foreground mt-1">
                         <span>{produtoSelecionado.minPrazo} meses</span>
                         <span>{produtoSelecionado.maxPrazo} meses</span>
                       </div>
@@ -879,7 +879,7 @@ export default function SimuladorPublico() {
                     {/* Slider Taxa */}
                     <div>
                       <div className="flex justify-between items-center mb-2">
-                        <Label className="text-sm font-semibold text-gray-700">
+                        <Label className="text-sm font-semibold text-foreground">
                           Taxa mensal para o cenário
                         </Label>
                         <span className="text-lg font-bold text-[#0033A0]">
@@ -895,13 +895,13 @@ export default function SimuladorPublico() {
                         onChange={(e) =>
                           setTaxa(Number(e.target.value) / 100)
                         }
-                        className="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer accent-[#0033A0]"
+                        className="w-full h-2 bg-border rounded-lg appearance-none cursor-pointer accent-[#0033A0]"
                       />
-                      <div className="flex justify-between text-xs text-gray-400 mt-1">
+                      <div className="flex justify-between text-xs text-muted-foreground mt-1">
                         <span>{produtoSelecionado.minTaxa}%</span>
                         <span>{produtoSelecionado.maxTaxa}%</span>
                       </div>
-                      <p className="text-xs text-gray-400 mt-1">
+                      <p className="text-xs text-muted-foreground mt-1">
                         * O cálculo não inclui automaticamente CET, seguros, tarifas ou indexadores.
                       </p>
                     </div>
@@ -910,41 +910,41 @@ export default function SimuladorPublico() {
               </div>
 
               {/* Resultado em tempo real */}
-              <div className="bg-white rounded-2xl shadow-sm border p-5">
-                <p className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-4">
+              <div className="bg-card rounded-2xl shadow-sm border p-5">
+                <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-4">
                   Resultado da Simulação
                 </p>
                 <div className="grid grid-cols-3 gap-4 mb-4">
-                  <div className="text-center p-4 bg-blue-50 rounded-xl">
+                  <div className="text-center p-4 bg-primary/10 rounded-xl">
                     <Banknote className="w-6 h-6 text-[#0033A0] mx-auto mb-1" />
-                    <p className="text-xs text-gray-500 mb-1">Valor da Parcela</p>
+                    <p className="text-xs text-muted-foreground mb-1">Valor da Parcela</p>
                     <p className="text-xl font-bold text-[#0033A0]">
                       {formatCurrency(parcela)}
                     </p>
                   </div>
-                  <div className="text-center p-4 bg-orange-50 rounded-xl">
+                  <div className="text-center p-4 bg-warning/10 rounded-xl">
                     <TrendingUp className="w-6 h-6 text-orange-500 mx-auto mb-1" />
-                    <p className="text-xs text-gray-500 mb-1">Total de Juros</p>
-                    <p className="text-xl font-bold text-orange-600">
+                    <p className="text-xs text-muted-foreground mb-1">Total de Juros</p>
+                    <p className="text-xl font-bold text-warning">
                       {formatCurrency(totalJuros)}
                     </p>
                   </div>
-                  <div className="text-center p-4 bg-gray-50 rounded-xl">
-                    <Calculator className="w-6 h-6 text-gray-600 mx-auto mb-1" />
-                    <p className="text-xs text-gray-500 mb-1">Valor Total</p>
-                    <p className="text-xl font-bold text-gray-800">
+                  <div className="text-center p-4 bg-muted rounded-xl">
+                    <Calculator className="w-6 h-6 text-muted-foreground mx-auto mb-1" />
+                    <p className="text-xs text-muted-foreground mb-1">Valor Total</p>
+                    <p className="text-xl font-bold text-foreground">
                       {formatCurrency(totalPagar)}
                     </p>
                   </div>
                 </div>
 
-                <p className="text-sm text-gray-500 text-center -mt-1 mb-4">
+                <p className="text-sm text-muted-foreground text-center -mt-1 mb-4">
                   Esse valor é um cenário educativo. Quer saber se você seria aprovado de verdade, e com qual taxa?
                 </p>
 
                 <Button
                   onClick={() => setStep(3)}
-                  className="w-full bg-[#0033A0] hover:bg-[#002280] text-white py-3 text-base font-semibold rounded-xl"
+                  className="w-full bg-[#0033A0] hover:bg-[#002280] text-primary-foreground py-3 text-base font-semibold rounded-xl"
                 >
                   Avançar para próximos passos
                   <ChevronRight className="w-5 h-5 ml-1" />
@@ -956,20 +956,20 @@ export default function SimuladorPublico() {
           {/* ── STEP 3: Próximos passos ── */}
           {step === 3 && (
             <div className="space-y-4">
-              <div className="bg-white rounded-2xl shadow-sm border p-6 text-center">
-                <div className="w-16 h-16 bg-blue-100 rounded-full flex items-center justify-center mx-auto mb-4">
+              <div className="bg-card rounded-2xl shadow-sm border p-6 text-center">
+                <div className="w-16 h-16 bg-primary/20 rounded-full flex items-center justify-center mx-auto mb-4">
                   <Zap className="w-8 h-8 text-[#0033A0]" />
                 </div>
-                <h2 className="text-2xl font-bold text-gray-900 mb-2">
+                <h2 className="text-2xl font-bold text-foreground mb-2">
                   Simulação concluída. E agora?
                 </h2>
-                <p className="text-gray-600 mb-5">
+                <p className="text-muted-foreground mb-5">
                   Nós estamos ao seu lado para encontrar a melhor solução. Solicite o contato de um especialista para receber assessoria consultiva, entender suas opções reais e organizar a documentação sem compromisso.
                 </p>
 
-                <div className="bg-blue-50 border border-blue-200 rounded-xl p-4 mb-5 text-left">
+                <div className="bg-primary/10 border border-primary/20 rounded-xl p-4 mb-5 text-left">
                   <p className="text-sm font-semibold text-[#0033A0] mb-3">Com a nossa assessoria, você terá:</p>
-                  <div className="grid sm:grid-cols-2 gap-2 text-sm text-gray-700">
+                  <div className="grid sm:grid-cols-2 gap-2 text-sm text-foreground">
                     {[
                       "Apoio consultivo especializado",
                       "Análise individual do perfil",
@@ -987,16 +987,16 @@ export default function SimuladorPublico() {
                 </div>
 
                 <div className="grid grid-cols-3 gap-3 mb-5">
-                  <div className="text-center p-3 bg-blue-50 rounded-xl">
-                    <p className="text-xs text-gray-500">Valor</p>
+                  <div className="text-center p-3 bg-primary/10 rounded-xl">
+                    <p className="text-xs text-muted-foreground">Valor</p>
                     <p className="font-bold text-[#0033A0] text-sm mt-1">{formatCurrency(valor)}</p>
                   </div>
-                  <div className="text-center p-3 bg-blue-50 rounded-xl">
-                    <p className="text-xs text-gray-500">Prazo</p>
+                  <div className="text-center p-3 bg-primary/10 rounded-xl">
+                    <p className="text-xs text-muted-foreground">Prazo</p>
                     <p className="font-bold text-[#0033A0] text-sm mt-1">{prazo} meses</p>
                   </div>
                   <div className="text-center p-3 bg-green-50 rounded-xl">
-                    <p className="text-xs text-gray-500">Parcela Est.</p>
+                    <p className="text-xs text-muted-foreground">Parcela Est.</p>
                     <p className="font-bold text-green-600 text-sm mt-1">{formatCurrency(parcela)}</p>
                   </div>
                 </div>
@@ -1005,14 +1005,14 @@ export default function SimuladorPublico() {
                   <Button
                     variant="outline"
                     onClick={() => setStep(2)}
-                    className="flex-1 border-gray-300"
+                    className="flex-1 border-input"
                   >
                     <ChevronLeft className="w-4 h-4 mr-1" /> Voltar
                   </Button>
                   <Button
                     onClick={handleSimular}
                     disabled={enviando}
-                    className="flex-[2] bg-[#0033A0] hover:bg-[#002280] text-white py-3 text-base font-semibold rounded-xl"
+                    className="flex-[2] bg-[#0033A0] hover:bg-[#002280] text-primary-foreground py-3 text-base font-semibold rounded-xl"
                   >
                     {enviando ? "Enviando..." : (
                       <>
@@ -1031,37 +1031,37 @@ export default function SimuladorPublico() {
           {step === 4 && (
             <div className="space-y-4">
               {/* Confirmação */}
-              <div className="bg-white rounded-2xl shadow-sm border p-6 text-center">
+              <div className="bg-card rounded-2xl shadow-sm border p-6 text-center">
                 <div className="w-16 h-16 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-4">
                   <CheckCircle2 className="w-8 h-8 text-green-500" />
                 </div>
-                <h2 className="text-2xl font-bold text-gray-900 mb-2">
+                <h2 className="text-2xl font-bold text-foreground mb-2">
                   Simulação Recebida!
                 </h2>
-                <p className="text-gray-600 mb-1">
+                <p className="text-muted-foreground mb-1">
                   Olá, <strong>{form.nome}</strong>! Recebemos sua simulação.
                 </p>
-                <p className="text-gray-500 text-sm">
+                <p className="text-muted-foreground text-sm">
                   Um especialista da Destrava Crédito entrará em contato pelo
                   WhatsApp <strong>{form.telefone}</strong> durante o horário comercial.
                 </p>
               </div>
 
               {/* Card de resultado enriquecido */}
-              <div className="bg-white rounded-2xl shadow-sm border p-6">
-                <p className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-4">
+              <div className="bg-card rounded-2xl shadow-sm border p-6">
+                <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-4">
                   Resumo da Sua Simulação
                 </p>
 
                 {/* Cenário selecionado */}
-                <div className="bg-blue-50 border border-blue-200 rounded-xl p-4 mb-4">
+                <div className="bg-primary/10 border border-primary/20 rounded-xl p-4 mb-4">
                   <div className="flex items-start gap-3">
                     <Award className="w-5 h-5 text-[#0033A0] flex-shrink-0 mt-0.5" />
                     <div>
                       <p className="text-sm font-bold text-[#0033A0]">
                         Cenário selecionado: {produtoSelecionado.nome}
                       </p>
-                      <p className="text-xs text-blue-700 mt-1">
+                      <p className="text-xs text-primary mt-1">
                         {produtoSelecionado.desc}. Esta seleção não representa recomendação, elegibilidade ou pré-aprovação para {tipoPessoa === "empresa" ? "Pessoa Jurídica" : "Pessoa Física"}.
                       </p>
                     </div>
@@ -1070,28 +1070,28 @@ export default function SimuladorPublico() {
 
                 {/* Métricas */}
                 <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-4">
-                  <div className="text-center p-3 bg-blue-50 rounded-xl">
-                    <p className="text-xs text-gray-500">Produto</p>
+                  <div className="text-center p-3 bg-primary/10 rounded-xl">
+                    <p className="text-xs text-muted-foreground">Produto</p>
                     <p className="font-bold text-[#0033A0] text-sm mt-1">{produtoSelecionado.nome}</p>
                   </div>
-                  <div className="text-center p-3 bg-blue-50 rounded-xl">
-                    <p className="text-xs text-gray-500">Valor</p>
+                  <div className="text-center p-3 bg-primary/10 rounded-xl">
+                    <p className="text-xs text-muted-foreground">Valor</p>
                     <p className="font-bold text-[#0033A0] text-sm mt-1">{formatCurrency(valor)}</p>
                   </div>
-                  <div className="text-center p-3 bg-blue-50 rounded-xl">
-                    <p className="text-xs text-gray-500">Prazo</p>
+                  <div className="text-center p-3 bg-primary/10 rounded-xl">
+                    <p className="text-xs text-muted-foreground">Prazo</p>
                     <p className="font-bold text-[#0033A0] text-sm mt-1">{prazo} meses</p>
                   </div>
                   <div className="text-center p-3 bg-green-50 rounded-xl">
-                    <p className="text-xs text-gray-500">Parcela Est.</p>
+                    <p className="text-xs text-muted-foreground">Parcela Est.</p>
                     <p className="font-bold text-green-600 text-sm mt-1">{formatCurrency(parcela)}</p>
                   </div>
                 </div>
 
                 {/* Responsabilidade pela análise */}
-                <div className="flex items-center gap-3 bg-gray-50 rounded-xl p-3 mb-4">
+                <div className="flex items-center gap-3 bg-muted rounded-xl p-3 mb-4">
                   <Zap className="w-4 h-4 text-yellow-500 flex-shrink-0" />
-                  <p className="text-sm text-gray-700">
+                  <p className="text-sm text-foreground">
                     <strong>Análise e prazo:</strong>{" "}
                     definidos pela instituição financeira conforme modalidade, documentos, garantias e perfil.
                   </p>
@@ -1107,7 +1107,7 @@ export default function SimuladorPublico() {
                     href={`https://wa.me/556135268355?text=Ol%C3%A1!%20Fiz%20uma%20simula%C3%A7%C3%A3o%20no%20site%20para%20${encodeURIComponent(produtoSelecionado.nome)}%20no%20valor%20de%20${encodeURIComponent(formatCurrency(valor))}%20em%20${prazo}%20meses.%20Meu%20nome%20%C3%A9%20${encodeURIComponent(form.nome)}.%20Gostaria%20de%20avan%C3%A7ar%20com%20a%20proposta.`}
                     target="_blank"
                     rel="noopener noreferrer"
-                    className="flex items-center justify-center gap-2 bg-green-500 hover:bg-green-600 text-white font-semibold py-3 px-4 rounded-xl transition-colors"
+                    className="flex items-center justify-center gap-2 bg-green-500 hover:bg-green-600 text-primary-foreground font-semibold py-3 px-4 rounded-xl transition-colors"
                   >
                     <MessageCircle className="w-5 h-5" />
                     Quero Avançar — Falar Agora
@@ -1115,7 +1115,7 @@ export default function SimuladorPublico() {
                   <Button
                     variant="outline"
                     onClick={() => setOfertaAberta(true)}
-                    className="flex items-center justify-center gap-2 border-[#0033A0] text-[#0033A0] hover:bg-blue-50"
+                    className="flex items-center justify-center gap-2 border-[#0033A0] text-[#0033A0] hover:bg-primary/10"
                   >
                     <FileDown className="w-4 h-4" />
                     Baixar Simulação em PDF
@@ -1131,11 +1131,11 @@ export default function SimuladorPublico() {
                       setForm({ nome: "", telefone: "", empresa: "", email: "", documento: "" });
                       setLeadSalvo(false);
                     }}
-                    className="border-gray-300 text-gray-600"
+                    className="border-input text-muted-foreground"
                   >
                     Nova Simulação
                   </Button>
-                  <Button asChild variant="ghost" className="w-full text-gray-500 hover:text-[#0033A0]">
+                  <Button asChild variant="ghost" className="w-full text-muted-foreground hover:text-[#0033A0]">
                     <Link href="/" data-cta-position="simulador-resultado-secundario">
                       <ArrowLeft className="w-4 h-4 mr-1" />
                       Voltar à Página Inicial
@@ -1179,7 +1179,7 @@ export default function SimuladorPublico() {
       />
 
       {/* Stats */}
-      <section className="bg-white border-t py-10 px-4">
+      <section className="bg-card border-t py-10 px-4">
         <div className="max-w-3xl mx-auto grid grid-cols-2 md:grid-cols-4 gap-6 text-center">
           {[
             { v: "PF e PJ", l: "Perfis analisados" },
@@ -1189,7 +1189,7 @@ export default function SimuladorPublico() {
           ].map((s) => (
             <div key={s.l}>
               <p className="text-2xl font-bold text-[#0033A0]">{s.v}</p>
-              <p className="text-sm text-gray-500 mt-1">{s.l}</p>
+              <p className="text-sm text-muted-foreground mt-1">{s.l}</p>
             </div>
           ))}
         </div>

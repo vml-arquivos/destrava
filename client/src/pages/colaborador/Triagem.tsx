@@ -47,10 +47,10 @@ interface Stats {
 const STATUS_CONFIG: Record<string, { label: string; color: string; badge: string; icon: React.ElementType }> = {
   pendente:         { label: "Pendente",          color: "border-yellow-300 bg-yellow-50",  badge: "bg-yellow-100 text-yellow-800",  icon: Clock },
   possivel_cliente: { label: "Possível Cliente",  color: "border-green-300 bg-green-50",   badge: "bg-green-100 text-green-800",    icon: UserCheck },
-  curioso:          { label: "Curioso",            color: "border-blue-300 bg-blue-50",     badge: "bg-blue-100 text-blue-800",      icon: HelpCircle },
-  sem_perfil:       { label: "Sem Perfil",         color: "border-orange-300 bg-orange-50", badge: "bg-orange-100 text-orange-800",  icon: AlertTriangle },
-  convertido:       { label: "Convertido",         color: "border-emerald-300 bg-emerald-50",badge: "bg-emerald-100 text-emerald-800",icon: CheckCircle2 },
-  descartado:       { label: "Descartado",         color: "border-gray-300 bg-gray-50",     badge: "bg-gray-100 text-gray-500",      icon: Trash2 },
+  curioso:          { label: "Curioso",            color: "border-primary/30 bg-primary/10",     badge: "bg-primary/20 text-primary",      icon: HelpCircle },
+  sem_perfil:       { label: "Sem Perfil",         color: "border-warning/30 bg-warning/10", badge: "bg-warning/20 text-warning",  icon: AlertTriangle },
+  convertido:       { label: "Convertido",         color: "border-success/30 bg-success/10",badge: "bg-success/20 text-success",icon: CheckCircle2 },
+  descartado:       { label: "Descartado",         color: "border-input bg-muted",     badge: "bg-muted text-muted-foreground",      icon: Trash2 },
 };
 
 const fmtBRL = new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" });
@@ -117,15 +117,15 @@ function ModalQualificacao({
 
   return (
     <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/40 p-0 sm:p-4" onClick={e => e.target === e.currentTarget && onClose()}>
-      <div className="bg-white rounded-t-2xl sm:rounded-2xl shadow-2xl w-full sm:max-w-lg max-h-[92vh] overflow-y-auto">
+      <div className="bg-card rounded-t-2xl sm:rounded-2xl shadow-2xl w-full sm:max-w-lg max-h-[92vh] overflow-y-auto">
         {/* Header */}
         <div className="flex items-start justify-between p-5 border-b">
           <div>
-            <h2 className="text-lg font-bold text-gray-900">{item.nome}</h2>
-            <p className="text-sm text-gray-500">{item.empresa || "Empresa não informada"}</p>
+            <h2 className="text-lg font-bold text-foreground">{item.nome}</h2>
+            <p className="text-sm text-muted-foreground">{item.empresa || "Empresa não informada"}</p>
           </div>
-          <button onClick={onClose} className="p-1.5 hover:bg-gray-100 rounded-lg transition-colors">
-            <X className="w-5 h-5 text-gray-400" />
+          <button onClick={onClose} className="p-1.5 hover:bg-muted rounded-lg transition-colors">
+            <X className="w-5 h-5 text-muted-foreground" />
           </button>
         </div>
 
@@ -133,37 +133,37 @@ function ModalQualificacao({
         <div className="p-4 sm:p-5 space-y-4">
           <div className="grid grid-cols-1 min-[360px]:grid-cols-2 gap-2 text-sm">
             {item.telefone && (
-              <a href={`tel:${item.telefone}`} className="flex items-center gap-2 p-2.5 bg-gray-50 rounded-xl hover:bg-blue-50 transition-colors">
-                <Phone className="w-4 h-4 text-blue-500 flex-shrink-0" />
-                <span className="text-gray-700 truncate">{item.telefone}</span>
+              <a href={`tel:${item.telefone}`} className="flex items-center gap-2 p-2.5 bg-muted rounded-xl hover:bg-primary/10 transition-colors">
+                <Phone className="w-4 h-4 text-primary flex-shrink-0" />
+                <span className="text-foreground truncate">{item.telefone}</span>
               </a>
             )}
             {item.email && (
-              <a href={`mailto:${item.email}`} className="flex items-center gap-2 p-2.5 bg-gray-50 rounded-xl hover:bg-blue-50 transition-colors">
-                <Mail className="w-4 h-4 text-blue-500 flex-shrink-0" />
-                <span className="text-gray-700 truncate">{item.email}</span>
+              <a href={`mailto:${item.email}`} className="flex items-center gap-2 p-2.5 bg-muted rounded-xl hover:bg-primary/10 transition-colors">
+                <Mail className="w-4 h-4 text-primary flex-shrink-0" />
+                <span className="text-foreground truncate">{item.email}</span>
               </a>
             )}
             {item.cpf_cnpj && (
-              <div className="flex items-center gap-2 p-2.5 bg-gray-50 rounded-xl">
-                <Building2 className="w-4 h-4 text-gray-400 flex-shrink-0" />
-                <span className="text-gray-700 truncate">{item.cpf_cnpj}</span>
+              <div className="flex items-center gap-2 p-2.5 bg-muted rounded-xl">
+                <Building2 className="w-4 h-4 text-muted-foreground flex-shrink-0" />
+                <span className="text-foreground truncate">{item.cpf_cnpj}</span>
               </div>
             )}
             {(item.cidade || item.estado) && (
-              <div className="flex items-center gap-2 p-2.5 bg-gray-50 rounded-xl">
-                <span className="text-gray-500 text-xs">{[item.cidade, item.estado].filter(Boolean).join(" / ")}</span>
+              <div className="flex items-center gap-2 p-2.5 bg-muted rounded-xl">
+                <span className="text-muted-foreground text-xs">{[item.cidade, item.estado].filter(Boolean).join(" / ")}</span>
               </div>
             )}
           </div>
 
           {/* Dados da simulação — sem exibir valores do simulador público */}
           {item.produto && (
-            <div className="bg-blue-50 border border-blue-200 rounded-xl p-4">
-              <p className="text-xs font-semibold text-blue-700 uppercase tracking-wide mb-2">Produto de Interesse</p>
+            <div className="bg-primary/10 border border-primary/20 rounded-xl p-4">
+              <p className="text-xs font-semibold text-primary uppercase tracking-wide mb-2">Produto de Interesse</p>
               <div className="grid grid-cols-1 min-[360px]:grid-cols-2 gap-3 text-sm">
-                <div><p className="text-xs text-gray-400">Produto</p><p className="font-semibold text-gray-800">{item.produto}</p></div>
-                {item.prazo && <div><p className="text-xs text-gray-400">Prazo desejado</p><p className="font-semibold text-gray-800">{item.prazo} meses</p></div>}
+                <div><p className="text-xs text-muted-foreground">Produto</p><p className="font-semibold text-foreground">{item.produto}</p></div>
+                {item.prazo && <div><p className="text-xs text-muted-foreground">Prazo desejado</p><p className="font-semibold text-foreground">{item.prazo} meses</p></div>}
               </div>
             </div>
           )}
@@ -172,7 +172,7 @@ function ModalQualificacao({
           <button
             onClick={handleQualificarIA}
             disabled={qualificandoIA}
-            className="w-full flex items-center justify-center gap-2 bg-gradient-to-r from-violet-600 to-blue-600 hover:from-violet-700 hover:to-blue-700 disabled:opacity-60 text-white text-sm font-semibold py-2.5 rounded-xl transition-all shadow-sm"
+            className="w-full flex items-center justify-center gap-2 bg-gradient-to-r from-violet-600 to-blue-600 hover:from-violet-700 hover:to-blue-700 disabled:opacity-60 text-primary-foreground text-sm font-semibold py-2.5 rounded-xl transition-all shadow-sm"
           >
             {qualificandoIA
               ? <><div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" /> Analisando com IA...</>
@@ -182,45 +182,45 @@ function ModalQualificacao({
 
           {/* Resultado da análise IA */}
           {analiseIA && (
-            <div className="bg-violet-50 border border-violet-200 rounded-xl p-4 space-y-3">
+            <div className="bg-primary/10 border border-primary/20 rounded-xl p-4 space-y-3">
               <div className="flex items-center justify-between">
-                <p className="text-xs font-bold text-violet-700 uppercase tracking-wide flex items-center gap-1.5">
+                <p className="text-xs font-bold text-primary uppercase tracking-wide flex items-center gap-1.5">
                   <ShieldCheck className="w-3.5 h-3.5" /> Análise da IA
                 </p>
                 <div className="flex items-center gap-2">
                   <span className={`text-xs px-2 py-0.5 rounded-full font-semibold ${
-                    analiseIA.temperatura === "quente" ? "bg-red-100 text-red-700" :
-                    analiseIA.temperatura === "morno" ? "bg-orange-100 text-orange-700" :
-                    "bg-blue-100 text-blue-700"
+                    analiseIA.temperatura === "quente" ? "bg-destructive/20 text-destructive" :
+                    analiseIA.temperatura === "morno" ? "bg-warning/20 text-warning" :
+                    "bg-primary/20 text-primary"
                   }`}>{analiseIA.temperatura === "quente" ? "🔥 Quente" : analiseIA.temperatura === "morno" ? "🌞 Morno" : "❄️ Frio"}</span>
-                  <span className="text-sm font-bold text-violet-700">{analiseIA.score}/100</span>
+                  <span className="text-sm font-bold text-primary">{analiseIA.score}/100</span>
                 </div>
               </div>
-              <p className="text-sm text-gray-700">{analiseIA.resumo}</p>
+              <p className="text-sm text-foreground">{analiseIA.resumo}</p>
               {analiseIA.pontos_positivos?.length > 0 && (
                 <div>
                   <p className="text-xs font-semibold text-green-700 mb-1">Pontos positivos</p>
                   <ul className="space-y-0.5">
                     {analiseIA.pontos_positivos.map((p, i) => (
-                      <li key={i} className="text-xs text-gray-600 flex items-start gap-1.5"><span className="text-green-500 mt-0.5">✓</span>{p}</li>
+                      <li key={i} className="text-xs text-muted-foreground flex items-start gap-1.5"><span className="text-green-500 mt-0.5">✓</span>{p}</li>
                     ))}
                   </ul>
                 </div>
               )}
               {analiseIA.pontos_atencao?.length > 0 && (
                 <div>
-                  <p className="text-xs font-semibold text-orange-700 mb-1">Pontos de atenção</p>
+                  <p className="text-xs font-semibold text-warning mb-1">Pontos de atenção</p>
                   <ul className="space-y-0.5">
                     {analiseIA.pontos_atencao.map((p, i) => (
-                      <li key={i} className="text-xs text-gray-600 flex items-start gap-1.5"><span className="text-orange-500 mt-0.5">⚠</span>{p}</li>
+                      <li key={i} className="text-xs text-muted-foreground flex items-start gap-1.5"><span className="text-orange-500 mt-0.5">⚠</span>{p}</li>
                     ))}
                   </ul>
                 </div>
               )}
               {analiseIA.proxima_acao && (
-                <div className="bg-white border border-violet-200 rounded-lg px-3 py-2">
-                  <p className="text-xs font-semibold text-violet-700 mb-0.5">Próxima ação recomendada</p>
-                  <p className="text-sm text-gray-700">{analiseIA.proxima_acao}</p>
+                <div className="bg-card border border-primary/20 rounded-lg px-3 py-2">
+                  <p className="text-xs font-semibold text-primary mb-0.5">Próxima ação recomendada</p>
+                  <p className="text-sm text-foreground">{analiseIA.proxima_acao}</p>
                 </div>
               )}
             </div>
@@ -228,7 +228,7 @@ function ModalQualificacao({
 
           {/* Qualificação */}
           <div className="space-y-3">
-            <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide">Qualificação</p>
+            <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Qualificação</p>
 
             {/* Botões de status */}
             <div className="grid grid-cols-2 gap-2">
@@ -245,7 +245,7 @@ function ModalQualificacao({
                       setSalvando(false);
                     }}
                     className={`flex items-center gap-2 px-3 py-2.5 rounded-xl border-2 text-sm font-medium transition-all ${
-                      status === s ? `${c.color} border-current` : "border-gray-200 bg-white hover:border-gray-300"
+                      status === s ? `${c.color} border-current` : "border-border bg-card hover:border-input"
                     }`}
                   >
                     <Icon className="w-4 h-4 flex-shrink-0" />
@@ -260,7 +260,7 @@ function ModalQualificacao({
               value={classificacao}
               onChange={e => setClassificacao(e.target.value)}
               placeholder="Classificação livre (ex: MEI sem faturamento, PJ ativa...)"
-              className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+              className="w-full border border-border rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-primary"
             />
 
             {/* Observações */}
@@ -269,7 +269,7 @@ function ModalQualificacao({
               onChange={e => setObservacoes(e.target.value)}
               placeholder="Observações internas sobre este contato..."
               rows={3}
-              className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 resize-none"
+              className="w-full border border-border rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-primary resize-none"
             />
           </div>
         </div>
@@ -279,7 +279,7 @@ function ModalQualificacao({
           <button
             onClick={handleSalvar}
             disabled={salvando}
-            className="flex-1 flex items-center justify-center gap-2 bg-blue-600 hover:bg-blue-700 disabled:opacity-60 text-white text-sm font-semibold py-2.5 rounded-xl transition-colors"
+            className="flex-1 flex items-center justify-center gap-2 bg-primary hover:bg-primary disabled:opacity-60 text-primary-foreground text-sm font-semibold py-2.5 rounded-xl transition-colors"
           >
             {salvando ? <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" /> : <CheckCircle2 className="w-4 h-4" />}
             Salvar Qualificação
@@ -288,7 +288,7 @@ function ModalQualificacao({
             <button
               onClick={handleConverter}
               disabled={convertendo}
-              className="flex-1 flex items-center justify-center gap-2 bg-emerald-600 hover:bg-emerald-700 disabled:opacity-60 text-white text-sm font-semibold py-2.5 rounded-xl transition-colors"
+              className="flex-1 flex items-center justify-center gap-2 bg-success hover:bg-success disabled:opacity-60 text-primary-foreground text-sm font-semibold py-2.5 rounded-xl transition-colors"
             >
               {convertendo ? <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" /> : <ArrowRight className="w-4 h-4" />}
               Converter em Lead
@@ -315,26 +315,26 @@ function CardTriagem({
   return (
     <div
       onClick={onClick}
-      className={`border-l-4 ${item.status === "pendente" ? "border-l-yellow-400" : item.status === "possivel_cliente" ? "border-l-green-500" : item.status === "curioso" ? "border-l-blue-400" : item.status === "sem_perfil" ? "border-l-orange-400" : item.status === "convertido" ? "border-l-emerald-500" : "border-l-gray-300"} bg-white border border-gray-200 rounded-xl p-4 cursor-pointer hover:shadow-md transition-all hover:border-blue-200 group`}
+      className={`border-l-4 ${item.status === "pendente" ? "border-l-yellow-400" : item.status === "possivel_cliente" ? "border-l-green-500" : item.status === "curioso" ? "border-l-blue-400" : item.status === "sem_perfil" ? "border-l-orange-400" : item.status === "convertido" ? "border-l-emerald-500" : "border-l-gray-300"} bg-card border border-border rounded-xl p-4 cursor-pointer hover:shadow-md transition-all hover:border-primary/20 group`}
     >
       <div className="flex items-start justify-between gap-3">
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-2 mb-1">
-            <p className="font-semibold text-gray-900 truncate">{item.nome}</p>
+            <p className="font-semibold text-foreground truncate">{item.nome}</p>
             <span className={`text-xs font-medium px-2 py-0.5 rounded-full flex-shrink-0 ${cfg.badge}`}>
               {cfg.label}
             </span>
           </div>
-          {item.empresa && <p className="text-xs text-gray-500 truncate mb-1">{item.empresa}</p>}
-          <div className="flex items-center gap-3 text-xs text-gray-400">
+          {item.empresa && <p className="text-xs text-muted-foreground truncate mb-1">{item.empresa}</p>}
+          <div className="flex items-center gap-3 text-xs text-muted-foreground">
             <span className="flex items-center gap-1"><Phone className="w-3 h-3" />{item.telefone}</span>
-            {item.produto && <span className="flex items-center gap-1 text-blue-600 font-medium">· {item.produto}</span>}
+            {item.produto && <span className="flex items-center gap-1 text-primary font-medium">· {item.produto}</span>}
             {item.valor && <span className="text-green-600 font-medium">· {fmtBRL.format(item.valor)}</span>}
           </div>
         </div>
         <div className="flex flex-col items-end gap-1 flex-shrink-0">
-          <span className="text-xs text-gray-400">{fmtData(item.created_at)}</span>
-          <ChevronRight className="w-4 h-4 text-gray-300 group-hover:text-blue-500 transition-colors" />
+          <span className="text-xs text-muted-foreground">{fmtData(item.created_at)}</span>
+          <ChevronRight className="w-4 h-4 text-gray-300 group-hover:text-primary transition-colors" />
         </div>
       </div>
     </div>
@@ -413,12 +413,12 @@ export default function Triagem() {
             </div>
             <div>
               <h1 className="text-2xl font-bold">Triagem de Leads</h1>
-              <p className="text-sm text-gray-500">Qualifique os contatos do simulador antes de enviar ao CRM</p>
+              <p className="text-sm text-muted-foreground">Qualifique os contatos do simulador antes de enviar ao CRM</p>
             </div>
           </div>
           <button
             onClick={carregarDados}
-            className="flex items-center gap-2 px-4 py-2 border border-gray-200 rounded-xl text-sm text-gray-600 hover:bg-gray-50 transition-colors"
+            className="flex items-center gap-2 px-4 py-2 border border-border rounded-xl text-sm text-muted-foreground hover:bg-muted transition-colors"
           >
             <RefreshCw className={`w-4 h-4 ${loading ? "animate-spin" : ""}`} />
             Atualizar
@@ -427,12 +427,12 @@ export default function Triagem() {
 
         {/* Cards de métricas */}
         <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-          <div className="bg-white border border-gray-200 rounded-xl p-4">
+          <div className="bg-card border border-border rounded-xl p-4">
             <div className="flex items-center gap-2 mb-1">
-              <Users className="w-4 h-4 text-gray-400" />
-              <span className="text-xs text-gray-500 font-medium">Total Recebido</span>
+              <Users className="w-4 h-4 text-muted-foreground" />
+              <span className="text-xs text-muted-foreground font-medium">Total Recebido</span>
             </div>
-            <p className="text-2xl font-black text-gray-900">{total}</p>
+            <p className="text-2xl font-black text-foreground">{total}</p>
           </div>
           <div className="bg-yellow-50 border border-yellow-200 rounded-xl p-4">
             <div className="flex items-center gap-2 mb-1">
@@ -448,32 +448,32 @@ export default function Triagem() {
             </div>
             <p className="text-2xl font-black text-green-700">{possiveis}</p>
           </div>
-          <div className="bg-emerald-50 border border-emerald-200 rounded-xl p-4">
+          <div className="bg-success/10 border border-success/20 rounded-xl p-4">
             <div className="flex items-center gap-2 mb-1">
               <TrendingUp className="w-4 h-4 text-emerald-500" />
-              <span className="text-xs text-emerald-700 font-medium">Convertidos</span>
+              <span className="text-xs text-success font-medium">Convertidos</span>
             </div>
-            <p className="text-2xl font-black text-emerald-700">{convertidos}</p>
+            <p className="text-2xl font-black text-success">{convertidos}</p>
           </div>
         </div>
 
         {/* Filtros */}
         <div className="flex flex-col sm:flex-row gap-3">
           <div className="relative flex-1">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
             <input
               value={busca}
               onChange={e => setBusca(e.target.value)}
               placeholder="Buscar por nome, empresa, telefone ou CNPJ..."
-              className="w-full pl-9 pr-4 py-2.5 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+              className="w-full pl-9 pr-4 py-2.5 border border-border rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-primary"
             />
           </div>
           <div className="flex items-center gap-2">
-            <Filter className="w-4 h-4 text-gray-400 flex-shrink-0" />
+            <Filter className="w-4 h-4 text-muted-foreground flex-shrink-0" />
             <select
               value={filtroStatus}
               onChange={e => setFiltroStatus(e.target.value)}
-              className="border border-gray-200 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white"
+              className="border border-border rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-primary bg-card"
             >
               <option value="todos">Todos os status</option>
               <option value="pendente">Pendente</option>
@@ -494,8 +494,8 @@ export default function Triagem() {
         ) : itens.length === 0 ? (
           <div className="flex flex-col items-center justify-center py-20 text-center">
             <ShieldCheck className="w-12 h-12 text-gray-300 mb-3" />
-            <p className="text-gray-500 font-medium">Nenhum item na fila</p>
-            <p className="text-sm text-gray-400 mt-1">
+            <p className="text-muted-foreground font-medium">Nenhum item na fila</p>
+            <p className="text-sm text-muted-foreground mt-1">
               {filtroStatus !== "todos" || busca
                 ? "Tente outros filtros"
                 : "Os leads do simulador público aparecerão aqui para qualificação"}
@@ -503,7 +503,7 @@ export default function Triagem() {
           </div>
         ) : (
           <div className="space-y-3">
-            <p className="text-xs text-gray-400 font-medium">{itens.length} {itens.length === 1 ? "item" : "itens"}</p>
+            <p className="text-xs text-muted-foreground font-medium">{itens.length} {itens.length === 1 ? "item" : "itens"}</p>
             {itens.map(item => (
               <CardTriagem
                 key={item.id}

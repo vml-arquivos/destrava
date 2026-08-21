@@ -92,9 +92,9 @@ export default function AcervoDocumentalEmpresa() {
 
   return (
     <Layout>
-      <div className="h-full min-h-0 overflow-y-auto bg-slate-50 px-3 py-2 lg:px-4">
+      <div className="h-full min-h-0 overflow-y-auto bg-muted px-3 py-2 lg:px-4">
         <div className="mx-auto max-w-[1780px] space-y-2 pb-4">
-          <div className="rounded-2xl border border-slate-200 bg-white px-3 py-2 shadow-sm">
+          <div className="rounded-2xl border border-border bg-white px-3 py-2 shadow-sm">
             {/* Antes, quem entrava no acervo de uma empresa só conseguia sair (pra ver
                 outra empresa ou voltar pra lista) pelo botão "voltar" do navegador --
                 não havia nenhum link dentro do site pra isso. Este botão sempre volta
@@ -102,29 +102,29 @@ export default function AcervoDocumentalEmpresa() {
             <button
               type="button"
               onClick={() => setLocation("/colaborador/empresas")}
-              className="mb-1.5 inline-flex items-center gap-1.5 text-xs font-bold text-slate-500 hover:text-blue-700"
+              className="mb-1.5 inline-flex items-center gap-1.5 text-xs font-bold text-muted-foreground hover:text-primary"
             >
               <ArrowLeft className="h-3.5 w-3.5" /> Voltar para a lista de empresas
             </button>
             <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
               <div className="flex min-w-0 items-center gap-3">
-                <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-blue-600 text-white shadow-sm">
+                <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-primary text-white shadow-sm">
                   <FileText className="h-5 w-5" />
                 </div>
                 <div className="min-w-0">
                   <div className="flex flex-wrap items-center gap-2">
-                    <p className="text-[10px] font-black uppercase tracking-[0.14em] text-blue-600">Acervo documental</p>
-                    <span className="inline-flex items-center gap-1 rounded-full border border-emerald-200 bg-emerald-50 px-2 py-0.5 text-[10px] font-bold text-emerald-700">
+                    <p className="text-[10px] font-black uppercase tracking-[0.14em] text-primary">Acervo documental</p>
+                    <span className="inline-flex items-center gap-1 rounded-full border border-success/20 bg-success/10 px-2 py-0.5 text-[10px] font-bold text-success">
                       <ShieldCheck className="h-3 w-3" /> Preservação ativa
                     </span>
                   </div>
-                  <h1 className="mt-0.5 max-w-[980px] truncate text-base font-black leading-tight text-slate-950 lg:text-lg">
+                  <h1 className="mt-0.5 max-w-[980px] truncate text-base font-black leading-tight text-foreground lg:text-lg">
                     {loading ? "Carregando empresa..." : empresa?.razao_social || "Empresa"}
                   </h1>
                 </div>
               </div>
 
-              <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-sm text-slate-500">
+              <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-sm text-muted-foreground">
                 {empresa?.nome_fantasia && <span>{empresa.nome_fantasia}</span>}
                 {empresa?.cnpj && <span className="font-mono">{formatCNPJ(empresa.cnpj)}</span>}
                 {(empresa?.cidade || empresa?.estado) && (
@@ -137,7 +137,7 @@ export default function AcervoDocumentalEmpresa() {
                 acervo pra ver outra aba (Inteligência 360, Conversas, etc.) exigia
                 "Voltar para a empresa" e só então clicar na aba lá. Agora é um
                 clique só, direto desta tela. */}
-            <div className="mt-2 flex flex-wrap gap-1 border-t border-slate-100 pt-2">
+            <div className="mt-2 flex flex-wrap gap-1 border-t border-border pt-2">
               {ABAS_EMPRESA_ACERVO.map((aba) => {
                 const ativa = aba.id === "dossie_credito" ? view === "analise" : aba.id === "documentos" ? view !== "analise" : false;
                 return (
@@ -147,8 +147,8 @@ export default function AcervoDocumentalEmpresa() {
                     onClick={() => navegarParaAbaEmpresa(aba.id)}
                     className={`flex items-center gap-1.5 rounded-xl px-3 py-1.5 text-xs font-bold border transition-all whitespace-nowrap ${
                       ativa
-                        ? "border-blue-300 bg-blue-600 text-white shadow-md shadow-blue-100"
-                        : "border-slate-200 text-slate-600 bg-white hover:text-slate-800 hover:border-slate-300 hover:bg-slate-50"
+                        ? "border-primary/30 bg-primary text-white shadow-md shadow-blue-100"
+                        : "border-border text-muted-foreground bg-white hover:text-foreground hover:border-input hover:bg-muted"
                     }`}
                   >
                     {aba.label}
@@ -167,11 +167,11 @@ export default function AcervoDocumentalEmpresa() {
               <button
                 type="button"
                 onClick={() => setLocation(`/colaborador/empresas/${empresaId}/acervo`)}
-                className="inline-flex items-center gap-1.5 text-xs font-bold text-blue-700 hover:text-blue-800"
+                className="inline-flex items-center gap-1.5 text-xs font-bold text-primary hover:text-primary"
               >
                 <ArrowLeft className="h-3.5 w-3.5" /> Voltar para o checklist de documentos
               </button>
-              <div className="rounded-2xl border border-slate-200 bg-white shadow-sm">
+              <div className="rounded-2xl border border-border bg-white shadow-sm">
                 <DossieCreditoEmpresa
                   empresaId={empresaId}
                   onAvancar={() => setLocation(`/colaborador/empresas/${empresaId}/acervo?etapa=documentacao_empresa`)}

@@ -75,16 +75,16 @@ interface MotorData {
 // ─── Configs visuais ──────────────────────────────────────────────────────────
 
 const PRIO_CFG: Record<Prioridade, { label: string; color: string; bg: string; border: string; Icon: React.ElementType }> = {
-  alta:  { label: "Alta",  color: "text-red-700",    bg: "bg-red-50",    border: "border-red-200",    Icon: AlertCircle },
-  media: { label: "Média", color: "text-amber-700",  bg: "bg-amber-50",  border: "border-amber-200",  Icon: AlertTriangle },
-  baixa: { label: "Baixa", color: "text-blue-700",   bg: "bg-blue-50",   border: "border-blue-200",   Icon: Info },
+  alta:  { label: "Alta",  color: "text-destructive",    bg: "bg-destructive/10",    border: "border-destructive/20",    Icon: AlertCircle },
+  media: { label: "Média", color: "text-warning",  bg: "bg-warning/10",  border: "border-warning/20",  Icon: AlertTriangle },
+  baixa: { label: "Baixa", color: "text-primary",   bg: "bg-primary/10",   border: "border-primary/20",   Icon: Info },
 };
 
 const STATUS_CFG: Record<StatusGeral, { label: string; color: string; bg: string }> = {
-  critico:   { label: "Crítico",   color: "text-red-700",     bg: "bg-red-50 border-red-200" },
-  atencao:   { label: "Atenção",   color: "text-amber-700",   bg: "bg-amber-50 border-amber-200" },
-  bom:       { label: "Bom",       color: "text-emerald-700", bg: "bg-emerald-50 border-emerald-200" },
-  excelente: { label: "Excelente", color: "text-blue-700",    bg: "bg-blue-50 border-blue-200" },
+  critico:   { label: "Crítico",   color: "text-destructive",     bg: "bg-destructive/10 border-destructive/20" },
+  atencao:   { label: "Atenção",   color: "text-warning",   bg: "bg-warning/10 border-warning/20" },
+  bom:       { label: "Bom",       color: "text-success", bg: "bg-success/10 border-success/20" },
+  excelente: { label: "Excelente", color: "text-primary",    bg: "bg-primary/10 border-primary/20" },
 };
 
 const MODULO_ICONS: Record<string, React.ElementType> = {
@@ -136,36 +136,36 @@ function CardPendencia({ p, onNavegar }: { p: Pendencia; onNavegar?: (aba: strin
   const aba = MODULO_ABA[p.modulo] ?? "visao_geral";
 
   return (
-    <div className={`rounded-xl border bg-white overflow-hidden ${p.prioridade === "alta" ? "border-red-200" : p.prioridade === "media" ? "border-amber-200" : "border-slate-200"}`}>
+    <div className={`rounded-xl border bg-card overflow-hidden ${p.prioridade === "alta" ? "border-destructive/20" : p.prioridade === "media" ? "border-warning/20" : "border-border"}`}>
       <button
         onClick={() => setExpandido(e => !e)}
-        className="w-full flex items-start gap-3 p-3 text-left hover:bg-slate-50 transition-colors"
+        className="w-full flex items-start gap-3 p-3 text-left hover:bg-muted transition-colors"
       >
-        <div className={`w-8 h-8 rounded-lg flex items-center justify-center shrink-0 mt-0.5 ${p.prioridade === "alta" ? "bg-red-100" : p.prioridade === "media" ? "bg-amber-100" : "bg-blue-100"}`}>
-          <ModuloIcon className={`w-4 h-4 ${p.prioridade === "alta" ? "text-red-600" : p.prioridade === "media" ? "text-amber-600" : "text-blue-600"}`} />
+        <div className={`w-8 h-8 rounded-lg flex items-center justify-center shrink-0 mt-0.5 ${p.prioridade === "alta" ? "bg-destructive/20" : p.prioridade === "media" ? "bg-warning/20" : "bg-primary/20"}`}>
+          <ModuloIcon className={`w-4 h-4 ${p.prioridade === "alta" ? "text-destructive" : p.prioridade === "media" ? "text-warning" : "text-primary"}`} />
         </div>
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-2 flex-wrap">
-            <p className="text-xs font-semibold text-slate-800">{p.titulo}</p>
+            <p className="text-xs font-semibold text-foreground">{p.titulo}</p>
             <PrioridadeChip prioridade={p.prioridade} />
           </div>
-          <p className="text-[11px] text-slate-500 mt-0.5 line-clamp-1">{p.descricao}</p>
+          <p className="text-[11px] text-muted-foreground mt-0.5 line-clamp-1">{p.descricao}</p>
         </div>
-        {expandido ? <ChevronUp className="w-4 h-4 text-slate-400 shrink-0 mt-1" /> : <ChevronDown className="w-4 h-4 text-slate-400 shrink-0 mt-1" />}
+        {expandido ? <ChevronUp className="w-4 h-4 text-muted-foreground shrink-0 mt-1" /> : <ChevronDown className="w-4 h-4 text-muted-foreground shrink-0 mt-1" />}
       </button>
       {expandido && (
-        <div className="px-3 pb-3 pt-1 border-t border-slate-100 space-y-2">
-          <div className="text-[11px] text-slate-600">
-            <span className="font-semibold text-slate-700">Impacto: </span>{p.impacto}
+        <div className="px-3 pb-3 pt-1 border-t border-border space-y-2">
+          <div className="text-[11px] text-muted-foreground">
+            <span className="font-semibold text-foreground">Impacto: </span>{p.impacto}
           </div>
-          <div className="flex items-start gap-1.5 text-[11px] text-slate-600">
-            <ArrowRight className="w-3 h-3 mt-0.5 shrink-0 text-blue-500" />
-            <span><span className="font-semibold text-slate-700">Ação: </span>{p.acaoRecomendada}</span>
+          <div className="flex items-start gap-1.5 text-[11px] text-muted-foreground">
+            <ArrowRight className="w-3 h-3 mt-0.5 shrink-0 text-primary" />
+            <span><span className="font-semibold text-foreground">Ação: </span>{p.acaoRecomendada}</span>
           </div>
           {onNavegar && (
             <button
               onClick={() => onNavegar(aba)}
-              className="inline-flex items-center gap-1.5 text-[11px] font-semibold text-blue-600 hover:text-blue-800 transition-colors"
+              className="inline-flex items-center gap-1.5 text-[11px] font-semibold text-primary hover:text-primary transition-colors"
             >
               <ArrowRight className="w-3 h-3" />
               Ir para módulo →
@@ -182,22 +182,22 @@ function GrupoAccordion({ grupo, onNavegar }: { grupo: GrupoPendencias; onNavega
   const ModuloIcon = MODULO_ICONS[grupo.categoria] ?? Settings;
 
   return (
-    <div className="rounded-xl border border-slate-200 bg-white overflow-hidden">
+    <div className="rounded-xl border border-border bg-card overflow-hidden">
       <button
         onClick={() => setAberto(a => !a)}
-        className="w-full flex items-center justify-between p-3 hover:bg-slate-50 transition-colors"
+        className="w-full flex items-center justify-between p-3 hover:bg-muted transition-colors"
       >
         <div className="flex items-center gap-2">
-          <ModuloIcon className="w-4 h-4 text-slate-400" />
-          <span className="text-sm font-semibold text-slate-700">{grupo.label}</span>
-          <span className="text-[10px] text-slate-500">{grupo.total} pend.</span>
-          {grupo.altas > 0 && <span className="text-[10px] font-black px-1.5 py-0.5 rounded-full bg-red-100 text-red-700 border border-red-200">{grupo.altas} alta{grupo.altas > 1 ? "s" : ""}</span>}
-          {grupo.medias > 0 && <span className="text-[10px] font-black px-1.5 py-0.5 rounded-full bg-amber-100 text-amber-700 border border-amber-200">{grupo.medias} média{grupo.medias > 1 ? "s" : ""}</span>}
+          <ModuloIcon className="w-4 h-4 text-muted-foreground" />
+          <span className="text-sm font-semibold text-foreground">{grupo.label}</span>
+          <span className="text-[10px] text-muted-foreground">{grupo.total} pend.</span>
+          {grupo.altas > 0 && <span className="text-[10px] font-black px-1.5 py-0.5 rounded-full bg-destructive/20 text-destructive border border-destructive/20">{grupo.altas} alta{grupo.altas > 1 ? "s" : ""}</span>}
+          {grupo.medias > 0 && <span className="text-[10px] font-black px-1.5 py-0.5 rounded-full bg-warning/20 text-warning border border-warning/20">{grupo.medias} média{grupo.medias > 1 ? "s" : ""}</span>}
         </div>
-        {aberto ? <ChevronUp className="w-4 h-4 text-slate-400" /> : <ChevronDown className="w-4 h-4 text-slate-400" />}
+        {aberto ? <ChevronUp className="w-4 h-4 text-muted-foreground" /> : <ChevronDown className="w-4 h-4 text-muted-foreground" />}
       </button>
       {aberto && (
-        <div className="px-3 pb-3 pt-1 border-t border-slate-100 space-y-2">
+        <div className="px-3 pb-3 pt-1 border-t border-border space-y-2">
           {safeArr<Pendencia>(grupo.pendencias).map(p => (
             <CardPendencia key={p.id} p={p} onNavegar={onNavegar} />
           ))}
@@ -257,20 +257,20 @@ export default function PlanoAcaoMotor({ empresaId, onNavegar }: Props) {
   // ── Estado inicial ──
   if (!data && !loading) {
     return (
-      <div className="rounded-2xl border border-slate-200 bg-gradient-to-br from-slate-50 to-amber-50 p-6">
+      <div className="rounded-2xl border border-border bg-gradient-to-br from-slate-50 to-amber-50 p-6">
         <div className="flex items-start gap-4">
-          <div className="w-12 h-12 rounded-2xl bg-amber-500 flex items-center justify-center shrink-0">
-            <ClipboardList className="w-6 h-6 text-white" />
+          <div className="w-12 h-12 rounded-2xl bg-warning/100 flex items-center justify-center shrink-0">
+            <ClipboardList className="w-6 h-6 text-primary-foreground" />
           </div>
           <div className="flex-1">
-            <h3 className="text-base font-black text-slate-900">Motor de Pendências e Plano de Ação</h3>
-            <p className="text-sm text-slate-600 mt-1 leading-relaxed">
+            <h3 className="text-base font-black text-foreground">Motor de Pendências e Plano de Ação</h3>
+            <p className="text-sm text-muted-foreground mt-1 leading-relaxed">
               Identifica automaticamente o que impede ou dificulta contrato, análise de crédito, proposta bancária, faturamento, documentação e relacionamento comercial.
             </p>
             <div className="mt-4">
               <button
                 onClick={calcular}
-                className="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl bg-amber-500 text-white text-sm font-bold hover:bg-amber-600 active:scale-95 transition-all shadow-md"
+                className="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl bg-warning/100 text-primary-foreground text-sm font-bold hover:bg-warning active:scale-95 transition-all shadow-md"
               >
                 <Zap className="w-4 h-4" />
                 Calcular pendências
@@ -284,7 +284,7 @@ export default function PlanoAcaoMotor({ empresaId, onNavegar }: Props) {
 
   if (loading) {
     return (
-      <div className="rounded-2xl border border-slate-200 bg-slate-50 p-6 flex items-center gap-3 text-slate-700">
+      <div className="rounded-2xl border border-border bg-muted p-6 flex items-center gap-3 text-foreground">
         <RefreshCw className="w-5 h-5 animate-spin text-amber-500" />
         <span className="text-sm font-semibold">Calculando pendências e plano de ação...</span>
       </div>
@@ -304,14 +304,14 @@ export default function PlanoAcaoMotor({ empresaId, onNavegar }: Props) {
   const baixas = todasPendencias.filter(p => p.prioridade === "baixa");
 
   return (
-    <div className="rounded-2xl border border-slate-200 bg-white overflow-hidden">
+    <div className="rounded-2xl border border-border bg-card overflow-hidden">
 
       {/* Header */}
-      <div className="bg-gradient-to-r from-amber-500 to-orange-500 text-white p-4">
+      <div className="bg-gradient-to-r from-amber-500 to-orange-500 text-primary-foreground p-4">
         <div className="flex items-start justify-between gap-3 flex-wrap">
           <div className="flex items-start gap-3">
-            <div className="w-9 h-9 rounded-xl bg-white/20 flex items-center justify-center shrink-0">
-              <ClipboardList className="w-4.5 h-4.5 text-white" />
+            <div className="w-9 h-9 rounded-xl bg-card/20 flex items-center justify-center shrink-0">
+              <ClipboardList className="w-4.5 h-4.5 text-primary-foreground" />
             </div>
             <div>
               <h3 className="text-sm font-black">Motor de Pendências e Plano de Ação</h3>
@@ -321,19 +321,19 @@ export default function PlanoAcaoMotor({ empresaId, onNavegar }: Props) {
             </div>
           </div>
           <div className="flex flex-wrap gap-2">
-            <button onClick={copiarPlano} className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-white/20 hover:bg-white/30 text-xs font-semibold transition-all">
+            <button onClick={copiarPlano} className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-card/20 hover:bg-card/30 text-xs font-semibold transition-all">
               {copiado ? <CheckCheck className="w-3.5 h-3.5" /> : <Copy className="w-3.5 h-3.5" />}
               {copiado ? "Copiado!" : "Copiar plano"}
             </button>
             <button
               title="Criar tarefas no Nexus"
-              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-white/20 hover:bg-white/30 text-xs font-semibold transition-all"
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-card/20 hover:bg-card/30 text-xs font-semibold transition-all"
               onClick={() => document.getElementById(`nexus-block-${empresaId}`)?.scrollIntoView({ behavior: 'smooth' })}
             >
               <Zap className="w-3.5 h-3.5" />
               Criar no Nexus
             </button>
-            <button onClick={calcular} disabled={loading} className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-white/20 hover:bg-white/30 text-xs font-semibold transition-all">
+            <button onClick={calcular} disabled={loading} className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-card/20 hover:bg-card/30 text-xs font-semibold transition-all">
               <RefreshCw className={`w-3.5 h-3.5 ${loading ? "animate-spin" : ""}`} />
               Recalcular
             </button>
@@ -349,34 +349,34 @@ export default function PlanoAcaoMotor({ empresaId, onNavegar }: Props) {
             Status: {statusCfg.label}
           </span>
           {data.altas > 0 && (
-            <span className="text-xs font-bold px-2.5 py-1 rounded-full border bg-red-50 text-red-700 border-red-200">
+            <span className="text-xs font-bold px-2.5 py-1 rounded-full border bg-destructive/10 text-destructive border-destructive/20">
               {data.altas} alta{data.altas > 1 ? "s" : ""}
             </span>
           )}
           {data.medias > 0 && (
-            <span className="text-xs font-bold px-2.5 py-1 rounded-full border bg-amber-50 text-amber-700 border-amber-200">
+            <span className="text-xs font-bold px-2.5 py-1 rounded-full border bg-warning/10 text-warning border-warning/20">
               {data.medias} média{data.medias > 1 ? "s" : ""}
             </span>
           )}
           {data.baixas > 0 && (
-            <span className="text-xs font-bold px-2.5 py-1 rounded-full border bg-blue-50 text-blue-700 border-blue-200">
+            <span className="text-xs font-bold px-2.5 py-1 rounded-full border bg-primary/10 text-primary border-primary/20">
               {data.baixas} baixa{data.baixas > 1 ? "s" : ""}
             </span>
           )}
         </div>
 
         {/* Resumo */}
-        <p className="text-sm text-slate-700 leading-relaxed">{data.resumo}</p>
+        <p className="text-sm text-foreground leading-relaxed">{data.resumo}</p>
 
         {/* Score de completude */}
         <div>
-          <div className="flex items-center justify-between text-xs text-slate-500 mb-1">
+          <div className="flex items-center justify-between text-xs text-muted-foreground mb-1">
             <span>Score de completude do cadastro</span>
-            <span className="font-bold text-slate-700">{data.score_completude}/100</span>
+            <span className="font-bold text-foreground">{data.score_completude}/100</span>
           </div>
-          <div className="h-2 rounded-full bg-slate-100 overflow-hidden">
+          <div className="h-2 rounded-full bg-muted overflow-hidden">
             <div
-              className={`h-full rounded-full transition-all duration-500 ${data.score_completude >= 70 ? "bg-emerald-500" : data.score_completude >= 50 ? "bg-amber-400" : data.score_completude >= 30 ? "bg-orange-400" : "bg-red-500"}`}
+              className={`h-full rounded-full transition-all duration-500 ${data.score_completude >= 70 ? "bg-success" : data.score_completude >= 50 ? "bg-amber-400" : data.score_completude >= 30 ? "bg-orange-400" : "bg-destructive"}`}
               style={{ width: `${data.score_completude}%` }}
             />
           </div>
@@ -384,9 +384,9 @@ export default function PlanoAcaoMotor({ empresaId, onNavegar }: Props) {
 
         {/* Sem pendências */}
         {data.total === 0 && (
-          <div className="flex items-center gap-3 p-4 rounded-xl border border-emerald-200 bg-emerald-50">
-            <CheckCircle2 className="w-5 h-5 text-emerald-600 shrink-0" />
-            <p className="text-sm font-semibold text-emerald-800">
+          <div className="flex items-center gap-3 p-4 rounded-xl border border-success/20 bg-success/10">
+            <CheckCircle2 className="w-5 h-5 text-success shrink-0" />
+            <p className="text-sm font-semibold text-success">
               Cliente sem pendências críticas identificadas com os dados atuais.
             </p>
           </div>
@@ -395,12 +395,12 @@ export default function PlanoAcaoMotor({ empresaId, onNavegar }: Props) {
         {/* Abas de visão */}
         {data.total > 0 && (
           <>
-            <div className="flex gap-2 border-b border-slate-200">
+            <div className="flex gap-2 border-b border-border">
               {(["kanban", "plano"] as const).map(v => (
                 <button
                   key={v}
                   onClick={() => setVisao(v)}
-                  className={`px-4 py-2 text-xs font-semibold border-b-2 transition-colors ${visao === v ? "border-amber-500 text-amber-700" : "border-transparent text-slate-500 hover:text-slate-700"}`}
+                  className={`px-4 py-2 text-xs font-semibold border-b-2 transition-colors ${visao === v ? "border-amber-500 text-warning" : "border-transparent text-muted-foreground hover:text-foreground"}`}
                 >
                   {v === "kanban" ? "Por Prioridade" : "Plano de Ação"}
                 </button>
@@ -413,8 +413,8 @@ export default function PlanoAcaoMotor({ empresaId, onNavegar }: Props) {
                 {altas.length > 0 && (
                   <div>
                     <div className="flex items-center gap-2 mb-2">
-                      <AlertCircle className="w-4 h-4 text-red-600" />
-                      <h4 className="text-xs font-black text-red-700 uppercase tracking-wide">Alta Prioridade ({altas.length})</h4>
+                      <AlertCircle className="w-4 h-4 text-destructive" />
+                      <h4 className="text-xs font-black text-destructive uppercase tracking-wide">Alta Prioridade ({altas.length})</h4>
                     </div>
                     <div className="space-y-2">
                       {altas.map(p => <CardPendencia key={p.id} p={p} onNavegar={onNavegar} />)}
@@ -424,8 +424,8 @@ export default function PlanoAcaoMotor({ empresaId, onNavegar }: Props) {
                 {medias.length > 0 && (
                   <div>
                     <div className="flex items-center gap-2 mb-2">
-                      <AlertTriangle className="w-4 h-4 text-amber-600" />
-                      <h4 className="text-xs font-black text-amber-700 uppercase tracking-wide">Média Prioridade ({medias.length})</h4>
+                      <AlertTriangle className="w-4 h-4 text-warning" />
+                      <h4 className="text-xs font-black text-warning uppercase tracking-wide">Média Prioridade ({medias.length})</h4>
                     </div>
                     <div className="space-y-2">
                       {medias.map(p => <CardPendencia key={p.id} p={p} onNavegar={onNavegar} />)}
@@ -435,8 +435,8 @@ export default function PlanoAcaoMotor({ empresaId, onNavegar }: Props) {
                 {baixas.length > 0 && (
                   <div>
                     <div className="flex items-center gap-2 mb-2">
-                      <Info className="w-4 h-4 text-blue-600" />
-                      <h4 className="text-xs font-black text-blue-700 uppercase tracking-wide">Baixa Prioridade ({baixas.length})</h4>
+                      <Info className="w-4 h-4 text-primary" />
+                      <h4 className="text-xs font-black text-primary uppercase tracking-wide">Baixa Prioridade ({baixas.length})</h4>
                     </div>
                     <div className="space-y-2">
                       {baixas.map(p => <CardPendencia key={p.id} p={p} onNavegar={onNavegar} />)}
@@ -450,7 +450,7 @@ export default function PlanoAcaoMotor({ empresaId, onNavegar }: Props) {
             {visao === "plano" && (
               <div className="space-y-2">
                 {planoAcao.length === 0 ? (
-                  <p className="text-sm text-slate-500 text-center py-4">Nenhuma ação pendente.</p>
+                  <p className="text-sm text-muted-foreground text-center py-4">Nenhuma ação pendente.</p>
                 ) : (
                   planoAcao.map(p => {
                     const ModuloIcon = MODULO_ICONS[p.modulo] ?? Settings;
@@ -458,26 +458,26 @@ export default function PlanoAcaoMotor({ empresaId, onNavegar }: Props) {
                     const prioCfg = PRIO_CFG[p.prioridade] ?? PRIO_CFG.baixa;
                     return (
                       <div key={p.pendencia_id} className={`flex items-start gap-3 p-3 rounded-xl border ${prioCfg.border} ${prioCfg.bg}`}>
-                        <span className={`h-6 w-6 rounded-full font-black text-[11px] flex items-center justify-center shrink-0 mt-0.5 ${p.prioridade === "alta" ? "bg-red-600 text-white" : p.prioridade === "media" ? "bg-amber-500 text-white" : "bg-blue-500 text-white"}`}>
+                        <span className={`h-6 w-6 rounded-full font-black text-[11px] flex items-center justify-center shrink-0 mt-0.5 ${p.prioridade === "alta" ? "bg-destructive text-primary-foreground" : p.prioridade === "media" ? "bg-warning/100 text-primary-foreground" : "bg-primary text-primary-foreground"}`}>
                           {p.numero}
                         </span>
                         <div className="flex-1 min-w-0">
                           <div className="flex items-center gap-2 flex-wrap">
-                            <p className="text-xs font-semibold text-slate-800">{p.titulo}</p>
+                            <p className="text-xs font-semibold text-foreground">{p.titulo}</p>
                             <PrioridadeChip prioridade={p.prioridade} />
                           </div>
-                          <p className="text-[11px] text-slate-600 mt-0.5 flex items-start gap-1">
+                          <p className="text-[11px] text-muted-foreground mt-0.5 flex items-start gap-1">
                             <ArrowRight className="w-3 h-3 mt-0.5 shrink-0" />{p.acao}
                           </p>
                           <div className="flex items-center gap-3 mt-1.5 flex-wrap">
-                            <span className="text-[10px] text-slate-500 flex items-center gap-1">
+                            <span className="text-[10px] text-muted-foreground flex items-center gap-1">
                               <ModuloIcon className="w-3 h-3" />{p.modulo.replace(/_/g, " ")}
                             </span>
-                            <span className="text-[10px] text-slate-500">Prazo: {p.prazo}</span>
+                            <span className="text-[10px] text-muted-foreground">Prazo: {p.prazo}</span>
                             {onNavegar && (
                               <button
                                 onClick={() => onNavegar(aba)}
-                                className="text-[11px] font-semibold text-blue-600 hover:text-blue-800 flex items-center gap-0.5 transition-colors"
+                                className="text-[11px] font-semibold text-primary hover:text-primary flex items-center gap-0.5 transition-colors"
                               >
                                 Ir para módulo <ArrowRight className="w-3 h-3" />
                               </button>
@@ -496,7 +496,7 @@ export default function PlanoAcaoMotor({ empresaId, onNavegar }: Props) {
         {/* Por categoria (colapsável) */}
         {grupos.length > 0 && (
           <div className="space-y-2">
-            <h4 className="text-xs font-black text-slate-500 uppercase tracking-wide">Por Categoria</h4>
+            <h4 className="text-xs font-black text-muted-foreground uppercase tracking-wide">Por Categoria</h4>
             {grupos.map(g => (
               <GrupoAccordion key={g.categoria} grupo={g} onNavegar={onNavegar} />
             ))}

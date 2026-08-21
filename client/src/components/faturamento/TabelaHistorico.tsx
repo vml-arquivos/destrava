@@ -53,7 +53,7 @@ function ValorCell({
       onChange={handleChange}
       placeholder="0,00"
       autoComplete="off"
-      className="w-full border border-gray-200 rounded px-2 py-1 text-sm text-right font-mono tabular-nums focus:outline-none focus:ring-1 focus:ring-blue-500"
+      className="w-full border border-border rounded px-2 py-1 text-sm text-right font-mono tabular-nums focus:outline-none focus:ring-1 focus:ring-primary"
     />
   );
 }
@@ -63,16 +63,16 @@ export function TabelaHistorico({ registros, onChange }: Props) {
     <div className="overflow-x-auto">
       <table className="w-full text-sm border-collapse">
         <thead>
-          <tr className="bg-gray-50 border-b border-gray-200">
-            <th className="text-left py-2 px-3 font-medium text-gray-600">Competência</th>
-            <th className="text-left py-2 px-3 font-medium text-gray-600">Faturamento (R$)</th>
-            <th className="text-left py-2 px-3 font-medium text-gray-600">Origem</th>
+          <tr className="bg-muted border-b border-border">
+            <th className="text-left py-2 px-3 font-medium text-muted-foreground">Competência</th>
+            <th className="text-left py-2 px-3 font-medium text-muted-foreground">Faturamento (R$)</th>
+            <th className="text-left py-2 px-3 font-medium text-muted-foreground">Origem</th>
           </tr>
         </thead>
         <tbody>
           {registros.map((reg, idx) => (
-            <tr key={reg.competencia} className="border-b border-gray-100 hover:bg-gray-50">
-              <td className="py-2 px-3 text-gray-700 capitalize">
+            <tr key={reg.competencia} className="border-b border-border hover:bg-muted">
+              <td className="py-2 px-3 text-foreground capitalize">
                 {formatMesAno(reg.competencia)}
               </td>
               <td className="py-2 px-3">
@@ -85,7 +85,7 @@ export function TabelaHistorico({ registros, onChange }: Props) {
                 <select
                   value={reg.origem || 'manual'}
                   onChange={e => onChange(idx, 'origem', e.target.value)}
-                  className="border border-gray-200 rounded px-2 py-1 text-sm focus:outline-none focus:ring-1 focus:ring-blue-500"
+                  className="border border-border rounded px-2 py-1 text-sm focus:outline-none focus:ring-1 focus:ring-primary"
                 >
                   <option value="manual">Manual</option>
                   <option value="importado">Importado</option>

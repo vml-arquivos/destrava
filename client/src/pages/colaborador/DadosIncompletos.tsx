@@ -357,40 +357,40 @@ export default function DadosIncompletos() {
 
   return (
     <Layout>
-      <div className="min-h-screen bg-slate-50 p-6">
+      <div className="min-h-screen bg-muted p-6">
         <div className="max-w-7xl mx-auto space-y-5">
           <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
             <div>
-              <div className="flex items-center gap-2 text-amber-700 font-semibold text-sm">
+              <div className="flex items-center gap-2 text-warning font-semibold text-sm">
                 <ShieldAlert className="w-4 h-4" /> Área de saneamento cadastral
               </div>
-              <h1 className="text-2xl font-bold text-slate-900 mt-1">Cadastros incompletos</h1>
-              <p className="text-sm text-slate-500 mt-1">
+              <h1 className="text-2xl font-bold text-foreground mt-1">Cadastros incompletos</h1>
+              <p className="text-sm text-muted-foreground mt-1">
                 Empresas, clientes PF e leads sem CPF/CNPJ, incompletos, desatualizados ou duplicados ficam aqui. Eles não aparecem nas telas principais e não podem ser usados em contrato, simulação ou operação.
               </p>
             </div>
             <div className="flex flex-wrap gap-2">
-              <button onClick={removerDuplicados} disabled={processando === "duplicados"} className="inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-red-600 text-white text-sm font-semibold hover:bg-red-700 disabled:opacity-60">
+              <button onClick={removerDuplicados} disabled={processando === "duplicados"} className="inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-destructive text-primary-foreground text-sm font-semibold hover:bg-destructive disabled:opacity-60">
                 <Trash2 className="w-4 h-4" /> Remover duplicados
               </button>
-              <button onClick={carregar} className="inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-blue-600 text-white text-sm font-semibold hover:bg-blue-700">
+              <button onClick={carregar} className="inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-primary text-primary-foreground text-sm font-semibold hover:bg-primary">
                 <RefreshCw className="w-4 h-4" /> Atualizar lista
               </button>
             </div>
           </div>
 
           <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-            <div className="rounded-2xl border bg-white p-4"><p className="text-2xl font-black text-slate-900">{loading ? "…" : itens.length}</p><p className="text-xs text-slate-500">Total para saneamento</p></div>
-            <div className="rounded-2xl border bg-white p-4"><p className="text-2xl font-black text-amber-600">{loading ? "…" : totalBloqueados}</p><p className="text-xs text-slate-500">Bloqueados operacionalmente</p></div>
-            <div className="rounded-2xl border bg-white p-4"><p className="text-2xl font-black text-red-600">{loading ? "…" : totalDuplicados}</p><p className="text-xs text-slate-500">Duplicados encontrados</p></div>
+            <div className="rounded-2xl border bg-card p-4"><p className="text-2xl font-black text-foreground">{loading ? "…" : itens.length}</p><p className="text-xs text-muted-foreground">Total para saneamento</p></div>
+            <div className="rounded-2xl border bg-card p-4"><p className="text-2xl font-black text-warning">{loading ? "…" : totalBloqueados}</p><p className="text-xs text-muted-foreground">Bloqueados operacionalmente</p></div>
+            <div className="rounded-2xl border bg-card p-4"><p className="text-2xl font-black text-destructive">{loading ? "…" : totalDuplicados}</p><p className="text-xs text-muted-foreground">Duplicados encontrados</p></div>
           </div>
 
-          <div className="rounded-2xl border bg-white p-4 flex flex-col md:flex-row gap-3">
+          <div className="rounded-2xl border bg-card p-4 flex flex-col md:flex-row gap-3">
             <div className="relative flex-1">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
-              <input value={busca} onChange={e => setBusca(e.target.value)} placeholder="Buscar por nome, empresa, CPF ou CNPJ..." className="w-full pl-10 pr-4 h-11 rounded-xl border border-slate-200 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+              <input value={busca} onChange={e => setBusca(e.target.value)} placeholder="Buscar por nome, empresa, CPF ou CNPJ..." className="w-full pl-10 pr-4 h-11 rounded-xl border border-border text-sm focus:outline-none focus:ring-2 focus:ring-primary" />
             </div>
-            <select value={tipo} onChange={e => setTipo(e.target.value)} className="h-11 rounded-xl border border-slate-200 px-3 text-sm bg-white">
+            <select value={tipo} onChange={e => setTipo(e.target.value)} className="h-11 rounded-xl border border-border px-3 text-sm bg-card">
               <option value="todos">Todos</option>
               <option value="empresas">Empresas</option>
               <option value="clientes_pf">Clientes PF</option>
@@ -399,15 +399,15 @@ export default function DadosIncompletos() {
           </div>
 
           {loading ? (
-            <div className="rounded-2xl border bg-white p-10 text-center text-slate-500">
-              <RefreshCw className="w-5 h-5 animate-spin mx-auto mb-2 text-blue-500" />
+            <div className="rounded-2xl border bg-card p-10 text-center text-muted-foreground">
+              <RefreshCw className="w-5 h-5 animate-spin mx-auto mb-2 text-primary" />
               Carregando cadastros incompletos...
             </div>
           ) : itens.length === 0 ? (
-            <div className="rounded-2xl border bg-white p-10 text-center">
-              <div className="w-12 h-12 rounded-2xl bg-emerald-50 text-emerald-600 mx-auto flex items-center justify-center mb-3">✓</div>
-              <h2 className="font-bold text-slate-900">Nenhum cadastro incompleto encontrado</h2>
-              <p className="text-sm text-slate-500 mt-1">As telas de Empresas e Clientes estão exibindo somente registros completos.</p>
+            <div className="rounded-2xl border bg-card p-10 text-center">
+              <div className="w-12 h-12 rounded-2xl bg-success/10 text-success mx-auto flex items-center justify-center mb-3">✓</div>
+              <h2 className="font-bold text-foreground">Nenhum cadastro incompleto encontrado</h2>
+              <p className="text-sm text-muted-foreground mt-1">As telas de Empresas e Clientes estão exibindo somente registros completos.</p>
             </div>
           ) : (
             <div className="grid grid-cols-1 gap-3">
@@ -418,31 +418,31 @@ export default function DadosIncompletos() {
                 const key = `${item.tipo}-${item.id}`;
                 const busy = processando === key;
                 return (
-                  <div key={key} className="rounded-2xl border bg-white p-4 flex flex-col xl:flex-row xl:items-start gap-4">
-                    <div className="w-11 h-11 rounded-xl bg-amber-50 text-amber-700 flex items-center justify-center shrink-0"><Icon className="w-5 h-5" /></div>
+                  <div key={key} className="rounded-2xl border bg-card p-4 flex flex-col xl:flex-row xl:items-start gap-4">
+                    <div className="w-11 h-11 rounded-xl bg-warning/10 text-warning flex items-center justify-center shrink-0"><Icon className="w-5 h-5" /></div>
                     <div className="flex-1 min-w-0">
                       <div className="flex flex-wrap items-center gap-2">
-                        <h3 className="font-bold text-slate-900 truncate">{nome}</h3>
-                        <span className="text-[11px] px-2 py-1 rounded-full bg-slate-100 text-slate-600 font-semibold">{tipoLabel[item.tipo] || item.tipo}</span>
-                        {(item.arquivado_por_duplicidade || item.cadastro_status === "duplicado") && <span className="text-[11px] px-2 py-1 rounded-full bg-red-50 text-red-700 font-semibold">Duplicado</span>}
-                        {item.bloqueado_operacional && <span className="text-[11px] px-2 py-1 rounded-full bg-amber-50 text-amber-700 font-semibold">Bloqueado</span>}
+                        <h3 className="font-bold text-foreground truncate">{nome}</h3>
+                        <span className="text-[11px] px-2 py-1 rounded-full bg-muted text-muted-foreground font-semibold">{tipoLabel[item.tipo] || item.tipo}</span>
+                        {(item.arquivado_por_duplicidade || item.cadastro_status === "duplicado") && <span className="text-[11px] px-2 py-1 rounded-full bg-destructive/10 text-destructive font-semibold">Duplicado</span>}
+                        {item.bloqueado_operacional && <span className="text-[11px] px-2 py-1 rounded-full bg-warning/10 text-warning font-semibold">Bloqueado</span>}
                       </div>
-                      <p className="text-sm text-slate-500 mt-1">{formatDoc(item.documento)} {item.email ? `• ${item.email}` : ""} {item.telefone ? `• ${item.telefone}` : ""}</p>
+                      <p className="text-sm text-muted-foreground mt-1">{formatDoc(item.documento)} {item.email ? `• ${item.email}` : ""} {item.telefone ? `• ${item.telefone}` : ""}</p>
                       <div className="flex flex-wrap gap-2 mt-3">
-                        {pendencias.length ? pendencias.map((p) => <span key={p} className="text-xs px-2 py-1 rounded-lg bg-amber-50 text-amber-800 border border-amber-100">{p}</span>) : <span className="text-xs px-2 py-1 rounded-lg bg-slate-50 text-slate-600">Pendente de revisão</span>}
+                        {pendencias.length ? pendencias.map((p) => <span key={p} className="text-xs px-2 py-1 rounded-lg bg-warning/10 text-warning border border-warning/20">{p}</span>) : <span className="text-xs px-2 py-1 rounded-lg bg-muted text-muted-foreground">Pendente de revisão</span>}
                       </div>
                     </div>
                     <div className="flex flex-wrap xl:flex-col gap-2 xl:w-40 shrink-0">
-                      <button disabled={busy} onClick={() => abrirEdicao(item)} className="inline-flex items-center justify-center gap-2 px-3 py-2 rounded-xl border border-slate-200 text-slate-700 text-xs font-semibold hover:bg-slate-50 disabled:opacity-60">
+                      <button disabled={busy} onClick={() => abrirEdicao(item)} className="inline-flex items-center justify-center gap-2 px-3 py-2 rounded-xl border border-border text-foreground text-xs font-semibold hover:bg-muted disabled:opacity-60">
                         <Pencil className="w-3.5 h-3.5" /> Editar
                       </button>
-                      <button disabled={busy} onClick={() => atualizarCadastro(item)} className="inline-flex items-center justify-center gap-2 px-3 py-2 rounded-xl border border-blue-200 bg-blue-50 text-blue-700 text-xs font-semibold hover:bg-blue-100 disabled:opacity-60">
+                      <button disabled={busy} onClick={() => atualizarCadastro(item)} className="inline-flex items-center justify-center gap-2 px-3 py-2 rounded-xl border border-primary/20 bg-primary/10 text-primary text-xs font-semibold hover:bg-primary/20 disabled:opacity-60">
                         <RefreshCw className={`w-3.5 h-3.5 ${busy ? "animate-spin" : ""}`} /> Atualizar
                       </button>
-                      <button disabled={busy} onClick={() => apagarCadastro(item)} className="inline-flex items-center justify-center gap-2 px-3 py-2 rounded-xl border border-red-200 bg-red-50 text-red-700 text-xs font-semibold hover:bg-red-100 disabled:opacity-60">
+                      <button disabled={busy} onClick={() => apagarCadastro(item)} className="inline-flex items-center justify-center gap-2 px-3 py-2 rounded-xl border border-destructive/20 bg-destructive/10 text-destructive text-xs font-semibold hover:bg-destructive/20 disabled:opacity-60">
                         <Trash2 className="w-3.5 h-3.5" /> Apagar
                       </button>
-                      <div className="text-[11px] text-slate-400 xl:text-right pt-1">Atualizado em<br />{formatDate(item.updated_at || item.created_at)}</div>
+                      <div className="text-[11px] text-muted-foreground xl:text-right pt-1">Atualizado em<br />{formatDate(item.updated_at || item.created_at)}</div>
                     </div>
                   </div>
                 );
@@ -454,37 +454,37 @@ export default function DadosIncompletos() {
 
       {editando && (
         <div className="fixed inset-0 z-50 bg-black/40 flex items-center justify-center p-4">
-          <div className="bg-white rounded-2xl shadow-xl border w-full max-w-xl overflow-hidden">
+          <div className="bg-card rounded-2xl shadow-xl border w-full max-w-xl overflow-hidden">
             <div className="flex items-center justify-between p-5 border-b">
               <div>
-                <h2 className="font-bold text-slate-900">Editar cadastro incompleto</h2>
-                <p className="text-xs text-slate-500">Após salvar, o cadastro será reprocessado automaticamente.</p>
+                <h2 className="font-bold text-foreground">Editar cadastro incompleto</h2>
+                <p className="text-xs text-muted-foreground">Após salvar, o cadastro será reprocessado automaticamente.</p>
               </div>
-              <button onClick={() => setEditando(null)} className="p-2 rounded-lg hover:bg-slate-100"><X className="w-4 h-4" /></button>
+              <button onClick={() => setEditando(null)} className="p-2 rounded-lg hover:bg-muted"><X className="w-4 h-4" /></button>
             </div>
             <div className="p-5 space-y-4">
               <div>
-                <label className="text-xs font-semibold text-slate-600">Nome / Razão social</label>
-                <input value={form.nome} onChange={e => setForm(f => ({ ...f, nome: e.target.value }))} className="mt-1 w-full h-11 rounded-xl border border-slate-200 px-3 text-sm" />
+                <label className="text-xs font-semibold text-muted-foreground">Nome / Razão social</label>
+                <input value={form.nome} onChange={e => setForm(f => ({ ...f, nome: e.target.value }))} className="mt-1 w-full h-11 rounded-xl border border-border px-3 text-sm" />
               </div>
               <div>
-                <label className="text-xs font-semibold text-slate-600">CPF/CNPJ</label>
-                <input value={form.documento} onChange={e => setForm(f => ({ ...f, documento: e.target.value }))} className="mt-1 w-full h-11 rounded-xl border border-slate-200 px-3 text-sm" />
+                <label className="text-xs font-semibold text-muted-foreground">CPF/CNPJ</label>
+                <input value={form.documento} onChange={e => setForm(f => ({ ...f, documento: e.target.value }))} className="mt-1 w-full h-11 rounded-xl border border-border px-3 text-sm" />
               </div>
               <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                 <div>
-                  <label className="text-xs font-semibold text-slate-600">E-mail</label>
-                  <input value={form.email} onChange={e => setForm(f => ({ ...f, email: e.target.value }))} className="mt-1 w-full h-11 rounded-xl border border-slate-200 px-3 text-sm" />
+                  <label className="text-xs font-semibold text-muted-foreground">E-mail</label>
+                  <input value={form.email} onChange={e => setForm(f => ({ ...f, email: e.target.value }))} className="mt-1 w-full h-11 rounded-xl border border-border px-3 text-sm" />
                 </div>
                 <div>
-                  <label className="text-xs font-semibold text-slate-600">Telefone</label>
-                  <input value={form.telefone} onChange={e => setForm(f => ({ ...f, telefone: e.target.value }))} className="mt-1 w-full h-11 rounded-xl border border-slate-200 px-3 text-sm" />
+                  <label className="text-xs font-semibold text-muted-foreground">Telefone</label>
+                  <input value={form.telefone} onChange={e => setForm(f => ({ ...f, telefone: e.target.value }))} className="mt-1 w-full h-11 rounded-xl border border-border px-3 text-sm" />
                 </div>
               </div>
             </div>
             <div className="p-5 border-t flex justify-end gap-2">
               <button onClick={() => setEditando(null)} className="px-4 py-2 rounded-xl border text-sm font-semibold">Cancelar</button>
-              <button onClick={salvarEdicao} disabled={!!processando} className="inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-blue-600 text-white text-sm font-semibold disabled:opacity-60">
+              <button onClick={salvarEdicao} disabled={!!processando} className="inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-primary text-primary-foreground text-sm font-semibold disabled:opacity-60">
                 <Save className="w-4 h-4" /> Salvar e reprocessar
               </button>
             </div>

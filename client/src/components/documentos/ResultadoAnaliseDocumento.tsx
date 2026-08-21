@@ -9,41 +9,41 @@ type ResultadoAnaliseDocumentoProps = {
 };
 
 function classesSecao(secao: DocumentoAnaliseSecao): string {
-  if (secao.id === "resultado") return "border-emerald-100 bg-emerald-50/60";
-  if (secao.id === "diagnostico_factual") return "border-blue-200 bg-blue-50/70";
-  if (secao.id === "resumo_alteracao") return "border-indigo-200 bg-indigo-50/60";
-  if (secao.id === "transacoes") return "border-indigo-200 bg-indigo-50/60";
-  if (secao.id === "qsa_nomes") return "border-blue-200 bg-blue-50/60";
-  if (secao.id === "amostra_dados") return "border-sky-200 bg-sky-50/60";
-  if (secao.id === "validacoes") return "border-amber-200 bg-amber-50/60";
-  if (secao.id === "titular_atual") return "border-cyan-200 bg-cyan-50/60";
-  if (secao.id === "leitura_societaria") return "border-violet-200 bg-violet-50/70";
-  if (secao.id === "evidencias") return "border-slate-200 bg-slate-50";
-  return "border-slate-200 bg-slate-50";
+  if (secao.id === "resultado") return "border-success/20 bg-success/10";
+  if (secao.id === "diagnostico_factual") return "border-primary/20 bg-primary/10";
+  if (secao.id === "resumo_alteracao") return "border-primary/20 bg-primary/10";
+  if (secao.id === "transacoes") return "border-primary/20 bg-primary/10";
+  if (secao.id === "qsa_nomes") return "border-primary/20 bg-primary/10";
+  if (secao.id === "amostra_dados") return "border-primary/20 bg-primary/10";
+  if (secao.id === "validacoes") return "border-warning/20 bg-warning/10";
+  if (secao.id === "titular_atual") return "border-primary/20 bg-primary/10";
+  if (secao.id === "leitura_societaria") return "border-primary/20 bg-primary/10";
+  if (secao.id === "evidencias") return "border-border bg-muted";
+  return "border-border bg-muted";
 }
 
 function classesTitulo(secao: DocumentoAnaliseSecao): string {
-  if (secao.id === "resultado") return "text-emerald-700";
-  if (secao.id === "diagnostico_factual") return "text-blue-800";
-  if (secao.id === "resumo_alteracao") return "text-indigo-800";
-  if (secao.id === "transacoes") return "text-indigo-800";
-  if (secao.id === "qsa_nomes") return "text-blue-800";
+  if (secao.id === "resultado") return "text-success";
+  if (secao.id === "diagnostico_factual") return "text-primary";
+  if (secao.id === "resumo_alteracao") return "text-primary";
+  if (secao.id === "transacoes") return "text-primary";
+  if (secao.id === "qsa_nomes") return "text-primary";
   if (secao.id === "amostra_dados") return "text-sky-800";
-  if (secao.id === "validacoes") return "text-amber-800";
-  if (secao.id === "titular_atual") return "text-cyan-800";
-  if (secao.id === "leitura_societaria") return "text-violet-800";
-  if (secao.id === "evidencias") return "text-slate-700";
-  return "text-slate-600";
+  if (secao.id === "validacoes") return "text-warning";
+  if (secao.id === "titular_atual") return "text-primary";
+  if (secao.id === "leitura_societaria") return "text-primary";
+  if (secao.id === "evidencias") return "text-muted-foreground";
+  return "text-muted-foreground";
 }
 
 function BlocoSecao({ secao, texto }: { secao: DocumentoAnaliseSecao; texto: string }) {
   return (
     <>
-      {secao.texto && <p className={`mt-0.5 whitespace-pre-line font-semibold text-slate-800 ${texto}`}>{secao.texto}</p>}
+      {secao.texto && <p className={`mt-0.5 whitespace-pre-line font-semibold text-foreground ${texto}`}>{secao.texto}</p>}
       {!!secao.itens?.length && (
         <div className="mt-1 space-y-1">
           {secao.itens.map((item, index) => (
-            <p key={`${secao.id}-${index}`} className={`whitespace-pre-line text-slate-700 ${texto}`}>
+            <p key={`${secao.id}-${index}`} className={`whitespace-pre-line text-muted-foreground ${texto}`}>
               {secao.id === "evidencias" ? <span className="italic">{item}</span> : <><span className="mr-1">•</span>{item}</>}
             </p>
           ))}
@@ -52,9 +52,9 @@ function BlocoSecao({ secao, texto }: { secao: DocumentoAnaliseSecao; texto: str
       {!!secao.campos?.length && (
         <div className="mt-1.5 grid gap-1.5 sm:grid-cols-2 lg:grid-cols-4">
           {secao.campos.map((campo, index) => (
-            <div key={`${campo.label}-${index}`} className="rounded-lg border border-slate-100 bg-white/80 px-2 py-1.5">
-              <p className="text-[8px] font-black uppercase text-slate-400">{campo.label}</p>
-              <p className={`mt-0.5 break-words font-semibold text-slate-700 ${texto}`}>{campo.valor}</p>
+            <div key={`${campo.label}-${index}`} className="rounded-lg border border-border bg-white/80 px-2 py-1.5">
+              <p className="text-[8px] font-black uppercase text-muted-foreground">{campo.label}</p>
+              <p className={`mt-0.5 break-words font-semibold text-muted-foreground ${texto}`}>{campo.valor}</p>
             </div>
           ))}
         </div>
@@ -94,7 +94,7 @@ export function ResultadoAnaliseDocumento({ resultado, documento, compacto = fal
             type="button"
             onClick={() => setDetalhesAbertos((v) => !v)}
             title="Ver informações técnicas complementares (checklist de validação, texto jurídico completo, evidências)"
-            className="inline-flex items-center gap-1 rounded-full border border-slate-200 bg-white px-2 py-1 text-[9px] font-bold text-slate-500 hover:border-slate-300 hover:text-slate-700"
+            className="inline-flex items-center gap-1 rounded-full border border-border bg-white px-2 py-1 text-[9px] font-bold text-muted-foreground hover:border-input hover:text-muted-foreground"
           >
             <Info className="h-3 w-3" />
             {detalhesAbertos ? "Ocultar informações técnicas" : "Ver informações técnicas"}

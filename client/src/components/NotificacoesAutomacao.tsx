@@ -21,9 +21,9 @@ const LABEL_WORKFLOW: Record<string, string> = {
 };
 
 function corTier(tier: string): string {
-  if (tier === "atrasado") return "text-red-600 bg-red-50 border-red-100";
-  if (tier === "hoje") return "text-amber-600 bg-amber-50 border-amber-100";
-  return "text-blue-600 bg-blue-50 border-blue-100";
+  if (tier === "atrasado") return "text-destructive bg-destructive/10 border-destructive/20";
+  if (tier === "hoje") return "text-warning bg-warning/10 border-warning/20";
+  return "text-primary bg-primary/10 border-primary/20";
 }
 
 /**
@@ -77,14 +77,14 @@ export default function NotificacoesAutomacao() {
       >
         <Zap className="h-4 w-4" />
         {total > 0 && (
-          <span className="absolute -top-1 -right-1 flex h-4 w-4 items-center justify-center rounded-full bg-amber-500 text-[10px] font-bold text-white">
+          <span className="absolute -top-1 -right-1 flex h-4 w-4 items-center justify-center rounded-full bg-warning/100 text-[10px] font-bold text-primary-foreground">
             {total > 9 ? "9+" : total}
           </span>
         )}
       </button>
 
       {aberto && (
-        <div className="absolute right-0 top-11 z-50 w-80 rounded-lg border bg-white shadow-xl">
+        <div className="absolute right-0 top-11 z-50 w-80 rounded-lg border bg-card shadow-xl">
           <div className="flex items-center justify-between px-4 py-3 border-b">
             <div className="flex items-center gap-2">
               <Zap className="h-4 w-4 text-primary" />
@@ -112,13 +112,13 @@ export default function NotificacoesAutomacao() {
             )}
 
             {alertas.map((alerta) => (
-              <div key={alerta.id} className={`flex items-start gap-3 px-4 py-3 border-b border-gray-100 ${corTier(alerta.tier)}`}>
+              <div key={alerta.id} className={`flex items-start gap-3 px-4 py-3 border-b border-border ${corTier(alerta.tier)}`}>
                 {alerta.tier === "atrasado" ? <AlertTriangle className="h-4 w-4 mt-0.5 flex-shrink-0" /> : <Clock className="h-4 w-4 mt-0.5 flex-shrink-0" />}
                 <div className="flex-1 min-w-0">
-                  <p className="text-sm font-medium text-gray-900 truncate">{alerta.empresa_nome || "Empresa"}</p>
+                  <p className="text-sm font-medium text-foreground truncate">{alerta.empresa_nome || "Empresa"}</p>
                   <p className="text-xs truncate">{alerta.titulo}</p>
                   {alerta.workflow_tipo && (
-                    <p className="text-[10px] text-gray-400">{LABEL_WORKFLOW[alerta.workflow_tipo] || alerta.workflow_tipo}</p>
+                    <p className="text-[10px] text-muted-foreground">{LABEL_WORKFLOW[alerta.workflow_tipo] || alerta.workflow_tipo}</p>
                   )}
                 </div>
               </div>

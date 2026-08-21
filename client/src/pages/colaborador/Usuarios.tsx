@@ -85,14 +85,14 @@ function gerarSenha(): string {
 
 function badgeCargo(cargo: string) {
   const lower = cargo.toLowerCase();
-  if (lower === "administrador") return "bg-purple-100 text-purple-800 border-purple-300";
-  if (lower === "diretor") return "bg-indigo-100 text-indigo-800 border-indigo-300";
-  if (lower === "gerente comercial") return "bg-blue-100 text-blue-800 border-blue-300";
+  if (lower === "administrador") return "bg-primary/20 text-primary border-purple-300";
+  if (lower === "diretor") return "bg-primary/20 text-primary border-indigo-300";
+  if (lower === "gerente comercial") return "bg-primary/20 text-primary border-primary/30";
   if (lower === "analista de crédito") return "bg-sky-100 text-sky-800 border-sky-300";
-  if (lower === "consultor de crédito") return "bg-teal-100 text-teal-800 border-teal-300";
-  if (lower === "captador externo") return "bg-amber-100 text-amber-800 border-amber-300";
-  if (lower === "estagiário") return "bg-gray-100 text-gray-600 border-gray-300";
-  return "bg-gray-100 text-gray-700 border-gray-300";
+  if (lower === "consultor de crédito") return "bg-success/20 text-success border-teal-300";
+  if (lower === "captador externo") return "bg-warning/20 text-warning border-warning/30";
+  if (lower === "estagiário") return "bg-muted text-muted-foreground border-input";
+  return "bg-muted text-foreground border-input";
 }
 
 function perfilOperacionalPadrao(cargo: string): PerfilOperacional {
@@ -367,21 +367,21 @@ export default function UsuariosPage() {
           <Card>
             <CardContent className="pt-5">
               <p className="text-xs text-muted-foreground">Podem atender leads</p>
-              <p className="text-2xl font-bold text-blue-700">{resumoPerfis.atendem}</p>
+              <p className="text-2xl font-bold text-primary">{resumoPerfis.atendem}</p>
             </CardContent>
           </Card>
           <Card>
             <CardContent className="pt-5">
               <p className="text-xs text-muted-foreground">Visão ampla</p>
-              <p className="text-2xl font-bold text-purple-700">{resumoPerfis.veemTudo}</p>
+              <p className="text-2xl font-bold text-primary">{resumoPerfis.veemTudo}</p>
             </CardContent>
           </Card>
         </div>
 
         {!podeGerenciar && (
-          <Card className="border-red-200 bg-red-50">
+          <Card className="border-destructive/20 bg-destructive/10">
             <CardContent className="pt-5">
-              <div className="flex items-center gap-3 text-red-800">
+              <div className="flex items-center gap-3 text-destructive">
                 <ShieldOff className="h-5 w-5 flex-shrink-0" />
                 <div>
                   <p className="font-semibold text-sm">Acesso restrito</p>
@@ -511,7 +511,7 @@ export default function UsuariosPage() {
                 </div>
 
                 {mensagem && (
-                  <div className={`flex items-start gap-2 rounded-xl px-4 py-3 text-sm ${mensagem.tipo === "sucesso" ? "bg-green-50 border border-green-200 text-green-800" : "bg-red-50 border border-red-200 text-red-800"}`}>
+                  <div className={`flex items-start gap-2 rounded-xl px-4 py-3 text-sm ${mensagem.tipo === "sucesso" ? "bg-green-50 border border-green-200 text-green-800" : "bg-destructive/10 border border-destructive/20 text-destructive"}`}>
                     {mensagem.tipo === "sucesso" ? <CheckCircle2 className="h-4 w-4 mt-0.5 flex-shrink-0" /> : <AlertCircle className="h-4 w-4 mt-0.5 flex-shrink-0" />}
                     <span>{mensagem.texto}</span>
                   </div>
@@ -549,8 +549,8 @@ export default function UsuariosPage() {
               ) : erroLista ? (
                 <div className="flex flex-col items-center justify-center py-12 text-center gap-2">
                   <AlertCircle className="h-10 w-10 text-red-400" />
-                  <p className="font-medium text-red-700 text-sm">Erro ao carregar colaboradores</p>
-                  <p className="text-xs text-red-500">{erroLista}</p>
+                  <p className="font-medium text-destructive text-sm">Erro ao carregar colaboradores</p>
+                  <p className="text-xs text-destructive">{erroLista}</p>
                 </div>
               ) : colaboradores.length === 0 ? (
                 <div className="text-center py-12 text-muted-foreground">
@@ -619,7 +619,7 @@ export default function UsuariosPage() {
                             </div>
                           </div>
 
-                          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 rounded-xl border bg-white p-3">
+                          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 rounded-xl border bg-card p-3">
                             <label className="flex items-center gap-3 text-sm">
                               <input type="checkbox" checked={editPodeAtenderLeads} onChange={(e) => setEditPodeAtenderLeads(e.target.checked)} />
                               <span>Pode atender leads</span>
@@ -631,7 +631,7 @@ export default function UsuariosPage() {
                           </div>
 
                           {mensagemEdit && (
-                            <p className={`text-xs px-3 py-2 rounded ${mensagemEdit.tipo === "sucesso" ? "text-green-700 bg-green-50" : "text-red-700 bg-red-50"}`}>
+                            <p className={`text-xs px-3 py-2 rounded ${mensagemEdit.tipo === "sucesso" ? "text-green-700 bg-green-50" : "text-destructive bg-destructive/10"}`}>
                               {mensagemEdit.texto}
                             </p>
                           )}
@@ -693,16 +693,16 @@ export default function UsuariosPage() {
           </Card>
         </div>
 
-        <Card className="border-blue-100 bg-blue-50/50">
+        <Card className="border-primary/20 bg-primary/10/50">
           <CardContent className="pt-5">
             <div className="flex items-start gap-3">
-              <Shield className="h-5 w-5 text-blue-600 flex-shrink-0 mt-0.5" />
-              <div className="space-y-3 text-sm text-blue-900 w-full">
+              <Shield className="h-5 w-5 text-primary flex-shrink-0 mt-0.5" />
+              <div className="space-y-3 text-sm text-primary w-full">
                 <p className="font-semibold">Referência operacional</p>
                 <div className="overflow-x-auto">
                   <table className="w-full text-xs border-collapse">
                     <thead>
-                      <tr className="bg-blue-100/80">
+                      <tr className="bg-primary/20/80">
                         <th className="text-left px-3 py-2 rounded-tl-lg font-semibold">Cargo</th>
                         <th className="text-left px-3 py-2 font-semibold">Perfil sugerido</th>
                         <th className="text-center px-3 py-2 font-semibold">Pode atender</th>
@@ -713,7 +713,7 @@ export default function UsuariosPage() {
                       {TODOS_CARGOS.map((item) => {
                         const perfilBase = perfilOperacionalPadrao(item);
                         return (
-                          <tr key={item} className="bg-white/60 hover:bg-white/90">
+                          <tr key={item} className="bg-card/60 hover:bg-card/90">
                             <td className="px-3 py-2"><span className={`px-1.5 py-0.5 rounded border font-medium ${badgeCargo(item)}`}>{item}</span></td>
                             <td className="px-3 py-2">{labelPerfil(perfilBase)}</td>
                             <td className="text-center px-3 py-2">{podeAtenderPadrao(item) ? "Sim" : "Não"}</td>

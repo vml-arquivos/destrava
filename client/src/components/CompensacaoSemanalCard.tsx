@@ -44,8 +44,8 @@ export default function CompensacaoSemanalCard({ semana }: Props) {
         <div
           className={`rounded-xl border p-4 ${
             alertaAderencia
-              ? "border-red-200 bg-red-50 text-red-800"
-              : "border-amber-200 bg-amber-50 text-amber-800"
+              ? "border-destructive/20 bg-destructive/10 text-destructive"
+              : "border-warning/20 bg-warning/10 text-warning"
           }`}
         >
           <div className="flex items-start gap-3">
@@ -65,43 +65,43 @@ export default function CompensacaoSemanalCard({ semana }: Props) {
         </div>
       )}
 
-      <div className="rounded-2xl border bg-white p-4 shadow-sm">
+      <div className="rounded-2xl border bg-card p-4 shadow-sm">
         <div className="mb-4 flex items-center justify-between gap-3">
           <div className="flex items-center gap-2">
-            <Target className="h-5 w-5 text-blue-700" />
-            <h3 className="font-bold text-slate-900">Acompanhamento Bancário Dinâmico</h3>
+            <Target className="h-5 w-5 text-primary" />
+            <h3 className="font-bold text-foreground">Acompanhamento Bancário Dinâmico</h3>
           </div>
-          <span className="rounded-full border bg-slate-50 px-3 py-1 text-xs font-bold text-slate-700">
+          <span className="rounded-full border bg-muted px-3 py-1 text-xs font-bold text-foreground">
             {statusLabel(semana.status_compensacao)}
           </span>
         </div>
 
         <div className="grid gap-3 md:grid-cols-4">
-          <div className="rounded-xl bg-slate-50 p-3">
-            <p className="text-xs font-semibold uppercase text-slate-500">Média mensal base</p>
+          <div className="rounded-xl bg-muted p-3">
+            <p className="text-xs font-semibold uppercase text-muted-foreground">Média mensal base</p>
             <p className="mt-1 text-lg font-bold">{moneyBR(semana.media_mensal_referencia)}</p>
           </div>
-          <div className="rounded-xl bg-blue-50 p-3">
-            <p className="text-xs font-semibold uppercase text-blue-600">Teto mensal +30%</p>
-            <p className="mt-1 text-lg font-bold text-blue-900">{moneyBR(semana.limite_mensal_referencia)}</p>
+          <div className="rounded-xl bg-primary/10 p-3">
+            <p className="text-xs font-semibold uppercase text-primary">Teto mensal +30%</p>
+            <p className="mt-1 text-lg font-bold text-primary">{moneyBR(semana.limite_mensal_referencia)}</p>
           </div>
-          <div className="rounded-xl bg-slate-50 p-3">
-            <p className="text-xs font-semibold uppercase text-slate-500">Meta semanal</p>
+          <div className="rounded-xl bg-muted p-3">
+            <p className="text-xs font-semibold uppercase text-muted-foreground">Meta semanal</p>
             <p className="mt-1 text-lg font-bold">{moneyBR(semana.media_semanal_referencia)}</p>
           </div>
-          <div className="rounded-xl bg-slate-50 p-3">
-            <p className="text-xs font-semibold uppercase text-slate-500">Entrada da semana</p>
+          <div className="rounded-xl bg-muted p-3">
+            <p className="text-xs font-semibold uppercase text-muted-foreground">Entrada da semana</p>
             <p className="mt-1 text-lg font-bold">{moneyBR(semana.total_entradas)}</p>
           </div>
         </div>
 
         <div className="mt-4 grid gap-3 md:grid-cols-3">
-          <div className={`rounded-xl p-3 ${diferenca > 0 ? "bg-red-50" : diferenca < 0 ? "bg-amber-50" : "bg-green-50"}`}>
+          <div className={`rounded-xl p-3 ${diferenca > 0 ? "bg-destructive/10" : diferenca < 0 ? "bg-warning/10" : "bg-green-50"}`}>
             <div className="flex items-center gap-2">
               {diferenca > 0 ? (
-                <TrendingUp className="h-4 w-4 text-red-700" />
+                <TrendingUp className="h-4 w-4 text-destructive" />
               ) : diferenca < 0 ? (
-                <TrendingDown className="h-4 w-4 text-amber-700" />
+                <TrendingDown className="h-4 w-4 text-warning" />
               ) : (
                 <CheckCircle2 className="h-4 w-4 text-green-700" />
               )}
@@ -117,17 +117,17 @@ export default function CompensacaoSemanalCard({ semana }: Props) {
             </p>
           </div>
 
-          <div className="rounded-xl bg-blue-50 p-3">
-            <p className="text-xs font-semibold uppercase text-blue-600">Meta dinâmica próxima semana</p>
-            <p className="mt-1 text-lg font-bold text-blue-900">{moneyBR(metaDinamica)}</p>
-            <p className="mt-1 text-xs text-blue-700">Valor sugerido para nivelar o mês nas semanas restantes.</p>
+          <div className="rounded-xl bg-primary/10 p-3">
+            <p className="text-xs font-semibold uppercase text-primary">Meta dinâmica próxima semana</p>
+            <p className="mt-1 text-lg font-bold text-primary">{moneyBR(metaDinamica)}</p>
+            <p className="mt-1 text-xs text-primary">Valor sugerido para nivelar o mês nas semanas restantes.</p>
           </div>
 
-          <div className="rounded-xl bg-slate-50 p-3">
-            <p className="text-xs font-semibold uppercase text-slate-500">
+          <div className="rounded-xl bg-muted p-3">
+            <p className="text-xs font-semibold uppercase text-muted-foreground">
               {excedente > 0 ? "Valor excedente" : "Saldo faltante"}
             </p>
-            <p className={`mt-1 text-lg font-bold ${excedente > 0 ? "text-red-700" : "text-slate-900"}`}>
+            <p className={`mt-1 text-lg font-bold ${excedente > 0 ? "text-destructive" : "text-foreground"}`}>
               {moneyBR(excedente > 0 ? excedente : faltante)}
             </p>
           </div>
@@ -135,21 +135,21 @@ export default function CompensacaoSemanalCard({ semana }: Props) {
 
         <div className="mt-4 grid gap-3 md:grid-cols-3">
           <div className="rounded-xl border p-3">
-            <p className="text-xs font-semibold uppercase text-slate-500">Uso semanal</p>
+            <p className="text-xs font-semibold uppercase text-muted-foreground">Uso semanal</p>
             <p className="mt-1 font-bold">{percentBR(semana.percentual_limite_semanal)}</p>
           </div>
           <div className="rounded-xl border p-3">
-            <p className="text-xs font-semibold uppercase text-slate-500">Uso mensal</p>
+            <p className="text-xs font-semibold uppercase text-muted-foreground">Uso mensal</p>
             <p className="mt-1 font-bold">{percentBR(semana.percentual_limite_mensal)}</p>
           </div>
           <div className="rounded-xl border p-3">
-            <p className="text-xs font-semibold uppercase text-slate-500">Uso anual</p>
+            <p className="text-xs font-semibold uppercase text-muted-foreground">Uso anual</p>
             <p className="mt-1 font-bold">{percentBR(semana.percentual_limite_anual)}</p>
           </div>
         </div>
 
         {semana.diagnostico_compensacao && (
-          <div className="mt-4 whitespace-pre-line rounded-xl border-l-4 border-blue-700 bg-blue-50 p-3 text-sm text-slate-700">
+          <div className="mt-4 whitespace-pre-line rounded-xl border-l-4 border-blue-700 bg-primary/10 p-3 text-sm text-foreground">
             {semana.diagnostico_compensacao}
           </div>
         )}

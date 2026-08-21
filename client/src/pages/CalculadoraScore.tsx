@@ -125,9 +125,9 @@ export default function CalculadoraScore() {
 
   const getScoreCategory = (score: number) => {
     if (score >= 800) return { label: "Excelente", color: "text-green-600", bgColor: "bg-green-100" };
-    if (score >= 600) return { label: "Bom", color: "text-blue-600", bgColor: "bg-blue-100" };
+    if (score >= 600) return { label: "Bom", color: "text-primary", bgColor: "bg-primary/20" };
     if (score >= 400) return { label: "Regular", color: "text-yellow-600", bgColor: "bg-yellow-100" };
-    return { label: "Ruim", color: "text-red-600", bgColor: "bg-red-100" };
+    return { label: "Ruim", color: "text-destructive", bgColor: "bg-destructive/20" };
   };
 
   const getScoreTips = (score: number) => {
@@ -246,7 +246,7 @@ export default function CalculadoraScore() {
                   <h1 className="text-4xl md:text-5xl font-bold text-[var(--color-caixa-blue)] mb-4">
                     Diagnóstico Educativo de Crédito
                   </h1>
-                  <p className="text-lg text-gray-600 max-w-2xl mx-auto">
+                  <p className="text-lg text-muted-foreground max-w-2xl mx-auto">
                     Responda 5 perguntas e receba um índice educativo. Esta ferramenta não consulta o score oficial nem representa análise bancária.
                   </p>
                 </div>
@@ -254,7 +254,7 @@ export default function CalculadoraScore() {
                 {/* Progress Bar */}
                 <div className="mb-8">
                   <div className="flex justify-between items-center mb-2">
-                    <span className="text-sm font-medium text-gray-600">Progresso</span>
+                    <span className="text-sm font-medium text-muted-foreground">Progresso</span>
                     <span className="text-sm font-medium text-[var(--color-caixa-blue)]">
                       {step} de 5
                     </span>
@@ -286,32 +286,32 @@ export default function CalculadoraScore() {
                         value={factors.paymentHistory}
                         onValueChange={(value) => setFactors({ ...factors, paymentHistory: value })}
                       >
-                        <div className="flex items-center space-x-3 p-4 border rounded-lg hover:bg-gray-50 cursor-pointer">
+                        <div className="flex items-center space-x-3 p-4 border rounded-lg hover:bg-muted cursor-pointer">
                           <RadioGroupItem value="excellent" id="ph-excellent" />
                           <Label htmlFor="ph-excellent" className="flex-1 cursor-pointer">
                             <div className="font-medium">Excelente</div>
-                            <div className="text-sm text-gray-500">Sempre pago tudo em dia, nunca atrasei</div>
+                            <div className="text-sm text-muted-foreground">Sempre pago tudo em dia, nunca atrasei</div>
                           </Label>
                         </div>
-                        <div className="flex items-center space-x-3 p-4 border rounded-lg hover:bg-gray-50 cursor-pointer">
+                        <div className="flex items-center space-x-3 p-4 border rounded-lg hover:bg-muted cursor-pointer">
                           <RadioGroupItem value="good" id="ph-good" />
                           <Label htmlFor="ph-good" className="flex-1 cursor-pointer">
                             <div className="font-medium">Bom</div>
-                            <div className="text-sm text-gray-500">Raramente atraso, menos de 3 vezes no ano</div>
+                            <div className="text-sm text-muted-foreground">Raramente atraso, menos de 3 vezes no ano</div>
                           </Label>
                         </div>
-                        <div className="flex items-center space-x-3 p-4 border rounded-lg hover:bg-gray-50 cursor-pointer">
+                        <div className="flex items-center space-x-3 p-4 border rounded-lg hover:bg-muted cursor-pointer">
                           <RadioGroupItem value="fair" id="ph-fair" />
                           <Label htmlFor="ph-fair" className="flex-1 cursor-pointer">
                             <div className="font-medium">Regular</div>
-                            <div className="text-sm text-gray-500">Atraso algumas vezes, mas sempre pago</div>
+                            <div className="text-sm text-muted-foreground">Atraso algumas vezes, mas sempre pago</div>
                           </Label>
                         </div>
-                        <div className="flex items-center space-x-3 p-4 border rounded-lg hover:bg-gray-50 cursor-pointer">
+                        <div className="flex items-center space-x-3 p-4 border rounded-lg hover:bg-muted cursor-pointer">
                           <RadioGroupItem value="poor" id="ph-poor" />
                           <Label htmlFor="ph-poor" className="flex-1 cursor-pointer">
                             <div className="font-medium">Ruim</div>
-                            <div className="text-sm text-gray-500">Tenho atrasos frequentes ou dívidas não pagas</div>
+                            <div className="text-sm text-muted-foreground">Tenho atrasos frequentes ou dívidas não pagas</div>
                           </Label>
                         </div>
                       </RadioGroup>
@@ -322,32 +322,32 @@ export default function CalculadoraScore() {
                         value={factors.debts}
                         onValueChange={(value) => setFactors({ ...factors, debts: value })}
                       >
-                        <div className="flex items-center space-x-3 p-4 border rounded-lg hover:bg-gray-50 cursor-pointer">
+                        <div className="flex items-center space-x-3 p-4 border rounded-lg hover:bg-muted cursor-pointer">
                           <RadioGroupItem value="none" id="debt-none" />
                           <Label htmlFor="debt-none" className="flex-1 cursor-pointer">
                             <div className="font-medium">Sem dívidas</div>
-                            <div className="text-sm text-gray-500">Não tenho dívidas ou uso menos de 10% do limite</div>
+                            <div className="text-sm text-muted-foreground">Não tenho dívidas ou uso menos de 10% do limite</div>
                           </Label>
                         </div>
-                        <div className="flex items-center space-x-3 p-4 border rounded-lg hover:bg-gray-50 cursor-pointer">
+                        <div className="flex items-center space-x-3 p-4 border rounded-lg hover:bg-muted cursor-pointer">
                           <RadioGroupItem value="low" id="debt-low" />
                           <Label htmlFor="debt-low" className="flex-1 cursor-pointer">
                             <div className="font-medium">Baixas</div>
-                            <div className="text-sm text-gray-500">Uso entre 10% e 30% do crédito disponível</div>
+                            <div className="text-sm text-muted-foreground">Uso entre 10% e 30% do crédito disponível</div>
                           </Label>
                         </div>
-                        <div className="flex items-center space-x-3 p-4 border rounded-lg hover:bg-gray-50 cursor-pointer">
+                        <div className="flex items-center space-x-3 p-4 border rounded-lg hover:bg-muted cursor-pointer">
                           <RadioGroupItem value="medium" id="debt-medium" />
                           <Label htmlFor="debt-medium" className="flex-1 cursor-pointer">
                             <div className="font-medium">Médias</div>
-                            <div className="text-sm text-gray-500">Uso entre 30% e 70% do crédito disponível</div>
+                            <div className="text-sm text-muted-foreground">Uso entre 30% e 70% do crédito disponível</div>
                           </Label>
                         </div>
-                        <div className="flex items-center space-x-3 p-4 border rounded-lg hover:bg-gray-50 cursor-pointer">
+                        <div className="flex items-center space-x-3 p-4 border rounded-lg hover:bg-muted cursor-pointer">
                           <RadioGroupItem value="high" id="debt-high" />
                           <Label htmlFor="debt-high" className="flex-1 cursor-pointer">
                             <div className="font-medium">Altas</div>
-                            <div className="text-sm text-gray-500">Uso mais de 70% do crédito ou estou no limite</div>
+                            <div className="text-sm text-muted-foreground">Uso mais de 70% do crédito ou estou no limite</div>
                           </Label>
                         </div>
                       </RadioGroup>
@@ -358,32 +358,32 @@ export default function CalculadoraScore() {
                         value={factors.creditAge}
                         onValueChange={(value) => setFactors({ ...factors, creditAge: value })}
                       >
-                        <div className="flex items-center space-x-3 p-4 border rounded-lg hover:bg-gray-50 cursor-pointer">
+                        <div className="flex items-center space-x-3 p-4 border rounded-lg hover:bg-muted cursor-pointer">
                           <RadioGroupItem value="long" id="age-long" />
                           <Label htmlFor="age-long" className="flex-1 cursor-pointer">
                             <div className="font-medium">Mais de 5 anos</div>
-                            <div className="text-sm text-gray-500">Tenho crédito há bastante tempo</div>
+                            <div className="text-sm text-muted-foreground">Tenho crédito há bastante tempo</div>
                           </Label>
                         </div>
-                        <div className="flex items-center space-x-3 p-4 border rounded-lg hover:bg-gray-50 cursor-pointer">
+                        <div className="flex items-center space-x-3 p-4 border rounded-lg hover:bg-muted cursor-pointer">
                           <RadioGroupItem value="medium" id="age-medium" />
                           <Label htmlFor="age-medium" className="flex-1 cursor-pointer">
                             <div className="font-medium">2 a 5 anos</div>
-                            <div className="text-sm text-gray-500">Tenho algum histórico de crédito</div>
+                            <div className="text-sm text-muted-foreground">Tenho algum histórico de crédito</div>
                           </Label>
                         </div>
-                        <div className="flex items-center space-x-3 p-4 border rounded-lg hover:bg-gray-50 cursor-pointer">
+                        <div className="flex items-center space-x-3 p-4 border rounded-lg hover:bg-muted cursor-pointer">
                           <RadioGroupItem value="short" id="age-short" />
                           <Label htmlFor="age-short" className="flex-1 cursor-pointer">
                             <div className="font-medium">Menos de 2 anos</div>
-                            <div className="text-sm text-gray-500">Comecei a usar crédito recentemente</div>
+                            <div className="text-sm text-muted-foreground">Comecei a usar crédito recentemente</div>
                           </Label>
                         </div>
-                        <div className="flex items-center space-x-3 p-4 border rounded-lg hover:bg-gray-50 cursor-pointer">
+                        <div className="flex items-center space-x-3 p-4 border rounded-lg hover:bg-muted cursor-pointer">
                           <RadioGroupItem value="none" id="age-none" />
                           <Label htmlFor="age-none" className="flex-1 cursor-pointer">
                             <div className="font-medium">Nunca tive crédito</div>
-                            <div className="text-sm text-gray-500">Não tenho histórico de crédito</div>
+                            <div className="text-sm text-muted-foreground">Não tenho histórico de crédito</div>
                           </Label>
                         </div>
                       </RadioGroup>
@@ -394,25 +394,25 @@ export default function CalculadoraScore() {
                         value={factors.creditInquiries}
                         onValueChange={(value) => setFactors({ ...factors, creditInquiries: value })}
                       >
-                        <div className="flex items-center space-x-3 p-4 border rounded-lg hover:bg-gray-50 cursor-pointer">
+                        <div className="flex items-center space-x-3 p-4 border rounded-lg hover:bg-muted cursor-pointer">
                           <RadioGroupItem value="none" id="inq-none" />
                           <Label htmlFor="inq-none" className="flex-1 cursor-pointer">
                             <div className="font-medium">Nenhuma</div>
-                            <div className="text-sm text-gray-500">Não solicitei crédito recentemente</div>
+                            <div className="text-sm text-muted-foreground">Não solicitei crédito recentemente</div>
                           </Label>
                         </div>
-                        <div className="flex items-center space-x-3 p-4 border rounded-lg hover:bg-gray-50 cursor-pointer">
+                        <div className="flex items-center space-x-3 p-4 border rounded-lg hover:bg-muted cursor-pointer">
                           <RadioGroupItem value="few" id="inq-few" />
                           <Label htmlFor="inq-few" className="flex-1 cursor-pointer">
                             <div className="font-medium">1 a 3 consultas</div>
-                            <div className="text-sm text-gray-500">Fiz poucas consultas de crédito</div>
+                            <div className="text-sm text-muted-foreground">Fiz poucas consultas de crédito</div>
                           </Label>
                         </div>
-                        <div className="flex items-center space-x-3 p-4 border rounded-lg hover:bg-gray-50 cursor-pointer">
+                        <div className="flex items-center space-x-3 p-4 border rounded-lg hover:bg-muted cursor-pointer">
                           <RadioGroupItem value="many" id="inq-many" />
                           <Label htmlFor="inq-many" className="flex-1 cursor-pointer">
                             <div className="font-medium">Mais de 3 consultas</div>
-                            <div className="text-sm text-gray-500">Solicitei crédito em vários lugares</div>
+                            <div className="text-sm text-muted-foreground">Solicitei crédito em vários lugares</div>
                           </Label>
                         </div>
                       </RadioGroup>
@@ -423,32 +423,32 @@ export default function CalculadoraScore() {
                         value={factors.creditTypes}
                         onValueChange={(value) => setFactors({ ...factors, creditTypes: value })}
                       >
-                        <div className="flex items-center space-x-3 p-4 border rounded-lg hover:bg-gray-50 cursor-pointer">
+                        <div className="flex items-center space-x-3 p-4 border rounded-lg hover:bg-muted cursor-pointer">
                           <RadioGroupItem value="diverse" id="type-diverse" />
                           <Label htmlFor="type-diverse" className="flex-1 cursor-pointer">
                             <div className="font-medium">Diversos tipos</div>
-                            <div className="text-sm text-gray-500">Cartão, empréstimo, financiamento, etc.</div>
+                            <div className="text-sm text-muted-foreground">Cartão, empréstimo, financiamento, etc.</div>
                           </Label>
                         </div>
-                        <div className="flex items-center space-x-3 p-4 border rounded-lg hover:bg-gray-50 cursor-pointer">
+                        <div className="flex items-center space-x-3 p-4 border rounded-lg hover:bg-muted cursor-pointer">
                           <RadioGroupItem value="some" id="type-some" />
                           <Label htmlFor="type-some" className="flex-1 cursor-pointer">
                             <div className="font-medium">Alguns tipos</div>
-                            <div className="text-sm text-gray-500">2 ou 3 tipos diferentes de crédito</div>
+                            <div className="text-sm text-muted-foreground">2 ou 3 tipos diferentes de crédito</div>
                           </Label>
                         </div>
-                        <div className="flex items-center space-x-3 p-4 border rounded-lg hover:bg-gray-50 cursor-pointer">
+                        <div className="flex items-center space-x-3 p-4 border rounded-lg hover:bg-muted cursor-pointer">
                           <RadioGroupItem value="one" id="type-one" />
                           <Label htmlFor="type-one" className="flex-1 cursor-pointer">
                             <div className="font-medium">Apenas um tipo</div>
-                            <div className="text-sm text-gray-500">Só tenho cartão de crédito, por exemplo</div>
+                            <div className="text-sm text-muted-foreground">Só tenho cartão de crédito, por exemplo</div>
                           </Label>
                         </div>
-                        <div className="flex items-center space-x-3 p-4 border rounded-lg hover:bg-gray-50 cursor-pointer">
+                        <div className="flex items-center space-x-3 p-4 border rounded-lg hover:bg-muted cursor-pointer">
                           <RadioGroupItem value="none" id="type-none" />
                           <Label htmlFor="type-none" className="flex-1 cursor-pointer">
                             <div className="font-medium">Nenhum</div>
-                            <div className="text-sm text-gray-500">Não tenho nenhum tipo de crédito</div>
+                            <div className="text-sm text-muted-foreground">Não tenho nenhum tipo de crédito</div>
                           </Label>
                         </div>
                       </RadioGroup>
@@ -484,7 +484,7 @@ export default function CalculadoraScore() {
                   <h1 className="text-4xl md:text-5xl font-bold text-[var(--color-caixa-blue)] mb-4">
                     Seu Índice Educativo
                   </h1>
-                  <p className="text-lg text-gray-600">
+                  <p className="text-lg text-muted-foreground">
                     Resultado interno da ferramenta, calculado apenas a partir das suas respostas
                   </p>
                 </div>
@@ -499,17 +499,17 @@ export default function CalculadoraScore() {
                       <div className="text-8xl font-bold text-[var(--color-caixa-blue)] mb-4">
                         {score}
                       </div>
-                      <div className="text-gray-500 mb-8">de 1000 pontos</div>
+                      <div className="text-muted-foreground mb-8">de 1000 pontos</div>
                       
                       {/* Score Bar */}
                       <div className="max-w-md mx-auto">
-                        <div className="h-4 bg-gray-200 rounded-full overflow-hidden">
+                        <div className="h-4 bg-border rounded-full overflow-hidden">
                           <div
                             className="h-full bg-gradient-to-r from-red-500 via-yellow-500 to-green-500 transition-all duration-1000"
                             style={{ width: `${(score / 1000) * 100}%` }}
                           />
                         </div>
-                        <div className="flex justify-between text-xs text-gray-500 mt-2">
+                        <div className="flex justify-between text-xs text-muted-foreground mt-2">
                           <span>0</span>
                           <span>250</span>
                           <span>500</span>
@@ -538,7 +538,7 @@ export default function CalculadoraScore() {
                           ) : (
                             <AlertCircle className="h-5 w-5 text-yellow-600 mt-0.5 flex-shrink-0" />
                           )}
-                          <span className="text-gray-700">{tip}</span>
+                          <span className="text-foreground">{tip}</span>
                         </li>
                       ))}
                     </ul>
@@ -599,7 +599,7 @@ export default function CalculadoraScore() {
                         >
                           {submittingLead ? "Enviando..." : "Receber orientação gratuita"}
                         </Button>
-                        <p className="text-xs text-gray-500 text-center">
+                        <p className="text-xs text-muted-foreground text-center">
                           Seus dados estão seguros. Não compartilhamos com terceiros.
                         </p>
                       </form>
@@ -620,12 +620,12 @@ export default function CalculadoraScore() {
                 )}
 
                 {/* CTA */}
-                <Card className="shadow-lg bg-gradient-to-r from-[var(--color-caixa-blue)] to-[var(--color-caixa-blue-dark)] text-white">
+                <Card className="shadow-lg bg-gradient-to-r from-[var(--color-caixa-blue)] to-[var(--color-caixa-blue-dark)] text-primary-foreground">
                   <CardContent className="pt-8 pb-8 text-center">
                     <h3 className="text-2xl font-bold mb-4">
                       Pronto para Solicitar Crédito?
                     </h3>
-                    <p className="mb-6 text-white/90">
+                    <p className="mb-6 text-primary-foreground/90">
                       A Destrava Crédito pode orientar a organização do seu perfil e a comparação de propostas.
                       A aprovação e as condições pertencem à instituição financeira.
                     </p>
@@ -643,7 +643,7 @@ export default function CalculadoraScore() {
                         asChild
                         size="lg"
                         variant="outline"
-                        className="bg-white text-[var(--color-caixa-blue)] hover:bg-white/90 border-white"
+                        className="bg-card text-[var(--color-caixa-blue)] hover:bg-card/90 border-white"
                       >
                         <a
                           href="https://wa.me/556135268355?text=Olá! Preenchi o diagnóstico educativo no site e gostaria de orientação sobre crédito."
@@ -684,8 +684,8 @@ export default function CalculadoraScore() {
             )}
 
             {/* Disclaimer */}
-            <div className="mt-12 p-6 bg-gray-100 rounded-lg">
-              <p className="text-sm text-gray-600 text-center">
+            <div className="mt-12 p-6 bg-muted rounded-lg">
+              <p className="text-sm text-muted-foreground text-center">
                 <strong>Importante:</strong> Este índice é educativo e usa somente as respostas fornecidas.
                 Ele não consulta, estima ou reproduz o score de Serasa, SPC Brasil, Quod ou qualquer banco.
                 Consulte diretamente a fonte oficial para conhecer uma pontuação real.

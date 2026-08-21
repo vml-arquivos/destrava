@@ -110,9 +110,9 @@ function isSituacaoInativa(situacao?: string | null): boolean {
 }
 
 function situacaoBadge(situacao?: string | null) {
-  if (isSituacaoAtiva(situacao)) return { cls: "bg-emerald-50 text-emerald-700 border-emerald-100", label: situacao || "Ativa" };
-  if (isSituacaoInativa(situacao)) return { cls: "bg-red-50 text-red-700 border-red-100", label: situacao || "Inativa/Baixada" };
-  return { cls: "bg-slate-50 text-slate-600 border-slate-200", label: situacao || "Não informada" };
+  if (isSituacaoAtiva(situacao)) return { cls: "bg-success/10 text-success border-success/20", label: situacao || "Ativa" };
+  if (isSituacaoInativa(situacao)) return { cls: "bg-destructive/10 text-destructive border-destructive/20", label: situacao || "Inativa/Baixada" };
+  return { cls: "bg-muted text-muted-foreground border-border", label: situacao || "Não informada" };
 }
 
 // ─── Componente principal ─────────────────────────────────────────────────────
@@ -238,13 +238,13 @@ export default function RelatorioEmpresas() {
     <Layout>
       <div className="w-full space-y-3 p-3 md:p-4 overflow-x-hidden">
         {/* Header */}
-        <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 rounded-xl border border-slate-200 bg-white px-4 py-3 shadow-sm">
+        <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 rounded-xl border border-border bg-white px-4 py-3 shadow-sm">
           <div>
-            <h1 className="text-lg font-black text-slate-900 tracking-tight flex items-center gap-2">
-              <BarChart3 className="w-5 h-5 text-blue-600" />
+            <h1 className="text-lg font-black text-foreground tracking-tight flex items-center gap-2">
+              <BarChart3 className="w-5 h-5 text-primary" />
               Relatório de Empresas
             </h1>
-            <p className="text-xs text-slate-500 mt-0.5">
+            <p className="text-xs text-muted-foreground mt-0.5">
               Visão consolidada · exportação CSV · {empresas.length} empresa(s) cadastrada(s)
             </p>
           </div>
@@ -252,7 +252,7 @@ export default function RelatorioEmpresas() {
             <button
               onClick={carregarEmpresas}
               disabled={loading}
-              className="inline-flex items-center gap-1.5 rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-600 hover:bg-slate-50 transition-colors"
+              className="inline-flex items-center gap-1.5 rounded-xl border border-border bg-white px-3 py-2 text-xs font-semibold text-muted-foreground hover:bg-muted transition-colors"
             >
               <RefreshCw className={`w-3.5 h-3.5 ${loading ? "animate-spin" : ""}`} />
               Atualizar
@@ -260,7 +260,7 @@ export default function RelatorioEmpresas() {
             <button
               onClick={exportarCSV}
               disabled={exportando || loading}
-              className="inline-flex items-center gap-1.5 rounded-xl bg-blue-600 px-3 py-2 text-xs font-bold text-white hover:bg-blue-700 transition-colors shadow-sm shadow-blue-200 disabled:opacity-60"
+              className="inline-flex items-center gap-1.5 rounded-xl bg-primary px-3 py-2 text-xs font-bold text-white hover:bg-primary/90 transition-colors shadow-sm shadow-blue-200 disabled:opacity-60"
             >
               {exportando ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <FileDown className="w-3.5 h-3.5" />}
               Exportar CSV
@@ -271,18 +271,18 @@ export default function RelatorioEmpresas() {
         {/* Cards de resumo */}
         <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-2">
           {[
-            { label: "Total", value: resumo.total, icon: Building2, color: "text-blue-700", bg: "bg-blue-50", border: "border-blue-100" },
-            { label: "Ativas", value: resumo.ativas, icon: CheckCircle, color: "text-emerald-700", bg: "bg-emerald-50", border: "border-emerald-100" },
-            { label: "Inativas", value: resumo.inativas, icon: XCircle, color: "text-red-700", bg: "bg-red-50", border: "border-red-100" },
-            { label: "Pendentes", value: resumo.pendentes, icon: AlertCircle, color: "text-amber-700", bg: "bg-amber-50", border: "border-amber-100" },
-            { label: "Sincronizadas", value: resumo.sincronizadas, icon: TrendingUp, color: "text-violet-700", bg: "bg-violet-50", border: "border-violet-100" },
+            { label: "Total", value: resumo.total, icon: Building2, color: "text-primary", bg: "bg-primary/10", border: "border-primary/20" },
+            { label: "Ativas", value: resumo.ativas, icon: CheckCircle, color: "text-success", bg: "bg-success/10", border: "border-success/20" },
+            { label: "Inativas", value: resumo.inativas, icon: XCircle, color: "text-destructive", bg: "bg-destructive/10", border: "border-destructive/20" },
+            { label: "Pendentes", value: resumo.pendentes, icon: AlertCircle, color: "text-warning", bg: "bg-warning/10", border: "border-warning/20" },
+            { label: "Sincronizadas", value: resumo.sincronizadas, icon: TrendingUp, color: "text-primary", bg: "bg-primary/10", border: "border-primary/20" },
           ].map(({ label, value, icon: Icon, color, bg, border }) => (
             <div key={label} className={`rounded-xl border ${border} ${bg} px-3 py-2.5 flex items-center gap-2.5`}>
               <div className={`w-7 h-7 rounded-lg bg-white flex items-center justify-center shrink-0 shadow-sm`}>
                 <Icon className={`w-3.5 h-3.5 ${color}`} />
               </div>
               <div>
-                <p className="text-[9px] font-bold uppercase tracking-wide text-slate-500">{label}</p>
+                <p className="text-[9px] font-bold uppercase tracking-wide text-muted-foreground">{label}</p>
                 <p className={`text-xl font-black ${color}`}>{value}</p>
               </div>
             </div>
@@ -290,19 +290,19 @@ export default function RelatorioEmpresas() {
         </div>
 
         {/* Filtros */}
-        <div className="rounded-xl border border-slate-200 bg-white px-3 py-2.5">
+        <div className="rounded-xl border border-border bg-white px-3 py-2.5">
           <div className="flex flex-wrap gap-2 items-center">
             <div className="relative">
-              <Search className="w-3.5 h-3.5 absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-400" />
+              <Search className="w-3.5 h-3.5 absolute left-2.5 top-1/2 -translate-y-1/2 text-muted-foreground" />
               <input
-                className="h-8 rounded-lg border border-slate-200 pl-8 pr-3 text-xs bg-white focus:outline-none focus:ring-2 focus:ring-blue-500 w-full sm:w-52"
+                className="h-8 rounded-lg border border-border pl-8 pr-3 text-xs bg-white focus:outline-none focus:ring-2 focus:ring-primary w-full sm:w-52"
                 placeholder="Buscar por nome ou CNPJ..."
                 value={busca}
                 onChange={(e) => setBusca(e.target.value)}
               />
             </div>
             <select
-              className="h-8 rounded-lg border border-slate-200 px-2.5 text-xs bg-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+              className="h-8 rounded-lg border border-border px-2.5 text-xs bg-white focus:outline-none focus:ring-2 focus:ring-primary"
               value={filtroStatus}
               onChange={(e) => setFiltroStatus(e.target.value)}
             >
@@ -311,7 +311,7 @@ export default function RelatorioEmpresas() {
               <option value="inativa">Inativa/Baixada</option>
             </select>
             <select
-              className="h-8 rounded-lg border border-slate-200 px-2.5 text-xs bg-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+              className="h-8 rounded-lg border border-border px-2.5 text-xs bg-white focus:outline-none focus:ring-2 focus:ring-primary"
               value={filtroPorte}
               onChange={(e) => setFiltroPorte(e.target.value)}
             >
@@ -323,7 +323,7 @@ export default function RelatorioEmpresas() {
             </select>
             {estados.length > 0 && (
               <select
-                className="h-8 rounded-lg border border-slate-200 px-2.5 text-xs bg-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+                className="h-8 rounded-lg border border-border px-2.5 text-xs bg-white focus:outline-none focus:ring-2 focus:ring-primary"
                 value={filtroEstado}
                 onChange={(e) => setFiltroEstado(e.target.value)}
               >
@@ -331,75 +331,75 @@ export default function RelatorioEmpresas() {
                 {estados.map((uf) => <option key={uf} value={uf}>{uf}</option>)}
               </select>
             )}
-            <span className="text-xs text-slate-400 ml-auto">{empresasFiltradas.length} resultado(s)</span>
+            <span className="text-xs text-muted-foreground ml-auto">{empresasFiltradas.length} resultado(s)</span>
           </div>
         </div>
 
         {/* Tabela */}
-        <div className="rounded-xl border border-slate-200 bg-white shadow-sm overflow-hidden">
-          <div className="border-b border-slate-100 px-4 py-2.5 flex items-center justify-between">
-            <p className="text-xs font-bold text-slate-800">Lista de Empresas</p>
+        <div className="rounded-xl border border-border bg-white shadow-sm overflow-hidden">
+          <div className="border-b border-border px-4 py-2.5 flex items-center justify-between">
+            <p className="text-xs font-bold text-foreground">Lista de Empresas</p>
             <button
               onClick={gerarCSVClientSide}
-              className="inline-flex items-center gap-1 text-[10px] font-semibold text-blue-600 hover:text-blue-700 transition-colors"
+              className="inline-flex items-center gap-1 text-[10px] font-semibold text-primary hover:text-primary transition-colors"
             >
               <FileDown className="w-3 h-3" /> Exportar visível
             </button>
           </div>
 
           {loading ? (
-            <div className="flex items-center justify-center py-12 gap-2 text-sm text-slate-500">
+            <div className="flex items-center justify-center py-12 gap-2 text-sm text-muted-foreground">
               <Loader2 className="w-4 h-4 animate-spin" /> Carregando empresas...
             </div>
           ) : empresasFiltradas.length === 0 ? (
             <div className="flex flex-col items-center justify-center py-12 gap-2">
-              <Building2 className="w-8 h-8 text-slate-200" />
-              <p className="text-sm text-slate-500">Nenhuma empresa encontrada.</p>
+              <Building2 className="w-8 h-8 text-muted-foreground" />
+              <p className="text-sm text-muted-foreground">Nenhuma empresa encontrada.</p>
             </div>
           ) : (
             <div className="overflow-x-auto">
               <table className="w-full text-xs">
                 <thead>
-                  <tr className="bg-slate-50 border-b border-slate-100">
-                    <th className="px-3 py-2.5 text-left text-[10px] font-bold uppercase tracking-wide text-slate-500 min-w-[200px]">Empresa</th>
-                    <th className="px-3 py-2.5 text-left text-[10px] font-bold uppercase tracking-wide text-slate-500 min-w-[140px]">CNPJ</th>
-                    <th className="px-3 py-2.5 text-left text-[10px] font-bold uppercase tracking-wide text-slate-500 min-w-[100px]">Situação</th>
-                    <th className="px-3 py-2.5 text-left text-[10px] font-bold uppercase tracking-wide text-slate-500 min-w-[100px]">Porte</th>
-                    <th className="px-3 py-2.5 text-left text-[10px] font-bold uppercase tracking-wide text-slate-500 min-w-[120px]">CNAE Principal</th>
-                    <th className="px-3 py-2.5 text-left text-[10px] font-bold uppercase tracking-wide text-slate-500 min-w-[100px]">Cidade/UF</th>
-                    <th className="px-3 py-2.5 text-left text-[10px] font-bold uppercase tracking-wide text-slate-500 min-w-[110px]">Capital Social</th>
-                    <th className="px-3 py-2.5 text-left text-[10px] font-bold uppercase tracking-wide text-slate-500 min-w-[110px]">Última Sinc.</th>
+                  <tr className="bg-muted border-b border-border">
+                    <th className="px-3 py-2.5 text-left text-[10px] font-bold uppercase tracking-wide text-muted-foreground min-w-[200px]">Empresa</th>
+                    <th className="px-3 py-2.5 text-left text-[10px] font-bold uppercase tracking-wide text-muted-foreground min-w-[140px]">CNPJ</th>
+                    <th className="px-3 py-2.5 text-left text-[10px] font-bold uppercase tracking-wide text-muted-foreground min-w-[100px]">Situação</th>
+                    <th className="px-3 py-2.5 text-left text-[10px] font-bold uppercase tracking-wide text-muted-foreground min-w-[100px]">Porte</th>
+                    <th className="px-3 py-2.5 text-left text-[10px] font-bold uppercase tracking-wide text-muted-foreground min-w-[120px]">CNAE Principal</th>
+                    <th className="px-3 py-2.5 text-left text-[10px] font-bold uppercase tracking-wide text-muted-foreground min-w-[100px]">Cidade/UF</th>
+                    <th className="px-3 py-2.5 text-left text-[10px] font-bold uppercase tracking-wide text-muted-foreground min-w-[110px]">Capital Social</th>
+                    <th className="px-3 py-2.5 text-left text-[10px] font-bold uppercase tracking-wide text-muted-foreground min-w-[110px]">Última Sinc.</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100">
                   {empresasFiltradas.map((empresa) => {
                     const badge = situacaoBadge(empresa.situacao_cadastral);
                     return (
-                      <tr key={empresa.id} className="hover:bg-slate-50/60 transition-colors">
+                      <tr key={empresa.id} className="hover:bg-muted transition-colors">
                         <td className="px-3 py-2.5">
-                          <p className="font-semibold text-slate-800 truncate max-w-[200px]">{empresa.razao_social}</p>
+                          <p className="font-semibold text-foreground truncate max-w-[200px]">{empresa.razao_social}</p>
                           {empresa.nome_fantasia && empresa.nome_fantasia !== empresa.razao_social && (
-                            <p className="text-[10px] text-slate-400 truncate max-w-[200px]">{empresa.nome_fantasia}</p>
+                            <p className="text-[10px] text-muted-foreground truncate max-w-[200px]">{empresa.nome_fantasia}</p>
                           )}
                         </td>
-                        <td className="px-3 py-2.5 font-mono text-slate-600">{formatCNPJ(empresa.cnpj)}</td>
+                        <td className="px-3 py-2.5 font-mono text-muted-foreground">{formatCNPJ(empresa.cnpj)}</td>
                         <td className="px-3 py-2.5">
                           <span className={`text-[10px] font-semibold px-1.5 py-0.5 rounded-full border ${badge.cls}`}>{badge.label}</span>
                         </td>
-                        <td className="px-3 py-2.5 text-slate-600">{empresa.porte || "-"}</td>
-                        <td className="px-3 py-2.5 text-slate-600 truncate max-w-[120px]">{empresa.cnae_principal || "-"}</td>
-                        <td className="px-3 py-2.5 text-slate-600">
+                        <td className="px-3 py-2.5 text-muted-foreground">{empresa.porte || "-"}</td>
+                        <td className="px-3 py-2.5 text-muted-foreground truncate max-w-[120px]">{empresa.cnae_principal || "-"}</td>
+                        <td className="px-3 py-2.5 text-muted-foreground">
                           {empresa.cidade && empresa.estado ? `${empresa.cidade}/${empresa.estado}` : empresa.cidade || empresa.estado || "-"}
                         </td>
-                        <td className="px-3 py-2.5 text-slate-600">{formatCurrency(empresa.capital_social)}</td>
+                        <td className="px-3 py-2.5 text-muted-foreground">{formatCurrency(empresa.capital_social)}</td>
                         <td className="px-3 py-2.5">
                           {empresa.ultima_sincronizacao_receita ? (
-                            <span className="text-emerald-600 flex items-center gap-1">
+                            <span className="text-success flex items-center gap-1">
                               <CheckCircle className="w-3 h-3" />
                               {formatDate(empresa.ultima_sincronizacao_receita)}
                             </span>
                           ) : (
-                            <span className="text-amber-600 flex items-center gap-1">
+                            <span className="text-warning flex items-center gap-1">
                               <Clock className="w-3 h-3" />
                               Pendente
                             </span>
@@ -415,8 +415,8 @@ export default function RelatorioEmpresas() {
         </div>
 
         {/* Rodapé informativo */}
-        <div className="rounded-xl border border-slate-100 bg-slate-50 px-4 py-3">
-          <p className="text-[10px] text-slate-500 flex items-center gap-1.5">
+        <div className="rounded-xl border border-border bg-muted px-4 py-3">
+          <p className="text-[10px] text-muted-foreground flex items-center gap-1.5">
             <FileText className="w-3 h-3" />
             Relatório gerado em {new Date().toLocaleDateString("pt-BR")} às {new Date().toLocaleTimeString("pt-BR")} ·
             {empresasFiltradas.length} empresa(s) exibida(s) de {empresas.length} cadastrada(s) ·

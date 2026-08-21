@@ -160,68 +160,68 @@ function fmtDate(v: string | null | undefined): string {
 // ─── Configs visuais ──────────────────────────────────────────────────────────
 
 const RISCO_CFG: Record<string, { label: string; color: string; bg: string; Icon: React.ElementType }> = {
-  baixo:   { label: "Baixo",   color: "text-emerald-700", bg: "bg-emerald-50 border-emerald-200", Icon: ShieldCheck },
-  medio:   { label: "Médio",   color: "text-amber-700",   bg: "bg-amber-50 border-amber-200",     Icon: ShieldAlert },
-  alto:    { label: "Alto",    color: "text-orange-700",  bg: "bg-orange-50 border-orange-200",   Icon: ShieldAlert },
-  critico: { label: "Crítico", color: "text-red-700",     bg: "bg-red-50 border-red-200",         Icon: ShieldX },
+  baixo:   { label: "Baixo",   color: "text-success", bg: "bg-success/10 border-success/20", Icon: ShieldCheck },
+  medio:   { label: "Médio",   color: "text-warning",   bg: "bg-warning/10 border-warning/20",     Icon: ShieldAlert },
+  alto:    { label: "Alto",    color: "text-warning",  bg: "bg-warning/10 border-warning/20",   Icon: ShieldAlert },
+  critico: { label: "Crítico", color: "text-destructive",     bg: "bg-destructive/10 border-destructive/20",         Icon: ShieldX },
 };
 
 const PRIO_CFG: Record<string, { color: string; label: string }> = {
-  critica: { color: "bg-red-100 text-red-700 border-red-200",       label: "Crítica" },
-  alta:    { color: "bg-orange-100 text-orange-700 border-orange-200", label: "Alta" },
-  media:   { color: "bg-amber-100 text-amber-700 border-amber-200",  label: "Média" },
-  baixa:   { color: "bg-slate-100 text-slate-600 border-slate-200",  label: "Baixa" },
+  critica: { color: "bg-destructive/20 text-destructive border-destructive/20",       label: "Crítica" },
+  alta:    { color: "bg-warning/20 text-warning border-warning/20", label: "Alta" },
+  media:   { color: "bg-warning/20 text-warning border-warning/20",  label: "Média" },
+  baixa:   { color: "bg-muted text-muted-foreground border-border",  label: "Baixa" },
 };
 
 const STATUS_CADASTRAL: Record<string, { color: string; label: string }> = {
-  completo:   { color: "text-emerald-700 bg-emerald-50 border-emerald-200", label: "Completo" },
-  basico:     { color: "text-blue-700 bg-blue-50 border-blue-200",          label: "Básico" },
-  incompleto: { color: "text-amber-700 bg-amber-50 border-amber-200",       label: "Incompleto" },
-  critico:    { color: "text-red-700 bg-red-50 border-red-200",             label: "Crítico" },
+  completo:   { color: "text-success bg-success/10 border-success/20", label: "Completo" },
+  basico:     { color: "text-primary bg-primary/10 border-primary/20",          label: "Básico" },
+  incompleto: { color: "text-warning bg-warning/10 border-warning/20",       label: "Incompleto" },
+  critico:    { color: "text-destructive bg-destructive/10 border-destructive/20",             label: "Crítico" },
 };
 
 // ─── Sub-componentes ──────────────────────────────────────────────────────────
 
 function InfoRow({ label, value }: { label: string; value: React.ReactNode }) {
   return (
-    <div className="flex items-start justify-between gap-2 py-1.5 border-b border-slate-100 last:border-0">
-      <span className="text-xs text-slate-500 shrink-0">{label}</span>
-      <span className="text-xs font-semibold text-slate-800 text-right">{value || "—"}</span>
+    <div className="flex items-start justify-between gap-2 py-1.5 border-b border-border last:border-0">
+      <span className="text-xs text-muted-foreground shrink-0">{label}</span>
+      <span className="text-xs font-semibold text-foreground text-right">{value || "—"}</span>
     </div>
   );
 }
 
 function ScoreBar({ score }: { score: number }) {
   const pct = Math.min(100, Math.max(0, score));
-  const cor = pct >= 70 ? "bg-emerald-500" : pct >= 50 ? "bg-amber-400" : pct >= 30 ? "bg-orange-400" : "bg-red-500";
+  const cor = pct >= 70 ? "bg-success" : pct >= 50 ? "bg-amber-400" : pct >= 30 ? "bg-orange-400" : "bg-destructive";
   return (
     <div className="flex items-center gap-2">
-      <div className="flex-1 h-2 rounded-full bg-slate-100 overflow-hidden">
+      <div className="flex-1 h-2 rounded-full bg-muted overflow-hidden">
         <div className={`h-full rounded-full transition-all duration-500 ${cor}`} style={{ width: `${pct}%` }} />
       </div>
-      <span className="text-sm font-black text-slate-700 w-10 text-right tabular-nums">{score}/100</span>
+      <span className="text-sm font-black text-foreground w-10 text-right tabular-nums">{score}/100</span>
     </div>
   );
 }
 
-function Accordion({ title, icon: Icon, badge, children, defaultOpen = false, badgeColor = "bg-blue-100 text-blue-700" }: {
+function Accordion({ title, icon: Icon, badge, children, defaultOpen = false, badgeColor = "bg-primary/20 text-primary" }: {
   title: string; icon: React.ElementType; badge?: number; children: React.ReactNode;
   defaultOpen?: boolean; badgeColor?: string;
 }) {
   const [open, setOpen] = useState(defaultOpen);
   return (
-    <div className="rounded-xl border border-slate-200 bg-white overflow-hidden">
-      <button onClick={() => setOpen(o => !o)} className="w-full flex items-center justify-between p-3.5 hover:bg-slate-50 transition-colors">
+    <div className="rounded-xl border border-border bg-card overflow-hidden">
+      <button onClick={() => setOpen(o => !o)} className="w-full flex items-center justify-between p-3.5 hover:bg-muted transition-colors">
         <div className="flex items-center gap-2">
-          <Icon className="w-4 h-4 text-slate-500" />
-          <span className="text-sm font-semibold text-slate-700">{title}</span>
+          <Icon className="w-4 h-4 text-muted-foreground" />
+          <span className="text-sm font-semibold text-foreground">{title}</span>
           {badge !== undefined && badge > 0 && (
             <span className={`text-[10px] font-black px-1.5 py-0.5 rounded-full ${badgeColor}`}>{badge}</span>
           )}
         </div>
-        {open ? <ChevronUp className="w-4 h-4 text-slate-400" /> : <ChevronDown className="w-4 h-4 text-slate-400" />}
+        {open ? <ChevronUp className="w-4 h-4 text-muted-foreground" /> : <ChevronDown className="w-4 h-4 text-muted-foreground" />}
       </button>
-      {open && <div className="px-4 pb-4 pt-1 border-t border-slate-100">{children}</div>}
+      {open && <div className="px-4 pb-4 pt-1 border-t border-border">{children}</div>}
     </div>
   );
 }
@@ -242,28 +242,28 @@ function ModalPreview({ data, onClose }: { data: RelatorioData; onClose: () => v
 
   return (
     <div className="fixed inset-0 z-50 flex items-start justify-center bg-black/60 backdrop-blur-sm overflow-y-auto py-6 px-4">
-      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-4xl">
+      <div className="bg-card rounded-2xl shadow-2xl w-full max-w-4xl">
 
         {/* Header do modal */}
-        <div className="sticky top-0 z-10 bg-white border-b border-slate-200 px-6 py-4 flex items-center justify-between rounded-t-2xl">
+        <div className="sticky top-0 z-10 bg-card border-b border-border px-6 py-4 flex items-center justify-between rounded-t-2xl">
           <div className="flex items-center gap-3">
-            <div className="w-9 h-9 rounded-xl bg-blue-600 flex items-center justify-center">
-              <FileText className="w-4.5 h-4.5 text-white" />
+            <div className="w-9 h-9 rounded-xl bg-primary flex items-center justify-center">
+              <FileText className="w-4.5 h-4.5 text-primary-foreground" />
             </div>
             <div>
-              <h2 className="text-sm font-black text-slate-900">Relatório Técnico Premium</h2>
-              <p className="text-xs text-slate-500">{data.identificacao?.razao_social} · {fmtDate(data.gerado_em)}</p>
+              <h2 className="text-sm font-black text-foreground">Relatório Técnico Premium</h2>
+              <p className="text-xs text-muted-foreground">{data.identificacao?.razao_social} · {fmtDate(data.gerado_em)}</p>
             </div>
           </div>
-          <button onClick={onClose} className="p-2 rounded-lg hover:bg-slate-100 transition-colors">
-            <X className="w-5 h-5 text-slate-500" />
+          <button onClick={onClose} className="p-2 rounded-lg hover:bg-muted transition-colors">
+            <X className="w-5 h-5 text-muted-foreground" />
           </button>
         </div>
 
         <div className="p-6 space-y-6">
 
           {/* CAPA */}
-          <div className="rounded-2xl bg-gradient-to-br from-blue-700 to-blue-500 text-white p-6">
+          <div className="rounded-2xl bg-gradient-to-br from-blue-700 to-blue-500 text-primary-foreground p-6">
             <p className="text-[11px] font-bold opacity-70 tracking-widest uppercase mb-1">Relatório Técnico Premium</p>
             <h1 className="text-2xl font-black mb-1">{data.identificacao?.razao_social}</h1>
             <p className="text-sm opacity-85">CNPJ: {data.identificacao?.cnpj} · {data.identificacao?.situacao_cadastral}</p>
@@ -288,20 +288,20 @@ function ModalPreview({ data, onClose }: { data: RelatorioData; onClose: () => v
           </div>
 
           {/* RESUMO EXECUTIVO */}
-          <div className="rounded-xl border border-blue-200 bg-blue-50 p-4">
+          <div className="rounded-xl border border-primary/20 bg-primary/10 p-4">
             <div className="flex items-center gap-2 mb-2">
-              <Info className="w-4 h-4 text-blue-500" />
-              <h3 className="text-sm font-bold text-slate-800">Resumo Executivo</h3>
+              <Info className="w-4 h-4 text-primary" />
+              <h3 className="text-sm font-bold text-foreground">Resumo Executivo</h3>
             </div>
-            <p className="text-sm text-slate-700 leading-relaxed">{data.resumo_executivo}</p>
+            <p className="text-sm text-foreground leading-relaxed">{data.resumo_executivo}</p>
           </div>
 
           {/* IDENTIFICAÇÃO + CONTATO */}
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            <div className="rounded-xl border border-slate-200 bg-white p-4">
+            <div className="rounded-xl border border-border bg-card p-4">
               <div className="flex items-center gap-2 mb-3">
-                <Building2 className="w-4 h-4 text-slate-400" />
-                <h3 className="text-sm font-bold text-slate-700">Identificação</h3>
+                <Building2 className="w-4 h-4 text-muted-foreground" />
+                <h3 className="text-sm font-bold text-foreground">Identificação</h3>
               </div>
               <div className="space-y-0.5">
                 <InfoRow label="CNPJ" value={data.identificacao?.cnpj} />
@@ -314,10 +314,10 @@ function ModalPreview({ data, onClose }: { data: RelatorioData; onClose: () => v
                 <InfoRow label="Capital Social" value={data.identificacao?.capital_social} />
               </div>
             </div>
-            <div className="rounded-xl border border-slate-200 bg-white p-4">
+            <div className="rounded-xl border border-border bg-card p-4">
               <div className="flex items-center gap-2 mb-3">
-                <Info className="w-4 h-4 text-slate-400" />
-                <h3 className="text-sm font-bold text-slate-700">Contato e Endereço</h3>
+                <Info className="w-4 h-4 text-muted-foreground" />
+                <h3 className="text-sm font-bold text-foreground">Contato e Endereço</h3>
               </div>
               <div className="space-y-0.5">
                 <InfoRow label="Responsável" value={data.contato?.responsavel_nome} />
@@ -331,10 +331,10 @@ function ModalPreview({ data, onClose }: { data: RelatorioData; onClose: () => v
           </div>
 
           {/* ANÁLISE DE CRÉDITO */}
-          <div className="rounded-xl border border-slate-200 bg-white p-4">
+          <div className="rounded-xl border border-border bg-card p-4">
             <div className="flex items-center gap-2 mb-3">
-              <BarChart3 className="w-4 h-4 text-slate-400" />
-              <h3 className="text-sm font-bold text-slate-700">Análise de Crédito</h3>
+              <BarChart3 className="w-4 h-4 text-muted-foreground" />
+              <h3 className="text-sm font-bold text-foreground">Análise de Crédito</h3>
               <span className={`text-xs font-bold px-2 py-0.5 rounded-full border ${riscoCfg.bg} ${riscoCfg.color}`}>
                 Risco {riscoCfg.label}
               </span>
@@ -349,18 +349,18 @@ function ModalPreview({ data, onClose }: { data: RelatorioData; onClose: () => v
                 { label: "Limite Est. Mín.", value: data.analise_credito?.capacidade_estimada_min },
                 { label: "Limite Est. Máx.", value: data.analise_credito?.capacidade_estimada_max },
               ].map(({ label, value }) => (
-                <div key={label} className="rounded-lg bg-slate-50 p-2.5">
-                  <p className="text-[10px] text-slate-400">{label}</p>
-                  <p className="text-xs font-bold text-slate-700">{value || "—"}</p>
+                <div key={label} className="rounded-lg bg-muted p-2.5">
+                  <p className="text-[10px] text-muted-foreground">{label}</p>
+                  <p className="text-xs font-bold text-foreground">{value || "—"}</p>
                 </div>
               ))}
             </div>
             {data.analise_credito?.produto_sugerido && (
-              <div className="mt-3 p-3 rounded-lg bg-emerald-50 border border-emerald-200 text-xs">
-                <span className="font-bold text-emerald-700">Produto sugerido: </span>
-                <span className="text-slate-700">{data.analise_credito.produto_sugerido}</span>
+              <div className="mt-3 p-3 rounded-lg bg-success/10 border border-success/20 text-xs">
+                <span className="font-bold text-success">Produto sugerido: </span>
+                <span className="text-foreground">{data.analise_credito.produto_sugerido}</span>
                 {data.analise_credito.prazo_sugerido && (
-                  <span className="text-slate-500"> · {data.analise_credito.prazo_sugerido}</span>
+                  <span className="text-muted-foreground"> · {data.analise_credito.prazo_sugerido}</span>
                 )}
               </div>
             )}
@@ -368,21 +368,21 @@ function ModalPreview({ data, onClose }: { data: RelatorioData; onClose: () => v
 
           {/* SÓCIOS */}
           {socios.length > 0 && (
-            <div className="rounded-xl border border-slate-200 bg-white p-4">
+            <div className="rounded-xl border border-border bg-card p-4">
               <div className="flex items-center gap-2 mb-3">
-                <Users className="w-4 h-4 text-slate-400" />
-                <h3 className="text-sm font-bold text-slate-700">Sócios / QSA ({socios.length})</h3>
+                <Users className="w-4 h-4 text-muted-foreground" />
+                <h3 className="text-sm font-bold text-foreground">Sócios / QSA ({socios.length})</h3>
               </div>
               <div className="space-y-2">
                 {socios.map((s, i) => (
-                  <div key={i} className="flex items-center gap-3 p-2.5 rounded-lg border border-slate-100 bg-slate-50">
+                  <div key={i} className="flex items-center gap-3 p-2.5 rounded-lg border border-border bg-muted">
                     <div className="flex-1 min-w-0">
-                      <p className="text-xs font-semibold text-slate-800 truncate">{s.nome}</p>
-                      <p className="text-[11px] text-slate-500">{s.cpf} · {s.percentual} · {s.qualificacao}</p>
+                      <p className="text-xs font-semibold text-foreground truncate">{s.nome}</p>
+                      <p className="text-[11px] text-muted-foreground">{s.cpf} · {s.percentual} · {s.qualificacao}</p>
                     </div>
                     <div className="flex items-center gap-1.5 shrink-0">
                       {s.tem_cpf ? <CheckCircle2 className="w-3.5 h-3.5 text-emerald-500" /> : <XCircle className="w-3.5 h-3.5 text-red-400" />}
-                      {s.representante_legal && <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-blue-100 text-blue-700 font-bold">Rep. Legal</span>}
+                      {s.representante_legal && <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-primary/20 text-primary font-bold">Rep. Legal</span>}
                     </div>
                   </div>
                 ))}
@@ -391,20 +391,20 @@ function ModalPreview({ data, onClose }: { data: RelatorioData; onClose: () => v
           )}
 
           {/* DOCUMENTOS */}
-          <div className="rounded-xl border border-slate-200 bg-white p-4">
+          <div className="rounded-xl border border-border bg-card p-4">
             <div className="flex items-center gap-2 mb-3">
-              <FileText className="w-4 h-4 text-slate-400" />
-              <h3 className="text-sm font-bold text-slate-700">Documentação</h3>
-              <span className="text-xs text-slate-500">{data.analise_documental?.com_arquivo}/{data.analise_documental?.total} com arquivo</span>
+              <FileText className="w-4 h-4 text-muted-foreground" />
+              <h3 className="text-sm font-bold text-foreground">Documentação</h3>
+              <span className="text-xs text-muted-foreground">{data.analise_documental?.com_arquivo}/{data.analise_documental?.total} com arquivo</span>
             </div>
             <div className="mb-2">
-              <div className="flex items-center justify-between text-[11px] text-slate-500 mb-1">
+              <div className="flex items-center justify-between text-[11px] text-muted-foreground mb-1">
                 <span>Cobertura</span>
                 <span className="font-bold">{data.analise_documental?.percentual_cobertura ?? 0}%</span>
               </div>
-              <div className="h-1.5 rounded-full bg-slate-100 overflow-hidden">
+              <div className="h-1.5 rounded-full bg-muted overflow-hidden">
                 <div
-                  className={`h-full rounded-full ${(data.analise_documental?.percentual_cobertura ?? 0) >= 80 ? "bg-emerald-500" : (data.analise_documental?.percentual_cobertura ?? 0) >= 50 ? "bg-amber-400" : "bg-red-400"}`}
+                  className={`h-full rounded-full ${(data.analise_documental?.percentual_cobertura ?? 0) >= 80 ? "bg-success" : (data.analise_documental?.percentual_cobertura ?? 0) >= 50 ? "bg-amber-400" : "bg-red-400"}`}
                   style={{ width: `${data.analise_documental?.percentual_cobertura ?? 0}%` }}
                 />
               </div>
@@ -412,10 +412,10 @@ function ModalPreview({ data, onClose }: { data: RelatorioData; onClose: () => v
             {documentos.length > 0 && (
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-1 max-h-40 overflow-y-auto">
                 {documentos.map((d, i) => (
-                  <div key={i} className="flex items-center gap-2 p-2 rounded-lg border border-slate-100 bg-slate-50">
+                  <div key={i} className="flex items-center gap-2 p-2 rounded-lg border border-border bg-muted">
                     {d.tem_arquivo ? <CheckCheck className="w-3.5 h-3.5 text-emerald-500 shrink-0" /> : <AlertTriangle className="w-3.5 h-3.5 text-amber-400 shrink-0" />}
-                    <span className="text-xs text-slate-700 truncate">{d.tipo}</span>
-                    {d.validado && <span className="text-[10px] px-1 py-0.5 rounded bg-emerald-100 text-emerald-700 font-bold shrink-0">✓</span>}
+                    <span className="text-xs text-foreground truncate">{d.tipo}</span>
+                    {d.validado && <span className="text-[10px] px-1 py-0.5 rounded bg-success/20 text-success font-bold shrink-0">✓</span>}
                   </div>
                 ))}
               </div>
@@ -424,21 +424,21 @@ function ModalPreview({ data, onClose }: { data: RelatorioData; onClose: () => v
 
           {/* PENDÊNCIAS */}
           {pendencias.length > 0 && (
-            <div className="rounded-xl border border-slate-200 bg-white p-4">
+            <div className="rounded-xl border border-border bg-card p-4">
               <div className="flex items-center gap-2 mb-3">
                 <AlertTriangle className="w-4 h-4 text-amber-500" />
-                <h3 className="text-sm font-bold text-slate-700">Pendências ({pendencias.length})</h3>
+                <h3 className="text-sm font-bold text-foreground">Pendências ({pendencias.length})</h3>
               </div>
               <div className="space-y-2">
                 {pendencias.map((p, i) => {
                   const prio = PRIO_CFG[p.prioridade] ?? PRIO_CFG.baixa;
                   return (
-                    <div key={i} className="p-3 rounded-xl border border-slate-200 bg-slate-50">
+                    <div key={i} className="p-3 rounded-xl border border-border bg-muted">
                       <div className="flex items-start justify-between gap-2">
-                        <p className="text-xs font-semibold text-slate-800">{p.descricao}</p>
+                        <p className="text-xs font-semibold text-foreground">{p.descricao}</p>
                         <span className={`text-[10px] font-black px-1.5 py-0.5 rounded-full border shrink-0 ${prio.color}`}>{prio.label}</span>
                       </div>
-                      <p className="text-[11px] text-slate-500 mt-1 flex items-start gap-1">
+                      <p className="text-[11px] text-muted-foreground mt-1 flex items-start gap-1">
                         <ArrowRight className="w-3 h-3 mt-0.5 shrink-0" />{p.acao_requerida}
                       </p>
                     </div>
@@ -450,18 +450,18 @@ function ModalPreview({ data, onClose }: { data: RelatorioData; onClose: () => v
 
           {/* PLANO DE AÇÃO */}
           {planoAcao.length > 0 && (
-            <div className="rounded-xl border border-slate-200 bg-white p-4">
+            <div className="rounded-xl border border-border bg-card p-4">
               <div className="flex items-center gap-2 mb-3">
-                <Clock className="w-4 h-4 text-slate-400" />
-                <h3 className="text-sm font-bold text-slate-700">Plano de Ação</h3>
+                <Clock className="w-4 h-4 text-muted-foreground" />
+                <h3 className="text-sm font-bold text-foreground">Plano de Ação</h3>
               </div>
               <ol className="space-y-2">
                 {planoAcao.map((p, i) => (
                   <li key={i} className="flex items-start gap-3">
-                    <span className="h-5 w-5 rounded-full bg-blue-600 text-white font-black text-[11px] flex items-center justify-center shrink-0 mt-0.5">{p.numero}</span>
+                    <span className="h-5 w-5 rounded-full bg-primary text-primary-foreground font-black text-[11px] flex items-center justify-center shrink-0 mt-0.5">{p.numero}</span>
                     <div className="flex-1 min-w-0">
-                      <p className="text-xs font-semibold text-slate-800">{p.acao}</p>
-                      <p className="text-[11px] text-slate-500">{p.modulo} · {p.prazo}</p>
+                      <p className="text-xs font-semibold text-foreground">{p.acao}</p>
+                      <p className="text-[11px] text-muted-foreground">{p.modulo} · {p.prazo}</p>
                     </div>
                   </li>
                 ))}
@@ -471,20 +471,20 @@ function ModalPreview({ data, onClose }: { data: RelatorioData; onClose: () => v
 
           {/* RECOMENDAÇÕES */}
           {recomendacoes.length > 0 && (
-            <div className="rounded-xl border border-slate-200 bg-white p-4">
+            <div className="rounded-xl border border-border bg-card p-4">
               <div className="flex items-center gap-2 mb-3">
-                <Star className="w-4 h-4 text-slate-400" />
-                <h3 className="text-sm font-bold text-slate-700">Recomendações</h3>
+                <Star className="w-4 h-4 text-muted-foreground" />
+                <h3 className="text-sm font-bold text-foreground">Recomendações</h3>
               </div>
               <div className="space-y-2">
                 {recomendacoes.map((r, i) => {
                   const prio = PRIO_CFG[r.prioridade] ?? PRIO_CFG.baixa;
                   return (
-                    <div key={i} className="flex items-start gap-3 p-2.5 rounded-xl border border-slate-100 bg-slate-50">
-                      <Zap className="w-3.5 h-3.5 text-blue-500 mt-0.5 shrink-0" />
+                    <div key={i} className="flex items-start gap-3 p-2.5 rounded-xl border border-border bg-muted">
+                      <Zap className="w-3.5 h-3.5 text-primary mt-0.5 shrink-0" />
                       <div className="flex-1 min-w-0">
-                        <p className="text-xs font-semibold text-slate-800">{r.titulo}</p>
-                        <p className="text-[11px] text-slate-500">{r.descricao}</p>
+                        <p className="text-xs font-semibold text-foreground">{r.titulo}</p>
+                        <p className="text-[11px] text-muted-foreground">{r.descricao}</p>
                       </div>
                       <span className={`text-[10px] font-black px-1.5 py-0.5 rounded-full border shrink-0 ${prio.color}`}>{prio.label}</span>
                     </div>
@@ -495,13 +495,13 @@ function ModalPreview({ data, onClose }: { data: RelatorioData; onClose: () => v
           )}
 
           {/* OBSERVAÇÕES LEGAIS */}
-          <div className="rounded-xl border border-slate-200 bg-slate-50 p-4">
+          <div className="rounded-xl border border-border bg-muted p-4">
             <div className="flex items-center gap-2 mb-2">
-              <BookOpen className="w-4 h-4 text-slate-400" />
-              <h3 className="text-xs font-bold text-slate-600">Observações Legais</h3>
+              <BookOpen className="w-4 h-4 text-muted-foreground" />
+              <h3 className="text-xs font-bold text-muted-foreground">Observações Legais</h3>
             </div>
-            <p className="text-[11px] text-slate-500 leading-relaxed">{data.observacoes_legais}</p>
-            <p className="text-[10px] text-slate-400 mt-2">
+            <p className="text-[11px] text-muted-foreground leading-relaxed">{data.observacoes_legais}</p>
+            <p className="text-[10px] text-muted-foreground mt-2">
               Relatório gerado em {fmtDate(data.gerado_em)} por {data.responsavel_analise} · Destrava Crédito
             </p>
           </div>
@@ -638,20 +638,20 @@ export default function RelatorioTecnico({ empresaId, onNavegar }: Props) {
   // ── Estado inicial ──
   if (!data && !loading) {
     return (
-      <div className="rounded-2xl border border-slate-200 bg-gradient-to-br from-slate-50 to-blue-50 p-6">
+      <div className="rounded-2xl border border-border bg-gradient-to-br from-slate-50 to-blue-50 p-6">
         <div className="flex items-start gap-4">
-          <div className="w-12 h-12 rounded-2xl bg-slate-700 flex items-center justify-center shrink-0">
-            <FileText className="w-6 h-6 text-white" />
+          <div className="w-12 h-12 rounded-2xl bg-primary flex items-center justify-center shrink-0">
+            <FileText className="w-6 h-6 text-primary-foreground" />
           </div>
           <div className="flex-1">
-            <h3 className="text-base font-black text-slate-900">Relatório Técnico Premium</h3>
-            <p className="text-sm text-slate-600 mt-1 leading-relaxed">
+            <h3 className="text-base font-black text-foreground">Relatório Técnico Premium</h3>
+            <p className="text-sm text-muted-foreground mt-1 leading-relaxed">
               Consolida diagnóstico cadastral, documental, societário, financeiro e de crédito em um relatório profissional para clientes, contadores e parceiros bancários.
             </p>
             <div className="mt-4 flex flex-wrap gap-2">
               <button
                 onClick={gerarRelatorio}
-                className="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl bg-slate-700 text-white text-sm font-bold hover:bg-slate-800 active:scale-95 transition-all shadow-md"
+                className="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl bg-primary text-primary-foreground text-sm font-bold hover:bg-brand-navy active:scale-95 transition-all shadow-md"
               >
                 <Zap className="w-4 h-4" />
                 Gerar relatório técnico
@@ -666,7 +666,7 @@ export default function RelatorioTecnico({ empresaId, onNavegar }: Props) {
   // ── Carregando ──
   if (loading) {
     return (
-      <div className="rounded-2xl border border-slate-200 bg-slate-50 p-6 flex items-center gap-3 text-slate-700">
+      <div className="rounded-2xl border border-border bg-muted p-6 flex items-center gap-3 text-foreground">
         <RefreshCw className="w-5 h-5 animate-spin" />
         <span className="text-sm font-semibold">Consolidando dados e gerando relatório técnico...</span>
       </div>
@@ -684,14 +684,14 @@ export default function RelatorioTecnico({ empresaId, onNavegar }: Props) {
     <>
       {modalAberto && <ModalPreview data={data} onClose={() => setModalAberto(false)} />}
 
-      <div className="rounded-2xl border border-slate-200 bg-white overflow-hidden">
+      <div className="rounded-2xl border border-border bg-card overflow-hidden">
 
         {/* Header */}
-        <div className="bg-gradient-to-r from-slate-700 to-slate-600 text-white p-4">
+        <div className="bg-gradient-to-r from-slate-700 to-slate-600 text-primary-foreground p-4">
           <div className="flex items-start justify-between gap-3 flex-wrap">
             <div className="flex items-start gap-3">
-              <div className="w-9 h-9 rounded-xl bg-white/20 flex items-center justify-center shrink-0">
-                <FileText className="w-4.5 h-4.5 text-white" />
+              <div className="w-9 h-9 rounded-xl bg-card/20 flex items-center justify-center shrink-0">
+                <FileText className="w-4.5 h-4.5 text-primary-foreground" />
               </div>
               <div>
                 <h3 className="text-sm font-black">Relatório Técnico Premium</h3>
@@ -702,32 +702,32 @@ export default function RelatorioTecnico({ empresaId, onNavegar }: Props) {
             </div>
             {/* Botões */}
             <div className="flex flex-wrap gap-2">
-              <button onClick={visualizarRelatorio} className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-white/20 hover:bg-white/30 text-xs font-semibold transition-all">
+              <button onClick={visualizarRelatorio} className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-card/20 hover:bg-card/30 text-xs font-semibold transition-all">
                 <Eye className="w-3.5 h-3.5" /> Visualizar
               </button>
-              <button onClick={baixarPdf} disabled={gerandoPdf} className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-white/20 hover:bg-white/30 text-xs font-semibold transition-all">
+              <button onClick={baixarPdf} disabled={gerandoPdf} className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-card/20 hover:bg-card/30 text-xs font-semibold transition-all">
                 {gerandoPdf ? <RefreshCw className="w-3.5 h-3.5 animate-spin" /> : <FileDown className="w-3.5 h-3.5" />}
                 {gerandoPdf ? "Gerando..." : "Baixar PDF"}
               </button>
-              <button onClick={baixarPdfComAnexos} disabled={gerandoPdfComAnexos} title="Ficha completa com todos os documentos do Acervo Documental já mesclados nas páginas do mesmo PDF" className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-white/20 hover:bg-white/30 text-xs font-semibold transition-all">
+              <button onClick={baixarPdfComAnexos} disabled={gerandoPdfComAnexos} title="Ficha completa com todos os documentos do Acervo Documental já mesclados nas páginas do mesmo PDF" className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-card/20 hover:bg-card/30 text-xs font-semibold transition-all">
                 {gerandoPdfComAnexos ? <RefreshCw className="w-3.5 h-3.5 animate-spin" /> : <Paperclip className="w-3.5 h-3.5" />}
                 {gerandoPdfComAnexos ? "Gerando..." : "Ficha + anexos (PDF único)"}
               </button>
-              <button onClick={baixarZipCompleto} disabled={gerandoZip} title="Ficha em PDF + todos os arquivos originais do Acervo Documental, dentro de um ZIP" className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-white/20 hover:bg-white/30 text-xs font-semibold transition-all">
+              <button onClick={baixarZipCompleto} disabled={gerandoZip} title="Ficha em PDF + todos os arquivos originais do Acervo Documental, dentro de um ZIP" className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-card/20 hover:bg-card/30 text-xs font-semibold transition-all">
                 {gerandoZip ? <RefreshCw className="w-3.5 h-3.5 animate-spin" /> : <FileArchive className="w-3.5 h-3.5" />}
                 {gerandoZip ? "Gerando..." : "Ficha + arquivos (ZIP)"}
               </button>
-              <button onClick={copiarResumo} className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-white/20 hover:bg-white/30 text-xs font-semibold transition-all">
+              <button onClick={copiarResumo} className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-card/20 hover:bg-card/30 text-xs font-semibold transition-all">
                 {resumoCopiado ? <CheckCheck className="w-3.5 h-3.5" /> : <Copy className="w-3.5 h-3.5" />}
                 {resumoCopiado ? "Copiado!" : "Copiar resumo"}
               </button>
-              <button onClick={enviarEmail} className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-white/20 hover:bg-white/30 text-xs font-semibold transition-all">
+              <button onClick={enviarEmail} className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-card/20 hover:bg-card/30 text-xs font-semibold transition-all">
                 <Send className="w-3.5 h-3.5" /> E-mail
               </button>
-              <button onClick={enviarWhatsApp} className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-white/20 hover:bg-white/30 text-xs font-semibold transition-all">
+              <button onClick={enviarWhatsApp} className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-card/20 hover:bg-card/30 text-xs font-semibold transition-all">
                 <MessageCircle className="w-3.5 h-3.5" /> WhatsApp
               </button>
-              <button onClick={gerarRelatorio} disabled={loading} className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-white/10 hover:bg-white/20 text-xs font-semibold transition-all">
+              <button onClick={gerarRelatorio} disabled={loading} className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-card/10 hover:bg-card/20 text-xs font-semibold transition-all">
                 <RefreshCw className={`w-3.5 h-3.5 ${loading ? "animate-spin" : ""}`} /> Recalcular
               </button>
             </div>
@@ -745,37 +745,37 @@ export default function RelatorioTecnico({ empresaId, onNavegar }: Props) {
             <span className={`text-xs font-bold px-2.5 py-1 rounded-full border ${STATUS_CADASTRAL[data.analise_cadastral?.status ?? "incompleto"]?.color ?? ""}`}>
               Cadastro: {STATUS_CADASTRAL[data.analise_cadastral?.status ?? "incompleto"]?.label ?? "—"}
             </span>
-            <span className="text-xs font-bold px-2.5 py-1 rounded-full border bg-blue-50 text-blue-700 border-blue-200">
+            <span className="text-xs font-bold px-2.5 py-1 rounded-full border bg-primary/10 text-primary border-primary/20">
               Docs: {data.analise_documental?.percentual_cobertura ?? 0}%
             </span>
             {criticas.length > 0 && (
-              <span className="text-xs font-bold px-2.5 py-1 rounded-full border bg-red-50 text-red-700 border-red-200">
+              <span className="text-xs font-bold px-2.5 py-1 rounded-full border bg-destructive/10 text-destructive border-destructive/20">
                 {criticas.length} pendência(s) crítica(s)
               </span>
             )}
           </div>
 
           {/* Resumo executivo */}
-          <p className="text-sm text-slate-700 leading-relaxed">{data.resumo_executivo}</p>
+          <p className="text-sm text-foreground leading-relaxed">{data.resumo_executivo}</p>
 
           {/* Métricas rápidas */}
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
             {[
-              { label: "Score Destrava", value: `${data.analise_credito?.score_destrava}/100`, color: "text-blue-700" },
-              { label: "Documentos", value: `${data.analise_documental?.com_arquivo}/${data.analise_documental?.total}`, color: "text-emerald-700" },
-              { label: "Sócios", value: String(safeArr(data.socios).length), color: "text-slate-700" },
-              { label: "Pendências", value: String(pendencias.length), color: criticas.length > 0 ? "text-red-700" : "text-amber-700" },
+              { label: "Score Destrava", value: `${data.analise_credito?.score_destrava}/100`, color: "text-primary" },
+              { label: "Documentos", value: `${data.analise_documental?.com_arquivo}/${data.analise_documental?.total}`, color: "text-success" },
+              { label: "Sócios", value: String(safeArr(data.socios).length), color: "text-foreground" },
+              { label: "Pendências", value: String(pendencias.length), color: criticas.length > 0 ? "text-destructive" : "text-warning" },
             ].map(({ label, value, color }) => (
-              <div key={label} className="rounded-xl border border-slate-200 bg-slate-50 p-3 text-center">
+              <div key={label} className="rounded-xl border border-border bg-muted p-3 text-center">
                 <p className={`text-xl font-black ${color}`}>{value}</p>
-                <p className="text-[11px] text-slate-500">{label}</p>
+                <p className="text-[11px] text-muted-foreground">{label}</p>
               </div>
             ))}
           </div>
 
           <button
             onClick={visualizarRelatorio}
-            className="w-full flex items-center justify-center gap-2 py-2.5 rounded-xl border border-slate-200 bg-slate-50 hover:bg-slate-100 text-sm font-semibold text-slate-700 transition-all"
+            className="w-full flex items-center justify-center gap-2 py-2.5 rounded-xl border border-border bg-muted hover:bg-muted text-sm font-semibold text-foreground transition-all"
           >
             <Eye className="w-4 h-4" />
             Ver relatório completo

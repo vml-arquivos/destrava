@@ -350,27 +350,27 @@ function SeletorCliente({
         {carregando && <div className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 border-2 border-blue-500 border-t-transparent rounded-full animate-spin" />}
       </div>
       {aberto && resultados.length > 0 && (
-        <div className="absolute z-50 w-full mt-1 bg-white border border-gray-200 rounded-xl shadow-lg overflow-hidden">
+        <div className="absolute z-50 w-full mt-1 bg-card border border-border rounded-xl shadow-lg overflow-hidden">
           {resultados.map(empresa => (
             <button
               key={empresa.id}
               type="button"
-              className="w-full text-left px-4 py-3 hover:bg-blue-50 border-b last:border-0 transition-colors"
+              className="w-full text-left px-4 py-3 hover:bg-primary/10 border-b last:border-0 transition-colors"
               onMouseDown={() => { onSelect(empresa); setBusca(""); setAberto(false); }}
             >
-              <p className="text-sm font-medium text-gray-900">{empresa.razao_social || empresa.nome_fantasia || "—"}</p>
-              <p className="text-xs text-gray-500">{empresa.responsavel_nome || "—"} · {empresa.cnpj || empresa.telefone || ""}</p>
+              <p className="text-sm font-medium text-foreground">{empresa.razao_social || empresa.nome_fantasia || "—"}</p>
+              <p className="text-xs text-muted-foreground">{empresa.responsavel_nome || "—"} · {empresa.cnpj || empresa.telefone || ""}</p>
             </button>
           ))}
         </div>
       )}
       {aberto && !carregando && busca.length >= 2 && resultados.length === 0 && (
-        <div className="absolute z-50 w-full mt-1 bg-white border border-gray-200 rounded-xl shadow-lg px-4 py-3 text-xs text-gray-500">
+        <div className="absolute z-50 w-full mt-1 bg-card border border-border rounded-xl shadow-lg px-4 py-3 text-xs text-muted-foreground">
           Nenhuma empresa cadastrada encontrada. Cadastre a empresa em Clientes PJ antes de simular, ou continue preenchendo os dados manualmente abaixo.
         </div>
       )}
       {aberto && busca.length >= 2 && resultados.length === 0 && !carregando && (
-        <div className="absolute z-50 w-full mt-1 bg-white border border-gray-200 rounded-xl shadow-sm px-4 py-3 text-sm text-gray-400">
+        <div className="absolute z-50 w-full mt-1 bg-card border border-border rounded-xl shadow-sm px-4 py-3 text-sm text-muted-foreground">
           Nenhum cliente encontrado. Preencha os dados manualmente.
         </div>
       )}
@@ -395,10 +395,10 @@ function PainelResultado({
 }) {
   return (
     <div className="space-y-3">
-      <div className="bg-gradient-to-br from-[#001f6b] to-[#003db5] rounded-2xl p-6 text-white text-center">
-        <p className="text-white/70 text-sm mb-1">Parcela Mensal</p>
+      <div className="bg-gradient-to-br from-[#001f6b] to-[#003db5] rounded-2xl p-6 text-primary-foreground text-center">
+        <p className="text-primary-foreground/70 text-sm mb-1">Parcela Mensal</p>
         <p className="text-4xl font-bold">{fmtBRL.format(resultado.parcelaMensal)}</p>
-        <p className="text-white/60 text-xs mt-1">{prazo}x mensais</p>
+        <p className="text-primary-foreground/60 text-xs mt-1">{prazo}x mensais</p>
       </div>
 
       <div className="rounded-xl border bg-card p-4">
@@ -410,7 +410,7 @@ function PainelResultado({
           </div>
           <div className="flex justify-between items-center py-2 border-b border-border text-sm">
             <span className="text-muted-foreground">Total de Juros</span>
-            <span className="font-medium text-amber-600">{fmtBRL.format(resultado.totalJuros)}</span>
+            <span className="font-medium text-warning">{fmtBRL.format(resultado.totalJuros)}</span>
           </div>
           <div className="flex justify-between items-center py-2 text-sm">
             <span className="font-semibold">Total do Financiamento</span>
@@ -419,24 +419,24 @@ function PainelResultado({
         </div>
       </div>
 
-      <div className="rounded-xl border-2 border-red-200 bg-red-50 p-4">
+      <div className="rounded-xl border-2 border-destructive/20 bg-destructive/10 p-4">
         <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-3">Custo Total da Operação <span className="normal-case font-normal">(cálculo bancário — sem honorários Destrava)</span></p>
         <div className="space-y-0">
-          <div className="flex justify-between items-center py-2 border-b border-red-100 text-sm">
+          <div className="flex justify-between items-center py-2 border-b border-destructive/20 text-sm">
             <span className="text-muted-foreground">Total do Financiamento</span>
             <span className="font-medium">{fmtBRL.format(resultado.totalFinanciamento)}</span>
           </div>
           {comImposto && resultado.impostoValor > 0 && (
-            <div className="flex justify-between items-center py-2 border-b border-red-100 text-sm">
+            <div className="flex justify-between items-center py-2 border-b border-destructive/20 text-sm">
               <span className="text-muted-foreground">
                 Imposto ({pctImpostoNum}% s/ {fmtBRL.format(valorFiscalNum)}) <span className="text-xs">(1x)</span>
               </span>
-              <span className="font-semibold text-red-600">{fmtBRL.format(resultado.impostoValor)}</span>
+              <span className="font-semibold text-destructive">{fmtBRL.format(resultado.impostoValor)}</span>
             </div>
           )}
           <div className="flex justify-between items-center pt-3 text-sm">
             <span className="font-bold text-base">Total da Operação <span className="text-xs font-normal">(o que o cliente paga ao banco)</span></span>
-            <span className="font-bold text-xl text-red-700">{fmtBRL.format(resultado.custoTotalOperacao)}</span>
+            <span className="font-bold text-xl text-destructive">{fmtBRL.format(resultado.custoTotalOperacao)}</span>
           </div>
         </div>
       </div>
@@ -450,17 +450,17 @@ function PainelResultado({
           </div>
           <div className="flex justify-between items-center py-2 text-sm">
             <span className="text-muted-foreground">CET (Custo Efetivo Total)</span>
-            <span className="font-medium text-red-600">{resultado.cetMensal.toFixed(2).replace('.', ',')}% a.m. / {resultado.cetAnual.toFixed(2).replace('.', ',')}% a.a.</span>
+            <span className="font-medium text-destructive">{resultado.cetMensal.toFixed(2).replace('.', ',')}% a.m. / {resultado.cetAnual.toFixed(2).replace('.', ',')}% a.a.</span>
           </div>
         </div>
       </div>
 
       {resultado.comissaoValor > 0 && (
-        <div className="rounded-xl border-2 border-amber-200 bg-amber-50 p-4">
-          <p className="text-xs font-semibold text-amber-700 uppercase tracking-wide mb-3">Honorários Destrava <span className="normal-case font-normal text-muted-foreground">(à parte — não é cálculo bancário, não soma no custo da operação)</span></p>
+        <div className="rounded-xl border-2 border-warning/20 bg-warning/10 p-4">
+          <p className="text-xs font-semibold text-warning uppercase tracking-wide mb-3">Honorários Destrava <span className="normal-case font-normal text-muted-foreground">(à parte — não é cálculo bancário, não soma no custo da operação)</span></p>
           <div className="flex justify-between items-center py-1 text-sm">
             <span className="text-muted-foreground">Comissão Destrava</span>
-            <span className="font-bold text-lg text-amber-700">{fmtBRL.format(resultado.comissaoValor)}</span>
+            <span className="font-bold text-lg text-warning">{fmtBRL.format(resultado.comissaoValor)}</span>
           </div>
         </div>
       )}
@@ -505,12 +505,12 @@ function CamposCliente({
       </div>
 
       {empresaVinculada && (
-        <div className="flex items-center justify-between gap-3 rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2">
-          <p className="text-xs text-emerald-800">
+        <div className="flex items-center justify-between gap-3 rounded-lg border border-success/20 bg-success/10 px-3 py-2">
+          <p className="text-xs text-success">
             <span className="font-bold">✓ Empresa vinculada do cadastro.</span> Razão social e CNPJ vêm do registro, sem digitar de novo.
           </p>
           {onLimparEmpresa && (
-            <button type="button" onClick={onLimparEmpresa} className="text-xs font-semibold text-emerald-700 underline underline-offset-2 whitespace-nowrap">
+            <button type="button" onClick={onLimparEmpresa} className="text-xs font-semibold text-success underline underline-offset-2 whitespace-nowrap">
               Trocar empresa
             </button>
           )}
@@ -620,7 +620,7 @@ function CamposEmprestimo({
           </SelectContent>
         </Select>
         {linhaAtiva && (
-          <p className="text-xs text-blue-700 bg-blue-50 border border-blue-100 rounded-lg px-3 py-2 mt-1">
+          <p className="text-xs text-primary bg-primary/10 border border-primary/20 rounded-lg px-3 py-2 mt-1">
             {linhaAtiva.observacao}
             {linhaAtiva.spreadSobreSelic != null && selic && !selic.indisponivel && (
               <> <strong>Referência de taxa: Selic ({selic.valor.toFixed(2)}% a.a., {selic.dataReferencia}) + {linhaAtiva.spreadSobreSelic}% a.a. de spread ≈ {(selic.valor + linhaAtiva.spreadSobreSelic).toFixed(2)}% a.a.</strong> Taxa final depende da análise do banco.</>
@@ -712,7 +712,7 @@ function CamposEmprestimo({
             />
           </div>
           {form.comissao && parseBRL(form.valorCredito) > 0 && (
-            <p className="text-xs text-orange-600 font-medium">
+            <p className="text-xs text-warning font-medium">
               = {fmtBRL.format((parseBRL(form.valorCredito) * parseFloat(form.comissao)) / 100)}
             </p>
           )}
@@ -861,7 +861,7 @@ function CenarioComImposto({ initialData }: { initialData?: { nome: string; empr
             <FileText className="h-4 w-4 text-primary" />
             <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Declaração Fiscal e Imposto</p>
           </div>
-          <div className="bg-blue-50 border border-blue-200 rounded-xl p-3 text-xs text-blue-800">
+          <div className="bg-primary/10 border border-primary/20 rounded-xl p-3 text-xs text-primary">
             <Info className="h-3.5 w-3.5 inline mr-1" />
             O imposto é calculado sobre o <strong>valor fiscal declarado</strong> pelo cliente.
           </div>
@@ -896,9 +896,9 @@ function CenarioComImposto({ initialData }: { initialData?: { nome: string; empr
             </div>
           </div>
           {impostoPreview !== null && (
-            <div className="flex items-center justify-between bg-red-50 border border-red-200 rounded-xl px-4 py-3">
+            <div className="flex items-center justify-between bg-destructive/10 border border-destructive/20 rounded-xl px-4 py-3">
               <span className="text-sm text-muted-foreground">Imposto ({pctImpostoNum}% de {fmtBRL.format(valorFiscalNum)})</span>
-              <span className="font-bold text-red-700 text-lg">{fmtBRL.format(impostoPreview)}</span>
+              <span className="font-bold text-destructive text-lg">{fmtBRL.format(impostoPreview)}</span>
             </div>
           )}
         </div>
@@ -930,7 +930,7 @@ function CenarioComImposto({ initialData }: { initialData?: { nome: string; empr
               <CardTitle className="text-base flex items-center gap-2 min-w-0">
                 <CheckCircle2 className="h-5 w-5 flex-shrink-0 text-green-600" />
                 <span className="truncate min-w-0 flex-1">Resultado — {form.nome}</span>
-                <Badge className="ml-auto flex-shrink-0 bg-blue-600 text-white text-xs">Cenário A · Com Imposto</Badge>
+                <Badge className="ml-auto flex-shrink-0 bg-primary text-primary-foreground text-xs">Cenário A · Com Imposto</Badge>
               </CardTitle>
             </CardHeader>
             <CardContent className="pt-4">
@@ -1171,10 +1171,10 @@ interface FormComparativo {
 
 function DifTag({ a, b, campo }: { a: number; b: number; campo: "parcela" | "total" }) {
   const diff = a - b;
-  if (Math.abs(diff) < 0.01) return <span className="text-xs text-gray-400 flex items-center gap-0.5"><Minus className="w-3 h-3" /> igual</span>;
+  if (Math.abs(diff) < 0.01) return <span className="text-xs text-muted-foreground flex items-center gap-0.5"><Minus className="w-3 h-3" /> igual</span>;
   const maior = diff > 0;
   return (
-    <span className={`text-xs font-semibold flex items-center gap-0.5 ${maior ? "text-red-600" : "text-green-600"}`}>
+    <span className={`text-xs font-semibold flex items-center gap-0.5 ${maior ? "text-destructive" : "text-green-600"}`}>
       {maior ? <TrendingUp className="w-3 h-3" /> : <TrendingDown className="w-3 h-3" />}
       {maior ? "+" : ""}{fmtBRL.format(Math.abs(diff))}
     </span>
@@ -1354,7 +1354,7 @@ function CenarioComparativo({ initialData }: { initialData?: { nome: string; emp
   return (
     <div className="space-y-6">
       {/* Dados comuns */}
-      <div className="bg-white rounded-2xl border p-5 space-y-5">
+      <div className="bg-card rounded-2xl border p-5 space-y-5">
         <SeletorCliente onSelect={handleSelectLead} />
         <p className="text-xs text-muted-foreground -mt-3">
           Empresa não encontrada? {" "}
@@ -1370,11 +1370,11 @@ function CenarioComparativo({ initialData }: { initialData?: { nome: string; emp
         </div>
 
         {form.empresaId && (
-          <div className="flex items-center justify-between gap-3 rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2">
-            <p className="text-xs text-emerald-800">
+          <div className="flex items-center justify-between gap-3 rounded-lg border border-success/20 bg-success/10 px-3 py-2">
+            <p className="text-xs text-success">
               <span className="font-bold">✓ Empresa vinculada do cadastro.</span> Razão social e CNPJ vêm do registro, sem digitar de novo.
             </p>
-            <button type="button" onClick={() => setForm(prev => ({ ...prev, empresa: "", cpfCnpj: "", empresaId: undefined }))} className="text-xs font-semibold text-emerald-700 underline underline-offset-2 whitespace-nowrap">
+            <button type="button" onClick={() => setForm(prev => ({ ...prev, empresa: "", cpfCnpj: "", empresaId: undefined }))} className="text-xs font-semibold text-success underline underline-offset-2 whitespace-nowrap">
               Trocar empresa
             </button>
           </div>
@@ -1427,7 +1427,7 @@ function CenarioComparativo({ initialData }: { initialData?: { nome: string; emp
               </SelectContent>
             </Select>
             {linhaAtivaComp && (
-              <p className="text-xs text-blue-700 bg-blue-50 border border-blue-100 rounded-lg px-3 py-2 mt-1">
+              <p className="text-xs text-primary bg-primary/10 border border-primary/20 rounded-lg px-3 py-2 mt-1">
                 {linhaAtivaComp.observacao}
                 {linhaAtivaComp.spreadSobreSelic != null && selicComp && !selicComp.indisponivel && (
                   <> <strong>Referência de taxa: Selic ({selicComp.valor.toFixed(2)}% a.a., {selicComp.dataReferencia}) + {linhaAtivaComp.spreadSobreSelic}% a.a. de spread ≈ {(selicComp.valor + linhaAtivaComp.spreadSobreSelic).toFixed(2)}% a.a.</strong> Taxa final depende da análise do banco.</>
@@ -1479,7 +1479,7 @@ function CenarioComparativo({ initialData }: { initialData?: { nome: string; emp
               <Input value={form.comissao} onChange={e => set("comissao", e.target.value.replace(",", "."))} placeholder="Ex: 2.50" className="pl-9" inputMode="decimal" />
             </div>
             {form.comissao && vc > 0 && (
-              <p className="text-xs text-orange-600 font-medium">= {fmtBRL.format(vc * pc / 100)}</p>
+              <p className="text-xs text-warning font-medium">= {fmtBRL.format(vc * pc / 100)}</p>
             )}
           </div>
         </div>
@@ -1488,24 +1488,24 @@ function CenarioComparativo({ initialData }: { initialData?: { nome: string; emp
       {/* Duas colunas de taxas */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
         {/* Cenário A */}
-        <div className="bg-blue-50 border-2 border-blue-200 rounded-2xl p-5 space-y-4">
+        <div className="bg-primary/10 border-2 border-primary/20 rounded-2xl p-5 space-y-4">
           <div className="flex items-center gap-2">
-            <div className="w-7 h-7 rounded-full bg-blue-600 text-white flex items-center justify-center text-sm font-bold">A</div>
+            <div className="w-7 h-7 rounded-full bg-primary text-primary-foreground flex items-center justify-center text-sm font-bold">A</div>
             <div>
-              <p className="font-bold text-blue-900">Com Imposto</p>
-              <p className="text-xs text-blue-600">Taxa + imposto sobre valor fiscal</p>
+              <p className="font-bold text-primary">Com Imposto</p>
+              <p className="text-xs text-primary">Taxa + imposto sobre valor fiscal</p>
             </div>
           </div>
 
           <div className="space-y-1.5">
-            <Label className="text-blue-900">Taxa de Juros Mensal (%) <span className="text-destructive">*</span></Label>
+            <Label className="text-primary">Taxa de Juros Mensal (%) <span className="text-destructive">*</span></Label>
             <div className="relative">
               <Percent className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-blue-400" />
               <Input
                 value={form.taxaA}
                 onChange={e => set("taxaA", e.target.value.replace(",", "."))}
                 placeholder="Ex: 2.10"
-                className={`pl-9 bg-white border-blue-300 focus:border-blue-500 ${erros.taxaA ? "border-destructive" : ""}`}
+                className={`pl-9 bg-card border-primary/30 focus:border-primary ${erros.taxaA ? "border-destructive" : ""}`}
                 inputMode="decimal"
               />
             </div>
@@ -1514,27 +1514,27 @@ function CenarioComparativo({ initialData }: { initialData?: { nome: string; emp
 
           <div className="grid grid-cols-2 gap-3">
             <div className="space-y-1.5">
-              <Label className="text-blue-900 text-xs">Valor Fiscal Declarado</Label>
+              <Label className="text-primary text-xs">Valor Fiscal Declarado</Label>
               <div className="relative">
                 <span className="absolute left-3 top-1/2 -translate-y-1/2 text-blue-400 text-sm font-semibold">R$</span>
                 <Input
                   value={form.valorFiscal}
                   onChange={e => set("valorFiscal", formatarMoeda(e.target.value))}
                   placeholder="0,00"
-                  className="pl-9 bg-white border-blue-300 text-sm"
+                  className="pl-9 bg-card border-primary/30 text-sm"
                   inputMode="numeric"
                 />
               </div>
             </div>
             <div className="space-y-1.5">
-              <Label className="text-blue-900 text-xs">Alíquota Imposto (%)</Label>
+              <Label className="text-primary text-xs">Alíquota Imposto (%)</Label>
               <div className="relative">
                 <Percent className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-blue-400" />
                 <Input
                   value={form.pctImposto}
                   onChange={e => set("pctImposto", e.target.value.replace(",", "."))}
                   placeholder="Ex: 6.00"
-                  className="pl-9 bg-white border-blue-300 text-sm"
+                  className="pl-9 bg-card border-primary/30 text-sm"
                   inputMode="decimal"
                 />
               </div>
@@ -1542,9 +1542,9 @@ function CenarioComparativo({ initialData }: { initialData?: { nome: string; emp
           </div>
 
           {vf > 0 && pi > 0 && (
-            <div className="flex items-center justify-between bg-blue-100 rounded-xl px-3 py-2 text-sm">
-              <span className="text-blue-700">Imposto ({pi}% s/ {fmtBRL.format(vf)})</span>
-              <span className="font-bold text-blue-900">{fmtBRL.format(vf * pi / 100)}</span>
+            <div className="flex items-center justify-between bg-primary/20 rounded-xl px-3 py-2 text-sm">
+              <span className="text-primary">Imposto ({pi}% s/ {fmtBRL.format(vf)})</span>
+              <span className="font-bold text-primary">{fmtBRL.format(vf * pi / 100)}</span>
             </div>
           )}
         </div>
@@ -1552,7 +1552,7 @@ function CenarioComparativo({ initialData }: { initialData?: { nome: string; emp
         {/* Cenário B */}
         <div className="bg-green-50 border-2 border-green-200 rounded-2xl p-5 space-y-4">
           <div className="flex items-center gap-2">
-            <div className="w-7 h-7 rounded-full bg-green-600 text-white flex items-center justify-center text-sm font-bold">B</div>
+            <div className="w-7 h-7 rounded-full bg-green-600 text-primary-foreground flex items-center justify-center text-sm font-bold">B</div>
             <div>
               <p className="font-bold text-green-900">Sem Imposto</p>
               <p className="text-xs text-green-600">Apenas taxa de juros + comissão</p>
@@ -1567,7 +1567,7 @@ function CenarioComparativo({ initialData }: { initialData?: { nome: string; emp
                 value={form.taxaB}
                 onChange={e => set("taxaB", e.target.value.replace(",", "."))}
                 placeholder="Ex: 1.89"
-                className={`pl-9 bg-white border-green-300 focus:border-green-500 ${erros.taxaB ? "border-destructive" : ""}`}
+                className={`pl-9 bg-card border-green-300 focus:border-green-500 ${erros.taxaB ? "border-destructive" : ""}`}
                 inputMode="decimal"
               />
             </div>
@@ -1586,20 +1586,20 @@ function CenarioComparativo({ initialData }: { initialData?: { nome: string; emp
         <div className="space-y-4">
           <div className="flex items-center gap-2">
             <ArrowLeftRight className="h-5 w-5 text-primary" />
-            <h3 className="font-bold text-gray-900">Comparativo em Tempo Real</h3>
+            <h3 className="font-bold text-foreground">Comparativo em Tempo Real</h3>
             <Badge variant="secondary" className="text-xs">Atualização automática</Badge>
           </div>
 
           {/* Cabeçalho */}
           <div className="grid grid-cols-3 gap-2 text-center text-xs font-semibold text-muted-foreground uppercase tracking-wide">
-            <div className="bg-blue-100 text-blue-700 rounded-lg py-2">Cenário A — Com Imposto</div>
-            <div className="bg-gray-100 rounded-lg py-2">Diferença</div>
+            <div className="bg-primary/20 text-primary rounded-lg py-2">Cenário A — Com Imposto</div>
+            <div className="bg-muted rounded-lg py-2">Diferença</div>
             <div className="bg-green-100 text-green-700 rounded-lg py-2">Cenário B — Sem Imposto</div>
           </div>
 
           {/* Parcela Mensal */}
           <div className="grid grid-cols-3 gap-2 items-center">
-            <div className="bg-blue-600 rounded-2xl p-4 text-white text-center">
+            <div className="bg-primary rounded-2xl p-4 text-primary-foreground text-center">
               <p className="text-blue-200 text-xs mb-1">Parcela Mensal</p>
               <p className="text-2xl font-bold">{resA ? fmtBRL.format(resA.parcelaMensal) : "—"}</p>
               <p className="text-blue-300 text-xs mt-1">{prazoNum}x mensais</p>
@@ -1610,7 +1610,7 @@ function CenarioComparativo({ initialData }: { initialData?: { nome: string; emp
                 <DifTag a={resA.parcelaMensal} b={resB.parcelaMensal} campo="parcela" />
               ) : <span className="text-xs text-gray-300">—</span>}
             </div>
-            <div className="bg-green-600 rounded-2xl p-4 text-white text-center">
+            <div className="bg-green-600 rounded-2xl p-4 text-primary-foreground text-center">
               <p className="text-green-200 text-xs mb-1">Parcela Mensal</p>
               <p className="text-2xl font-bold">{resB ? fmtBRL.format(resB.parcelaMensal) : "—"}</p>
               <p className="text-green-300 text-xs mt-1">{prazoNum}x mensais</p>
@@ -1618,12 +1618,12 @@ function CenarioComparativo({ initialData }: { initialData?: { nome: string; emp
           </div>
 
           {/* Tabela comparativa detalhada */}
-          <div className="bg-white rounded-2xl border overflow-hidden">
+          <div className="bg-card rounded-2xl border overflow-hidden">
             <table className="w-full text-sm">
               <thead>
-                <tr className="bg-gray-50 border-b">
+                <tr className="bg-muted border-b">
                   <th className="text-left px-4 py-3 text-xs font-semibold text-muted-foreground uppercase">Item</th>
-                  <th className="text-right px-4 py-3 text-xs font-semibold text-blue-700 uppercase">Cenário A</th>
+                  <th className="text-right px-4 py-3 text-xs font-semibold text-primary uppercase">Cenário A</th>
                   <th className="text-right px-4 py-3 text-xs font-semibold text-muted-foreground uppercase">Diferença</th>
                   <th className="text-right px-4 py-3 text-xs font-semibold text-green-700 uppercase">Cenário B</th>
                 </tr>
@@ -1665,20 +1665,20 @@ function CenarioComparativo({ initialData }: { initialData?: { nome: string; emp
                     destaque: true,
                   },
                 ].map((row, i) => (
-                  <tr key={i} className={row.destaque ? "bg-red-50" : "hover:bg-gray-50"}>
-                    <td className="px-4 py-3 text-gray-700 font-medium">{row.label}</td>
-                    <td className={`px-4 py-3 text-right font-semibold ${row.destaque ? "text-red-700" : "text-blue-700"}`}>{row.a}</td>
+                  <tr key={i} className={row.destaque ? "bg-destructive/10" : "hover:bg-muted"}>
+                    <td className="px-4 py-3 text-foreground font-medium">{row.label}</td>
+                    <td className={`px-4 py-3 text-right font-semibold ${row.destaque ? "text-destructive" : "text-primary"}`}>{row.a}</td>
                     <td className="px-4 py-3 text-right">
                       {row.aNum !== null && row.bNum !== null ? (
                         <DifTag a={row.aNum} b={row.bNum} campo="total" />
                       ) : <span className="text-gray-300 text-xs">—</span>}
                     </td>
-                    <td className={`px-4 py-3 text-right font-semibold ${row.destaque ? "text-gray-400" : "text-green-700"}`}>{row.b}</td>
+                    <td className={`px-4 py-3 text-right font-semibold ${row.destaque ? "text-muted-foreground" : "text-green-700"}`}>{row.b}</td>
                   </tr>
                 ))}
 
                 {/* Linha de total */}
-                <tr className="bg-gray-900 text-white">
+                <tr className="bg-gray-900 text-primary-foreground">
                   <td className="px-4 py-4 font-bold text-base">Total da Operação <span className="text-xs font-normal">(cálculo bancário — sem honorários Destrava)</span></td>
                   <td className="px-4 py-4 text-right font-bold text-lg text-blue-300">
                     {resA ? fmtBRL.format(resA.custoTotalOperacao) : "—"}
@@ -1689,7 +1689,7 @@ function CenarioComparativo({ initialData }: { initialData?: { nome: string; emp
                         {resA.custoTotalOperacao > resB.custoTotalOperacao ? <TrendingUp className="w-4 h-4" /> : <TrendingDown className="w-4 h-4" />}
                         {fmtBRL.format(Math.abs(resA.custoTotalOperacao - resB.custoTotalOperacao))}
                       </span>
-                    ) : <span className="text-gray-500">—</span>}
+                    ) : <span className="text-muted-foreground">—</span>}
                   </td>
                   <td className="px-4 py-4 text-right font-bold text-lg text-green-300">
                     {resB ? fmtBRL.format(resB.custoTotalOperacao) : "—"}
@@ -1705,10 +1705,10 @@ function CenarioComparativo({ initialData }: { initialData?: { nome: string; emp
               resA.custoTotalOperacao > resB.custoTotalOperacao
                 ? "bg-gradient-to-r from-blue-900 to-blue-700"
                 : "bg-gradient-to-r from-green-900 to-green-700"
-            } text-white`}>
-              <p className="text-white/70 text-sm mb-1">Diferença Total entre os Cenários (cálculo bancário)</p>
+            } text-primary-foreground`}>
+              <p className="text-primary-foreground/70 text-sm mb-1">Diferença Total entre os Cenários (cálculo bancário)</p>
               <p className="text-4xl font-bold">{fmtBRL.format(Math.abs(resA.custoTotalOperacao - resB.custoTotalOperacao))}</p>
-              <p className="text-white/70 text-sm mt-2">
+              <p className="text-primary-foreground/70 text-sm mt-2">
                 {resA.custoTotalOperacao > resB.custoTotalOperacao
                   ? "O Cenário A (com imposto) custa mais para o cliente"
                   : "O Cenário B (sem imposto) custa mais para o cliente"}
@@ -1718,13 +1718,13 @@ function CenarioComparativo({ initialData }: { initialData?: { nome: string; emp
 
           {/* Honorários Destrava — à parte, nunca somado ao cálculo bancário acima */}
           {((resA?.comissaoValor ?? 0) > 0 || (resB?.comissaoValor ?? 0) > 0) && (
-            <div className="rounded-xl border-2 border-amber-200 bg-amber-50 p-4">
-              <p className="text-xs font-semibold text-amber-700 uppercase tracking-wide mb-3">
+            <div className="rounded-xl border-2 border-warning/20 bg-warning/10 p-4">
+              <p className="text-xs font-semibold text-warning uppercase tracking-wide mb-3">
                 Honorários Destrava <span className="normal-case font-normal text-muted-foreground">(mesma comissão nos dois cenários — não é cálculo bancário, não soma no custo da operação)</span>
               </p>
               <div className="flex justify-between items-center py-1 text-sm">
                 <span className="text-muted-foreground">Comissão Destrava</span>
-                <span className="font-bold text-lg text-amber-700">{fmtBRL.format((resA || resB)?.comissaoValor ?? 0)}</span>
+                <span className="font-bold text-lg text-warning">{fmtBRL.format((resA || resB)?.comissaoValor ?? 0)}</span>
               </div>
             </div>
           )}
@@ -1798,7 +1798,7 @@ export default function CalculadoraPage() {
         </div>
 
         {/* Aviso */}
-        <div className="flex items-start gap-2 bg-amber-50 border border-amber-200 rounded-xl px-4 py-3 text-sm text-amber-800">
+        <div className="flex items-start gap-2 bg-warning/10 border border-warning/20 rounded-xl px-4 py-3 text-sm text-warning">
           <AlertCircle className="h-4 w-4 mt-0.5 flex-shrink-0" />
           <span>
             <strong>Uso interno.</strong> Confirme sempre taxas e condições com o banco antes de apresentar ao cliente.

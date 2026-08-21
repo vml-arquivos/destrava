@@ -129,38 +129,38 @@ const STATUS_CONFIG: Record<StatusSemana, {
 }> = {
   dentro_da_faixa: {
     label: "Dentro da faixa",
-    bg: "bg-emerald-50", border: "border-emerald-200", text: "text-emerald-800",
+    bg: "bg-success/10", border: "border-success/20", text: "text-success",
     icon: CheckCircle2,
   },
   abaixo_referencia: {
     label: "Abaixo da referência",
-    bg: "bg-amber-50", border: "border-amber-200", text: "text-amber-800",
+    bg: "bg-warning/10", border: "border-warning/20", text: "text-warning",
     icon: TrendingDown,
   },
   abaixo_piso: {
     label: "Abaixo do piso mínimo",
-    bg: "bg-red-50", border: "border-red-200", text: "text-red-800",
+    bg: "bg-destructive/10", border: "border-destructive/20", text: "text-destructive",
     icon: TrendingDown,
   },
   acima_teto: {
     label: "Acima do teto",
-    bg: "bg-orange-50", border: "border-orange-200", text: "text-orange-800",
+    bg: "bg-warning/10", border: "border-warning/20", text: "text-warning",
     icon: TrendingUp,
   },
   critico: {
     label: "Crítico — Risco COAF",
-    bg: "bg-red-100", border: "border-red-400", text: "text-red-900",
+    bg: "bg-destructive/20", border: "border-red-400", text: "text-destructive",
     icon: AlertTriangle,
   },
 };
 
 const ALERT_COLORS: Record<NivelAlerta, { bg: string; border: string; text: string; badge: string }> = {
-  verde:          { bg: "bg-emerald-50", border: "border-emerald-200", text: "text-emerald-800", badge: "bg-emerald-100 text-emerald-700" },
-  amarelo_baixo:  { bg: "bg-amber-50",   border: "border-amber-200",   text: "text-amber-800",   badge: "bg-amber-100 text-amber-700"   },
-  amarelo_alto:   { bg: "bg-orange-50",  border: "border-orange-200",  text: "text-orange-800",  badge: "bg-orange-100 text-orange-700" },
-  vermelho_baixo: { bg: "bg-red-50",     border: "border-red-200",     text: "text-red-800",     badge: "bg-red-100 text-red-700"      },
-  vermelho_alto:  { bg: "bg-red-50",     border: "border-red-300",     text: "text-red-900",     badge: "bg-red-200 text-red-800"      },
-  critico:        { bg: "bg-red-100",    border: "border-red-500",     text: "text-red-900",     badge: "bg-red-500 text-white"        },
+  verde:          { bg: "bg-success/10", border: "border-success/20", text: "text-success", badge: "bg-success/20 text-success" },
+  amarelo_baixo:  { bg: "bg-warning/10",   border: "border-warning/20",   text: "text-warning",   badge: "bg-warning/20 text-warning"   },
+  amarelo_alto:   { bg: "bg-warning/10",  border: "border-warning/20",  text: "text-warning",  badge: "bg-warning/20 text-warning" },
+  vermelho_baixo: { bg: "bg-destructive/10",     border: "border-destructive/20",     text: "text-destructive",     badge: "bg-destructive/20 text-destructive"      },
+  vermelho_alto:  { bg: "bg-destructive/10",     border: "border-destructive/30",     text: "text-destructive",     badge: "bg-red-200 text-destructive"      },
+  critico:        { bg: "bg-destructive/20",    border: "border-red-500",     text: "text-destructive",     badge: "bg-destructive text-primary-foreground"        },
 };
 
 const ALERT_LABELS: Record<NivelAlerta, string> = {
@@ -195,18 +195,18 @@ function BarraCorredor({
   const refPct   = toP(reference);
   const ceilPct  = toP(ceiling);
 
-  let barColor = "bg-emerald-500";
-  if (total > ceiling * 1.5) barColor = "bg-red-600";
-  else if (total > ceiling)  barColor = "bg-orange-500";
+  let barColor = "bg-success";
+  if (total > ceiling * 1.5) barColor = "bg-destructive";
+  else if (total > ceiling)  barColor = "bg-warning";
   else if (total < floor)    barColor = "bg-red-400";
   else if (total < reference) barColor = "bg-amber-400";
 
   return (
     <div className="space-y-2">
-      <div className="relative h-5 bg-gray-100 rounded-full overflow-hidden border border-gray-200">
+      <div className="relative h-5 bg-muted rounded-full overflow-hidden border border-border">
         {/* Faixa OK (floor → ceiling) */}
         <div
-          className="absolute top-0 h-full bg-emerald-100 border-x border-emerald-300"
+          className="absolute top-0 h-full bg-success/20 border-x border-success/30"
           style={{ left: `${floorPct}%`, width: `${ceilPct - floorPct}%` }}
         />
         {/* Barra total */}
@@ -216,9 +216,9 @@ function BarraCorredor({
         />
         {/* Marcadores */}
         {[
-          { pct: floorPct, color: "bg-amber-500", label: "Piso" },
-          { pct: refPct,   color: "bg-blue-500",  label: "Ref" },
-          { pct: ceilPct,  color: "bg-red-500",   label: "Teto" },
+          { pct: floorPct, color: "bg-warning/100", label: "Piso" },
+          { pct: refPct,   color: "bg-primary",  label: "Ref" },
+          { pct: ceilPct,  color: "bg-destructive",   label: "Teto" },
         ].map(({ pct: p, color, label }) => (
           <div
             key={label}
@@ -230,17 +230,17 @@ function BarraCorredor({
       </div>
 
       {/* Legenda */}
-      <div className="flex justify-between text-xs text-gray-500">
+      <div className="flex justify-between text-xs text-muted-foreground">
         <div className="flex items-center gap-1">
-          <div className="w-2 h-2 rounded-full bg-amber-500" />
+          <div className="w-2 h-2 rounded-full bg-warning/100" />
           <span>Piso {brl(floor)}</span>
         </div>
         <div className="flex items-center gap-1">
-          <div className="w-2 h-2 rounded-full bg-blue-500" />
+          <div className="w-2 h-2 rounded-full bg-primary" />
           <span>Ref {brl(reference)}</span>
         </div>
         <div className="flex items-center gap-1">
-          <div className="w-2 h-2 rounded-full bg-red-500" />
+          <div className="w-2 h-2 rounded-full bg-destructive" />
           <span>Teto {brl(ceiling)}</span>
         </div>
       </div>
@@ -258,41 +258,41 @@ function CardCompensacao({ comp }: { comp: InfoCompensacao }) {
     : 0;
 
   return (
-    <div className="rounded-xl border border-blue-200 bg-blue-50 p-4 space-y-3">
-      <div className="flex items-center gap-2 text-blue-800 font-semibold text-sm">
+    <div className="rounded-xl border border-primary/20 bg-primary/10 p-4 space-y-3">
+      <div className="flex items-center gap-2 text-primary font-semibold text-sm">
         <Target className="w-4 h-4" />
         Compensação — Achatamento da Curva
       </div>
 
       <div className="grid grid-cols-2 gap-3 text-xs">
-        <div className="bg-white rounded-lg p-2.5 border border-blue-100">
-          <p className="text-gray-500 mb-0.5">Acumulado no mês</p>
-          <p className="font-bold text-gray-900">{brl(comp.accumulated_this_month)}</p>
+        <div className="bg-card rounded-lg p-2.5 border border-primary/20">
+          <p className="text-muted-foreground mb-0.5">Acumulado no mês</p>
+          <p className="font-bold text-foreground">{brl(comp.accumulated_this_month)}</p>
         </div>
-        <div className="bg-white rounded-lg p-2.5 border border-blue-100">
-          <p className="text-gray-500 mb-0.5">Teto mensal</p>
-          <p className="font-bold text-gray-900">{brl(comp.monthly_ceiling)}</p>
+        <div className="bg-card rounded-lg p-2.5 border border-primary/20">
+          <p className="text-muted-foreground mb-0.5">Teto mensal</p>
+          <p className="font-bold text-foreground">{brl(comp.monthly_ceiling)}</p>
         </div>
-        <div className="bg-white rounded-lg p-2.5 border border-blue-100">
-          <p className="text-gray-500 mb-0.5">Disponível (semanas rest.)</p>
-          <p className="font-bold text-emerald-700">{brl(comp.available_for_remaining_weeks)}</p>
+        <div className="bg-card rounded-lg p-2.5 border border-primary/20">
+          <p className="text-muted-foreground mb-0.5">Disponível (semanas rest.)</p>
+          <p className="font-bold text-success">{brl(comp.available_for_remaining_weeks)}</p>
         </div>
-        <div className="bg-white rounded-lg p-2.5 border border-blue-100">
-          <p className="text-gray-500 mb-0.5">Semanas restantes</p>
-          <p className="font-bold text-gray-900">{comp.remaining_weeks_in_month}</p>
+        <div className="bg-card rounded-lg p-2.5 border border-primary/20">
+          <p className="text-muted-foreground mb-0.5">Semanas restantes</p>
+          <p className="font-bold text-foreground">{comp.remaining_weeks_in_month}</p>
         </div>
       </div>
 
       {/* Barra de uso mensal */}
       <div>
-        <div className="flex justify-between text-xs text-blue-700 mb-1">
+        <div className="flex justify-between text-xs text-primary mb-1">
           <span>Uso do teto mensal</span>
           <span className="font-bold">{pct(pctUsado)}</span>
         </div>
-        <div className="h-2.5 bg-blue-100 rounded-full overflow-hidden">
+        <div className="h-2.5 bg-primary/20 rounded-full overflow-hidden">
           <div
             className={`h-full rounded-full transition-all duration-500 ${
-              pctUsado > 100 ? "bg-red-500" : pctUsado > 85 ? "bg-orange-500" : "bg-blue-500"
+              pctUsado > 100 ? "bg-destructive" : pctUsado > 85 ? "bg-warning" : "bg-primary"
             }`}
             style={{ width: `${Math.min(100, pctUsado)}%` }}
           />
@@ -300,14 +300,14 @@ function CardCompensacao({ comp }: { comp: InfoCompensacao }) {
       </div>
 
       {comp.remaining_weeks_in_month > 0 && (
-        <div className="flex items-center gap-2 bg-white rounded-lg p-2.5 border border-blue-200">
-          <ArrowRight className="w-4 h-4 text-blue-600 flex-shrink-0" />
+        <div className="flex items-center gap-2 bg-card rounded-lg p-2.5 border border-primary/20">
+          <ArrowRight className="w-4 h-4 text-primary flex-shrink-0" />
           <div className="text-xs">
-            <span className="text-gray-600">Nova meta semanal: </span>
-            <span className="font-bold text-blue-800">{brl(comp.new_weekly_target)}</span>
-            <span className="text-gray-400"> / </span>
-            <span className="text-gray-600">Teto: </span>
-            <span className="font-bold text-orange-700">{brl(comp.new_weekly_ceiling)}</span>
+            <span className="text-muted-foreground">Nova meta semanal: </span>
+            <span className="font-bold text-primary">{brl(comp.new_weekly_target)}</span>
+            <span className="text-muted-foreground"> / </span>
+            <span className="text-muted-foreground">Teto: </span>
+            <span className="font-bold text-warning">{brl(comp.new_weekly_ceiling)}</span>
           </div>
         </div>
       )}
@@ -375,21 +375,21 @@ function FormManual({
     });
   };
 
-  const cls = "w-full border border-gray-200 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-400";
+  const cls = "w-full border border-border rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-400";
 
   return (
-    <div className="space-y-4 bg-gray-50 rounded-xl border border-gray-200 p-4">
-      <p className="text-xs font-bold text-gray-500 uppercase tracking-wide">
+    <div className="space-y-4 bg-muted rounded-xl border border-border p-4">
+      <p className="text-xs font-bold text-muted-foreground uppercase tracking-wide">
         Entrada Manual de Dados
       </p>
 
       <div className="grid grid-cols-2 gap-3">
         <div>
-          <label className="text-xs text-gray-600 mb-1 block">Início da semana</label>
+          <label className="text-xs text-muted-foreground mb-1 block">Início da semana</label>
           <input type="date" value={weekStart} onChange={e => setWeekStart(e.target.value)} className={cls} />
         </div>
         <div>
-          <label className="text-xs text-gray-600 mb-1 block">Margem operacional (%)</label>
+          <label className="text-xs text-muted-foreground mb-1 block">Margem operacional (%)</label>
           <input type="number" min={0} max={100} value={margin} onChange={e => setMargin(e.target.value)} className={cls} />
         </div>
       </div>
@@ -397,7 +397,7 @@ function FormManual({
       <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
         {CANAIS.map(({ key, label }) => (
           <div key={key}>
-            <label className="text-xs text-gray-600 mb-1 block">{label} (R$)</label>
+            <label className="text-xs text-muted-foreground mb-1 block">{label} (R$)</label>
             <input
               type="text"
               inputMode="numeric"
@@ -412,14 +412,14 @@ function FormManual({
       </div>
 
       {/* Prévia do total */}
-      <div className="flex items-center justify-between bg-white rounded-lg border border-gray-200 px-3 py-2 text-sm">
-        <span className="text-gray-500">Total da semana (prévia)</span>
-        <span className="font-bold text-gray-900">{brl(totalPreview)}</span>
+      <div className="flex items-center justify-between bg-card rounded-lg border border-border px-3 py-2 text-sm">
+        <span className="text-muted-foreground">Total da semana (prévia)</span>
+        <span className="font-bold text-foreground">{brl(totalPreview)}</span>
       </div>
 
       <div className="grid grid-cols-2 gap-3">
         <div>
-          <label className="text-xs text-gray-600 mb-1 block">Acumulado mês anterior (R$)</label>
+          <label className="text-xs text-muted-foreground mb-1 block">Acumulado mês anterior (R$)</label>
           <input
             type="text"
             inputMode="numeric"
@@ -431,7 +431,7 @@ function FormManual({
           />
         </div>
         <div>
-          <label className="text-xs text-gray-600 mb-1 block">Acumulado ano anterior (R$)</label>
+          <label className="text-xs text-muted-foreground mb-1 block">Acumulado ano anterior (R$)</label>
           <input
             type="text"
             inputMode="numeric"
@@ -445,7 +445,7 @@ function FormManual({
       </div>
 
       <div>
-        <label className="text-xs text-gray-600 mb-1 block">Índice de sazonalidade manual (opcional, 0.5–2.0)</label>
+        <label className="text-xs text-muted-foreground mb-1 block">Índice de sazonalidade manual (opcional, 0.5–2.0)</label>
         <input
           type="number" min={0.5} max={2.0} step={0.05}
           value={seasonIdx}
@@ -458,7 +458,7 @@ function FormManual({
       <button
         onClick={handleSubmit}
         disabled={loading}
-        className="w-full flex items-center justify-center gap-2 px-4 py-2.5 bg-[#1B3A8C] text-white text-sm font-bold rounded-lg hover:bg-[#142d6e] disabled:opacity-50 transition-colors"
+        className="w-full flex items-center justify-center gap-2 px-4 py-2.5 bg-[#1B3A8C] text-primary-foreground text-sm font-bold rounded-lg hover:bg-[#142d6e] disabled:opacity-50 transition-colors"
       >
         {loading
           ? <><RefreshCw className="w-4 h-4 animate-spin" />Analisando...</>
@@ -541,14 +541,14 @@ export default function WeeklyMonitorDashboard({
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-3">
           <div className="p-2 bg-[#1B3A8C] rounded-lg">
-            <Activity className="w-5 h-5 text-white" />
+            <Activity className="w-5 h-5 text-primary-foreground" />
           </div>
           <div>
-            <h2 className="font-bold text-gray-900 text-base leading-tight">
+            <h2 className="font-bold text-foreground text-base leading-tight">
               Monitor Semanal Inteligente
             </h2>
             {resultado && (
-              <p className="text-xs text-gray-500">{resultado.week_id} · {resultado.week_start}</p>
+              <p className="text-xs text-muted-foreground">{resultado.week_id} · {resultado.week_start}</p>
             )}
           </div>
         </div>
@@ -557,7 +557,7 @@ export default function WeeklyMonitorDashboard({
             <button
               onClick={carregarAutomatico}
               disabled={loading}
-              className="p-1.5 text-gray-500 hover:text-blue-600 rounded-lg hover:bg-blue-50 transition-colors"
+              className="p-1.5 text-muted-foreground hover:text-primary rounded-lg hover:bg-primary/10 transition-colors"
               title="Recarregar análise"
             >
               <RefreshCw className={`w-4 h-4 ${loading ? "animate-spin" : ""}`} />
@@ -566,7 +566,7 @@ export default function WeeklyMonitorDashboard({
           {onClose && (
             <button
               onClick={onClose}
-              className="p-1.5 text-gray-400 hover:text-gray-700 rounded-lg hover:bg-gray-100 transition-colors"
+              className="p-1.5 text-muted-foreground hover:text-foreground rounded-lg hover:bg-muted transition-colors"
             >
               <X className="w-4 h-4" />
             </button>
@@ -585,7 +585,7 @@ export default function WeeklyMonitorDashboard({
 
       {/* ERRO */}
       {erro && (
-        <div className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700 flex items-start gap-2">
+        <div className="rounded-xl border border-destructive/20 bg-destructive/10 px-4 py-3 text-sm text-destructive flex items-start gap-2">
           <AlertTriangle className="w-4 h-4 mt-0.5 flex-shrink-0" />
           <span>{erro}</span>
         </div>
@@ -593,7 +593,7 @@ export default function WeeklyMonitorDashboard({
 
       {/* LOADING sem resultado */}
       {loading && !resultado && (
-        <div className="flex items-center justify-center py-12 text-gray-400 text-sm gap-2">
+        <div className="flex items-center justify-center py-12 text-muted-foreground text-sm gap-2">
           <RefreshCw className="w-5 h-5 animate-spin" />
           Analisando dados da semana...
         </div>
@@ -611,7 +611,7 @@ export default function WeeklyMonitorDashboard({
                 {statusCfg.label}
               </div>
               <div className="text-right">
-                <p className="text-xs text-gray-500">Total da semana</p>
+                <p className="text-xs text-muted-foreground">Total da semana</p>
                 <p className={`text-xl font-bold ${statusCfg.text}`}>{brl(resultado.total_week)}</p>
               </div>
             </div>
@@ -624,7 +624,7 @@ export default function WeeklyMonitorDashboard({
             />
 
             {resultado.corridors.seasonal_index !== 1.0 && (
-              <p className="text-xs text-gray-500 mt-2 flex items-center gap-1">
+              <p className="text-xs text-muted-foreground mt-2 flex items-center gap-1">
                 <Info className="w-3 h-3" />
                 Sazonalidade aplicada: ×{resultado.corridors.seasonal_index.toFixed(2)}
               </p>
@@ -634,13 +634,13 @@ export default function WeeklyMonitorDashboard({
           {/* MÉTRICAS RÁPIDAS */}
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
             {[
-              { label: "Referência semanal", value: brl(resultado.corridors.reference_weekly), color: "text-blue-700" },
-              { label: "Teto semanal",        value: brl(resultado.corridors.ceiling_weekly),  color: "text-orange-700" },
-              { label: "Acumulado mês",        value: brl(resultado.accumulated.month),         color: "text-gray-900" },
-              { label: "Acumulado ano",        value: brl(resultado.accumulated.year),          color: "text-gray-900" },
+              { label: "Referência semanal", value: brl(resultado.corridors.reference_weekly), color: "text-primary" },
+              { label: "Teto semanal",        value: brl(resultado.corridors.ceiling_weekly),  color: "text-warning" },
+              { label: "Acumulado mês",        value: brl(resultado.accumulated.month),         color: "text-foreground" },
+              { label: "Acumulado ano",        value: brl(resultado.accumulated.year),          color: "text-foreground" },
             ].map(({ label, value, color }) => (
-              <div key={label} className="bg-white rounded-xl border border-gray-200 px-3 py-3 text-center">
-                <p className="text-xs text-gray-500 mb-1 leading-tight">{label}</p>
+              <div key={label} className="bg-card rounded-xl border border-border px-3 py-3 text-center">
+                <p className="text-xs text-muted-foreground mb-1 leading-tight">{label}</p>
                 <p className={`text-sm font-bold ${color}`}>{value}</p>
               </div>
             ))}
@@ -648,7 +648,7 @@ export default function WeeklyMonitorDashboard({
 
           {/* ALERTAS */}
           <div className="space-y-2">
-            <p className="text-xs font-bold text-gray-500 uppercase tracking-wide">Alertas</p>
+            <p className="text-xs font-bold text-muted-foreground uppercase tracking-wide">Alertas</p>
             {resultado.alerts.map((alerta, i) => {
               const cfg = ALERT_COLORS[alerta.level];
               const aberto = detalheAberto === i;
@@ -691,43 +691,43 @@ export default function WeeklyMonitorDashboard({
           {/* PROJEÇÃO MENSAL */}
           <div className={`rounded-xl border p-4 ${
             resultado.projection.on_track
-              ? "border-emerald-200 bg-emerald-50"
+              ? "border-success/20 bg-success/10"
               : resultado.projection.percent_of_limit > 105
-              ? "border-orange-200 bg-orange-50"
-              : "border-amber-200 bg-amber-50"
+              ? "border-warning/20 bg-warning/10"
+              : "border-warning/20 bg-warning/10"
           }`}>
-            <div className="flex items-center gap-2 text-sm font-semibold text-gray-700 mb-3">
+            <div className="flex items-center gap-2 text-sm font-semibold text-foreground mb-3">
               <BarChart3 className="w-4 h-4" />
               Projeção de Fechamento Mensal
             </div>
 
             <div className="grid grid-cols-3 gap-3 text-xs mb-3">
               <div className="text-center">
-                <p className="text-gray-500 mb-0.5">Projeção</p>
-                <p className="font-bold text-gray-900">{brl(resultado.projection.monthly_estimated)}</p>
+                <p className="text-muted-foreground mb-0.5">Projeção</p>
+                <p className="font-bold text-foreground">{brl(resultado.projection.monthly_estimated)}</p>
               </div>
               <div className="text-center">
-                <p className="text-gray-500 mb-0.5">Teto mensal</p>
-                <p className="font-bold text-orange-700">{brl(resultado.projection.monthly_limit)}</p>
+                <p className="text-muted-foreground mb-0.5">Teto mensal</p>
+                <p className="font-bold text-warning">{brl(resultado.projection.monthly_limit)}</p>
               </div>
               <div className="text-center">
-                <p className="text-gray-500 mb-0.5">Uso do teto</p>
-                <p className={`font-bold ${resultado.projection.percent_of_limit > 100 ? "text-red-700" : "text-gray-900"}`}>
+                <p className="text-muted-foreground mb-0.5">Uso do teto</p>
+                <p className={`font-bold ${resultado.projection.percent_of_limit > 100 ? "text-destructive" : "text-foreground"}`}>
                   {pct(resultado.projection.percent_of_limit)}
                 </p>
               </div>
             </div>
 
-            <div className="h-2.5 bg-gray-200 rounded-full overflow-hidden">
+            <div className="h-2.5 bg-border rounded-full overflow-hidden">
               <div
                 className={`h-full rounded-full transition-all duration-500 ${
                   resultado.projection.percent_of_limit > 100
-                    ? "bg-red-500"
+                    ? "bg-destructive"
                     : resultado.projection.percent_of_limit > 85
-                    ? "bg-orange-500"
+                    ? "bg-warning"
                     : resultado.projection.on_track
-                    ? "bg-emerald-500"
-                    : "bg-amber-500"
+                    ? "bg-success"
+                    : "bg-warning/100"
                 }`}
                 style={{ width: `${Math.min(100, resultado.projection.percent_of_limit)}%` }}
               />
@@ -736,8 +736,8 @@ export default function WeeklyMonitorDashboard({
 
           {/* BREAKDOWN POR CANAL */}
           {canalEntries.length > 0 && (
-            <div className="bg-white rounded-xl border border-gray-200 p-4">
-              <p className="text-xs font-bold text-gray-500 uppercase tracking-wide mb-3">
+            <div className="bg-card rounded-xl border border-border p-4">
+              <p className="text-xs font-bold text-muted-foreground uppercase tracking-wide mb-3">
                 Composição por Canal
               </p>
               <div className="space-y-2">
@@ -751,8 +751,8 @@ export default function WeeklyMonitorDashboard({
                     };
                     return (
                       <div key={canal} className="flex items-center gap-3">
-                        <span className="text-xs text-gray-600 w-20 flex-shrink-0">{labels[canal] ?? canal}</span>
-                        <div className="flex-1 h-2 bg-gray-100 rounded-full overflow-hidden">
+                        <span className="text-xs text-muted-foreground w-20 flex-shrink-0">{labels[canal] ?? canal}</span>
+                        <div className="flex-1 h-2 bg-muted rounded-full overflow-hidden">
                           <div
                             className="h-full rounded-full"
                             style={{
@@ -761,8 +761,8 @@ export default function WeeklyMonitorDashboard({
                             }}
                           />
                         </div>
-                        <span className="text-xs font-semibold text-gray-700 w-24 text-right flex-shrink-0">
-                          {brl(valor)} <span className="text-gray-400 font-normal">({pct(parcela)})</span>
+                        <span className="text-xs font-semibold text-foreground w-24 text-right flex-shrink-0">
+                          {brl(valor)} <span className="text-muted-foreground font-normal">({pct(parcela)})</span>
                         </span>
                       </div>
                     );

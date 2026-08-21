@@ -40,7 +40,7 @@ function whatsappUrlComContexto(mensagemBase: string): string {
 
 export default function CertificadoDigital() {
   return (
-    <div className="min-h-screen flex flex-col bg-white">
+    <div className="min-h-screen flex flex-col bg-card">
       <SEO
         title="Certificado Digital para Empresa e Pessoa Física"
         description="Emita seu Certificado Digital A1 ou A3 para empresa (CNPJ) ou pessoa física (CPF). Necessário para emissão de NF-e, e-Social, eSocial, SPED e acesso a sistemas governamentais."
@@ -56,7 +56,7 @@ export default function CertificadoDigital() {
       <Header />
 
       {/* HERO */}
-      <section className="bg-gradient-to-br from-[#1a5276] via-[#154360] to-[#0d2b45] text-white py-14 md:py-20 relative overflow-hidden">
+      <section className="bg-gradient-to-br from-[#1a5276] via-[#154360] to-[#0d2b45] text-primary-foreground py-14 md:py-20 relative overflow-hidden">
         <div className="absolute inset-0 opacity-10">
           <div className="absolute top-0 right-0 w-96 h-96 bg-cyan-400 rounded-full blur-3xl" />
           <div className="absolute bottom-0 left-0 w-96 h-96 bg-cyan-400 rounded-full blur-3xl" />
@@ -71,17 +71,17 @@ export default function CertificadoDigital() {
               Certificado Digital<br />
               <span className="text-cyan-400">para Empresa e PF</span>
             </h1>
-            <p className="text-lg md:text-xl text-white/90 mb-8 leading-relaxed">
+            <p className="text-lg md:text-xl text-primary-foreground/90 mb-8 leading-relaxed">
               Emita seu certificado digital com agilidade e segurança. Indispensável para emissão de nota fiscal eletrônica, acesso a sistemas governamentais e assinatura de documentos digitais.
             </p>
             <div className="flex flex-col sm:flex-row gap-4">
-              <Button asChild size="lg" className="bg-cyan-400 hover:bg-cyan-500 text-black font-bold px-8">
+              <Button asChild size="lg" className="bg-cyan-400 hover:bg-primary/100 text-foreground font-bold px-8">
                 <Link href="/captura?produto=certificado-digital">
                   Solicitar Certificado
                   <ArrowRight className="ml-2 h-5 w-5" />
                 </Link>
               </Button>
-              <Button asChild size="lg" variant="outline" className="border-white/40 text-white hover:bg-white/10 font-bold px-8">
+              <Button asChild size="lg" variant="outline" className="border-white/40 text-primary-foreground hover:bg-card/10 font-bold px-8">
                 <a href={whatsappUrlComContexto("Olá! Preciso de um certificado digital.")} target="_blank" rel="noopener noreferrer">
                   Falar com Especialista
                 </a>
@@ -92,15 +92,15 @@ export default function CertificadoDigital() {
       </section>
 
       {/* URGÊNCIA: certificado vencido/vencendo */}
-      <section className="py-10 bg-red-50 border-y border-red-100">
+      <section className="py-10 bg-destructive/10 border-y border-destructive/20">
         <div className="container px-4">
           <div className="max-w-4xl mx-auto flex flex-col sm:flex-row items-center gap-5 text-center sm:text-left">
-            <div className="w-14 h-14 rounded-2xl bg-red-100 flex items-center justify-center shrink-0">
-              <AlertTriangle className="h-7 w-7 text-red-600" />
+            <div className="w-14 h-14 rounded-2xl bg-destructive/20 flex items-center justify-center shrink-0">
+              <AlertTriangle className="h-7 w-7 text-destructive" />
             </div>
             <div>
-              <h2 className="text-lg font-bold text-gray-900">Sua operação não pode parar. Certificado vencido ou vencendo?</h2>
-              <p className="text-sm text-gray-600 mt-1">
+              <h2 className="text-lg font-bold text-foreground">Sua operação não pode parar. Certificado vencido ou vencendo?</h2>
+              <p className="text-sm text-muted-foreground mt-1">
                 Sem certificado válido, a empresa perde acesso à emissão de NF-e, ao e-CAC, ao eSocial e ao SPED. Se o seu já venceu ou vence nos próximos dias, fale com a gente antes que isso trave alguma obrigação.
               </p>
             </div>
@@ -109,28 +109,28 @@ export default function CertificadoDigital() {
       </section>
 
       {/* TIPOS DE CERTIFICADO */}
-      <section className="py-14 bg-white">
+      <section className="py-14 bg-card">
         <div className="container px-4">
           <div className="max-w-5xl mx-auto">
             <div className="text-center mb-12">
-              <h2 className="text-3xl font-bold text-gray-900 mb-4">Tipos de Certificado Digital</h2>
-              <p className="text-gray-600">Escolha o modelo ideal para sua necessidade</p>
+              <h2 className="text-3xl font-bold text-foreground mb-4">Tipos de Certificado Digital</h2>
+              <p className="text-muted-foreground">Escolha o modelo ideal para sua necessidade</p>
             </div>
             <div className="grid md:grid-cols-2 gap-8">
               {/* A1 */}
-              <div className="bg-white rounded-2xl border-2 border-blue-200 p-8 shadow-sm">
+              <div className="bg-card rounded-2xl border-2 border-primary/20 p-8 shadow-sm">
                 <div className="flex items-center gap-3 mb-6">
-                  <div className="w-12 h-12 rounded-xl bg-blue-100 flex items-center justify-center">
-                    <Laptop className="h-6 w-6 text-blue-600" />
+                  <div className="w-12 h-12 rounded-xl bg-primary/20 flex items-center justify-center">
+                    <Laptop className="h-6 w-6 text-primary" />
                   </div>
                   <div>
-                    <h3 className="text-2xl font-bold text-gray-900">Tipo A1</h3>
-                    <p className="text-sm text-gray-500">Arquivo digital no computador</p>
+                    <h3 className="text-2xl font-bold text-foreground">Tipo A1</h3>
+                    <p className="text-sm text-muted-foreground">Arquivo digital no computador</p>
                   </div>
                 </div>
-                <div className="mb-5 rounded-xl border border-blue-100 bg-blue-50/60 px-4 py-3">
-                  <p className="text-xs font-bold uppercase tracking-wide text-blue-700">Valor</p>
-                  <p className="text-sm text-blue-800">Sob consulta — resposta com o valor exato em minutos, sem compromisso.</p>
+                <div className="mb-5 rounded-xl border border-primary/20 bg-primary/10/60 px-4 py-3">
+                  <p className="text-xs font-bold uppercase tracking-wide text-primary">Valor</p>
+                  <p className="text-sm text-primary">Sob consulta — resposta com o valor exato em minutos, sem compromisso.</p>
                 </div>
                 <ul className="space-y-3 mb-6">
                   {[
@@ -141,17 +141,17 @@ export default function CertificadoDigital() {
                     "Instalação simples e rápida",
                     "Backup facilitado",
                   ].map((item) => (
-                    <li key={item} className="flex items-center gap-3 text-sm text-gray-700">
+                    <li key={item} className="flex items-center gap-3 text-sm text-foreground">
                       <CheckCircle2 className="h-4 w-4 text-green-500 flex-shrink-0" />
                       {item}
                     </li>
                   ))}
                 </ul>
-                <div className="bg-blue-50 rounded-xl p-4 mb-6">
-                  <p className="text-sm font-semibold text-blue-800">Ideal para:</p>
-                  <p className="text-sm text-blue-700">Empresas que emitem NF-e, acessam e-CAC, e-Social, SPED e sistemas governamentais com frequência.</p>
+                <div className="bg-primary/10 rounded-xl p-4 mb-6">
+                  <p className="text-sm font-semibold text-primary">Ideal para:</p>
+                  <p className="text-sm text-primary">Empresas que emitem NF-e, acessam e-CAC, e-Social, SPED e sistemas governamentais com frequência.</p>
                 </div>
-                <Button asChild className="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold">
+                <Button asChild className="w-full bg-primary hover:bg-primary text-primary-foreground font-bold">
                   <Link href="/captura?produto=certificado-digital">
                     Solicitar A1
                     <ArrowRight className="ml-2 h-4 w-4" />
@@ -160,19 +160,19 @@ export default function CertificadoDigital() {
               </div>
 
               {/* A3 */}
-              <div className="bg-white rounded-2xl border-2 border-purple-200 p-8 shadow-sm">
+              <div className="bg-card rounded-2xl border-2 border-primary/20 p-8 shadow-sm">
                 <div className="flex items-center gap-3 mb-6">
-                  <div className="w-12 h-12 rounded-xl bg-purple-100 flex items-center justify-center">
+                  <div className="w-12 h-12 rounded-xl bg-primary/20 flex items-center justify-center">
                     <CreditCard className="h-6 w-6 text-purple-600" />
                   </div>
                   <div>
-                    <h3 className="text-2xl font-bold text-gray-900">Tipo A3</h3>
-                    <p className="text-sm text-gray-500">Token USB ou cartão inteligente</p>
+                    <h3 className="text-2xl font-bold text-foreground">Tipo A3</h3>
+                    <p className="text-sm text-muted-foreground">Token USB ou cartão inteligente</p>
                   </div>
                 </div>
-                <div className="mb-5 rounded-xl border border-purple-100 bg-purple-50/60 px-4 py-3">
-                  <p className="text-xs font-bold uppercase tracking-wide text-purple-700">Valor</p>
-                  <p className="text-sm text-purple-800">Sob consulta — resposta com o valor exato em minutos, sem compromisso.</p>
+                <div className="mb-5 rounded-xl border border-purple-100 bg-primary/10/60 px-4 py-3">
+                  <p className="text-xs font-bold uppercase tracking-wide text-primary">Valor</p>
+                  <p className="text-sm text-primary">Sob consulta — resposta com o valor exato em minutos, sem compromisso.</p>
                 </div>
                 <ul className="space-y-3 mb-6">
                   {[
@@ -183,17 +183,17 @@ export default function CertificadoDigital() {
                     "Exigido em alguns sistemas governamentais",
                     "Ideal para assinatura de contratos",
                   ].map((item) => (
-                    <li key={item} className="flex items-center gap-3 text-sm text-gray-700">
+                    <li key={item} className="flex items-center gap-3 text-sm text-foreground">
                       <CheckCircle2 className="h-4 w-4 text-green-500 flex-shrink-0" />
                       {item}
                     </li>
                   ))}
                 </ul>
-                <div className="bg-purple-50 rounded-xl p-4 mb-6">
-                  <p className="text-sm font-semibold text-purple-800">Ideal para:</p>
-                  <p className="text-sm text-purple-700">Contadores, advogados, médicos, empresas que assinam contratos digitais e precisam de maior segurança.</p>
+                <div className="bg-primary/10 rounded-xl p-4 mb-6">
+                  <p className="text-sm font-semibold text-primary">Ideal para:</p>
+                  <p className="text-sm text-primary">Contadores, advogados, médicos, empresas que assinam contratos digitais e precisam de maior segurança.</p>
                 </div>
-                <Button asChild className="w-full bg-purple-600 hover:bg-purple-700 text-white font-bold">
+                <Button asChild className="w-full bg-purple-600 hover:bg-purple-700 text-primary-foreground font-bold">
                   <Link href="/captura?produto=certificado-digital">
                     Solicitar A3
                     <ArrowRight className="ml-2 h-4 w-4" />
@@ -206,17 +206,17 @@ export default function CertificadoDigital() {
       </section>
 
       {/* PARA QUEM É */}
-      <section className="py-14 bg-gray-50">
+      <section className="py-14 bg-muted">
         <div className="container px-4">
           <div className="max-w-5xl mx-auto">
             <div className="text-center mb-12">
-              <h2 className="text-3xl font-bold text-gray-900 mb-4">Para Quem é o Certificado Digital?</h2>
+              <h2 className="text-3xl font-bold text-foreground mb-4">Para Quem é o Certificado Digital?</h2>
             </div>
             <div className="grid md:grid-cols-2 gap-8">
-              <div className="bg-white rounded-2xl p-8 shadow-sm border border-gray-100">
+              <div className="bg-card rounded-2xl p-8 shadow-sm border border-border">
                 <div className="flex items-center gap-3 mb-6">
                   <Building2 className="h-8 w-8 text-[var(--color-caixa-blue)]" />
-                  <h3 className="text-xl font-bold text-gray-900">Para Empresas (e-CNPJ)</h3>
+                  <h3 className="text-xl font-bold text-foreground">Para Empresas (e-CNPJ)</h3>
                 </div>
                 <div className="space-y-3">
                   {[
@@ -229,17 +229,17 @@ export default function CertificadoDigital() {
                     "Participação em licitações eletrônicas",
                     "Acesso ao Portal do Simples Nacional",
                   ].map((item) => (
-                    <div key={item} className="flex items-center gap-3 text-sm text-gray-700">
+                    <div key={item} className="flex items-center gap-3 text-sm text-foreground">
                       <CheckCircle2 className="h-4 w-4 text-green-500 flex-shrink-0" />
                       {item}
                     </div>
                   ))}
                 </div>
               </div>
-              <div className="bg-white rounded-2xl p-8 shadow-sm border border-gray-100">
+              <div className="bg-card rounded-2xl p-8 shadow-sm border border-border">
                 <div className="flex items-center gap-3 mb-6">
                   <User className="h-8 w-8 text-[var(--color-caixa-blue)]" />
-                  <h3 className="text-xl font-bold text-gray-900">Para Pessoa Física (e-CPF)</h3>
+                  <h3 className="text-xl font-bold text-foreground">Para Pessoa Física (e-CPF)</h3>
                 </div>
                 <div className="space-y-3">
                   {[
@@ -252,7 +252,7 @@ export default function CertificadoDigital() {
                     "Acesso a cartórios digitais",
                     "Representação legal em sistemas governamentais",
                   ].map((item) => (
-                    <div key={item} className="flex items-center gap-3 text-sm text-gray-700">
+                    <div key={item} className="flex items-center gap-3 text-sm text-foreground">
                       <CheckCircle2 className="h-4 w-4 text-green-500 flex-shrink-0" />
                       {item}
                     </div>
@@ -265,12 +265,12 @@ export default function CertificadoDigital() {
       </section>
 
       {/* PROCESSO */}
-      <section className="py-14 bg-white">
+      <section className="py-14 bg-card">
         <div className="container px-4">
           <div className="max-w-4xl mx-auto">
             <div className="text-center mb-12">
-              <h2 className="text-3xl font-bold text-gray-900 mb-4">Como Funciona o Processo</h2>
-              <p className="text-gray-600">Simples, rápido e seguro</p>
+              <h2 className="text-3xl font-bold text-foreground mb-4">Como Funciona o Processo</h2>
+              <p className="text-muted-foreground">Simples, rápido e seguro</p>
             </div>
             <div className="grid md:grid-cols-4 gap-6">
               {[
@@ -280,12 +280,12 @@ export default function CertificadoDigital() {
                 { num: "4", icon: Star, title: "Entrega", desc: "Receba o certificado A1 por e-mail ou retire o token A3 presencialmente." },
               ].map((step) => (
                 <div key={step.num} className="text-center">
-                  <div className="w-14 h-14 rounded-full bg-[var(--color-caixa-blue)] text-white flex items-center justify-center font-bold text-xl mx-auto mb-4">
+                  <div className="w-14 h-14 rounded-full bg-[var(--color-caixa-blue)] text-primary-foreground flex items-center justify-center font-bold text-xl mx-auto mb-4">
                     {step.num}
                   </div>
                   <step.icon className="h-6 w-6 text-[var(--color-caixa-blue)] mx-auto mb-3" />
-                  <h3 className="font-bold text-gray-900 mb-2">{step.title}</h3>
-                  <p className="text-sm text-gray-600">{step.desc}</p>
+                  <h3 className="font-bold text-foreground mb-2">{step.title}</h3>
+                  <p className="text-sm text-muted-foreground">{step.desc}</p>
                 </div>
               ))}
             </div>
@@ -294,22 +294,22 @@ export default function CertificadoDigital() {
       </section>
 
       {/* VANTAGENS */}
-      <section className="py-14 bg-gray-50">
+      <section className="py-14 bg-muted">
         <div className="container px-4">
           <div className="max-w-4xl mx-auto">
-            <h2 className="text-3xl font-bold text-gray-900 text-center mb-12">Por que Emitir com a Destrava Crédito?</h2>
+            <h2 className="text-3xl font-bold text-foreground text-center mb-12">Por que Emitir com a Destrava Crédito?</h2>
             <div className="grid md:grid-cols-3 gap-6">
               {[
-                { icon: Clock, title: "Agilidade", desc: "Processo simplificado com orientação completa da nossa equipe do início ao fim.", color: "text-blue-600", bg: "bg-blue-50" },
+                { icon: Clock, title: "Agilidade", desc: "Processo simplificado com orientação completa da nossa equipe do início ao fim.", color: "text-primary", bg: "bg-primary/10" },
                 { icon: Shield, title: "Segurança", desc: "Trabalhamos com Autoridades Certificadoras credenciadas pelo ITI (ICP-Brasil).", color: "text-green-600", bg: "bg-green-50" },
                 { icon: Star, title: "Suporte", desc: "Acompanhamento completo após a emissão, incluindo renovação e suporte técnico.", color: "text-yellow-600", bg: "bg-yellow-50" },
               ].map((v) => (
-                <div key={v.title} className="bg-white rounded-2xl p-6 shadow-sm border border-gray-100 text-center">
+                <div key={v.title} className="bg-card rounded-2xl p-6 shadow-sm border border-border text-center">
                   <div className={`w-14 h-14 rounded-2xl ${v.bg} flex items-center justify-center mx-auto mb-4`}>
                     <v.icon className={`h-7 w-7 ${v.color}`} />
                   </div>
-                  <h3 className="font-bold text-gray-900 mb-3">{v.title}</h3>
-                  <p className="text-sm text-gray-600">{v.desc}</p>
+                  <h3 className="font-bold text-foreground mb-3">{v.title}</h3>
+                  <p className="text-sm text-muted-foreground">{v.desc}</p>
                 </div>
               ))}
             </div>
@@ -318,15 +318,15 @@ export default function CertificadoDigital() {
       </section>
 
       {/* FAQ */}
-      <section className="py-14 bg-white">
+      <section className="py-14 bg-card">
         <div className="container px-4">
           <div className="max-w-3xl mx-auto">
-            <h2 className="text-3xl font-bold text-gray-900 text-center mb-10">Perguntas Frequentes</h2>
+            <h2 className="text-3xl font-bold text-foreground text-center mb-10">Perguntas Frequentes</h2>
             <div className="space-y-4">
               {CERTIFICADO_FAQS.map((f) => (
-                <div key={f.question} className="rounded-2xl border border-gray-100 bg-gray-50 p-5">
-                  <h3 className="font-bold text-gray-900 mb-1.5">{f.question}</h3>
-                  <p className="text-sm text-gray-600 leading-relaxed">{f.answer}</p>
+                <div key={f.question} className="rounded-2xl border border-border bg-muted p-5">
+                  <h3 className="font-bold text-foreground mb-1.5">{f.question}</h3>
+                  <p className="text-sm text-muted-foreground leading-relaxed">{f.answer}</p>
                 </div>
               ))}
             </div>
@@ -335,21 +335,21 @@ export default function CertificadoDigital() {
       </section>
 
       {/* CTA */}
-      <section className="py-14 bg-gradient-to-br from-[#1a5276] to-[#0d2b45] text-white">
+      <section className="py-14 bg-gradient-to-br from-[#1a5276] to-[#0d2b45] text-primary-foreground">
         <div className="container px-4">
           <div className="max-w-2xl mx-auto text-center">
             <h2 className="text-3xl font-bold mb-4">Emita seu Certificado Digital Agora</h2>
-            <p className="text-white/90 mb-8 text-lg">
+            <p className="text-primary-foreground/90 mb-8 text-lg">
               Não deixe sua empresa sem o certificado digital. Regularize hoje mesmo com a ajuda da nossa equipe especializada.
             </p>
             <div className="flex flex-col sm:flex-row gap-4 justify-center">
-              <Button asChild size="lg" className="bg-cyan-400 hover:bg-cyan-500 text-black font-bold px-8">
+              <Button asChild size="lg" className="bg-cyan-400 hover:bg-primary/100 text-foreground font-bold px-8">
                 <Link href="/captura?produto=certificado-digital">
                   Solicitar Agora
                   <ArrowRight className="ml-2 h-5 w-5" />
                 </Link>
               </Button>
-              <Button asChild size="lg" variant="outline" className="border-white/40 text-white hover:bg-white/10 font-bold px-8">
+              <Button asChild size="lg" variant="outline" className="border-white/40 text-primary-foreground hover:bg-card/10 font-bold px-8">
                 <a href={whatsappUrlComContexto("Olá! Preciso de um certificado digital.")} target="_blank" rel="noopener noreferrer">
                   Falar no WhatsApp
                 </a>

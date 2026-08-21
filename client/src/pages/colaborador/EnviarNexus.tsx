@@ -60,9 +60,9 @@ interface Props {
 // ─── Utilitários ──────────────────────────────────────────────────────────────
 
 const PRIORIDADE_CFG: Record<string, { label: string; color: string; bg: string }> = {
-  alta:  { label: "Alta",  color: "text-red-700",   bg: "bg-red-50 border-red-200" },
-  media: { label: "Média", color: "text-amber-700", bg: "bg-amber-50 border-amber-200" },
-  baixa: { label: "Baixa", color: "text-slate-600", bg: "bg-slate-50 border-slate-200" },
+  alta:  { label: "Alta",  color: "text-destructive",   bg: "bg-destructive/10 border-destructive/20" },
+  media: { label: "Média", color: "text-warning", bg: "bg-warning/10 border-warning/20" },
+  baixa: { label: "Baixa", color: "text-muted-foreground", bg: "bg-muted border-border" },
 };
 
 // Sprint 8: idempotencyKey gerada server-side. Função mantida apenas para compatibilidade.
@@ -77,11 +77,11 @@ function StatusIntegracao({ config }: { config: ConfiguracaoNexus | null }) {
 
   if (!config.algumConfigurado) {
     return (
-      <div className="flex items-start gap-2 p-3 rounded-lg bg-amber-50 border border-amber-200">
-        <AlertTriangle className="w-4 h-4 text-amber-600 shrink-0 mt-0.5" />
+      <div className="flex items-start gap-2 p-3 rounded-lg bg-warning/10 border border-warning/20">
+        <AlertTriangle className="w-4 h-4 text-warning shrink-0 mt-0.5" />
         <div>
-          <p className="text-xs font-semibold text-amber-800">Integração não configurada</p>
-          <p className="text-xs text-amber-700 mt-0.5">{config.mensagemStatus}</p>
+          <p className="text-xs font-semibold text-warning">Integração não configurada</p>
+          <p className="text-xs text-warning mt-0.5">{config.mensagemStatus}</p>
         </div>
       </div>
     );
@@ -89,9 +89,9 @@ function StatusIntegracao({ config }: { config: ConfiguracaoNexus | null }) {
 
   const destinoLabel = config.destino === "nexus" ? "Nexus" : "n8n";
   return (
-    <div className="flex items-center gap-2 p-2.5 rounded-lg bg-emerald-50 border border-emerald-200">
-      <div className="w-2 h-2 rounded-full bg-emerald-500 shrink-0" />
-      <p className="text-xs font-semibold text-emerald-700">
+    <div className="flex items-center gap-2 p-2.5 rounded-lg bg-success/10 border border-success/20">
+      <div className="w-2 h-2 rounded-full bg-success shrink-0" />
+      <p className="text-xs font-semibold text-success">
         Integração {destinoLabel} ativa e pronta para uso
       </p>
     </div>
@@ -117,52 +117,52 @@ function ModalConfirmacao({
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm p-4">
-      <div className="bg-white rounded-2xl shadow-2xl border border-slate-200 w-full max-w-md">
+      <div className="bg-card rounded-2xl shadow-2xl border border-border w-full max-w-md">
         {/* Header */}
-        <div className="flex items-center gap-3 p-4 border-b border-slate-100">
-          <div className="w-9 h-9 rounded-xl bg-blue-600 flex items-center justify-center shrink-0">
-            <Zap className="w-4.5 h-4.5 text-white" />
+        <div className="flex items-center gap-3 p-4 border-b border-border">
+          <div className="w-9 h-9 rounded-xl bg-primary flex items-center justify-center shrink-0">
+            <Zap className="w-4.5 h-4.5 text-primary-foreground" />
           </div>
           <div>
-            <h3 className="text-sm font-black text-slate-900">Criar tarefa no {destinoLabel}</h3>
-            <p className="text-xs text-slate-500">Confirme antes de enviar</p>
+            <h3 className="text-sm font-black text-foreground">Criar tarefa no {destinoLabel}</h3>
+            <p className="text-xs text-muted-foreground">Confirme antes de enviar</p>
           </div>
         </div>
 
         {/* Corpo */}
         <div className="p-4 space-y-3">
           {/* Aviso de confirmação */}
-          <div className="flex items-start gap-2 p-3 rounded-lg bg-blue-50 border border-blue-200">
-            <Info className="w-4 h-4 text-blue-600 shrink-0 mt-0.5" />
-            <p className="text-xs text-blue-800">
+          <div className="flex items-start gap-2 p-3 rounded-lg bg-primary/10 border border-primary/20">
+            <Info className="w-4 h-4 text-primary shrink-0 mt-0.5" />
+            <p className="text-xs text-primary">
               Esta ação criará uma tarefa no <strong>{destinoLabel}</strong> para a equipe resolver
               a pendência abaixo. A tarefa não será duplicada se já tiver sido enviada hoje.
             </p>
           </div>
 
           {/* Dados da tarefa */}
-          <div className="rounded-xl border border-slate-200 bg-slate-50 p-3 space-y-2">
+          <div className="rounded-xl border border-border bg-muted p-3 space-y-2">
             <div className="flex items-start justify-between gap-2">
-              <span className="text-xs text-slate-500 shrink-0">Empresa</span>
-              <span className="text-xs font-semibold text-slate-800 text-right">{razaoSocial}</span>
+              <span className="text-xs text-muted-foreground shrink-0">Empresa</span>
+              <span className="text-xs font-semibold text-foreground text-right">{razaoSocial}</span>
             </div>
             <div className="flex items-start justify-between gap-2">
-              <span className="text-xs text-slate-500 shrink-0">Tarefa</span>
-              <span className="text-xs font-semibold text-slate-800 text-right">{pendencia.titulo}</span>
+              <span className="text-xs text-muted-foreground shrink-0">Tarefa</span>
+              <span className="text-xs font-semibold text-foreground text-right">{pendencia.titulo}</span>
             </div>
             <div className="flex items-start justify-between gap-2">
-              <span className="text-xs text-slate-500 shrink-0">Categoria</span>
-              <span className="text-xs font-semibold text-slate-800 text-right capitalize">{pendencia.categoria}</span>
+              <span className="text-xs text-muted-foreground shrink-0">Categoria</span>
+              <span className="text-xs font-semibold text-foreground text-right capitalize">{pendencia.categoria}</span>
             </div>
             <div className="flex items-start justify-between gap-2">
-              <span className="text-xs text-slate-500 shrink-0">Prioridade</span>
+              <span className="text-xs text-muted-foreground shrink-0">Prioridade</span>
               <span className={`text-xs font-bold px-2 py-0.5 rounded-full border ${priorCfg.bg} ${priorCfg.color}`}>
                 {priorCfg.label}
               </span>
             </div>
             <div className="flex items-start justify-between gap-2">
-              <span className="text-xs text-slate-500 shrink-0">Ação</span>
-              <span className="text-xs font-semibold text-slate-800 text-right">{pendencia.acaoRecomendada}</span>
+              <span className="text-xs text-muted-foreground shrink-0">Ação</span>
+              <span className="text-xs font-semibold text-foreground text-right">{pendencia.acaoRecomendada}</span>
             </div>
           </div>
         </div>
@@ -172,14 +172,14 @@ function ModalConfirmacao({
           <button
             onClick={onCancelar}
             disabled={enviando}
-            className="flex-1 px-4 py-2.5 text-sm font-semibold text-slate-700 bg-slate-100 hover:bg-slate-200 rounded-xl transition-colors disabled:opacity-50"
+            className="flex-1 px-4 py-2.5 text-sm font-semibold text-foreground bg-muted hover:bg-muted rounded-xl transition-colors disabled:opacity-50"
           >
             Cancelar
           </button>
           <button
             onClick={onConfirmar}
             disabled={enviando}
-            className="flex-1 flex items-center justify-center gap-2 px-4 py-2.5 text-sm font-bold text-white bg-blue-600 hover:bg-blue-700 rounded-xl transition-colors disabled:opacity-50"
+            className="flex-1 flex items-center justify-center gap-2 px-4 py-2.5 text-sm font-bold text-primary-foreground bg-primary hover:bg-primary rounded-xl transition-colors disabled:opacity-50"
           >
             {enviando ? (
               <>
@@ -283,7 +283,7 @@ export default function EnviarNexus({ empresaId, pendencias, onEnviado }: Props)
 
   if (loadingConfig) {
     return (
-      <div className="flex items-center gap-2 p-3 text-slate-400">
+      <div className="flex items-center gap-2 p-3 text-muted-foreground">
         <Loader2 className="w-4 h-4 animate-spin" />
         <span className="text-xs">Verificando integração Nexus...</span>
       </div>
@@ -292,9 +292,9 @@ export default function EnviarNexus({ empresaId, pendencias, onEnviado }: Props)
 
   if (!pendencias || pendencias.length === 0) {
     return (
-      <div className="flex items-center gap-2 p-3 rounded-xl bg-emerald-50 border border-emerald-200">
-        <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
-        <p className="text-xs font-semibold text-emerald-700">
+      <div className="flex items-center gap-2 p-3 rounded-xl bg-success/10 border border-success/20">
+        <CheckCircle2 className="w-4 h-4 text-success shrink-0" />
+        <p className="text-xs font-semibold text-success">
           Nenhuma pendência identificada para envio ao Nexus.
         </p>
       </div>
@@ -316,25 +316,25 @@ export default function EnviarNexus({ empresaId, pendencias, onEnviado }: Props)
         />
       )}
 
-      <div className="rounded-2xl border border-slate-200 bg-white overflow-hidden">
+      <div className="rounded-2xl border border-border bg-card overflow-hidden">
         {/* Header */}
-        <div className="flex items-center justify-between p-4 border-b border-slate-100">
+        <div className="flex items-center justify-between p-4 border-b border-border">
           <div className="flex items-center gap-2">
-            <div className="w-7 h-7 rounded-lg bg-blue-100 flex items-center justify-center shrink-0">
-              <Zap className="w-3.5 h-3.5 text-blue-600" />
+            <div className="w-7 h-7 rounded-lg bg-primary/20 flex items-center justify-center shrink-0">
+              <Zap className="w-3.5 h-3.5 text-primary" />
             </div>
             <div>
-              <h3 className="text-sm font-bold text-slate-800">
+              <h3 className="text-sm font-bold text-foreground">
                 Criar Tarefas no {destinoLabel}
               </h3>
-              <p className="text-[11px] text-slate-500">
+              <p className="text-[11px] text-muted-foreground">
                 {pendencias.length} pendência{pendencias.length !== 1 ? "s" : ""} disponível{pendencias.length !== 1 ? "is" : ""}
               </p>
             </div>
           </div>
           <button
             onClick={carregarConfig}
-            className="p-1.5 text-slate-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"
+            className="p-1.5 text-muted-foreground hover:text-primary hover:bg-primary/10 rounded-lg transition-colors"
             title="Verificar status da integração"
           >
             <RefreshCw className="w-3.5 h-3.5" />
@@ -357,10 +357,10 @@ export default function EnviarNexus({ empresaId, pendencias, onEnviado }: Props)
                     key={p.pendenciaId}
                     className={`rounded-xl border p-3 transition-colors ${
                       resultado?.sucesso
-                        ? "bg-emerald-50 border-emerald-200"
+                        ? "bg-success/10 border-success/20"
                         : resultado && !resultado.sucesso
-                        ? "bg-red-50 border-red-200"
-                        : "bg-white border-slate-200 hover:border-slate-300"
+                        ? "bg-destructive/10 border-destructive/20"
+                        : "bg-card border-border hover:border-input"
                     }`}
                   >
                     <div className="flex items-start justify-between gap-2">
@@ -369,14 +369,14 @@ export default function EnviarNexus({ empresaId, pendencias, onEnviado }: Props)
                           <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded-full border ${priorCfg.bg} ${priorCfg.color}`}>
                             {priorCfg.label}
                           </span>
-                          <span className="text-[10px] text-slate-500 capitalize">{p.categoria}</span>
+                          <span className="text-[10px] text-muted-foreground capitalize">{p.categoria}</span>
                         </div>
-                        <p className="text-xs font-semibold text-slate-800 leading-tight">{p.titulo}</p>
-                        <p className="text-[11px] text-slate-500 mt-0.5 line-clamp-2">{p.descricao}</p>
+                        <p className="text-xs font-semibold text-foreground leading-tight">{p.titulo}</p>
+                        <p className="text-[11px] text-muted-foreground mt-0.5 line-clamp-2">{p.descricao}</p>
 
                         {/* Resultado do envio */}
                         {resultado && (
-                          <div className={`flex items-start gap-1.5 mt-2 ${resultado.sucesso ? "text-emerald-700" : "text-red-700"}`}>
+                          <div className={`flex items-start gap-1.5 mt-2 ${resultado.sucesso ? "text-success" : "text-destructive"}`}>
                             {resultado.sucesso ? (
                               <CheckCircle2 className="w-3.5 h-3.5 shrink-0 mt-0.5" />
                             ) : (
@@ -392,7 +392,7 @@ export default function EnviarNexus({ empresaId, pendencias, onEnviado }: Props)
                       {/* Botão de envio */}
                       <div className="shrink-0">
                         {resultado?.sucesso || resultado?.jaEnviado ? (
-                          <div className="flex items-center gap-1 text-emerald-600">
+                          <div className="flex items-center gap-1 text-success">
                             <CheckCircle2 className="w-4 h-4" />
                             <span className="text-[10px] font-bold">Enviado</span>
                           </div>
@@ -400,7 +400,7 @@ export default function EnviarNexus({ empresaId, pendencias, onEnviado }: Props)
                           <button
                             onClick={() => setPendenciaSelecionada(p)}
                             disabled={!config.algumConfigurado || enviando}
-                            className="flex items-center gap-1.5 px-2.5 py-1.5 text-xs font-bold text-white bg-blue-600 hover:bg-blue-700 rounded-lg transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+                            className="flex items-center gap-1.5 px-2.5 py-1.5 text-xs font-bold text-primary-foreground bg-primary hover:bg-primary rounded-lg transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
                           >
                             <Send className="w-3 h-3" />
                             {destinoLabel}
@@ -416,7 +416,7 @@ export default function EnviarNexus({ empresaId, pendencias, onEnviado }: Props)
               {pendencias.length > 5 && (
                 <button
                   onClick={() => setExpandido(e => !e)}
-                  className="w-full text-xs font-semibold text-blue-600 hover:text-blue-700 py-1.5 text-center transition-colors"
+                  className="w-full text-xs font-semibold text-primary hover:text-primary py-1.5 text-center transition-colors"
                 >
                   {expandido
                     ? "Mostrar menos"
@@ -428,11 +428,11 @@ export default function EnviarNexus({ empresaId, pendencias, onEnviado }: Props)
 
           {/* Aviso de não configurado com instrução */}
           {!config?.algumConfigurado && (
-            <div className="flex items-start gap-2 p-3 rounded-lg bg-slate-50 border border-slate-200">
-              <ShieldAlert className="w-4 h-4 text-slate-400 shrink-0 mt-0.5" />
+            <div className="flex items-start gap-2 p-3 rounded-lg bg-muted border border-border">
+              <ShieldAlert className="w-4 h-4 text-muted-foreground shrink-0 mt-0.5" />
               <div>
-                <p className="text-xs font-semibold text-slate-700">Como configurar a integração</p>
-                <p className="text-xs text-slate-500 mt-1">
+                <p className="text-xs font-semibold text-foreground">Como configurar a integração</p>
+                <p className="text-xs text-muted-foreground mt-1">
                   Adicione <code className="bg-slate-200 px-1 rounded text-[10px]">NEXUS_WEBHOOK_URL</code> ou{" "}
                   <code className="bg-slate-200 px-1 rounded text-[10px]">N8N_WEBHOOK_URL</code> nas variáveis
                   de ambiente do servidor Destrava. Opcionalmente, adicione{" "}

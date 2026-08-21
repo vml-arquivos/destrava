@@ -116,10 +116,10 @@ function qualificacaoLabel(code: string | number): string {
 
 function situacaoCor(s: string): string {
   const u = s.toUpperCase();
-  if (u.includes('ATIVA')) return 'bg-emerald-100 text-emerald-700 border-emerald-200';
-  if (u.includes('SUSPENSA') || u.includes('INAPTA')) return 'bg-amber-100 text-amber-700 border-amber-200';
-  if (u.includes('BAIXADA') || u.includes('CANCELADA')) return 'bg-red-100 text-red-700 border-red-200';
-  return 'bg-blue-100 text-blue-700 border-blue-200';
+  if (u.includes('ATIVA')) return 'bg-success/20 text-success border-success/20';
+  if (u.includes('SUSPENSA') || u.includes('INAPTA')) return 'bg-warning/20 text-warning border-warning/20';
+  if (u.includes('BAIXADA') || u.includes('CANCELADA')) return 'bg-destructive/20 text-destructive border-destructive/20';
+  return 'bg-primary/20 text-primary border-primary/20';
 }
 
 function formatFileSize(bytes: number): string {
@@ -130,17 +130,17 @@ function formatFileSize(bytes: number): string {
 
 // ─── Sub-componentes ──────────────────────────────────────────────────────────
 const inputClass =
-  'h-10 px-3 rounded-xl border border-slate-200 bg-white text-sm text-slate-900 ' +
-  'focus:outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100 ' +
-  'transition-all placeholder:text-slate-400 shadow-sm';
+  'h-10 px-3 rounded-xl border border-border bg-white text-sm text-foreground ' +
+  'focus:outline-none focus:border-primary focus:ring-2 focus:ring-primary/20 ' +
+  'transition-all placeholder:text-muted-foreground shadow-sm';
 
 function Field({ label, required, children }: {
   label: string; required?: boolean; children: React.ReactNode;
 }) {
   return (
     <div className="flex flex-col gap-1.5">
-      <label className="text-xs font-semibold text-slate-500 tracking-wide uppercase">
-        {label}{required && <span className="text-red-500 ml-0.5">*</span>}
+      <label className="text-xs font-semibold text-muted-foreground tracking-wide uppercase">
+        {label}{required && <span className="text-destructive ml-0.5">*</span>}
       </label>
       {children}
     </div>
@@ -152,9 +152,9 @@ function StepIndicator({ step, current }: { step: number; current: number }) {
   const active = current === step;
   return (
     <div className={`w-9 h-9 rounded-full flex items-center justify-center text-sm font-bold border-2 transition-all ${
-      done ? 'bg-blue-600 border-blue-600 text-white' :
-      active ? 'bg-white border-blue-600 text-blue-600' :
-      'bg-white border-slate-200 text-slate-400'
+      done ? 'bg-primary border-primary text-white' :
+      active ? 'bg-white border-primary text-primary' :
+      'bg-white border-border text-muted-foreground'
     }`}>
       {done ? <Check className="w-4 h-4" /> : step}
     </div>
@@ -173,30 +173,30 @@ function SocioCard({ socio, selected, onToggle }: {
       onClick={onToggle}
       className={`relative flex items-start gap-3 p-4 rounded-xl border-2 cursor-pointer transition-all select-none ${
         selected
-          ? 'border-blue-500 bg-blue-50 shadow-sm'
-          : 'border-slate-200 bg-white hover:border-blue-200 hover:bg-slate-50'
+          ? 'border-primary/70 bg-primary/10 shadow-sm'
+          : 'border-border bg-white hover:border-primary/20 hover:bg-muted'
       }`}
     >
       {selected && (
-        <div className="absolute top-2 right-2 w-5 h-5 rounded-full bg-blue-600 flex items-center justify-center">
+        <div className="absolute top-2 right-2 w-5 h-5 rounded-full bg-primary flex items-center justify-center">
           <Check className="w-3 h-3 text-white" />
         </div>
       )}
-      <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-blue-500 to-blue-700 flex items-center justify-center text-white font-bold text-base shrink-0">
+      <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-primary to-primary/90 flex items-center justify-center text-white font-bold text-base shrink-0">
         {initial}
       </div>
       <div className="flex-1 min-w-0">
-        <p className="text-sm font-bold text-slate-800 truncate">{socio.nome_socio}</p>
-        <span className="inline-block text-xs font-semibold px-2 py-0.5 rounded-full bg-blue-100 text-blue-700 border border-blue-200 mt-1">
+        <p className="text-sm font-bold text-foreground truncate">{socio.nome_socio}</p>
+        <span className="inline-block text-xs font-semibold px-2 py-0.5 rounded-full bg-primary/20 text-primary border border-primary/20 mt-1">
           {qual}
         </span>
         {socio.cnpj_cpf_do_socio && (
-          <p className="text-xs text-slate-400 font-mono mt-1">
+          <p className="text-xs text-muted-foreground font-mono mt-1">
             CPF: {socio.cnpj_cpf_do_socio.replace(/(\d{3})(\d{3})(\d{3})(\d{2})/, '$1.***.***-$4')}
           </p>
         )}
         {socio.data_entrada_sociedade && (
-          <p className="text-xs text-slate-400 mt-0.5">
+          <p className="text-xs text-muted-foreground mt-0.5">
             Entrada: {new Date(socio.data_entrada_sociedade).toLocaleDateString('pt-BR')}
           </p>
         )}
@@ -466,12 +466,12 @@ export default function CadastroEmpresa() {
   if (saved) {
     return (
       <div className="max-w-2xl mx-auto p-8 text-center space-y-6">
-        <div className="w-20 h-20 rounded-full bg-emerald-100 flex items-center justify-center mx-auto">
-          <CheckCircle className="w-10 h-10 text-emerald-600" />
+        <div className="w-20 h-20 rounded-full bg-success/20 flex items-center justify-center mx-auto">
+          <CheckCircle className="w-10 h-10 text-success" />
         </div>
         <div>
-          <h2 className="text-2xl font-bold text-slate-800">Empresa cadastrada!</h2>
-          <p className="text-slate-500 mt-2">
+          <h2 className="text-2xl font-bold text-foreground">Empresa cadastrada!</h2>
+          <p className="text-muted-foreground mt-2">
             <strong>{form.razao_social}</strong> foi salva com sucesso.
             {socios.filter((_, i) => sociosSelecionados.has(i)).length > 0 && (
               <> {socios.filter((_, i) => sociosSelecionados.has(i)).length} sócio(s) importado(s).</>
@@ -484,14 +484,14 @@ export default function CadastroEmpresa() {
         <div className="flex gap-3 justify-center">
           <button
             onClick={handleReset}
-            className="px-5 py-2.5 bg-blue-600 text-white rounded-xl text-sm font-semibold hover:bg-blue-700 transition-colors"
+            className="px-5 py-2.5 bg-primary text-white rounded-xl text-sm font-semibold hover:bg-primary/90 transition-colors"
           >
             Cadastrar outra empresa
           </button>
           {empresaId && (
             <a
               href={`/colaborador/empresas`}
-              className="px-5 py-2.5 border border-slate-200 text-slate-700 rounded-xl text-sm font-semibold hover:bg-slate-50 transition-colors"
+              className="px-5 py-2.5 border border-border text-muted-foreground rounded-xl text-sm font-semibold hover:bg-muted transition-colors"
             >
               Ver empresas
             </a>
@@ -505,11 +505,11 @@ export default function CadastroEmpresa() {
     <div className="max-w-3xl mx-auto p-6 space-y-8">
       {/* Header */}
       <div>
-        <h1 className="text-2xl font-bold text-slate-800 flex items-center gap-2">
-          <Building2 className="w-6 h-6 text-blue-600" />
+        <h1 className="text-2xl font-bold text-foreground flex items-center gap-2">
+          <Building2 className="w-6 h-6 text-primary" />
           Smart Onboarding
         </h1>
-        <p className="text-sm text-slate-500 mt-1">
+        <p className="text-sm text-muted-foreground mt-1">
           Cadastro inteligente de empresa com preenchimento automático via CNPJ
         </p>
       </div>
@@ -524,12 +524,12 @@ export default function CadastroEmpresa() {
           <div key={n} className="flex items-center flex-1">
             <div className="flex flex-col items-center gap-1">
               <StepIndicator step={n} current={step} />
-              <span className={`text-xs font-medium ${step === n ? 'text-blue-600' : 'text-slate-400'}`}>
+              <span className={`text-xs font-medium ${step === n ? 'text-primary' : 'text-muted-foreground'}`}>
                 {label}
               </span>
             </div>
             {idx < 2 && (
-              <div className={`flex-1 h-0.5 mx-2 mb-4 ${step > n ? 'bg-blue-600' : 'bg-slate-200'}`} />
+              <div className={`flex-1 h-0.5 mx-2 mb-4 ${step > n ? 'bg-primary' : 'bg-muted'}`} />
             )}
           </div>
         ))}
@@ -539,10 +539,10 @@ export default function CadastroEmpresa() {
       {step === 1 && (
         <div className="space-y-6">
           {/* CNPJ */}
-          <div className="p-6 rounded-2xl border border-slate-200 bg-white shadow-sm space-y-4">
+          <div className="p-6 rounded-2xl border border-border bg-white shadow-sm space-y-4">
             <div className="flex items-center gap-2 mb-2">
-              <Search className="w-4 h-4 text-blue-600" />
-              <span className="text-sm font-bold text-slate-700">Consulta de CNPJ</span>
+              <Search className="w-4 h-4 text-primary" />
+              <span className="text-sm font-bold text-muted-foreground">Consulta de CNPJ</span>
             </div>
             <Field label="CNPJ" required>
               <div className="relative">
@@ -555,33 +555,33 @@ export default function CadastroEmpresa() {
                   maxLength={18}
                 />
                 <div className="absolute right-3 top-1/2 -translate-y-1/2">
-                  {cnpjStatus === 'loading' && <Loader2 className="w-4 h-4 text-blue-500 animate-spin" />}
-                  {cnpjStatus === 'found' && <CheckCircle className="w-4 h-4 text-emerald-500" />}
-                  {cnpjStatus === 'error' && <AlertCircle className="w-4 h-4 text-red-500" />}
+                  {cnpjStatus === 'loading' && <Loader2 className="w-4 h-4 text-primary animate-spin" />}
+                  {cnpjStatus === 'found' && <CheckCircle className="w-4 h-4 text-success" />}
+                  {cnpjStatus === 'error' && <AlertCircle className="w-4 h-4 text-destructive" />}
                 </div>
               </div>
-              {cnpjError && <p className="text-xs text-red-500 mt-1">{cnpjError}</p>}
+              {cnpjError && <p className="text-xs text-destructive mt-1">{cnpjError}</p>}
               {cnpjStatus === 'found' && (
-                <p className="text-xs text-emerald-600 mt-1 flex items-center gap-1">
+                <p className="text-xs text-success mt-1 flex items-center gap-1">
                   <CheckCircle className="w-3 h-3" /> Dados preenchidos automaticamente
                 </p>
               )}
               {isManualFallbackAvailable && !manualMode && (
-                <div className="mt-3 rounded-xl border border-amber-200 bg-amber-50 p-3">
-                  <p className="text-xs text-amber-800">
+                <div className="mt-3 rounded-xl border border-warning/20 bg-warning/10 p-3">
+                  <p className="text-xs text-warning">
                     Não foi possível obter os dados automaticamente agora. Você pode continuar com o cadastro manual, sem alterar a consulta automática.
                   </p>
                   <button
                     type="button"
                     onClick={handleEnableManualMode}
-                    className="mt-2 text-xs font-semibold text-amber-900 underline underline-offset-2 hover:text-amber-700"
+                    className="mt-2 text-xs font-semibold text-warning underline underline-offset-2 hover:text-warning"
                   >
                     Continuar cadastro manualmente
                   </button>
                 </div>
               )}
               {manualMode && (
-                <p className="text-xs text-amber-700 mt-1 flex items-center gap-1">
+                <p className="text-xs text-warning mt-1 flex items-center gap-1">
                   <AlertCircle className="w-3 h-3" /> Modo manual ativado. Preencha os dados disponíveis.
                 </p>
               )}
@@ -597,7 +597,7 @@ export default function CadastroEmpresa() {
                     {form.situacao}
                   </span>
                   {form.porte && (
-                    <span className="text-xs font-semibold px-3 py-1 rounded-full border border-slate-200 bg-slate-50 text-slate-600">
+                    <span className="text-xs font-semibold px-3 py-1 rounded-full border border-border bg-muted text-muted-foreground">
                       {form.porte}
                     </span>
                   )}
@@ -605,10 +605,10 @@ export default function CadastroEmpresa() {
               )}
 
               {/* Dados Fiscais */}
-              <div className="p-6 rounded-2xl border border-slate-200 bg-white shadow-sm space-y-4">
+              <div className="p-6 rounded-2xl border border-border bg-white shadow-sm space-y-4">
                 <div className="flex items-center gap-2 mb-1">
-                  <Briefcase className="w-4 h-4 text-blue-600" />
-                  <span className="text-sm font-bold text-slate-700">Dados Fiscais</span>
+                  <Briefcase className="w-4 h-4 text-primary" />
+                  <span className="text-sm font-bold text-muted-foreground">Dados Fiscais</span>
                 </div>
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   <Field label="Razão Social" required>
@@ -679,10 +679,10 @@ export default function CadastroEmpresa() {
               </div>
 
               {/* Contato */}
-              <div className="p-6 rounded-2xl border border-slate-200 bg-white shadow-sm space-y-4">
+              <div className="p-6 rounded-2xl border border-border bg-white shadow-sm space-y-4">
                 <div className="flex items-center gap-2 mb-1">
-                  <Phone className="w-4 h-4 text-blue-600" />
-                  <span className="text-sm font-bold text-slate-700">Contato</span>
+                  <Phone className="w-4 h-4 text-primary" />
+                  <span className="text-sm font-bold text-muted-foreground">Contato</span>
                 </div>
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   <Field label="E-mail">
@@ -698,10 +698,10 @@ export default function CadastroEmpresa() {
               </div>
 
               {/* Endereço */}
-              <div className="p-6 rounded-2xl border border-slate-200 bg-white shadow-sm space-y-4">
+              <div className="p-6 rounded-2xl border border-border bg-white shadow-sm space-y-4">
                 <div className="flex items-center gap-2 mb-1">
-                  <MapPin className="w-4 h-4 text-blue-600" />
-                  <span className="text-sm font-bold text-slate-700">Endereço</span>
+                  <MapPin className="w-4 h-4 text-primary" />
+                  <span className="text-sm font-bold text-muted-foreground">Endereço</span>
                 </div>
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   <Field label="CEP">
@@ -709,7 +709,7 @@ export default function CadastroEmpresa() {
                       <input className={`${inputClass} w-full`} value={form.cep}
                         onChange={handleCep} placeholder="00000-000" inputMode="numeric" maxLength={9} />
                       {cepLoading && (
-                        <Loader2 className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-blue-500 animate-spin" />
+                        <Loader2 className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-primary animate-spin" />
                       )}
                     </div>
                   </Field>
@@ -742,10 +742,10 @@ export default function CadastroEmpresa() {
               </div>
 
               {/* Responsável */}
-              <div className="p-6 rounded-2xl border border-slate-200 bg-white shadow-sm space-y-4">
+              <div className="p-6 rounded-2xl border border-border bg-white shadow-sm space-y-4">
                 <div className="flex items-center gap-2 mb-1">
-                  <User className="w-4 h-4 text-blue-600" />
-                  <span className="text-sm font-bold text-slate-700">Responsável Legal</span>
+                  <User className="w-4 h-4 text-primary" />
+                  <span className="text-sm font-bold text-muted-foreground">Responsável Legal</span>
                 </div>
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   <Field label="Nome">
@@ -780,7 +780,7 @@ export default function CadastroEmpresa() {
             <button
               onClick={goToStep2}
               disabled={cnpjStatus !== 'found' && !manualMode}
-              className="flex items-center gap-2 px-6 py-2.5 bg-blue-600 text-white rounded-xl text-sm font-semibold hover:bg-blue-700 disabled:opacity-40 disabled:cursor-not-allowed transition-colors shadow-sm"
+              className="flex items-center gap-2 px-6 py-2.5 bg-primary text-white rounded-xl text-sm font-semibold hover:bg-primary/90 disabled:opacity-40 disabled:cursor-not-allowed transition-colors shadow-sm"
             >
               Próximo: Sócios
               <ChevronRight className="w-4 h-4" />
@@ -792,21 +792,21 @@ export default function CadastroEmpresa() {
       {/* ─── PASSO 2: Sócios (QSA) ──────────────────────────────────────────── */}
       {step === 2 && (
         <div className="space-y-6">
-          <div className="p-6 rounded-2xl border border-slate-200 bg-white shadow-sm">
+          <div className="p-6 rounded-2xl border border-border bg-white shadow-sm">
             <div className="flex items-center justify-between mb-4">
               <div>
-                <h3 className="text-sm font-bold text-slate-800">Quadro de Sócios e Administradores</h3>
-                <p className="text-xs text-slate-500 mt-0.5">
+                <h3 className="text-sm font-bold text-foreground">Quadro de Sócios e Administradores</h3>
+                <p className="text-xs text-muted-foreground mt-0.5">
                   Selecione os sócios que deseja importar para o sistema
                 </p>
               </div>
-              <span className="text-xs font-semibold px-2.5 py-1 rounded-full bg-blue-100 text-blue-700">
+              <span className="text-xs font-semibold px-2.5 py-1 rounded-full bg-primary/20 text-primary">
                 {sociosSelecionados.size}/{socios.length} selecionados
               </span>
             </div>
 
             {socios.length === 0 ? (
-              <div className="text-center py-8 text-slate-400">
+              <div className="text-center py-8 text-muted-foreground">
                 <User className="w-10 h-10 mx-auto mb-2 opacity-40" />
                 <p className="text-sm">Nenhum sócio retornado pela Receita Federal</p>
               </div>
@@ -830,17 +830,17 @@ export default function CadastroEmpresa() {
               </div>
             )}
 
-            <div className="flex gap-2 mt-4 pt-4 border-t border-slate-100">
+            <div className="flex gap-2 mt-4 pt-4 border-t border-border">
               <button
                 onClick={() => setSociosSelecionados(new Set(socios.map((_, i) => i)))}
-                className="text-xs text-blue-600 hover:underline font-medium"
+                className="text-xs text-primary hover:underline font-medium"
               >
                 Selecionar todos
               </button>
-              <span className="text-slate-300">|</span>
+              <span className="text-muted-foreground">|</span>
               <button
                 onClick={() => setSociosSelecionados(new Set())}
-                className="text-xs text-slate-500 hover:underline font-medium"
+                className="text-xs text-muted-foreground hover:underline font-medium"
               >
                 Desmarcar todos
               </button>
@@ -850,14 +850,14 @@ export default function CadastroEmpresa() {
           <div className="flex justify-between pt-2">
             <button
               onClick={() => setStep(1)}
-              className="flex items-center gap-2 px-5 py-2.5 border border-slate-200 text-slate-600 rounded-xl text-sm font-semibold hover:bg-slate-50 transition-colors"
+              className="flex items-center gap-2 px-5 py-2.5 border border-border text-muted-foreground rounded-xl text-sm font-semibold hover:bg-muted transition-colors"
             >
               <ChevronLeft className="w-4 h-4" />
               Voltar
             </button>
             <button
               onClick={goToStep3}
-              className="flex items-center gap-2 px-6 py-2.5 bg-blue-600 text-white rounded-xl text-sm font-semibold hover:bg-blue-700 transition-colors shadow-sm"
+              className="flex items-center gap-2 px-6 py-2.5 bg-primary text-white rounded-xl text-sm font-semibold hover:bg-primary/90 transition-colors shadow-sm"
             >
               Próximo: Documentos
               <ChevronRight className="w-4 h-4" />
@@ -869,10 +869,10 @@ export default function CadastroEmpresa() {
       {/* ─── PASSO 3: Upload de Documentos ──────────────────────────────────── */}
       {step === 3 && (
         <div className="space-y-6">
-          <div className="p-6 rounded-2xl border border-slate-200 bg-white shadow-sm space-y-5">
+          <div className="p-6 rounded-2xl border border-border bg-white shadow-sm space-y-5">
             <div>
-              <h3 className="text-sm font-bold text-slate-800">Upload de Documentos</h3>
-              <p className="text-xs text-slate-500 mt-0.5">
+              <h3 className="text-sm font-bold text-foreground">Upload de Documentos</h3>
+              <p className="text-xs text-muted-foreground mt-0.5">
                 Envie o Contrato Social e o Cartão CNPJ para iniciar o processo de análise
               </p>
             </div>
@@ -886,19 +886,19 @@ export default function CadastroEmpresa() {
               const uploaded = uploads.find(u => u.tipo === tipo);
               return (
                 <div key={tipo}>
-                  <p className="text-xs font-semibold text-slate-600 mb-2">{label}</p>
+                  <p className="text-xs font-semibold text-muted-foreground mb-2">{label}</p>
                   {uploaded ? (
-                    <div className="flex items-center gap-3 p-4 rounded-xl border border-emerald-200 bg-emerald-50">
-                      <div className="w-10 h-10 rounded-lg bg-emerald-100 flex items-center justify-center shrink-0">
-                        <FileText className="w-5 h-5 text-emerald-600" />
+                    <div className="flex items-center gap-3 p-4 rounded-xl border border-success/20 bg-success/10">
+                      <div className="w-10 h-10 rounded-lg bg-success/20 flex items-center justify-center shrink-0">
+                        <FileText className="w-5 h-5 text-success" />
                       </div>
                       <div className="flex-1 min-w-0">
-                        <p className="text-sm font-semibold text-slate-800 truncate">{uploaded.file.name}</p>
-                        <p className="text-xs text-slate-500">{formatFileSize(uploaded.file.size)}</p>
+                        <p className="text-sm font-semibold text-foreground truncate">{uploaded.file.name}</p>
+                        <p className="text-xs text-muted-foreground">{formatFileSize(uploaded.file.size)}</p>
                       </div>
                       <button
                         onClick={() => removeUpload(tipo)}
-                        className="p-1.5 rounded-lg hover:bg-emerald-100 text-slate-400 hover:text-red-500 transition-colors"
+                        className="p-1.5 rounded-lg hover:bg-success/20 text-muted-foreground hover:text-destructive transition-colors"
                       >
                         <X className="w-4 h-4" />
                       </button>
@@ -910,8 +910,8 @@ export default function CadastroEmpresa() {
                       onDrop={e => handleDrop(e, tipo)}
                       className={`flex flex-col items-center justify-center gap-2 p-8 rounded-xl border-2 border-dashed cursor-pointer transition-all ${
                         dragOver === tipo
-                          ? 'border-blue-500 bg-blue-50'
-                          : 'border-slate-200 hover:border-blue-300 hover:bg-slate-50'
+                          ? 'border-primary/70 bg-primary/10'
+                          : 'border-border hover:border-primary/30 hover:bg-muted'
                       }`}
                     >
                       <input
@@ -920,16 +920,16 @@ export default function CadastroEmpresa() {
                         accept=".pdf,.jpg,.jpeg,.png"
                         onChange={e => handleFileInput(e, tipo)}
                       />
-                      <div className="w-12 h-12 rounded-xl bg-slate-100 flex items-center justify-center">
-                        <FileText className="w-6 h-6 text-slate-400" />
+                      <div className="w-12 h-12 rounded-xl bg-muted flex items-center justify-center">
+                        <FileText className="w-6 h-6 text-muted-foreground" />
                       </div>
                       <div className="text-center">
-                        <p className="text-sm font-semibold text-slate-700">
+                        <p className="text-sm font-semibold text-muted-foreground">
                           Arraste o arquivo ou{' '}
-                          <span className="text-blue-600">clique para selecionar</span>
+                          <span className="text-primary">clique para selecionar</span>
                         </p>
-                        <p className="text-xs text-slate-400 mt-0.5">{desc}</p>
-                        <p className="text-xs text-slate-400">PDF, JPG ou PNG</p>
+                        <p className="text-xs text-muted-foreground mt-0.5">{desc}</p>
+                        <p className="text-xs text-muted-foreground">PDF, JPG ou PNG</p>
                       </div>
                     </label>
                   )}
@@ -939,15 +939,15 @@ export default function CadastroEmpresa() {
           </div>
 
           {/* Resumo */}
-          <div className="p-4 rounded-xl border border-blue-100 bg-blue-50 space-y-1">
-            <p className="text-xs font-bold text-blue-800">Resumo do cadastro</p>
-            <p className="text-xs text-blue-700">
+          <div className="p-4 rounded-xl border border-primary/20 bg-primary/10 space-y-1">
+            <p className="text-xs font-bold text-primary">Resumo do cadastro</p>
+            <p className="text-xs text-primary">
               Empresa: <strong>{form.razao_social}</strong>
             </p>
-            <p className="text-xs text-blue-700">
+            <p className="text-xs text-primary">
               Sócios: <strong>{sociosSelecionados.size} selecionado(s)</strong>
             </p>
-            <p className="text-xs text-blue-700">
+            <p className="text-xs text-primary">
               Documentos: <strong>{uploads.length} arquivo(s)</strong>
             </p>
           </div>
@@ -955,7 +955,7 @@ export default function CadastroEmpresa() {
           <div className="flex justify-between pt-2">
             <button
               onClick={() => setStep(2)}
-              className="flex items-center gap-2 px-5 py-2.5 border border-slate-200 text-slate-600 rounded-xl text-sm font-semibold hover:bg-slate-50 transition-colors"
+              className="flex items-center gap-2 px-5 py-2.5 border border-border text-muted-foreground rounded-xl text-sm font-semibold hover:bg-muted transition-colors"
             >
               <ChevronLeft className="w-4 h-4" />
               Voltar
@@ -963,7 +963,7 @@ export default function CadastroEmpresa() {
             <button
               onClick={handleSalvar}
               disabled={saving}
-              className="flex items-center gap-2 px-6 py-2.5 bg-emerald-600 text-white rounded-xl text-sm font-semibold hover:bg-emerald-700 disabled:opacity-60 transition-colors shadow-sm"
+              className="flex items-center gap-2 px-6 py-2.5 bg-success text-white rounded-xl text-sm font-semibold hover:bg-success/90 disabled:opacity-60 transition-colors shadow-sm"
             >
               {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : <CheckCircle className="w-4 h-4" />}
               {saving ? 'Salvando...' : 'Concluir Cadastro'}

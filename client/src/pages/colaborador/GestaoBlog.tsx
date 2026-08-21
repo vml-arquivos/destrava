@@ -245,49 +245,49 @@ export default function GestaoBlog() {
 
   return (
     <Layout title="Gestão de Conteúdo">
-      <div className="min-h-full bg-slate-50 p-4 sm:p-6">
+      <div className="min-h-full bg-muted p-4 sm:p-6">
         <div className="mx-auto max-w-7xl space-y-5">
-          <header className="overflow-hidden rounded-3xl bg-slate-950 px-6 py-7 text-white shadow-sm sm:px-8">
+          <header className="overflow-hidden rounded-3xl bg-slate-950 px-6 py-7 text-primary-foreground shadow-sm sm:px-8">
             <div className="flex flex-col gap-5 sm:flex-row sm:items-end sm:justify-between">
               <div>
-                <div className="mb-3 inline-flex items-center gap-2 rounded-full bg-white/10 px-3 py-1 text-xs font-bold uppercase tracking-[0.18em] text-blue-100">
+                <div className="mb-3 inline-flex items-center gap-2 rounded-full bg-card/10 px-3 py-1 text-xs font-bold uppercase tracking-[0.18em] text-blue-100">
                   <BookOpenText className="h-3.5 w-3.5" />
                   Conteúdo e SEO
                 </div>
                 <h1 className="text-2xl font-black tracking-tight sm:text-3xl">Blog Destrava</h1>
-                <p className="mt-2 max-w-2xl text-sm leading-6 text-slate-300">
+                <p className="mt-2 max-w-2xl text-sm leading-6 text-muted-foreground">
                   Crie, revise e publique artigos sem alterar rotas ou código. Os campos SEO acompanham cada conteúdo.
                 </p>
               </div>
-              <Button onClick={openCreate} className="bg-blue-600 text-white hover:bg-blue-500">
+              <Button onClick={openCreate} className="bg-primary text-primary-foreground hover:bg-primary">
                 <FilePlus2 className="mr-2 h-4 w-4" /> Novo artigo
               </Button>
             </div>
           </header>
 
           <section className="grid gap-3 sm:grid-cols-3">
-            <div className="rounded-2xl bg-white p-5 shadow-sm ring-1 ring-slate-100">
-              <div className="text-xs font-bold uppercase tracking-wider text-slate-400">Total</div>
+            <div className="rounded-2xl bg-card p-5 shadow-sm ring-1 ring-slate-100">
+              <div className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Total</div>
               <div className="mt-1 text-3xl font-black text-slate-950">{posts.length}</div>
             </div>
-            <div className="rounded-2xl bg-white p-5 shadow-sm ring-1 ring-slate-100">
-              <div className="text-xs font-bold uppercase tracking-wider text-slate-400">Publicados</div>
-              <div className="mt-1 text-3xl font-black text-emerald-600">{publishedCount}</div>
+            <div className="rounded-2xl bg-card p-5 shadow-sm ring-1 ring-slate-100">
+              <div className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Publicados</div>
+              <div className="mt-1 text-3xl font-black text-success">{publishedCount}</div>
             </div>
-            <div className="rounded-2xl bg-white p-5 shadow-sm ring-1 ring-slate-100">
-              <div className="text-xs font-bold uppercase tracking-wider text-slate-400">Rascunhos</div>
-              <div className="mt-1 text-3xl font-black text-amber-600">{posts.length - publishedCount}</div>
+            <div className="rounded-2xl bg-card p-5 shadow-sm ring-1 ring-slate-100">
+              <div className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Rascunhos</div>
+              <div className="mt-1 text-3xl font-black text-warning">{posts.length - publishedCount}</div>
             </div>
           </section>
 
-          <section className="rounded-3xl bg-white p-4 shadow-sm ring-1 ring-slate-100 sm:p-6">
+          <section className="rounded-3xl bg-card p-4 shadow-sm ring-1 ring-slate-100 sm:p-6">
             <div className="mb-5 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
               <div>
                 <h2 className="font-black text-slate-950">Artigos</h2>
-                <p className="text-sm text-slate-500">Publicar torna o artigo disponível imediatamente no site.</p>
+                <p className="text-sm text-muted-foreground">Publicar torna o artigo disponível imediatamente no site.</p>
               </div>
               <div className="relative w-full sm:w-80">
-                <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+                <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
                 <Input
                   value={search}
                   onChange={event => setSearch(event.target.value)}
@@ -298,29 +298,29 @@ export default function GestaoBlog() {
             </div>
 
             {loading ? (
-              <div className="flex min-h-52 items-center justify-center text-slate-500">
+              <div className="flex min-h-52 items-center justify-center text-muted-foreground">
                 <Loader2 className="mr-2 h-5 w-5 animate-spin" /> Carregando artigos
               </div>
             ) : filteredPosts.length === 0 ? (
-              <div className="rounded-2xl border border-dashed border-slate-200 px-6 py-14 text-center">
-                <BookOpenText className="mx-auto h-9 w-9 text-slate-300" />
-                <p className="mt-3 font-bold text-slate-700">Nenhum artigo encontrado</p>
-                <p className="mt-1 text-sm text-slate-500">Crie o primeiro artigo ou ajuste a busca.</p>
+              <div className="rounded-2xl border border-dashed border-border px-6 py-14 text-center">
+                <BookOpenText className="mx-auto h-9 w-9 text-muted-foreground" />
+                <p className="mt-3 font-bold text-foreground">Nenhum artigo encontrado</p>
+                <p className="mt-1 text-sm text-muted-foreground">Crie o primeiro artigo ou ajuste a busca.</p>
               </div>
             ) : (
               <div className="space-y-2">
                 {filteredPosts.map(post => (
-                  <article key={post.id} className="group rounded-2xl border border-slate-100 p-4 transition hover:border-blue-100 hover:bg-blue-50/30">
+                  <article key={post.id} className="group rounded-2xl border border-border p-4 transition hover:border-primary/20 hover:bg-primary/10/30">
                     <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
                       <div className="min-w-0 flex-1">
                         <div className="flex flex-wrap items-center gap-2">
-                          <span className={`rounded-full px-2.5 py-1 text-[11px] font-black uppercase tracking-wider ${post.is_published ? "bg-emerald-50 text-emerald-700" : "bg-amber-50 text-amber-700"}`}>
+                          <span className={`rounded-full px-2.5 py-1 text-[11px] font-black uppercase tracking-wider ${post.is_published ? "bg-success/10 text-success" : "bg-warning/10 text-warning"}`}>
                             {post.is_published ? "Publicado" : "Rascunho"}
                           </span>
-                          <span className="text-xs font-semibold text-slate-400">{post.category}</span>
+                          <span className="text-xs font-semibold text-muted-foreground">{post.category}</span>
                         </div>
-                        <h3 className="mt-2 truncate text-base font-black text-slate-900">{post.title}</h3>
-                        <p className="mt-1 truncate text-sm text-slate-500">/blog/{post.slug}</p>
+                        <h3 className="mt-2 truncate text-base font-black text-foreground">{post.title}</h3>
+                        <p className="mt-1 truncate text-sm text-muted-foreground">/blog/{post.slug}</p>
                       </div>
                       <div className="flex flex-wrap items-center gap-2">
                         <Button variant="outline" size="sm" onClick={() => togglePublished(post)}>
@@ -330,7 +330,7 @@ export default function GestaoBlog() {
                         <Button variant="outline" size="sm" onClick={() => openEdit(post)}>
                           <Pencil className="mr-2 h-4 w-4" /> Editar
                         </Button>
-                        <Button variant="outline" size="sm" className="text-red-600 hover:bg-red-50 hover:text-red-700" onClick={() => deletePost(post)}>
+                        <Button variant="outline" size="sm" className="text-destructive hover:bg-destructive/10 hover:text-destructive" onClick={() => deletePost(post)}>
                           <Trash2 className="h-4 w-4" />
                           <span className="sr-only">Excluir {post.title}</span>
                         </Button>
@@ -346,12 +346,12 @@ export default function GestaoBlog() {
 
       {editorOpen && (
         <div className="fixed inset-0 z-[100] flex items-start justify-end bg-slate-950/45 backdrop-blur-sm" role="dialog" aria-modal="true" aria-label={editingId ? "Editar artigo" : "Novo artigo"}>
-          <div className="h-full w-full max-w-3xl overflow-y-auto bg-white shadow-2xl">
+          <div className="h-full w-full max-w-3xl overflow-y-auto bg-card shadow-2xl">
             <form onSubmit={savePost} className="min-h-full">
-              <div className="sticky top-0 z-10 flex items-center justify-between border-b border-slate-100 bg-white/95 px-5 py-4 backdrop-blur sm:px-7">
+              <div className="sticky top-0 z-10 flex items-center justify-between border-b border-border bg-card/95 px-5 py-4 backdrop-blur sm:px-7">
                 <div>
                   <h2 className="text-lg font-black text-slate-950">{editingId ? "Editar artigo" : "Novo artigo"}</h2>
-                  <p className="text-xs text-slate-500">Salve como rascunho até a revisão final.</p>
+                  <p className="text-xs text-muted-foreground">Salve como rascunho até a revisão final.</p>
                 </div>
                 <Button type="button" variant="ghost" size="icon" onClick={closeEditor} aria-label="Fechar editor">
                   <X className="h-5 w-5" />
@@ -381,7 +381,7 @@ export default function GestaoBlog() {
                   <div>
                     <Label htmlFor="post-excerpt">Resumo</Label>
                     <Textarea id="post-excerpt" value={form.excerpt} onChange={event => updateForm("excerpt", event.target.value)} required minLength={10} maxLength={500} rows={3} className="mt-1.5" />
-                    <p className="mt-1 text-right text-xs text-slate-400">{form.excerpt.length}/500</p>
+                    <p className="mt-1 text-right text-xs text-muted-foreground">{form.excerpt.length}/500</p>
                   </div>
                   <div>
                     <Label htmlFor="post-content">Conteúdo em Markdown</Label>
@@ -389,10 +389,10 @@ export default function GestaoBlog() {
                   </div>
                 </section>
 
-                <section className="space-y-4 rounded-2xl bg-slate-50 p-5">
+                <section className="space-y-4 rounded-2xl bg-muted p-5">
                   <div>
-                    <h3 className="font-black text-slate-900">Apresentação</h3>
-                    <p className="text-xs text-slate-500">Imagem opcional e estimativa de leitura.</p>
+                    <h3 className="font-black text-foreground">Apresentação</h3>
+                    <p className="text-xs text-muted-foreground">Imagem opcional e estimativa de leitura.</p>
                   </div>
                   <div className="grid gap-4 sm:grid-cols-[1fr_140px]">
                     <div>
@@ -406,10 +406,10 @@ export default function GestaoBlog() {
                   </div>
                 </section>
 
-                <section className="space-y-4 rounded-2xl border border-blue-100 bg-blue-50/40 p-5">
+                <section className="space-y-4 rounded-2xl border border-primary/20 bg-primary/10/40 p-5">
                   <div>
-                    <h3 className="font-black text-slate-900">SEO</h3>
-                    <p className="text-xs text-slate-500">Se vazios, título e resumo do artigo serão usados como fallback.</p>
+                    <h3 className="font-black text-foreground">SEO</h3>
+                    <p className="text-xs text-muted-foreground">Se vazios, título e resumo do artigo serão usados como fallback.</p>
                   </div>
                   <div>
                     <Label htmlFor="post-seo-title">Título SEO</Label>
@@ -418,7 +418,7 @@ export default function GestaoBlog() {
                   <div>
                     <Label htmlFor="post-seo-description">Descrição SEO</Label>
                     <Textarea id="post-seo-description" value={form.seo_description} onChange={event => updateForm("seo_description", event.target.value)} maxLength={160} rows={3} className="mt-1.5" />
-                    <p className={`mt-1 text-right text-xs ${form.seo_description.length > 160 ? "text-red-600" : "text-slate-400"}`}>{form.seo_description.length}/160</p>
+                    <p className={`mt-1 text-right text-xs ${form.seo_description.length > 160 ? "text-destructive" : "text-muted-foreground"}`}>{form.seo_description.length}/160</p>
                   </div>
                   <div>
                     <Label htmlFor="post-seo-keywords">Palavras-chave</Label>
@@ -426,18 +426,18 @@ export default function GestaoBlog() {
                   </div>
                 </section>
 
-                <section className="flex items-center justify-between rounded-2xl border border-slate-200 p-5">
+                <section className="flex items-center justify-between rounded-2xl border border-border p-5">
                   <div>
-                    <Label htmlFor="post-published" className="font-black text-slate-900">Publicar agora</Label>
-                    <p className="mt-1 text-xs text-slate-500">Desative para manter o conteúdo como rascunho.</p>
+                    <Label htmlFor="post-published" className="font-black text-foreground">Publicar agora</Label>
+                    <p className="mt-1 text-xs text-muted-foreground">Desative para manter o conteúdo como rascunho.</p>
                   </div>
                   <Switch id="post-published" checked={form.is_published} onCheckedChange={value => updateForm("is_published", value)} />
                 </section>
               </div>
 
-              <div className="sticky bottom-0 flex items-center justify-end gap-3 border-t border-slate-100 bg-white/95 px-5 py-4 backdrop-blur sm:px-7">
+              <div className="sticky bottom-0 flex items-center justify-end gap-3 border-t border-border bg-card/95 px-5 py-4 backdrop-blur sm:px-7">
                 <Button type="button" variant="outline" onClick={closeEditor} disabled={saving}>Cancelar</Button>
-                <Button type="submit" disabled={saving} className="bg-blue-600 text-white hover:bg-blue-700">
+                <Button type="submit" disabled={saving} className="bg-primary text-primary-foreground hover:bg-primary">
                   {saving && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
                   {editingId ? "Salvar alterações" : "Criar artigo"}
                 </Button>

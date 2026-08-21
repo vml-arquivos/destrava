@@ -105,34 +105,34 @@ export function DocumentoPreview({ dados, onFechar }: Props) {
     /* ── Overlay ─────────────────────────────────────────────────────────── */
     <div className="fixed inset-0 z-50 flex items-start justify-center bg-black/60 backdrop-blur-sm overflow-y-auto py-6 px-4">
       {/* Folha A4-like */}
-      <div className="w-full max-w-3xl bg-white rounded-2xl shadow-2xl overflow-hidden">
+      <div className="w-full max-w-3xl bg-card rounded-2xl shadow-2xl overflow-hidden">
 
         {/* ── Barra de ações (fora da folha) ──────────────────────────────── */}
         <div className="flex items-center justify-between bg-gray-900 px-5 py-3">
           <div className="flex items-center gap-2">
             <div className="w-2 h-2 rounded-full bg-emerald-400" />
-            <span className="text-white text-sm font-medium">
+            <span className="text-primary-foreground text-sm font-medium">
               Preview — {isDeclaracao ? 'Declaração de Faturamento' : 'Previsão de Faturamento'}
             </span>
           </div>
           <div className="flex items-center gap-2">
             <button
               onClick={() => window.print()}
-              className="flex items-center gap-1.5 px-3 py-1.5 text-xs text-white border border-white/20 rounded-lg hover:bg-white/10 transition"
+              className="flex items-center gap-1.5 px-3 py-1.5 text-xs text-primary-foreground border border-white/20 rounded-lg hover:bg-card/10 transition"
             >
               <Printer className="w-3.5 h-3.5" />
               Imprimir
             </button>
             <button
               onClick={() => gerarPdfFaturamento(dadosComNum)}
-              className="flex items-center gap-1.5 px-3 py-1.5 text-xs bg-[#1B3A6B] text-white rounded-lg hover:bg-[#142d55] transition font-medium"
+              className="flex items-center gap-1.5 px-3 py-1.5 text-xs bg-[#1B3A6B] text-primary-foreground rounded-lg hover:bg-[#142d55] transition font-medium"
             >
               <FileDown className="w-3.5 h-3.5" />
               Baixar PDF
             </button>
             <button
               onClick={onFechar}
-              className="p-1.5 text-white/60 hover:text-white hover:bg-white/10 rounded-lg transition"
+              className="p-1.5 text-primary-foreground/60 hover:text-primary-foreground hover:bg-card/10 rounded-lg transition"
               title="Fechar preview"
             >
               <X className="w-4 h-4" />
@@ -147,7 +147,7 @@ export function DocumentoPreview({ dados, onFechar }: Props) {
           <div className="bg-[#1B3A6B] px-8 pt-6 pb-0">
             <div className="flex items-start justify-between">
               <div>
-                <p className="text-white text-lg font-bold tracking-wide">
+                <p className="text-primary-foreground text-lg font-bold tracking-wide">
                   {dados.contabilidade.escritorio.toUpperCase()}
                 </p>
                 <p className="text-blue-200 text-xs mt-0.5">
@@ -156,14 +156,14 @@ export function DocumentoPreview({ dados, onFechar }: Props) {
               </div>
               <div className="text-right">
                 <p className="text-blue-300 text-[10px] font-semibold tracking-wider uppercase">Nº Documento</p>
-                <p className="text-white font-mono text-sm font-bold">{numDoc}</p>
+                <p className="text-primary-foreground font-mono text-sm font-bold">{numDoc}</p>
                 <p className="text-blue-300 text-[9px] mt-0.5">Emitido em: {dataHoje()}</p>
               </div>
             </div>
 
             {/* Faixa de empresa */}
             <div className="mt-4 bg-[#29559B] -mx-8 px-8 py-2">
-              <p className="text-white text-sm font-semibold text-center tracking-wide">
+              <p className="text-primary-foreground text-sm font-semibold text-center tracking-wide">
                 {dados.empresa.razaoSocial.toUpperCase()}
                 {dados.empresa.cnpj && (
                   <span className="font-normal text-blue-200 ml-2">| CNPJ: {dados.empresa.cnpj}</span>
@@ -182,21 +182,21 @@ export function DocumentoPreview({ dados, onFechar }: Props) {
             <div className="text-center space-y-1">
               <h2 className="text-[#1B3A6B] text-base font-bold tracking-tight">{tituloDoc}</h2>
               <div className="w-24 h-0.5 bg-[#1B3A6B] mx-auto" />
-              <p className="text-gray-500 text-xs italic">{tituloPeriodo}</p>
+              <p className="text-muted-foreground text-xs italic">{tituloPeriodo}</p>
             </div>
 
             {/* Texto declaratório */}
-            <p className="text-gray-600 text-[10px] leading-snug">
+            <p className="text-muted-foreground text-[10px] leading-snug">
               Declaramos para os devidos fins, a pedido da empresa supra qualificada, e sob as penas da lei,
               que o faturamento {isDeclaracao ? 'realizado' : 'previsto'} no período apresentou os seguintes valores:
             </p>
 
             {/* Tabela */}
-            <div className="rounded-lg overflow-hidden border border-gray-200">
+            <div className="rounded-lg overflow-hidden border border-border">
               {/* Cabeçalho da tabela */}
               <div className="bg-[#1B3A6B] grid grid-cols-2 px-4 py-1.5">
-                <span className="text-white text-xs font-semibold">Mês/Ano</span>
-                <span className="text-white text-xs font-semibold text-right">
+                <span className="text-primary-foreground text-xs font-semibold">Mês/Ano</span>
+                <span className="text-primary-foreground text-xs font-semibold text-right">
                   {isDeclaracao ? 'Faturamento Total (R$)' : 'Faturamento Previsto (R$)'}
                 </span>
               </div>
@@ -205,29 +205,29 @@ export function DocumentoPreview({ dados, onFechar }: Props) {
               {linhasTabela.map((linha, idx) => (
                 <div
                   key={idx}
-                  className={`grid grid-cols-2 px-4 py-1 border-b border-gray-100 ${
-                    idx % 2 === 0 ? 'bg-white' : 'bg-[#F6F8FC]'
+                  className={`grid grid-cols-2 px-4 py-1 border-b border-border ${
+                    idx % 2 === 0 ? 'bg-card' : 'bg-[#F6F8FC]'
                   }`}
                 >
-                  <span className="text-gray-700 text-[10px] capitalize">{linha.mes}</span>
-                  <span className="text-gray-900 text-[10px] font-semibold text-right">{linha.valor}</span>
+                  <span className="text-foreground text-[10px] capitalize">{linha.mes}</span>
+                  <span className="text-foreground text-[10px] font-semibold text-right">{linha.valor}</span>
                 </div>
               ))}
 
               {/* Total */}
               <div className="bg-[#1B3A6B] grid grid-cols-2 px-4 py-2">
-                <span className="text-white text-xs font-bold uppercase">
+                <span className="text-primary-foreground text-xs font-bold uppercase">
                   {isDeclaracao
                     ? `Total do Período (${qtdMesesDeclaracao} ${qtdMesesDeclaracao === 1 ? 'Mês' : 'Meses'})`
                     : 'Total Previsto'}
                 </span>
-                <span className="text-white text-sm font-bold text-right">{fmtBRL(total)}</span>
+                <span className="text-primary-foreground text-sm font-bold text-right">{fmtBRL(total)}</span>
               </div>
             </div>
 
             {/* Nota metodológica (previsão) */}
             {!isDeclaracao && (
-              <p className="text-gray-400 text-[10px] italic">
+              <p className="text-muted-foreground text-[10px] italic">
                 {isPrevisaoManual
                   ? '* Previsão informada manualmente pelo usuário, com total inteiro e parcelas mensais uniformes.'
                   : '* Valores estimados com base em histórico de crescimento, contratos vigentes e modelo preditivo IA (Prophet/Linear). Não constituem garantia de receita futura.'}
@@ -236,27 +236,27 @@ export function DocumentoPreview({ dados, onFechar }: Props) {
 
             {/* ── Área de assinaturas ──────────────────────────────────────── */}
             <div className="pt-3 mt-4 space-y-2">
-              <p className="text-gray-600 text-xs">{cidade}, {dataHoje()}.</p>
+              <p className="text-muted-foreground text-xs">{cidade}, {dataHoje()}.</p>
 
               <div className="grid grid-cols-2 gap-8 pt-6">
                 {/* Contador */}
                 <div className="text-center space-y-1">
                   <div className="border-t border-gray-400 pt-2">
-                    <p className="text-gray-900 text-[11px] font-bold">
+                    <p className="text-foreground text-[11px] font-bold">
                       {dados.contabilidade.nomeContador}
                     </p>
-                    <p className="text-gray-500 text-[10px]">Contador Responsável</p>
-                    <p className="text-gray-500 text-[10px]">CRC: {dados.contabilidade.crc}</p>
+                    <p className="text-muted-foreground text-[10px]">Contador Responsável</p>
+                    <p className="text-muted-foreground text-[10px]">CRC: {dados.contabilidade.crc}</p>
                   </div>
                 </div>
 
                 {/* Representante Legal */}
                 <div className="text-center space-y-1">
                   <div className="border-t border-gray-400 pt-2">
-                    <p className="text-gray-900 text-[11px] font-bold">{dados.empresa.razaoSocial}</p>
-                    <p className="text-gray-500 text-[10px]">Representante Legal</p>
+                    <p className="text-foreground text-[11px] font-bold">{dados.empresa.razaoSocial}</p>
+                    <p className="text-muted-foreground text-[10px]">Representante Legal</p>
                     {dados.empresa.cnpj && (
-                      <p className="text-gray-500 text-[10px]">CNPJ: {dados.empresa.cnpj}</p>
+                      <p className="text-muted-foreground text-[10px]">CNPJ: {dados.empresa.cnpj}</p>
                     )}
                   </div>
                 </div>

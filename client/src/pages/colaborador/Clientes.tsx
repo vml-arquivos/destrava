@@ -71,27 +71,27 @@ interface Atividade {
 
 // ─── Configurações visuais ────────────────────────────────────
 const STATUS_CONFIG = {
-  lead:       { label: "Lead",        color: "bg-gray-100 text-gray-700",    dot: "bg-gray-400",   order: 1 },
-  contato:    { label: "Em Contato",  color: "bg-blue-100 text-blue-700",    dot: "bg-blue-500",   order: 2 },
-  analise:    { label: "Em Análise",  color: "bg-amber-100 text-amber-700",  dot: "bg-amber-500",  order: 3 },
-  aprovado:   { label: "Aprovado",    color: "bg-emerald-100 text-emerald-700", dot: "bg-emerald-500", order: 4 },
-  convertido: { label: "Convertido",  color: "bg-purple-100 text-purple-700", dot: "bg-purple-500", order: 5 },
-  reprovado:  { label: "Reprovado",   color: "bg-red-100 text-red-700",      dot: "bg-red-500",    order: 6 },
-  cancelado:  { label: "Cancelado",   color: "bg-gray-100 text-gray-400",    dot: "bg-gray-300",   order: 7 },
+  lead:       { label: "Lead",        color: "bg-muted text-foreground",    dot: "bg-gray-400",   order: 1 },
+  contato:    { label: "Em Contato",  color: "bg-primary/20 text-primary",    dot: "bg-primary",   order: 2 },
+  analise:    { label: "Em Análise",  color: "bg-warning/20 text-warning",  dot: "bg-warning/100",  order: 3 },
+  aprovado:   { label: "Aprovado",    color: "bg-success/20 text-success", dot: "bg-success", order: 4 },
+  convertido: { label: "Convertido",  color: "bg-primary/20 text-primary", dot: "bg-primary/100", order: 5 },
+  reprovado:  { label: "Reprovado",   color: "bg-destructive/20 text-destructive",      dot: "bg-destructive",    order: 6 },
+  cancelado:  { label: "Cancelado",   color: "bg-muted text-muted-foreground",    dot: "bg-gray-300",   order: 7 },
 } as const;
 
 const PRIORIDADE_CONFIG = {
-  alta:  { label: "Alta",  color: "text-red-600",    bg: "bg-red-50 border-red-200",    dot: "bg-red-500" },
-  media: { label: "Média", color: "text-amber-600",  bg: "bg-amber-50 border-amber-200", dot: "bg-amber-500" },
-  baixa: { label: "Baixa", color: "text-emerald-600", bg: "bg-emerald-50 border-emerald-200", dot: "bg-emerald-500" },
+  alta:  { label: "Alta",  color: "text-destructive",    bg: "bg-destructive/10 border-destructive/20",    dot: "bg-destructive" },
+  media: { label: "Média", color: "text-warning",  bg: "bg-warning/10 border-warning/20", dot: "bg-warning/100" },
+  baixa: { label: "Baixa", color: "text-success", bg: "bg-success/10 border-success/20", dot: "bg-success" },
 } as const;
 
 const ORIGEM_CONFIG: Record<string, { label: string; icon: React.ReactNode; color: string; bg: string }> = {
   whatsapp:  { label: "WhatsApp",   icon: <Smartphone className="w-3 h-3" />, color: "text-green-700",  bg: "bg-green-50 border-green-200" },
-  site:      { label: "Site",       icon: <Globe className="w-3 h-3" />,      color: "text-blue-700",   bg: "bg-blue-50 border-blue-200" },
-  campanha:  { label: "Campanha",   icon: <Megaphone className="w-3 h-3" />,  color: "text-purple-700", bg: "bg-purple-50 border-purple-200" },
-  indicacao: { label: "Indicação",  icon: <UserCheck className="w-3 h-3" />,  color: "text-teal-700",   bg: "bg-teal-50 border-teal-200" },
-  manual:    { label: "Manual",     icon: <UserPlus className="w-3 h-3" />,   color: "text-gray-700",   bg: "bg-gray-50 border-gray-200" },
+  site:      { label: "Site",       icon: <Globe className="w-3 h-3" />,      color: "text-primary",   bg: "bg-primary/10 border-primary/20" },
+  campanha:  { label: "Campanha",   icon: <Megaphone className="w-3 h-3" />,  color: "text-primary", bg: "bg-primary/10 border-primary/20" },
+  indicacao: { label: "Indicação",  icon: <UserCheck className="w-3 h-3" />,  color: "text-success",   bg: "bg-success/10 border-success/20" },
+  manual:    { label: "Manual",     icon: <UserPlus className="w-3 h-3" />,   color: "text-foreground",   bg: "bg-muted border-border" },
 };
 
 const TIPO_ATIVIDADE = {
@@ -586,20 +586,20 @@ export default function Clientes() {
         <div className={`flex flex-col flex-1 overflow-hidden transition-all ${clienteSelecionado ? "w-[55%]" : "w-full"}`}>
 
           {/* Header */}
-          <div className="flex items-center justify-between px-6 py-4 border-b bg-white">
+          <div className="flex items-center justify-between px-6 py-4 border-b bg-card">
             <div className="flex items-center gap-3">
-              <div className="w-9 h-9 rounded-lg bg-blue-100 flex items-center justify-center">
-                <Users className="w-5 h-5 text-blue-600" />
+              <div className="w-9 h-9 rounded-lg bg-primary/20 flex items-center justify-center">
+                <Users className="w-5 h-5 text-primary" />
               </div>
               <div>
-                <h1 className="text-lg font-bold text-gray-900 flex items-center gap-2">
+                <h1 className="text-lg font-bold text-foreground flex items-center gap-2">
                   Clientes
-                  <span className="text-xs px-2 py-0.5 rounded bg-blue-50 text-blue-700 font-medium">Unificado</span>
+                  <span className="text-xs px-2 py-0.5 rounded bg-primary/10 text-primary font-medium">Unificado</span>
                 </h1>
-                <p className="text-xs text-gray-500 mt-0.5">
+                <p className="text-xs text-muted-foreground mt-0.5">
                   {clientesFiltrados.length} de {clientes.length} clientes unificados
                   {totalDuplicatas > 0 && (
-                    <span className="ml-2 text-orange-600 font-medium">
+                    <span className="ml-2 text-warning font-medium">
                       · {totalDuplicatas} telefones duplicados
                     </span>
                   )}
@@ -609,7 +609,7 @@ export default function Clientes() {
             <div className="flex gap-2">
               <button
                 onClick={carregarClientes}
-                className="p-2 text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"
+                className="p-2 text-muted-foreground hover:text-primary hover:bg-primary/10 rounded-lg transition-colors"
                 title="Atualizar"
               >
                 <RefreshCw className="w-4 h-4" />
@@ -618,7 +618,7 @@ export default function Clientes() {
                 <button
                   onClick={executarDeduplicacao}
                   disabled={deduplicando}
-                  className="flex items-center gap-1.5 px-3 py-2 text-sm text-orange-700 bg-orange-50 border border-orange-200 rounded-lg hover:bg-orange-100 transition-colors"
+                  className="flex items-center gap-1.5 px-3 py-2 text-sm text-warning bg-warning/10 border border-warning/20 rounded-lg hover:bg-warning/20 transition-colors"
                   title="Mesclar leads duplicados por telefone"
                 >
                   {deduplicando ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <GitMerge className="w-3.5 h-3.5" />}
@@ -627,14 +627,14 @@ export default function Clientes() {
               )}
               <button
                 onClick={() => setShowFiltros(f => !f)}
-                className={`flex items-center gap-1.5 px-3 py-2 text-sm rounded-lg border transition-colors ${showFiltros ? "bg-blue-600 text-white border-blue-600" : "text-gray-600 border-gray-200 hover:bg-gray-50"}`}
+                className={`flex items-center gap-1.5 px-3 py-2 text-sm rounded-lg border transition-colors ${showFiltros ? "bg-primary text-primary-foreground border-blue-600" : "text-muted-foreground border-border hover:bg-muted"}`}
               >
                 <SlidersHorizontal className="w-3.5 h-3.5" />
                 Filtros
               </button>
               <button
                 onClick={() => setModalNovoCliente(true)}
-                className="flex items-center gap-1.5 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 text-sm font-medium"
+                className="flex items-center gap-1.5 px-4 py-2 bg-primary text-primary-foreground rounded-lg hover:bg-primary text-sm font-medium"
               >
                 <Plus className="w-4 h-4" />
                 Novo Cliente
@@ -643,24 +643,24 @@ export default function Clientes() {
           </div>
 
           {/* Stats cards */}
-          <div className="grid grid-cols-4 gap-3 px-6 py-3 bg-gray-50 border-b">
+          <div className="grid grid-cols-4 gap-3 px-6 py-3 bg-muted border-b">
             {[
-              { label: "Total",          value: stats.total,      color: "text-gray-800",    sub: "clientes" },
-              { label: "Leads Novos",    value: stats.leads,      color: "text-gray-600",    sub: "aguardando" },
-              { label: "Em Análise",     value: stats.analise,    color: "text-amber-600",   sub: "em processo" },
-              { label: "Aprovados",      value: stats.aprovados,  color: "text-emerald-600", sub: "convertidos" },
+              { label: "Total",          value: stats.total,      color: "text-foreground",    sub: "clientes" },
+              { label: "Leads Novos",    value: stats.leads,      color: "text-muted-foreground",    sub: "aguardando" },
+              { label: "Em Análise",     value: stats.analise,    color: "text-warning",   sub: "em processo" },
+              { label: "Aprovados",      value: stats.aprovados,  color: "text-success", sub: "convertidos" },
             ].map(s => (
-              <div key={s.label} className="bg-white rounded-xl p-3 shadow-sm border border-gray-100">
+              <div key={s.label} className="bg-card rounded-xl p-3 shadow-sm border border-border">
                 <div className={`text-2xl font-bold ${s.color}`}>{s.value}</div>
-                <div className="text-xs font-medium text-gray-600">{s.label}</div>
-                <div className="text-xs text-gray-400">{s.sub}</div>
+                <div className="text-xs font-medium text-muted-foreground">{s.label}</div>
+                <div className="text-xs text-muted-foreground">{s.sub}</div>
               </div>
             ))}
           </div>
 
           {/* Badges de origem */}
-          <div className="flex items-center gap-2 px-6 py-2 bg-gray-50 border-b overflow-x-auto">
-            <span className="text-xs text-gray-500 shrink-0">Origem:</span>
+          <div className="flex items-center gap-2 px-6 py-2 bg-muted border-b overflow-x-auto">
+            <span className="text-xs text-muted-foreground shrink-0">Origem:</span>
             {Object.entries(ORIGEM_CONFIG).map(([key, cfg]) => {
               const count = clientes.filter(c => getOrigem(c) === key).length;
               if (count === 0) return null;
@@ -670,20 +670,20 @@ export default function Clientes() {
                   onClick={() => setFiltroOrigem(filtroOrigem === key ? "todos" : key)}
                   className={`flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-medium border transition-all shrink-0 ${
                     filtroOrigem === key
-                      ? "bg-blue-600 text-white border-blue-600"
+                      ? "bg-primary text-primary-foreground border-blue-600"
                       : `${cfg.color} ${cfg.bg} border`
                   }`}
                 >
                   {cfg.icon}
                   {cfg.label}
-                  <span className={`ml-0.5 font-bold ${filtroOrigem === key ? "text-white" : ""}`}>{count}</span>
+                  <span className={`ml-0.5 font-bold ${filtroOrigem === key ? "text-primary-foreground" : ""}`}>{count}</span>
                 </button>
               );
             })}
             {filtroIncompleto ? (
               <button
                 onClick={() => setFiltroIncompleto(false)}
-                className="flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-medium border bg-orange-600 text-white border-orange-600 shrink-0"
+                className="flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-medium border bg-warning text-primary-foreground border-orange-600 shrink-0"
               >
                 <AlertCircle className="w-3 h-3" />
                 Incompletos: {stats.incompletos}
@@ -691,7 +691,7 @@ export default function Clientes() {
             ) : stats.incompletos > 0 ? (
               <button
                 onClick={() => setFiltroIncompleto(true)}
-                className="flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-medium border text-orange-700 bg-orange-50 border-orange-200 shrink-0"
+                className="flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-medium border text-warning bg-warning/10 border-warning/20 shrink-0"
               >
                 <AlertCircle className="w-3 h-3" />
                 Incompletos: {stats.incompletos}
@@ -701,21 +701,21 @@ export default function Clientes() {
 
           {/* Painel de filtros expandível */}
           {showFiltros && (
-            <div className="flex flex-wrap gap-3 px-6 py-3 bg-white border-b">
+            <div className="flex flex-wrap gap-3 px-6 py-3 bg-card border-b">
               <div className="flex-1 min-w-48 relative">
-                <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
                 <input
                   type="text"
                   placeholder="Buscar por nome, empresa, telefone..."
                   value={busca}
                   onChange={e => setBusca(e.target.value)}
-                  className="w-full pl-9 pr-4 py-2 border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  className="w-full pl-9 pr-4 py-2 border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary"
                 />
               </div>
               <select
                 value={filtroStatus}
                 onChange={e => setFiltroStatus(e.target.value)}
-                className="px-3 py-2 border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                className="px-3 py-2 border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary"
               >
                 <option value="todos">Todos os status</option>
                 {Object.entries(STATUS_CONFIG).map(([k, v]) => (
@@ -725,7 +725,7 @@ export default function Clientes() {
               <select
                 value={filtroTipo}
                 onChange={e => setFiltroTipo(e.target.value)}
-                className="px-3 py-2 border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                className="px-3 py-2 border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary"
               >
                 <option value="todos">PF e PJ</option>
                 <option value="pj">Pessoa Jurídica</option>
@@ -734,7 +734,7 @@ export default function Clientes() {
               <select
                 value={filtroPrioridade}
                 onChange={e => setFiltroPrioridade(e.target.value)}
-                className="px-3 py-2 border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                className="px-3 py-2 border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary"
               >
                 <option value="todos">Todas as prioridades</option>
                 <option value="alta">Alta</option>
@@ -747,7 +747,7 @@ export default function Clientes() {
                     setBusca(""); setFiltroStatus("todos"); setFiltroTipo("todos");
                     setFiltroPrioridade("todos"); setFiltroOrigem("todos"); setFiltroIncompleto(false);
                   }}
-                  className="px-3 py-2 text-sm text-red-600 border border-red-200 rounded-lg hover:bg-red-50"
+                  className="px-3 py-2 text-sm text-destructive border border-destructive/20 rounded-lg hover:bg-destructive/10"
                 >
                   Limpar filtros
                 </button>
@@ -757,15 +757,15 @@ export default function Clientes() {
 
           {/* Barra de busca sempre visível (quando filtros fechados) */}
           {!showFiltros && (
-            <div className="px-6 py-2 bg-white border-b">
+            <div className="px-6 py-2 bg-card border-b">
               <div className="relative">
-                <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
                 <input
                   type="text"
                   placeholder="Buscar por nome, empresa, telefone, e-mail..."
                   value={busca}
                   onChange={e => setBusca(e.target.value)}
-                  className="w-full pl-9 pr-4 py-2 border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  className="w-full pl-9 pr-4 py-2 border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary"
                 />
               </div>
             </div>
@@ -775,15 +775,15 @@ export default function Clientes() {
           <div className="flex-1 overflow-y-auto">
             {loading ? (
               <div className="flex items-center justify-center h-40">
-                <Loader2 className="w-8 h-8 text-blue-600 animate-spin" />
+                <Loader2 className="w-8 h-8 text-primary animate-spin" />
               </div>
             ) : clientesFiltrados.length === 0 ? (
-              <div className="flex flex-col items-center justify-center h-40 text-gray-400">
+              <div className="flex flex-col items-center justify-center h-40 text-muted-foreground">
                 <Users className="w-12 h-12 mb-3 opacity-30" />
                 <p className="text-sm">Nenhum cliente encontrado</p>
                 <button
                   onClick={() => setModalNovoCliente(true)}
-                  className="mt-3 text-blue-600 text-sm hover:underline"
+                  className="mt-3 text-primary text-sm hover:underline"
                 >
                   + Adicionar primeiro cliente
                 </button>
@@ -802,13 +802,13 @@ export default function Clientes() {
                     <div
                       key={cliente.id}
                       onClick={() => selecionarCliente(cliente)}
-                      className={`flex items-center gap-3 px-6 py-3.5 hover:bg-blue-50/50 cursor-pointer transition-colors ${
-                        clienteSelecionado?.id === cliente.id ? "bg-blue-50 border-l-4 border-l-blue-600" : "border-l-4 border-l-transparent"
+                      className={`flex items-center gap-3 px-6 py-3.5 hover:bg-primary/10/50 cursor-pointer transition-colors ${
+                        clienteSelecionado?.id === cliente.id ? "bg-primary/10 border-l-4 border-l-blue-600" : "border-l-4 border-l-transparent"
                       }`}
                     >
                       {/* Avatar */}
-                      <div className={`w-9 h-9 rounded-full flex items-center justify-center text-white font-bold text-sm flex-shrink-0 ${
-                        getTipo(cliente) === "pj" ? "bg-blue-600" : "bg-violet-600"
+                      <div className={`w-9 h-9 rounded-full flex items-center justify-center text-primary-foreground font-bold text-sm flex-shrink-0 ${
+                        getTipo(cliente) === "pj" ? "bg-primary" : "bg-primary"
                       }`}>
                         {cliente.nome.charAt(0).toUpperCase()}
                       </div>
@@ -816,12 +816,12 @@ export default function Clientes() {
                       {/* Info principal */}
                       <div className="flex-1 min-w-0">
                         <div className="flex items-center gap-1.5 flex-wrap">
-                          <span className="font-semibold text-gray-900 text-sm truncate">{cliente.nome}</span>
+                          <span className="font-semibold text-foreground text-sm truncate">{cliente.nome}</span>
                           {/* Badge tipo */}
                           <span className={`text-xs px-1.5 py-0.5 rounded font-medium ${
                             getTipo(cliente) === "pj"
-                              ? "bg-blue-50 text-blue-700"
-                              : "bg-violet-50 text-violet-700"
+                              ? "bg-primary/10 text-primary"
+                              : "bg-primary/10 text-primary"
                           }`}>
                             {getTipo(cliente) === "pj" ? "PJ" : "PF"}
                           </span>
@@ -833,19 +833,19 @@ export default function Clientes() {
                           )}
                           {/* Badge incompleto */}
                           {incompleto && (
-                            <span className="text-xs px-1.5 py-0.5 rounded bg-orange-100 text-orange-700 font-medium flex items-center gap-0.5">
+                            <span className="text-xs px-1.5 py-0.5 rounded bg-warning/20 text-warning font-medium flex items-center gap-0.5">
                               <AlertCircle className="w-2.5 h-2.5" /> Incompleto
                             </span>
                           )}
                           {/* Badge duplicado */}
                           {isDuplicado && (
-                            <span className="text-xs px-1.5 py-0.5 rounded bg-red-100 text-red-700 font-medium flex items-center gap-0.5">
+                            <span className="text-xs px-1.5 py-0.5 rounded bg-destructive/20 text-destructive font-medium flex items-center gap-0.5">
                               <GitMerge className="w-2.5 h-2.5" /> Duplicado
                             </span>
                           )}
                         </div>
                         <div className="flex items-center gap-2 mt-0.5">
-                          <span className="text-xs text-gray-500 truncate">
+                          <span className="text-xs text-muted-foreground truncate">
                             {cliente.empresa ? `${cliente.empresa} · ` : ""}{cliente.telefone}
                           </span>
                           {/* Badge origem */}
@@ -862,7 +862,7 @@ export default function Clientes() {
                           <span className={`w-1.5 h-1.5 rounded-full ${statusCfg.dot}`} />
                           {statusCfg.label}
                         </span>
-                        <span className="text-xs text-gray-400">{fmtDate(cliente.created_at)}</span>
+                        <span className="text-xs text-muted-foreground">{fmtDate(cliente.created_at)}</span>
                       </div>
 
                       <ChevronRight className="w-4 h-4 text-gray-300 flex-shrink-0" />
@@ -876,9 +876,9 @@ export default function Clientes() {
 
         {/* ── Painel de Detalhes ── */}
         {clienteSelecionado && (
-          <div className="flex-1 border-l bg-white flex flex-col overflow-hidden min-w-0">
+          <div className="flex-1 border-l bg-card flex flex-col overflow-hidden min-w-0">
             {/* Header do cliente */}
-            <div className="px-5 py-4 border-b bg-gradient-to-r from-blue-900 to-blue-700 text-white">
+            <div className="px-5 py-4 border-b bg-gradient-to-r from-blue-900 to-blue-700 text-primary-foreground">
               <div className="flex items-start justify-between">
                 <div className="min-w-0 flex-1">
                   <h2 className="text-lg font-bold truncate">{clienteSelecionado.nome}</h2>
@@ -886,10 +886,10 @@ export default function Clientes() {
                     <p className="text-blue-200 text-sm truncate">{clienteSelecionado.empresa}</p>
                   )}
                   <div className="flex items-center gap-2 mt-2 flex-wrap">
-                    <span className="text-xs px-2 py-0.5 rounded-full font-medium bg-white/20 text-white">
+                    <span className="text-xs px-2 py-0.5 rounded-full font-medium bg-card/20 text-primary-foreground">
                       {STATUS_CONFIG[clienteSelecionado.status]?.label}
                     </span>
-                    <span className="text-xs px-2 py-0.5 rounded-full bg-white/10 text-blue-100">
+                    <span className="text-xs px-2 py-0.5 rounded-full bg-card/10 text-blue-100">
                       {getTipo(clienteSelecionado) === "pj" ? "Pessoa Jurídica" : "Pessoa Física"}
                     </span>
                     <span className="text-xs text-blue-200">
@@ -899,7 +899,7 @@ export default function Clientes() {
                 </div>
                 <button
                   onClick={() => setClienteSelecionado(null)}
-                  className="text-blue-200 hover:text-white text-lg ml-3 flex-shrink-0"
+                  className="text-blue-200 hover:text-primary-foreground text-lg ml-3 flex-shrink-0"
                 >
                   ✕
                 </button>
@@ -908,19 +908,19 @@ export default function Clientes() {
 
             <div className="flex-1 overflow-y-auto">
               {/* Ações rápidas */}
-              <div className="px-4 py-3 border-b bg-gray-50">
+              <div className="px-4 py-3 border-b bg-muted">
                 <div className="flex gap-2 flex-wrap">
                   <a
                     href={`https://wa.me/55${clienteSelecionado.telefone.replace(/\D/g, "")}?text=Olá ${clienteSelecionado.nome}, sou da Destrava Crédito!`}
                     target="_blank"
-                    className="flex items-center gap-1 px-3 py-1.5 bg-green-600 text-white rounded-lg text-xs font-medium hover:bg-green-700"
+                    className="flex items-center gap-1 px-3 py-1.5 bg-green-600 text-primary-foreground rounded-lg text-xs font-medium hover:bg-green-700"
                   >
                     💬 WhatsApp
                   </a>
                   {clienteSelecionado.email && (
                     <a
                       href={`mailto:${clienteSelecionado.email}`}
-                      className="flex items-center gap-1 px-3 py-1.5 bg-blue-600 text-white rounded-lg text-xs font-medium hover:bg-blue-700"
+                      className="flex items-center gap-1 px-3 py-1.5 bg-primary text-primary-foreground rounded-lg text-xs font-medium hover:bg-primary"
                     >
                       📧 E-mail
                     </a>
@@ -928,26 +928,26 @@ export default function Clientes() {
                   {!isClientePF(clienteSelecionado) && (
                     <button
                       onClick={() => setModalAtividade(true)}
-                      className="flex items-center gap-1 px-3 py-1.5 bg-white text-gray-700 border rounded-lg text-xs font-medium hover:bg-gray-50"
+                      className="flex items-center gap-1 px-3 py-1.5 bg-card text-foreground border rounded-lg text-xs font-medium hover:bg-muted"
                     >
                       📝 Registrar
                     </button>
                   )}
                   <Link
                     href="/colaborador/calculadora"
-                    className="flex items-center gap-1 px-3 py-1.5 bg-amber-500 text-white rounded-lg text-xs font-medium hover:bg-amber-600"
+                    className="flex items-center gap-1 px-3 py-1.5 bg-warning/100 text-primary-foreground rounded-lg text-xs font-medium hover:bg-warning"
                   >
                     🧮 Simulação
                   </Link>
                   <button
                     onClick={abrirEditarCliente}
-                    className="flex items-center gap-1 px-3 py-1.5 bg-white text-gray-700 border rounded-lg text-xs font-medium hover:bg-gray-50"
+                    className="flex items-center gap-1 px-3 py-1.5 bg-card text-foreground border rounded-lg text-xs font-medium hover:bg-muted"
                   >
                     <Pencil className="w-3 h-3" /> Editar
                   </button>
                   <button
                     onClick={() => excluirCliente(clienteSelecionado.id)}
-                    className="flex items-center gap-1 px-3 py-1.5 bg-red-50 text-red-600 border border-red-200 rounded-lg text-xs font-medium hover:bg-red-100"
+                    className="flex items-center gap-1 px-3 py-1.5 bg-destructive/10 text-destructive border border-destructive/20 rounded-lg text-xs font-medium hover:bg-destructive/20"
                   >
                     <Trash2 className="w-3 h-3" /> Excluir
                   </button>
@@ -956,9 +956,9 @@ export default function Clientes() {
 
               {/* Alterar Status */}
               <div className="px-4 py-3 border-b">
-                <p className="text-xs font-semibold text-gray-500 uppercase mb-2">{isClientePF(clienteSelecionado) ? "Origem do cadastro" : "Alterar Status"}</p>
+                <p className="text-xs font-semibold text-muted-foreground uppercase mb-2">{isClientePF(clienteSelecionado) ? "Origem do cadastro" : "Alterar Status"}</p>
                 {isClientePF(clienteSelecionado) ? (
-                  <div className="text-sm text-gray-700">
+                  <div className="text-sm text-foreground">
                     {getFonteCadastro(clienteSelecionado)} · Cadastrado em {fmtDate(clienteSelecionado.created_at)}
                     {clienteSelecionado.cadastrado_por_nome ? ` por ${clienteSelecionado.cadastrado_por_nome}` : ""}
                   </div>
@@ -971,7 +971,7 @@ export default function Clientes() {
                         className={`text-xs px-2.5 py-1 rounded-full border font-medium transition-all flex items-center gap-1 ${
                           clienteSelecionado.status === k
                             ? `${v.color} border-current ring-2 ring-offset-1 ring-blue-400`
-                            : "border-gray-200 text-gray-500 hover:border-gray-400 hover:bg-gray-50"
+                            : "border-border text-muted-foreground hover:border-gray-400 hover:bg-muted"
                         }`}
                       >
                         <span className={`w-1.5 h-1.5 rounded-full ${v.dot}`} />
@@ -984,64 +984,64 @@ export default function Clientes() {
 
               {/* Dados do cliente */}
               <div className="px-4 py-3 border-b">
-                <p className="text-xs font-semibold text-gray-500 uppercase mb-3">Dados do Cliente</p>
+                <p className="text-xs font-semibold text-muted-foreground uppercase mb-3">Dados do Cliente</p>
                 <div className="grid grid-cols-2 gap-3 text-sm">
                   <div>
-                    <span className="text-gray-400 text-xs block">Telefone</span>
+                    <span className="text-muted-foreground text-xs block">Telefone</span>
                     <p className="font-medium">{clienteSelecionado.telefone}</p>
                   </div>
                   {clienteSelecionado.email ? (
                     <div>
-                      <span className="text-gray-400 text-xs block">E-mail</span>
+                      <span className="text-muted-foreground text-xs block">E-mail</span>
                       <p className="font-medium truncate">{clienteSelecionado.email}</p>
                     </div>
                   ) : (
                     <div>
-                      <span className="text-gray-400 text-xs block">E-mail</span>
+                      <span className="text-muted-foreground text-xs block">E-mail</span>
                       <p className="text-orange-500 text-xs font-medium">⚠️ Não informado</p>
                     </div>
                   )}
                   {clienteSelecionado.cpf_cnpj ? (
                     <div>
-                      <span className="text-gray-400 text-xs block">CPF/CNPJ</span>
+                      <span className="text-muted-foreground text-xs block">CPF/CNPJ</span>
                       <p className="font-medium">{clienteSelecionado.cpf_cnpj}</p>
                     </div>
                   ) : (
                     <div>
-                      <span className="text-gray-400 text-xs block">CPF/CNPJ</span>
+                      <span className="text-muted-foreground text-xs block">CPF/CNPJ</span>
                       <p className="text-orange-500 text-xs font-medium">⚠️ Não informado</p>
                     </div>
                   )}
                   <div>
-                    <span className="text-gray-400 text-xs block">Tipo</span>
+                    <span className="text-muted-foreground text-xs block">Tipo</span>
                     <p className="font-medium">{getTipo(clienteSelecionado) === "pj" ? "Pessoa Jurídica" : "Pessoa Física"}</p>
                   </div>
                   {clienteSelecionado.cidade && (
                     <div>
-                      <span className="text-gray-400 text-xs block">Cidade/UF</span>
+                      <span className="text-muted-foreground text-xs block">Cidade/UF</span>
                       <p className="font-medium">{clienteSelecionado.cidade}{clienteSelecionado.estado ? `/${clienteSelecionado.estado}` : ""}</p>
                     </div>
                   )}
                   {clienteSelecionado.faturamento_anual && (
                     <div>
-                      <span className="text-gray-400 text-xs block">Faturamento Anual</span>
+                      <span className="text-muted-foreground text-xs block">Faturamento Anual</span>
                       <p className="font-medium">{fmt(clienteSelecionado.faturamento_anual)}</p>
                     </div>
                   )}
                   {clienteSelecionado.segmento && (
                     <div>
-                      <span className="text-gray-400 text-xs block">Segmento</span>
+                      <span className="text-muted-foreground text-xs block">Segmento</span>
                       <p className="font-medium">{clienteSelecionado.segmento}</p>
                     </div>
                   )}
                   {getProximoContato(clienteSelecionado) && (
                     <div>
-                      <span className="text-gray-400 text-xs block">Próximo Contato</span>
-                      <p className="font-medium text-blue-600">{fmtDate(getProximoContato(clienteSelecionado))}</p>
+                      <span className="text-muted-foreground text-xs block">Próximo Contato</span>
+                      <p className="font-medium text-primary">{fmtDate(getProximoContato(clienteSelecionado))}</p>
                     </div>
                   )}
                   <div>
-                    <span className="text-gray-400 text-xs block">Origem / Canal</span>
+                    <span className="text-muted-foreground text-xs block">Origem / Canal</span>
                     <div className="flex items-center gap-1 mt-0.5">
                       {(() => {
                         const cfg = ORIGEM_CONFIG[getOrigem(clienteSelecionado)] || ORIGEM_CONFIG.manual;
@@ -1054,14 +1054,14 @@ export default function Clientes() {
                     </div>
                   </div>
                   <div>
-                    <span className="text-gray-400 text-xs block">Cadastro</span>
+                    <span className="text-muted-foreground text-xs block">Cadastro</span>
                     <p className="font-medium text-sm">{getFonteCadastro(clienteSelecionado)}</p>
-                    <p className="text-xs text-gray-500">
+                    <p className="text-xs text-muted-foreground">
                       {fmtDate(clienteSelecionado.created_at)}{clienteSelecionado.cadastrado_por_nome ? ` · ${clienteSelecionado.cadastrado_por_nome}` : ""}
                     </p>
                   </div>
                   <div>
-                    <span className="text-gray-400 text-xs block">Prioridade</span>
+                    <span className="text-muted-foreground text-xs block">Prioridade</span>
                     <div className="flex items-center gap-1 mt-0.5">
                       {(() => {
                         const cfg = PRIORIDADE_CONFIG[clienteSelecionado.prioridade] || PRIORIDADE_CONFIG.media;
@@ -1075,14 +1075,14 @@ export default function Clientes() {
                     </div>
                   </div>
                   <div>
-                    <span className="text-gray-400 text-xs block">n8n Notificado</span>
+                    <span className="text-muted-foreground text-xs block">n8n Notificado</span>
                     <p className="font-medium text-sm">{clienteSelecionado.n8n_notificado ? "✅ Sim" : "❌ Não"}</p>
                   </div>
                 </div>
                 {getObs(clienteSelecionado) && (
-                  <div className="mt-3 p-3 bg-gray-50 rounded-lg">
-                    <span className="text-gray-400 text-xs block mb-1">Observações</span>
-                    <p className="text-sm text-gray-700">{getObs(clienteSelecionado)}</p>
+                  <div className="mt-3 p-3 bg-muted rounded-lg">
+                    <span className="text-muted-foreground text-xs block mb-1">Observações</span>
+                    <p className="text-sm text-foreground">{getObs(clienteSelecionado)}</p>
                   </div>
                 )}
               </div>
@@ -1090,13 +1090,13 @@ export default function Clientes() {
               {/* Ficha completa (só para cliente PF cadastrado de verdade -- um lead
                   ainda não tem os dados cadastrais completos que a ficha exige) */}
               {isClientePF(clienteSelecionado) && (
-                <div className="px-4 py-3 border-t flex flex-wrap items-center gap-2 bg-slate-50">
-                  <span className="text-xs font-semibold text-gray-500 uppercase mr-1">Ficha completa</span>
+                <div className="px-4 py-3 border-t flex flex-wrap items-center gap-2 bg-muted">
+                  <span className="text-xs font-semibold text-muted-foreground uppercase mr-1">Ficha completa</span>
                   <button
                     onClick={baixarFichaClientePf}
                     disabled={gerandoFichaPf}
                     title="Dados cadastrais e todos os documentos do Acervo Documental já mesclados nas páginas do mesmo PDF"
-                    className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-slate-200 bg-white hover:bg-slate-100 text-xs font-semibold text-slate-700 transition-all disabled:opacity-50"
+                    className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-border bg-card hover:bg-muted text-xs font-semibold text-foreground transition-all disabled:opacity-50"
                   >
                     {gerandoFichaPf ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Paperclip className="w-3.5 h-3.5" />}
                     {gerandoFichaPf ? "Gerando..." : "Ficha + anexos (PDF único)"}
@@ -1105,7 +1105,7 @@ export default function Clientes() {
                     onClick={baixarZipClientePf}
                     disabled={gerandoZipPf}
                     title="Ficha em PDF + todos os arquivos originais do Acervo Documental, dentro de um ZIP"
-                    className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-slate-200 bg-white hover:bg-slate-100 text-xs font-semibold text-slate-700 transition-all disabled:opacity-50"
+                    className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-border bg-card hover:bg-muted text-xs font-semibold text-foreground transition-all disabled:opacity-50"
                   >
                     {gerandoZipPf ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <FileArchive className="w-3.5 h-3.5" />}
                     {gerandoZipPf ? "Gerando..." : "Ficha + arquivos (ZIP)"}
@@ -1132,11 +1132,11 @@ export default function Clientes() {
               {/* Histórico de Atividades */}
               <div className="px-4 py-3">
                 <div className="flex items-center justify-between mb-3">
-                  <p className="text-xs font-semibold text-gray-500 uppercase">Histórico de Atividades</p>
+                  <p className="text-xs font-semibold text-muted-foreground uppercase">Histórico de Atividades</p>
                   {!isClientePF(clienteSelecionado) && (
                     <button
                       onClick={() => setModalAtividade(true)}
-                      className="text-xs text-blue-600 hover:underline flex items-center gap-1"
+                      className="text-xs text-primary hover:underline flex items-center gap-1"
                     >
                       <Plus className="w-3 h-3" /> Registrar
                     </button>
@@ -1145,10 +1145,10 @@ export default function Clientes() {
 
                 {loadingAtividades ? (
                   <div className="flex justify-center py-4">
-                    <Loader2 className="w-5 h-5 text-blue-600 animate-spin" />
+                    <Loader2 className="w-5 h-5 text-primary animate-spin" />
                   </div>
                 ) : atividades.length === 0 ? (
-                  <div className="text-center py-6 text-gray-400">
+                  <div className="text-center py-6 text-muted-foreground">
                     <Clock className="w-8 h-8 mx-auto mb-2 opacity-30" />
                     <p className="text-xs">{isClientePF(clienteSelecionado) ? "Cliente PF cadastrado diretamente. Histórico comercial será criado quando houver atendimento." : "Nenhuma atividade registrada"}</p>
                   </div>
@@ -1156,17 +1156,17 @@ export default function Clientes() {
                   <div className="space-y-3">
                     {atividades.map(a => (
                       <div key={a.id} className="flex gap-3">
-                        <div className="w-7 h-7 rounded-full bg-gray-100 flex items-center justify-center text-sm flex-shrink-0">
+                        <div className="w-7 h-7 rounded-full bg-muted flex items-center justify-center text-sm flex-shrink-0">
                           {TIPO_ATIVIDADE[a.tipo]?.icon}
                         </div>
                         <div className="flex-1">
                           <div className="flex items-center gap-2">
-                            <span className="text-xs font-medium text-gray-700">{TIPO_ATIVIDADE[a.tipo]?.label}</span>
-                            <span className="text-xs text-gray-400">{fmtDate(a.created_at)}</span>
+                            <span className="text-xs font-medium text-foreground">{TIPO_ATIVIDADE[a.tipo]?.label}</span>
+                            <span className="text-xs text-muted-foreground">{fmtDate(a.created_at)}</span>
                           </div>
-                          <p className="text-sm text-gray-600">{a.descricao}</p>
+                          <p className="text-sm text-muted-foreground">{a.descricao}</p>
                           {a.resultado && (
-                            <p className="text-xs text-emerald-600 mt-0.5">→ {a.resultado}</p>
+                            <p className="text-xs text-success mt-0.5">→ {a.resultado}</p>
                           )}
                         </div>
                       </div>
@@ -1182,18 +1182,18 @@ export default function Clientes() {
       {/* ── Modal: Nova Atividade ── */}
       {modalAtividade && clienteSelecionado && (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-xl shadow-xl w-full max-w-md">
+          <div className="bg-card rounded-xl shadow-xl w-full max-w-md">
             <div className="p-5 border-b">
-              <h3 className="font-bold text-gray-900">Registrar Atividade</h3>
-              <p className="text-sm text-gray-500">{clienteSelecionado.nome}</p>
+              <h3 className="font-bold text-foreground">Registrar Atividade</h3>
+              <p className="text-sm text-muted-foreground">{clienteSelecionado.nome}</p>
             </div>
             <div className="p-5 space-y-4">
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Tipo</label>
+                <label className="block text-sm font-medium text-foreground mb-1">Tipo</label>
                 <select
                   value={novaAtividade.tipo}
                   onChange={e => setNovaAtividade(p => ({ ...p, tipo: e.target.value }))}
-                  className="w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  className="w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary"
                 >
                   {Object.entries(TIPO_ATIVIDADE).map(([k, v]) => (
                     <option key={k} value={k}>{v.icon} {v.label}</option>
@@ -1201,37 +1201,37 @@ export default function Clientes() {
                 </select>
               </div>
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Descrição *</label>
+                <label className="block text-sm font-medium text-foreground mb-1">Descrição *</label>
                 <textarea
                   value={novaAtividade.descricao}
                   onChange={e => setNovaAtividade(p => ({ ...p, descricao: e.target.value }))}
                   placeholder="Descreva o que aconteceu..."
                   rows={3}
-                  className="w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  className="w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary"
                 />
               </div>
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Resultado (opcional)</label>
+                <label className="block text-sm font-medium text-foreground mb-1">Resultado (opcional)</label>
                 <input
                   type="text"
                   value={novaAtividade.resultado}
                   onChange={e => setNovaAtividade(p => ({ ...p, resultado: e.target.value }))}
                   placeholder="Ex: Cliente interessado, aguardando documentos..."
-                  className="w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  className="w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary"
                 />
               </div>
             </div>
             <div className="p-5 border-t flex gap-3">
               <button
                 onClick={() => setModalAtividade(false)}
-                className="flex-1 px-4 py-2 border rounded-lg text-sm text-gray-600 hover:bg-gray-50"
+                className="flex-1 px-4 py-2 border rounded-lg text-sm text-muted-foreground hover:bg-muted"
               >
                 Cancelar
               </button>
               <button
                 onClick={salvarAtividade}
                 disabled={salvando || !novaAtividade.descricao}
-                className="flex-1 px-4 py-2 bg-blue-600 text-white rounded-lg text-sm font-medium hover:bg-blue-700 disabled:opacity-50 flex items-center justify-center gap-2"
+                className="flex-1 px-4 py-2 bg-primary text-primary-foreground rounded-lg text-sm font-medium hover:bg-primary disabled:opacity-50 flex items-center justify-center gap-2"
               >
                 {salvando ? <Loader2 className="w-4 h-4 animate-spin" /> : null}
                 Salvar
@@ -1244,10 +1244,10 @@ export default function Clientes() {
       {/* ── Modal: Novo Cliente ── */}
       {modalNovoCliente && (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-xl shadow-xl w-full max-w-2xl max-h-[90vh] overflow-y-auto">
-            <div className="p-5 border-b sticky top-0 bg-white z-10">
-              <h3 className="font-bold text-gray-900 text-lg">Novo Cliente</h3>
-              <p className="text-sm text-gray-500">Cadastro manual — origem: painel interno</p>
+          <div className="bg-card rounded-xl shadow-xl w-full max-w-2xl max-h-[90vh] overflow-y-auto">
+            <div className="p-5 border-b sticky top-0 bg-card z-10">
+              <h3 className="font-bold text-foreground text-lg">Novo Cliente</h3>
+              <p className="text-sm text-muted-foreground">Cadastro manual — origem: painel interno</p>
             </div>
             <div className="p-5 grid grid-cols-2 gap-4">
               {[
@@ -1263,33 +1263,33 @@ export default function Clientes() {
                 { label: "Próximo Contato", key: "proximo_contato", type: "date", placeholder: "" },
               ].map(f => (
                 <div key={f.key}>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">{f.label}</label>
+                  <label className="block text-sm font-medium text-foreground mb-1">{f.label}</label>
                   <input
                     type={f.type}
                     placeholder={f.placeholder}
                     value={(form as any)[f.key]}
                     onChange={e => setForm(p => ({ ...p, [f.key]: e.target.value }))}
-                    className="w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    className="w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary"
                   />
                 </div>
               ))}
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Tipo de Pessoa</label>
+                <label className="block text-sm font-medium text-foreground mb-1">Tipo de Pessoa</label>
                 <select
                   value={form.tipo}
                   onChange={e => setForm(p => ({ ...p, tipo: e.target.value }))}
-                  className="w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  className="w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary"
                 >
                   <option value="pf">Pessoa Física</option>
                   <option value="pj">Pessoa Jurídica</option>
                 </select>
               </div>
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Prioridade</label>
+                <label className="block text-sm font-medium text-foreground mb-1">Prioridade</label>
                 <select
                   value={form.prioridade}
                   onChange={e => setForm(p => ({ ...p, prioridade: e.target.value }))}
-                  className="w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  className="w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary"
                 >
                   <option value="alta">Alta</option>
                   <option value="media">Média</option>
@@ -1297,27 +1297,27 @@ export default function Clientes() {
                 </select>
               </div>
               <div className="col-span-2">
-                <label className="block text-sm font-medium text-gray-700 mb-1">Observações</label>
+                <label className="block text-sm font-medium text-foreground mb-1">Observações</label>
                 <textarea
                   value={form.observacoes}
                   onChange={e => setForm(p => ({ ...p, observacoes: e.target.value }))}
                   placeholder="Informações adicionais sobre o cliente..."
                   rows={2}
-                  className="w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  className="w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary"
                 />
               </div>
             </div>
-            <div className="p-5 border-t flex gap-3 sticky bottom-0 bg-white">
+            <div className="p-5 border-t flex gap-3 sticky bottom-0 bg-card">
               <button
                 onClick={() => setModalNovoCliente(false)}
-                className="flex-1 px-4 py-2 border rounded-lg text-sm text-gray-600 hover:bg-gray-50"
+                className="flex-1 px-4 py-2 border rounded-lg text-sm text-muted-foreground hover:bg-muted"
               >
                 Cancelar
               </button>
               <button
                 onClick={salvarNovoCliente}
                 disabled={salvando || !form.nome || !form.telefone || !form.cpf_cnpj}
-                className="flex-1 px-4 py-2 bg-blue-600 text-white rounded-lg text-sm font-medium hover:bg-blue-700 disabled:opacity-50 flex items-center justify-center gap-2"
+                className="flex-1 px-4 py-2 bg-primary text-primary-foreground rounded-lg text-sm font-medium hover:bg-primary disabled:opacity-50 flex items-center justify-center gap-2"
               >
                 {salvando ? <Loader2 className="w-4 h-4 animate-spin" /> : <Plus className="w-4 h-4" />}
                 Criar Cliente
@@ -1330,10 +1330,10 @@ export default function Clientes() {
       {/* ── Modal: Editar Cliente ── */}
       {modalEditarCliente && clienteSelecionado && (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-xl shadow-xl w-full max-w-2xl max-h-[90vh] overflow-y-auto">
-            <div className="p-5 border-b sticky top-0 bg-white z-10">
-              <h3 className="font-bold text-gray-900 text-lg">Editar Cliente</h3>
-              <p className="text-sm text-gray-500">{clienteSelecionado.nome}</p>
+          <div className="bg-card rounded-xl shadow-xl w-full max-w-2xl max-h-[90vh] overflow-y-auto">
+            <div className="p-5 border-b sticky top-0 bg-card z-10">
+              <h3 className="font-bold text-foreground text-lg">Editar Cliente</h3>
+              <p className="text-sm text-muted-foreground">{clienteSelecionado.nome}</p>
             </div>
             <div className="p-5 grid grid-cols-2 gap-4">
               {[
@@ -1349,23 +1349,23 @@ export default function Clientes() {
                 ...(form.tipo === "pj" ? [{ label: "Próximo Contato", key: "proximo_contato", type: "date", placeholder: "" }] : []),
               ].map(f => (
                 <div key={f.key}>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">{f.label}</label>
+                  <label className="block text-sm font-medium text-foreground mb-1">{f.label}</label>
                   <input
                     type={f.type}
                     placeholder={f.placeholder}
                     value={(form as any)[f.key]}
                     onChange={e => setForm(p => ({ ...p, [f.key]: e.target.value }))}
-                    className="w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    className="w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary"
                   />
                 </div>
               ))}
               {!isClientePF(clienteSelecionado) && (
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Prioridade</label>
+                  <label className="block text-sm font-medium text-foreground mb-1">Prioridade</label>
                   <select
                     value={form.prioridade}
                     onChange={e => setForm(p => ({ ...p, prioridade: e.target.value }))}
-                    className="w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    className="w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary"
                   >
                     <option value="alta">Alta</option>
                     <option value="media">Média</option>
@@ -1374,27 +1374,27 @@ export default function Clientes() {
                 </div>
               )}
               <div className="col-span-2">
-                <label className="block text-sm font-medium text-gray-700 mb-1">Observações</label>
+                <label className="block text-sm font-medium text-foreground mb-1">Observações</label>
                 <textarea
                   value={form.observacoes}
                   onChange={e => setForm(p => ({ ...p, observacoes: e.target.value }))}
                   placeholder="Informações adicionais sobre o cliente..."
                   rows={2}
-                  className="w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  className="w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary"
                 />
               </div>
             </div>
-            <div className="p-5 border-t flex gap-3 sticky bottom-0 bg-white">
+            <div className="p-5 border-t flex gap-3 sticky bottom-0 bg-card">
               <button
                 onClick={() => setModalEditarCliente(false)}
-                className="flex-1 px-4 py-2 border rounded-lg text-sm text-gray-600 hover:bg-gray-50"
+                className="flex-1 px-4 py-2 border rounded-lg text-sm text-muted-foreground hover:bg-muted"
               >
                 Cancelar
               </button>
               <button
                 onClick={salvarEdicaoCliente}
                 disabled={salvando || !form.nome || !form.telefone || !form.cpf_cnpj}
-                className="flex-1 px-4 py-2 bg-blue-600 text-white rounded-lg text-sm font-medium hover:bg-blue-700 disabled:opacity-50 flex items-center justify-center gap-2"
+                className="flex-1 px-4 py-2 bg-primary text-primary-foreground rounded-lg text-sm font-medium hover:bg-primary disabled:opacity-50 flex items-center justify-center gap-2"
               >
                 {salvando ? <Loader2 className="w-4 h-4 animate-spin" /> : <Pencil className="w-4 h-4" />}
                 Salvar Alterações

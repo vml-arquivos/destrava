@@ -43,12 +43,12 @@ export function FormHistorico({ onImport }: Props) {
       <button
         type="button"
         onClick={() => inputRef.current?.click()}
-        className="flex items-center gap-2 px-3 py-2 text-sm border border-gray-300 rounded-lg hover:bg-gray-50 text-gray-700"
+        className="flex items-center gap-2 px-3 py-2 text-sm border border-input rounded-lg hover:bg-muted text-foreground"
       >
         <Upload className="w-4 h-4" />
         Importar CSV
       </button>
-      <p className="text-xs text-gray-400 mt-1">
+      <p className="text-xs text-muted-foreground mt-1">
         Formato esperado: colunas <code>competencia</code> (YYYY-MM-DD) e <code>valor</code>
       </p>
     </div>

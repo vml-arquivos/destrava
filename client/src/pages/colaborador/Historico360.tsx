@@ -68,18 +68,18 @@ const CONFIG_TIPO: Record<TipoEvento, {
   icone: React.ElementType;
   label: string;
 }> = {
-  cadastro:             { cor: "text-blue-700",   bg: "bg-blue-100",   borda: "border-blue-300",  icone: Building2,     label: "Cadastro" },
-  atualizacao_cadastral:{ cor: "text-indigo-700", bg: "bg-indigo-100", borda: "border-indigo-300",icone: RefreshCw,     label: "Atualização" },
-  documento:            { cor: "text-amber-700",  bg: "bg-amber-100",  borda: "border-amber-300", icone: FileText,      label: "Documento" },
-  simulacao:            { cor: "text-emerald-700",bg: "bg-emerald-100",borda: "border-emerald-300",icone: TrendingUp,   label: "Simulação" },
-  contrato:             { cor: "text-purple-700", bg: "bg-purple-100", borda: "border-purple-300",icone: FileSignature, label: "Contrato" },
-  orcamento:            { cor: "text-orange-700", bg: "bg-orange-100", borda: "border-orange-300",icone: ClipboardList, label: "Orçamento" },
+  cadastro:             { cor: "text-primary",   bg: "bg-primary/20",   borda: "border-primary/30",  icone: Building2,     label: "Cadastro" },
+  atualizacao_cadastral:{ cor: "text-primary", bg: "bg-primary/20", borda: "border-indigo-300",icone: RefreshCw,     label: "Atualização" },
+  documento:            { cor: "text-warning",  bg: "bg-warning/20",  borda: "border-warning/30", icone: FileText,      label: "Documento" },
+  simulacao:            { cor: "text-success",bg: "bg-success/20",borda: "border-success/30",icone: TrendingUp,   label: "Simulação" },
+  contrato:             { cor: "text-primary", bg: "bg-primary/20", borda: "border-purple-300",icone: FileSignature, label: "Contrato" },
+  orcamento:            { cor: "text-warning", bg: "bg-warning/20", borda: "border-warning/30",icone: ClipboardList, label: "Orçamento" },
   followup:             { cor: "text-sky-700",    bg: "bg-sky-100",    borda: "border-sky-300",   icone: MessageSquare, label: "Follow-up" },
-  nota:                 { cor: "text-slate-700",  bg: "bg-slate-100",  borda: "border-slate-300", icone: MessageSquare, label: "Nota" },
-  acompanhamento_bancario:{ cor: "text-teal-700", bg: "bg-teal-100",  borda: "border-teal-300",  icone: Banknote,      label: "Bancário" },
-  analise:              { cor: "text-violet-700", bg: "bg-violet-100", borda: "border-violet-300",icone: Info,          label: "Análise" },
-  tarefa_nexus:         { cor: "text-blue-700",   bg: "bg-blue-100",   borda: "border-blue-300",  icone: ClipboardList, label: "Tarefa Nexus" },
-  sistema:              { cor: "text-slate-500",  bg: "bg-slate-50",   borda: "border-slate-200", icone: RefreshCw,     label: "Sistema" },
+  nota:                 { cor: "text-foreground",  bg: "bg-muted",  borda: "border-input", icone: MessageSquare, label: "Nota" },
+  acompanhamento_bancario:{ cor: "text-success", bg: "bg-success/20",  borda: "border-teal-300",  icone: Banknote,      label: "Bancário" },
+  analise:              { cor: "text-primary", bg: "bg-primary/10", borda: "border-primary/30",icone: Info,          label: "Análise" },
+  tarefa_nexus:         { cor: "text-primary",   bg: "bg-primary/20",   borda: "border-primary/30",  icone: ClipboardList, label: "Tarefa Nexus" },
+  sistema:              { cor: "text-muted-foreground",  bg: "bg-muted",   borda: "border-border", icone: RefreshCw,     label: "Sistema" },
 };
 
 const MODULO_LABEL: Record<ModuloEvento, string> = {
@@ -153,8 +153,8 @@ function CardEvento({ evento, onNavegar }: { evento: EventoHistorico; onNavegar?
       <div className="flex-1 min-w-0 pb-4">
         <div className="flex items-start justify-between gap-2">
           <div className="min-w-0 flex-1">
-            <p className="text-[13px] font-semibold text-slate-800 leading-snug">{evento.titulo}</p>
-            <p className="text-[12px] text-slate-500 mt-0.5 leading-relaxed">{evento.descricao}</p>
+            <p className="text-[13px] font-semibold text-foreground leading-snug">{evento.titulo}</p>
+            <p className="text-[12px] text-muted-foreground mt-0.5 leading-relaxed">{evento.descricao}</p>
           </div>
           <div className="flex items-center gap-1.5 shrink-0">
             <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${cfg.bg} ${cfg.cor} border ${cfg.borda}`}>
@@ -166,24 +166,24 @@ function CardEvento({ evento, onNavegar }: { evento: EventoHistorico; onNavegar?
         {/* Metadados */}
         <div className="flex flex-wrap items-center gap-3 mt-1.5">
           {evento.data && (
-            <span className="flex items-center gap-1 text-[11px] text-slate-400">
+            <span className="flex items-center gap-1 text-[11px] text-muted-foreground">
               <Calendar className="w-3 h-3" />
               {formatarData(evento.data)}
             </span>
           )}
           {evento.usuario && (
-            <span className="flex items-center gap-1 text-[11px] text-slate-400">
+            <span className="flex items-center gap-1 text-[11px] text-muted-foreground">
               <User className="w-3 h-3" />
               {evento.usuario}
             </span>
           )}
-          <span className="text-[11px] text-slate-300">
+          <span className="text-[11px] text-muted-foreground">
             {MODULO_LABEL[evento.modulo] ?? evento.modulo}
           </span>
           {abaDestino && onNavegar && (
             <button
               onClick={() => onNavegar(abaDestino)}
-              className="flex items-center gap-1 text-[11px] text-blue-500 hover:text-blue-700 transition-colors"
+              className="flex items-center gap-1 text-[11px] text-primary hover:text-primary transition-colors"
             >
               <ExternalLink className="w-3 h-3" />
               Ir para módulo
@@ -211,21 +211,21 @@ function GrupoDia({ data, eventos, onNavegar }: {
       >
         <div className="flex items-center gap-2 flex-1">
           <div className="w-2 h-2 rounded-full bg-blue-400 shrink-0" />
-          <span className="text-[12px] font-bold text-slate-600 uppercase tracking-wide">
+          <span className="text-[12px] font-bold text-muted-foreground uppercase tracking-wide">
             {formatarDataCurta(data)}
           </span>
-          <span className="text-[11px] text-slate-400">
+          <span className="text-[11px] text-muted-foreground">
             {eventos.length} evento{eventos.length !== 1 ? "s" : ""}
           </span>
         </div>
         {expandido
-          ? <ChevronUp className="w-3.5 h-3.5 text-slate-400" />
-          : <ChevronDown className="w-3.5 h-3.5 text-slate-400" />
+          ? <ChevronUp className="w-3.5 h-3.5 text-muted-foreground" />
+          : <ChevronDown className="w-3.5 h-3.5 text-muted-foreground" />
         }
       </button>
 
       {expandido && (
-        <div className="ml-4 pl-4 border-l-2 border-slate-100 space-y-0">
+        <div className="ml-4 pl-4 border-l-2 border-border space-y-0">
           {eventos.map(e => (
             <CardEvento key={e.id} evento={e} onNavegar={onNavegar} />
           ))}
@@ -284,26 +284,26 @@ export default function Historico360({ empresaId, onNavegar, modoCompacto = fals
 
   if (!dados && !carregando) {
     return (
-      <div className={`rounded-2xl border border-slate-200 bg-white shadow-sm ${modoCompacto ? "p-4" : "p-5"}`}>
+      <div className={`rounded-2xl border border-border bg-card shadow-sm ${modoCompacto ? "p-4" : "p-5"}`}>
         <div className="flex items-center justify-between mb-3">
           <div className="flex items-center gap-2">
-            <div className="w-9 h-9 rounded-xl bg-slate-800 flex items-center justify-center">
-              <History className="w-4.5 h-4.5 text-white" />
+            <div className="w-9 h-9 rounded-xl bg-brand-navy flex items-center justify-center">
+              <History className="w-4.5 h-4.5 text-primary-foreground" />
             </div>
             <div>
-              <p className="text-[10px] font-black uppercase tracking-widest text-slate-500">Linha do Tempo</p>
-              <h3 className="text-sm font-black text-slate-900">Histórico 360 do Cliente</h3>
+              <p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">Linha do Tempo</p>
+              <h3 className="text-sm font-black text-foreground">Histórico 360 do Cliente</h3>
             </div>
           </div>
           <button
             onClick={carregar}
-            className="flex items-center gap-2 px-4 py-2 bg-slate-800 text-white text-xs font-bold rounded-xl hover:bg-slate-900 transition-colors"
+            className="flex items-center gap-2 px-4 py-2 bg-brand-navy text-primary-foreground text-xs font-bold rounded-xl hover:bg-brand-navy transition-colors"
           >
             <History className="w-3.5 h-3.5" />
             Carregar histórico
           </button>
         </div>
-        <p className="text-xs text-slate-400">
+        <p className="text-xs text-muted-foreground">
           Consolida eventos de documentos, simulações, contratos, orçamentos, follow-ups, acompanhamentos bancários e atualizações cadastrais em uma linha do tempo unificada.
         </p>
       </div>
@@ -314,9 +314,9 @@ export default function Historico360({ empresaId, onNavegar, modoCompacto = fals
 
   if (carregando) {
     return (
-      <div className="rounded-2xl border border-slate-200 bg-white shadow-sm p-8 flex flex-col items-center gap-3">
-        <RefreshCw className="w-6 h-6 text-slate-400 animate-spin" />
-        <p className="text-sm text-slate-500">Consolidando histórico 360...</p>
+      <div className="rounded-2xl border border-border bg-card shadow-sm p-8 flex flex-col items-center gap-3">
+        <RefreshCw className="w-6 h-6 text-muted-foreground animate-spin" />
+        <p className="text-sm text-muted-foreground">Consolidando histórico 360...</p>
       </div>
     );
   }
@@ -325,13 +325,13 @@ export default function Historico360({ empresaId, onNavegar, modoCompacto = fals
 
   if (erro) {
     return (
-      <div className="rounded-2xl border border-red-200 bg-red-50 p-5 flex items-center gap-3">
-        <AlertCircle className="w-5 h-5 text-red-500 shrink-0" />
+      <div className="rounded-2xl border border-destructive/20 bg-destructive/10 p-5 flex items-center gap-3">
+        <AlertCircle className="w-5 h-5 text-destructive shrink-0" />
         <div>
-          <p className="text-sm font-semibold text-red-700">Erro ao carregar histórico</p>
-          <p className="text-xs text-red-500 mt-0.5">{erro}</p>
+          <p className="text-sm font-semibold text-destructive">Erro ao carregar histórico</p>
+          <p className="text-xs text-destructive mt-0.5">{erro}</p>
         </div>
-        <button onClick={carregar} className="ml-auto text-xs text-red-600 hover:underline">Tentar novamente</button>
+        <button onClick={carregar} className="ml-auto text-xs text-destructive hover:underline">Tentar novamente</button>
       </div>
     );
   }
@@ -343,23 +343,23 @@ export default function Historico360({ empresaId, onNavegar, modoCompacto = fals
   return (
     <div className="space-y-4">
       {/* Cabeçalho */}
-      <div className="rounded-2xl border border-slate-200 bg-white shadow-sm p-4">
+      <div className="rounded-2xl border border-border bg-card shadow-sm p-4">
         <div className="flex items-center justify-between mb-3">
           <div className="flex items-center gap-2">
-            <div className="w-9 h-9 rounded-xl bg-slate-800 flex items-center justify-center">
-              <History className="w-4.5 h-4.5 text-white" />
+            <div className="w-9 h-9 rounded-xl bg-brand-navy flex items-center justify-center">
+              <History className="w-4.5 h-4.5 text-primary-foreground" />
             </div>
             <div>
-              <p className="text-[10px] font-black uppercase tracking-widest text-slate-500">Linha do Tempo</p>
-              <h3 className="text-sm font-black text-slate-900">Histórico 360 do Cliente</h3>
+              <p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">Linha do Tempo</p>
+              <h3 className="text-sm font-black text-foreground">Histórico 360 do Cliente</h3>
             </div>
           </div>
           <button
             onClick={carregar}
             title="Atualizar"
-            className="p-2 rounded-lg hover:bg-slate-100 transition-colors"
+            className="p-2 rounded-lg hover:bg-muted transition-colors"
           >
-            <RefreshCw className="w-4 h-4 text-slate-400" />
+            <RefreshCw className="w-4 h-4 text-muted-foreground" />
           </button>
         </div>
 
@@ -371,9 +371,9 @@ export default function Historico360({ empresaId, onNavegar, modoCompacto = fals
             { label: "Primeiro evento", valor: dados.primeiro_evento ? formatarDataCurta(dados.primeiro_evento) : "—" },
             { label: "Último evento", valor: dados.ultimo_evento ? formatarDataCurta(dados.ultimo_evento) : "—" },
           ].map(m => (
-            <div key={m.label} className="bg-slate-50 rounded-xl p-2.5 border border-slate-100">
-              <p className="text-[10px] text-slate-400 font-medium">{m.label}</p>
-              <p className="text-sm font-black text-slate-800 mt-0.5">{m.valor}</p>
+            <div key={m.label} className="bg-muted rounded-xl p-2.5 border border-border">
+              <p className="text-[10px] text-muted-foreground font-medium">{m.label}</p>
+              <p className="text-sm font-black text-foreground mt-0.5">{m.valor}</p>
             </div>
           ))}
         </div>
@@ -400,8 +400,8 @@ export default function Historico360({ empresaId, onNavegar, modoCompacto = fals
             onClick={() => setFiltroTipo("todos")}
             className={`text-[11px] font-bold px-3 py-1 rounded-full border transition-colors ${
               filtroTipo === "todos"
-                ? "bg-slate-800 text-white border-slate-800"
-                : "bg-white text-slate-600 border-slate-200 hover:border-slate-400"
+                ? "bg-brand-navy text-primary-foreground border-slate-800"
+                : "bg-card text-muted-foreground border-border hover:border-slate-400"
             }`}
           >
             Todos ({dados.total_eventos})
@@ -416,7 +416,7 @@ export default function Historico360({ empresaId, onNavegar, modoCompacto = fals
                 className={`text-[11px] font-bold px-3 py-1 rounded-full border transition-colors ${
                   filtroTipo === tipo
                     ? `${cfg.bg} ${cfg.cor} ${cfg.borda}`
-                    : "bg-white text-slate-500 border-slate-200 hover:border-slate-300"
+                    : "bg-card text-muted-foreground border-border hover:border-input"
                 }`}
               >
                 {cfg.label} ({qtd})
@@ -427,11 +427,11 @@ export default function Historico360({ empresaId, onNavegar, modoCompacto = fals
       )}
 
       {/* Linha do tempo */}
-      <div className="rounded-2xl border border-slate-200 bg-white shadow-sm p-4">
+      <div className="rounded-2xl border border-border bg-card shadow-sm p-4">
         {eventosFiltrados.length === 0 && eventosSemDataFiltrados.length === 0 ? (
           <div className="flex flex-col items-center justify-center py-12 gap-3">
             <History className="w-10 h-10 text-slate-200" />
-            <p className="text-sm text-slate-400">Nenhum evento encontrado para o filtro selecionado.</p>
+            <p className="text-sm text-muted-foreground">Nenhum evento encontrado para o filtro selecionado.</p>
           </div>
         ) : (
           <div>
@@ -454,14 +454,14 @@ export default function Historico360({ empresaId, onNavegar, modoCompacto = fals
               <div className="mt-4">
                 <button
                   onClick={() => setMostrarSemData(v => !v)}
-                  className="flex items-center gap-2 text-[12px] font-bold text-slate-500 hover:text-slate-700 transition-colors mb-2"
+                  className="flex items-center gap-2 text-[12px] font-bold text-muted-foreground hover:text-foreground transition-colors mb-2"
                 >
                   <AlertCircle className="w-3.5 h-3.5 text-amber-400" />
                   Data não informada ({eventosSemDataFiltrados.length} evento{eventosSemDataFiltrados.length !== 1 ? "s" : ""})
                   {mostrarSemData ? <ChevronUp className="w-3.5 h-3.5" /> : <ChevronDown className="w-3.5 h-3.5" />}
                 </button>
                 {mostrarSemData && (
-                  <div className="ml-4 pl-4 border-l-2 border-amber-100 space-y-0">
+                  <div className="ml-4 pl-4 border-l-2 border-warning/20 space-y-0">
                     {eventosSemDataFiltrados.map(e => (
                       <CardEvento key={e.id} evento={e} onNavegar={onNavegar} />
                     ))}
@@ -474,7 +474,7 @@ export default function Historico360({ empresaId, onNavegar, modoCompacto = fals
       </div>
 
       {/* Rodapé */}
-      <p className="text-[10px] text-slate-400 text-center">
+      <p className="text-[10px] text-muted-foreground text-center">
         Histórico consolidado de {dados.total_eventos} evento{dados.total_eventos !== 1 ? "s" : ""} · Calculado em {new Date(dados.calculado_em).toLocaleString("pt-BR")} · Fonte: {dados.fonte}
       </p>
     </div>

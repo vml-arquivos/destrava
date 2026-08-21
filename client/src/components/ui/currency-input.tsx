@@ -110,9 +110,9 @@ export const CurrencyInput = React.forwardRef<HTMLInputElement, CurrencyInputPro
         disabled={disabled}
         required={required}
         className={cn(
-          "w-full rounded border border-gray-300 px-3 py-2 text-right font-mono text-sm tabular-nums",
-          "focus:border-blue-400 focus:outline-none focus:ring-1 focus:ring-blue-400",
-          disabled && "cursor-not-allowed bg-gray-50 opacity-60",
+          "w-full rounded border border-input px-3 py-2 text-right font-mono text-sm tabular-nums",
+          "focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary",
+          disabled && "cursor-not-allowed bg-muted opacity-60",
           className
         )}
         autoComplete="off"
@@ -125,10 +125,10 @@ export const CurrencyInput = React.forwardRef<HTMLInputElement, CurrencyInputPro
         <div className={cn("space-y-1", wrapperClassName)}>
           <label
             htmlFor={id}
-            className="block text-xs font-semibold text-gray-600"
+            className="block text-xs font-semibold text-muted-foreground"
           >
             {label}
-            {required && <span className="ml-0.5 text-red-500">*</span>}
+            {required && <span className="ml-0.5 text-destructive">*</span>}
           </label>
           {inputElement}
         </div>
