@@ -2,6 +2,7 @@ import { useState } from "react";
 import { Link, useLocation } from "wouter";
 import { useAuth } from "@/hooks/useAuth";
 import { useFeatureAccess } from "@/hooks/useFeatureAccess";
+import { useTheme } from "@/contexts/ThemeContext";
 import { Button } from "@/components/ui/button";
 import NotificacoesFollowup from "@/components/NotificacoesFollowup";
 import NotificacoesAutomacao from "@/components/NotificacoesAutomacao";
@@ -38,6 +39,8 @@ import {
   SlidersHorizontal,
   Newspaper,
   Image as ImageIcon,
+  Sun,
+  Moon,
 } from "lucide-react";
 
 const CARGOS_GESTAO = ["administrador", "diretor", "gerente comercial"];
@@ -66,7 +69,7 @@ const NAV_MODULES: NavModule[] = [
     id: "visao",
     label: "Visão Geral",
     icon: LayoutDashboard,
-    color: "text-slate-600",
+    color: "text-sidebar-foreground",
     items: [
       {
         href: "/colaborador/dashboard",
@@ -82,7 +85,7 @@ const NAV_MODULES: NavModule[] = [
     id: "comercial",
     label: "Comercial",
     icon: Kanban,
-    color: "text-blue-600",
+    color: "text-primary",
     items: [
       {
         href: "/colaborador/crm",
@@ -122,7 +125,7 @@ const NAV_MODULES: NavModule[] = [
     id: "clientes",
     label: "Clientes",
     icon: Users,
-    color: "text-violet-600",
+    color: "text-chart-4",
     items: [
       {
         href: "/colaborador/empresas",
@@ -156,7 +159,7 @@ const NAV_MODULES: NavModule[] = [
     id: "assessoria",
     label: "Assessoria IA",
     icon: BrainCircuit,
-    color: "text-emerald-600",
+    color: "text-success",
     items: [
       {
         href: "/colaborador/assessoria",
@@ -178,7 +181,7 @@ const NAV_MODULES: NavModule[] = [
     id: "financeiro",
     label: "Financeiro",
     icon: Banknote,
-    color: "text-amber-600",
+    color: "text-accent",
     items: [
       {
         href: "/colaborador/acompanhamento-bancario",
@@ -206,7 +209,7 @@ const NAV_MODULES: NavModule[] = [
     id: "documentos",
     label: "Contratos",
     icon: FileText,
-    color: "text-orange-600",
+    color: "text-accent",
     items: [
       {
         href: "/colaborador/contratos",
@@ -222,7 +225,7 @@ const NAV_MODULES: NavModule[] = [
     id: "gestao",
     label: "Gestão",
     icon: Settings,
-    color: "text-slate-500",
+    color: "text-muted-foreground",
     allowedCargos: CARGOS_GESTAO,
     items: [
       {
@@ -339,6 +342,7 @@ export default function Layout({
   const [location] = useLocation();
   const { colaborador, logout } = useAuth();
   const { isFeatureEnabled } = useFeatureAccess();
+  const { theme, toggleTheme } = useTheme();
   const [mobileOpen, setMobileOpen] = useState(false);
   // Módulos expandidos — inicializa com o módulo ativo aberto
   const modulos = filtrarModulos(NAV_MODULES, colaborador, isFeatureEnabled);
@@ -363,7 +367,7 @@ export default function Layout({
   const sidebar = (
     <nav className="flex h-full flex-col">
       {/* Logo */}
-      <div className="flex items-center gap-3 border-b border-slate-100 px-4 py-4">
+      <div className="flex items-center gap-3 border-b border-sidebar-border px-4 py-4">
         <img
           src="/destrava-logo.svg"
           alt="Destrava"
@@ -373,10 +377,10 @@ export default function Layout({
           }}
         />
         <div className="min-w-0">
-          <div className="text-xs font-black text-slate-800 leading-tight">
+          <div className="text-xs font-black text-sidebar-foreground leading-tight">
             Destrava Crédito
           </div>
-          <div className="text-[10px] text-slate-400 font-medium">
+          <div className="text-[10px] text-muted-foreground font-medium">
             Área do Colaborador
           </div>
         </div>
@@ -406,8 +410,8 @@ export default function Layout({
                 <div
                   className={`flex items-center gap-2.5 rounded-xl px-3 py-2 text-sm font-semibold transition-all cursor-pointer ${
                     isActive
-                      ? "bg-blue-600 text-white shadow-sm"
-                      : "text-slate-600 hover:bg-slate-100 hover:text-slate-900"
+                      ? "bg-primary text-primary-foreground shadow-sm"
+                      : "text-sidebar-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground"
                   }`}
                 >
                   <ItemIcon
@@ -426,25 +430,25 @@ export default function Layout({
                 onClick={() => toggleModulo(mod.id)}
                 className={`w-full flex items-center gap-2.5 rounded-xl px-3 py-2 text-sm font-bold transition-all ${
                   hasActive && !isExpanded
-                    ? "bg-blue-50 text-blue-700"
-                    : "text-slate-700 hover:bg-slate-100"
+                    ? "bg-sidebar-accent text-primary"
+                    : "text-sidebar-foreground hover:bg-sidebar-accent"
                 }`}
               >
                 <ModIcon className={`h-4 w-4 shrink-0 ${mod.color}`} />
                 <span className="flex-1 text-left truncate">{mod.label}</span>
                 {hasActive && !isExpanded && (
-                  <span className="h-1.5 w-1.5 rounded-full bg-blue-500 shrink-0" />
+                  <span className="h-1.5 w-1.5 rounded-full bg-primary shrink-0" />
                 )}
                 {isExpanded ? (
-                  <ChevronDown className="h-3.5 w-3.5 shrink-0 text-slate-400" />
+                  <ChevronDown className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
                 ) : (
-                  <ChevronRight className="h-3.5 w-3.5 shrink-0 text-slate-400" />
+                  <ChevronRight className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
                 )}
               </button>
 
               {/* Itens do módulo */}
               {isExpanded && (
-                <div className="ml-3 mt-0.5 space-y-0.5 border-l border-slate-100 pl-3">
+                <div className="ml-3 mt-0.5 space-y-0.5 border-l border-sidebar-border pl-3">
                   {mod.items.map(item => {
                     const ItemIcon = item.icon;
                     const isActive =
@@ -459,12 +463,12 @@ export default function Layout({
                         <div
                           className={`flex items-center gap-2 rounded-lg px-2.5 py-1.5 text-xs font-semibold transition-all cursor-pointer ${
                             isActive
-                              ? "bg-blue-600 text-white"
-                              : "text-slate-500 hover:bg-slate-100 hover:text-slate-800"
+                              ? "bg-primary text-primary-foreground"
+                              : "text-muted-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground"
                           }`}
                         >
                           <ItemIcon
-                            className={`h-3.5 w-3.5 shrink-0 ${isActive ? "text-white" : "text-slate-400"}`}
+                            className={`h-3.5 w-3.5 shrink-0 ${isActive ? "text-primary-foreground" : "text-muted-foreground"}`}
                           />
                           <span className="truncate">{item.label}</span>
                         </div>
@@ -479,20 +483,20 @@ export default function Layout({
       </div>
 
       {/* Footer com perfil */}
-      <div className="border-t border-slate-100 p-3 space-y-1">
+      <div className="border-t border-sidebar-border p-3 space-y-1">
         <Link
           href="/colaborador/meu-perfil"
           onClick={() => setMobileOpen(false)}
         >
-          <div className="flex items-center gap-2.5 rounded-xl px-3 py-2 text-xs font-semibold text-slate-600 hover:bg-slate-100 transition-all cursor-pointer">
-            <div className="h-7 w-7 rounded-full bg-blue-100 flex items-center justify-center text-blue-700 font-black text-xs shrink-0">
+          <div className="flex items-center gap-2.5 rounded-xl px-3 py-2 text-xs font-semibold text-sidebar-foreground hover:bg-sidebar-accent transition-all cursor-pointer">
+            <div className="h-7 w-7 rounded-full bg-sidebar-accent flex items-center justify-center text-primary font-black text-xs shrink-0">
               {(colaborador?.nome || "?").charAt(0).toUpperCase()}
             </div>
             <div className="min-w-0">
-              <div className="truncate font-bold text-slate-800">
+              <div className="truncate font-bold text-sidebar-foreground">
                 {colaborador?.nome || "Colaborador"}
               </div>
-              <div className="truncate text-slate-400 capitalize">
+              <div className="truncate text-muted-foreground capitalize">
                 {colaborador?.cargo || ""}
               </div>
             </div>
@@ -500,7 +504,7 @@ export default function Layout({
         </Link>
         <button
           onClick={logout}
-          className="w-full flex items-center gap-2 rounded-xl px-3 py-2 text-xs font-semibold text-slate-500 hover:bg-red-50 hover:text-red-600 transition-all"
+          className="w-full flex items-center gap-2 rounded-xl px-3 py-2 text-xs font-semibold text-muted-foreground hover:bg-destructive/10 hover:text-destructive transition-all"
         >
           <LogOut className="h-3.5 w-3.5" />
           Sair
@@ -510,9 +514,9 @@ export default function Layout({
   );
 
   return (
-    <div className="flex h-screen bg-slate-50 overflow-hidden">
+    <div className="flex h-screen bg-background text-foreground overflow-hidden">
       {/* Sidebar desktop */}
-      <aside className="hidden lg:flex w-56 shrink-0 flex-col bg-white border-r border-slate-100 shadow-sm">
+      <aside className="hidden lg:flex w-56 shrink-0 flex-col bg-sidebar text-sidebar-foreground border-r border-sidebar-border shadow-sm">
         {sidebar}
       </aside>
 
@@ -523,13 +527,13 @@ export default function Layout({
             className="absolute inset-0 bg-black/30 backdrop-blur-sm"
             onClick={() => setMobileOpen(false)}
           />
-          <aside className="absolute left-0 top-0 bottom-0 w-64 bg-white shadow-2xl flex flex-col">
+          <aside className="absolute left-0 top-0 bottom-0 w-64 bg-sidebar text-sidebar-foreground shadow-2xl flex flex-col">
             <div className="flex justify-end p-3">
               <button
                 onClick={() => setMobileOpen(false)}
-                className="rounded-xl p-2 hover:bg-slate-100"
+                className="rounded-xl p-2 hover:bg-sidebar-accent text-sidebar-foreground"
               >
-                <X className="h-5 w-5 text-slate-600" />
+                <X className="h-5 w-5 text-sidebar-foreground" />
               </button>
             </div>
             {sidebar}
@@ -540,34 +544,54 @@ export default function Layout({
       {/* Conteúdo principal */}
       <div className="flex flex-1 flex-col min-w-0 overflow-hidden">
         {/* Header mobile */}
-        <header className="flex lg:hidden items-center justify-between border-b border-slate-100 bg-white px-4 py-3 shadow-sm">
+        <header className="flex lg:hidden items-center justify-between border-b border-sidebar-border bg-card px-4 py-3 shadow-sm">
           <button
             onClick={() => setMobileOpen(true)}
-            className="rounded-xl p-2 hover:bg-slate-100"
+            className="rounded-xl p-2 hover:bg-sidebar-accent text-sidebar-foreground"
           >
-            <Menu className="h-5 w-5 text-slate-600" />
+            <Menu className="h-5 w-5 text-sidebar-foreground" />
           </button>
-          <span className="text-sm font-black text-slate-800">
+          <span className="text-sm font-black text-foreground">
             {title || "Destrava Crédito"}
           </span>
+          <button
+            type="button"
+            onClick={() => toggleTheme?.()}
+            aria-label={theme === "dark" ? "Ativar tema claro" : "Ativar tema escuro"}
+            title={theme === "dark" ? "Ativar tema claro" : "Ativar tema escuro"}
+            className="rounded-xl p-2 text-muted-foreground hover:bg-sidebar-accent hover:text-foreground"
+          >
+            {theme === "dark" ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}
+            <span className="sr-only">{theme === "dark" ? "Ativar tema claro" : "Ativar tema escuro"}</span>
+          </button>
           <NotificacoesAutomacao />
           <NotificacoesFollowup />
         </header>
 
         {/* Header desktop */}
-        <header className="hidden lg:flex items-center justify-between border-b border-slate-100 bg-white px-6 py-3 shadow-sm">
+        <header className="hidden lg:flex items-center justify-between border-b border-sidebar-border bg-card px-6 py-3 shadow-sm">
           <div>
-            <h1 className="text-base font-black text-slate-800">
+            <h1 className="text-base font-black text-sidebar-foreground">
               {title || "Destrava Crédito"}
             </h1>
-            <p className="text-xs text-slate-400">Destrava Crédito</p>
+            <p className="text-xs text-muted-foreground">Destrava Crédito</p>
           </div>
           <div className="flex items-center gap-3">
+            <button
+              type="button"
+              onClick={() => toggleTheme?.()}
+              aria-label={theme === "dark" ? "Ativar tema claro" : "Ativar tema escuro"}
+              title={theme === "dark" ? "Ativar tema claro" : "Ativar tema escuro"}
+              className="rounded-xl p-2 text-muted-foreground hover:bg-sidebar-accent hover:text-foreground"
+            >
+              {theme === "dark" ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}
+              <span className="sr-only">{theme === "dark" ? "Ativar tema claro" : "Ativar tema escuro"}</span>
+            </button>
             <NotificacoesAutomacao />
             <NotificacoesFollowup />
             <Link href="/colaborador/meu-perfil">
-              <button className="flex items-center gap-2 rounded-xl px-3 py-2 text-xs font-bold text-slate-600 hover:bg-slate-100 transition-all">
-                <div className="h-7 w-7 rounded-full bg-blue-100 flex items-center justify-center text-blue-700 font-black text-xs">
+              <button className="flex items-center gap-2 rounded-xl px-3 py-2 text-xs font-bold text-sidebar-foreground hover:bg-sidebar-accent transition-all">
+                <div className="h-7 w-7 rounded-full bg-sidebar-accent flex items-center justify-center text-primary font-black text-xs">
                   {(colaborador?.nome || "?").charAt(0).toUpperCase()}
                 </div>
                 {colaborador?.nome?.split(" ")[0] || "Perfil"}
@@ -575,7 +599,7 @@ export default function Layout({
             </Link>
             <button
               onClick={logout}
-              className="flex items-center gap-1.5 rounded-xl px-3 py-2 text-xs font-bold text-slate-500 hover:bg-red-50 hover:text-red-600 transition-all"
+              className="flex items-center gap-1.5 rounded-xl px-3 py-2 text-xs font-bold text-muted-foreground hover:bg-destructive/10 hover:text-destructive transition-all"
             >
               <LogOut className="h-4 w-4" />
               Sair

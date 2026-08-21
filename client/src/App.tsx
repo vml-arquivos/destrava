@@ -88,15 +88,15 @@ function FeatureGate({
   if (isFeatureEnabled(featureKey)) return <>{children}</>;
   return (
     <Layout title="Função indisponível">
-      <div className="min-h-full bg-slate-50 p-6">
-        <div className="mx-auto max-w-2xl rounded-3xl border border-amber-200 bg-white p-6 shadow-sm">
-          <div className="text-xs font-black uppercase tracking-[0.25em] text-amber-600">
+      <div className="min-h-full bg-background p-6">
+        <div className="mx-auto max-w-2xl rounded-3xl border border-warning/30 bg-card p-6 shadow-sm">
+          <div className="text-xs font-black uppercase tracking-[0.25em] text-warning">
             Acesso controlado
           </div>
-          <h1 className="mt-2 text-2xl font-black text-slate-950">
+          <h1 className="mt-2 text-2xl font-black text-foreground">
             Função oculta para este usuário
           </h1>
-          <p className="mt-2 text-sm text-slate-600">
+          <p className="mt-2 text-sm text-muted-foreground">
             Esta função foi ocultada na configuração administrativa de menu e
             funções. Peça ao administrador para liberar o acesso caso precise
             utilizar este módulo.
@@ -109,9 +109,9 @@ function FeatureGate({
 
 function PageLoader() {
   return (
-    <div className="flex min-h-screen items-center justify-center bg-slate-50" role="status" aria-live="polite">
+    <div className="flex min-h-screen items-center justify-center bg-background" role="status" aria-live="polite">
       <span className="sr-only">Carregando página...</span>
-      <div className="h-10 w-10 animate-spin rounded-full border-4 border-slate-200 border-t-[#0033A0]" aria-hidden="true" />
+      <div className="h-10 w-10 animate-spin rounded-full border-4 border-border border-t-primary" aria-hidden="true" />
     </div>
   );
 }
@@ -462,7 +462,7 @@ function Router() {
 function App() {
   return (
     <ErrorBoundary>
-      <ThemeProvider defaultTheme="light">
+      <ThemeProvider defaultTheme="light" switchable>
         <TooltipProvider>
           <Toaster />
           <RouteSeoDefaults />

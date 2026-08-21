@@ -8,11 +8,11 @@
   --font-family-display: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
   --font-family-sans: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
   
-  /* Cores da CAIXA */
-  --color-caixa-blue: oklch(0.35 0.15 250);
-  --color-caixa-blue-dark: oklch(0.20 0.12 250);
-  --color-caixa-yellow: oklch(0.80 0.15 85);
-  --color-caixa-gray: oklch(0.97 0.002 250);
+  /* Identidade Destrava: um único azul de marca nos dois temas */
+  --color-caixa-blue: #0b4f9c;
+  --color-caixa-blue-dark: #073565;
+  --color-caixa-yellow: #f2c94c;
+  --color-caixa-gray: #f4f7fb;
   
   --radius-sm: calc(var(--radius) - 4px);
   --radius-md: calc(var(--radius) - 2px);
@@ -34,6 +34,10 @@
   --color-accent-foreground: var(--accent-foreground);
   --color-destructive: var(--destructive);
   --color-destructive-foreground: var(--destructive-foreground);
+  --color-success: var(--success);
+  --color-success-foreground: var(--success-foreground);
+  --color-warning: var(--warning);
+  --color-warning-foreground: var(--warning-foreground);
   --color-border: var(--border);
   --color-input: var(--input);
   --color-ring: var(--ring);
@@ -53,78 +57,87 @@
 }
 
 :root {
-  /* Cores primárias baseadas na CAIXA */
+  /* Tema claro: superfície limpa e contraste AA/AAA para texto e controles */
   --primary: var(--color-caixa-blue);
-  --primary-foreground: oklch(1 0 0);
-  --secondary: var(--color-caixa-yellow);
-  --secondary-foreground: var(--color-caixa-blue-dark);
-  --accent: var(--color-caixa-yellow);
-  --accent-foreground: var(--color-caixa-blue-dark);
+  --primary-foreground: #ffffff;
+  --secondary: #f2c94c;
+  --secondary-foreground: #1f2937;
+  --accent: #e8743b;
+  --accent-foreground: #1f2937;
   
-  --radius: 0.5rem;
-  --background: oklch(1 0 0);
-  --foreground: oklch(0.20 0.012 250);
-  --card: oklch(1 0 0);
-  --card-foreground: oklch(0.20 0.012 250);
-  --popover: oklch(1 0 0);
-  --popover-foreground: oklch(0.20 0.012 250);
-  --muted: var(--color-caixa-gray);
-  --muted-foreground: oklch(0.45 0.01 250);
-  --destructive: oklch(0.577 0.245 27.325);
-  --destructive-foreground: oklch(1 0 0);
-  --border: oklch(0.90 0.005 250);
-  --input: oklch(0.90 0.005 250);
+  --radius: 0.75rem;
+  --background: #f8fafc;
+  --foreground: #172033;
+  --card: #ffffff;
+  --card-foreground: #172033;
+  --popover: #ffffff;
+  --popover-foreground: #172033;
+  --muted: #eef3f9;
+  --muted-foreground: #526176;
+  --destructive: #b42318;
+  --destructive-foreground: #ffffff;
+  --success: #15803d;
+  --success-foreground: #ffffff;
+  --warning: #b45309;
+  --warning-foreground: #ffffff;
+  --border: #d7e0eb;
+  --input: #c6d2e0;
   --ring: var(--color-caixa-blue);
   
   --chart-1: var(--color-caixa-blue);
-  --chart-2: var(--color-caixa-yellow);
-  --chart-3: var(--color-caixa-blue-dark);
-  --chart-4: oklch(0.50 0.12 250);
-  --chart-5: oklch(0.65 0.10 85);
+  --chart-2: #15803d;
+  --chart-3: #e8743b;
+  --chart-4: #7c3aed;
+  --chart-5: #0891b2;
   
-  --sidebar: oklch(1 0 0);
-  --sidebar-foreground: oklch(0.20 0.012 250);
+  --sidebar: #ffffff;
+  --sidebar-foreground: #172033;
   --sidebar-primary: var(--color-caixa-blue);
-  --sidebar-primary-foreground: oklch(1 0 0);
-  --sidebar-accent: var(--color-caixa-gray);
-  --sidebar-accent-foreground: oklch(0.20 0.012 250);
-  --sidebar-border: oklch(0.90 0.005 250);
+  --sidebar-primary-foreground: #ffffff;
+  --sidebar-accent: #eaf1f8;
+  --sidebar-accent-foreground: #17345b;
+  --sidebar-border: #d7e0eb;
   --sidebar-ring: var(--color-caixa-blue);
 }
 
 .dark {
-  --primary: var(--color-blue-700);
-  --primary-foreground: var(--color-blue-50);
-  --sidebar-primary: var(--color-blue-500);
-  --sidebar-primary-foreground: var(--color-blue-50);
-  --background: oklch(0.141 0.005 285.823);
-  --foreground: oklch(0.85 0.005 65);
-  --card: oklch(0.21 0.006 285.885);
-  --card-foreground: oklch(0.85 0.005 65);
-  --popover: oklch(0.21 0.006 285.885);
-  --popover-foreground: oklch(0.85 0.005 65);
-  --secondary: oklch(0.24 0.006 286.033);
-  --secondary-foreground: oklch(0.7 0.005 65);
-  --muted: oklch(0.274 0.006 286.033);
-  --muted-foreground: oklch(0.705 0.015 286.067);
-  --accent: oklch(0.274 0.006 286.033);
-  --accent-foreground:  oklch(0.92 0.005 65);
-  --destructive: oklch(0.704 0.191 22.216);
-  --destructive-foreground: oklch(0.985 0 0);
-  --border: oklch(1 0 0 / 10%);
-  --input: oklch(1 0 0 / 15%);
-  --ring: oklch(0.488 0.243 264.376);
-  --chart-1: var(--color-blue-300);
-  --chart-2: var(--color-blue-500);
-  --chart-3: var(--color-blue-600);
-  --chart-4: var(--color-blue-700);
-  --chart-5: var(--color-blue-800);
-  --sidebar: oklch(0.21 0.006 285.885);
-  --sidebar-foreground: oklch(0.85 0.005 65);
-  --sidebar-accent: oklch(0.274 0.006 286.033);
-  --sidebar-accent-foreground:  oklch(0.985 0 0);
-  --sidebar-border: oklch(1 0 0 / 10%);
-  --sidebar-ring: oklch(0.488 0.243 264.376);
+  /* Dashdark X-inspired dark canvas, while keeping the same brand blue */
+  --primary: var(--color-caixa-blue);
+  --primary-foreground: #ffffff;
+  --sidebar-primary: var(--color-caixa-blue);
+  --sidebar-primary-foreground: #ffffff;
+  --background: #101935;
+  --foreground: #f8fafc;
+  --card: #080f25;
+  --card-foreground: #f8fafc;
+  --popover: #080f25;
+  --popover-foreground: #f8fafc;
+  --secondary: #212c4d;
+  --secondary-foreground: #e6ecff;
+  --muted: #202b4a;
+  --muted-foreground: #c2cbe0;
+  --accent: #6c72ff;
+  --accent-foreground: #050817;
+  --destructive: #f07882;
+  --destructive-foreground: #2b0b0f;
+  --success: #12a466;
+  --success-foreground: #ffffff;
+  --warning: #f2a65a;
+  --warning-foreground: #111a38;
+  --border: rgba(226, 232, 240, 0.18);
+  --input: rgba(226, 232, 240, 0.24);
+  --ring: #8ab4ff;
+  --chart-1: var(--color-caixa-blue);
+  --chart-2: #6c72ff;
+  --chart-3: #12a466;
+  --chart-4: #e8743b;
+  --chart-5: #c2414d;
+  --sidebar: #080f25;
+  --sidebar-foreground: #f8fafc;
+  --sidebar-accent: #212c4d;
+  --sidebar-accent-foreground: #ffffff;
+  --sidebar-border: rgba(226, 232, 240, 0.18);
+  --sidebar-ring: #8ab4ff;
 }
 
 @layer base {
@@ -196,17 +209,18 @@
 }
 @layer components {
   .destrava-shell {
-    --dt-blue: #2563eb;
-    --dt-blue-dark: #1e40af;
-    --dt-surface: rgba(255, 255, 255, 0.9);
-    --dt-border: rgba(203, 213, 225, 0.72);
-    color: #0f172a;
+    --dt-blue: var(--color-caixa-blue);
+    --dt-blue-dark: var(--color-caixa-blue-dark);
+    --dt-surface: color-mix(in srgb, var(--card) 92%, transparent);
+    --dt-border: color-mix(in srgb, var(--border) 72%, transparent);
+    color: var(--foreground);
   }
 
   .destrava-page {
     background:
-      radial-gradient(circle at 22% 0%, rgba(37, 99, 235, 0.08), transparent 28%),
-      linear-gradient(180deg, #f8fafc 0%, #f6f8fc 100%);
+      radial-gradient(circle at 22% 0%, color-mix(in srgb, var(--primary) 10%, transparent), transparent 28%),
+      linear-gradient(180deg, var(--background) 0%, color-mix(in srgb, var(--background) 88%, var(--card)) 100%);
+    color: var(--foreground);
   }
 
   .destrava-page > div:not(.emp-page) {
@@ -226,17 +240,18 @@
   .destrava-page select,
   .destrava-page textarea {
     border-radius: 0.95rem;
-    border-color: #dbe4ef;
-    background-color: rgba(255, 255, 255, 0.95);
-    box-shadow: 0 1px 2px rgba(15, 23, 42, 0.03);
+    border-color: var(--input);
+    background-color: color-mix(in srgb, var(--card) 95%, transparent);
+    color: var(--foreground);
+    box-shadow: 0 1px 2px color-mix(in srgb, var(--foreground) 8%, transparent);
     transition: border-color .18s ease, box-shadow .18s ease, background-color .18s ease;
   }
 
   .destrava-page input:not([type="checkbox"]):not([type="radio"]):focus,
   .destrava-page select:focus,
   .destrava-page textarea:focus {
-    border-color: #93c5fd;
-    box-shadow: 0 0 0 4px rgba(37, 99, 235, 0.10);
+    border-color: var(--ring);
+    box-shadow: 0 0 0 4px color-mix(in srgb, var(--ring) 18%, transparent);
     outline: none;
   }
 
@@ -246,8 +261,8 @@
   }
 
   .destrava-page thead th {
-    background: #f8fafc;
-    color: #64748b;
+    background: var(--muted);
+    color: var(--muted-foreground);
     font-size: 0.74rem;
     letter-spacing: 0.08em;
     text-transform: uppercase;
@@ -259,12 +274,19 @@
   }
 
   .destrava-page tbody tr:hover {
-    background: rgba(248, 250, 252, 0.9);
+    background: color-mix(in srgb, var(--muted) 72%, transparent);
   }
 
   .destrava-page .recharts-wrapper,
   .destrava-page .recharts-surface {
     overflow: visible;
+  }
+
+  .destrava-page .recharts-cartesian-axis-tick-value,
+  .destrava-page .recharts-default-legend,
+  .destrava-page .recharts-legend-item-text {
+    fill: var(--muted-foreground);
+    color: var(--muted-foreground);
   }
 
   .destrava-page button,
@@ -290,7 +312,7 @@
 
   .destrava-nav-scroll::-webkit-scrollbar-thumb,
   .destrava-page *::-webkit-scrollbar-thumb {
-    background: rgba(148, 163, 184, 0.42);
+    background: color-mix(in srgb, var(--muted-foreground) 42%, transparent);
     border-radius: 999px;
     border: 2px solid transparent;
     background-clip: padding-box;
@@ -298,7 +320,7 @@
 
   .destrava-nav-scroll::-webkit-scrollbar-thumb:hover,
   .destrava-page *::-webkit-scrollbar-thumb:hover {
-    background: rgba(100, 116, 139, 0.55);
+    background: color-mix(in srgb, var(--muted-foreground) 55%, transparent);
     border: 2px solid transparent;
     background-clip: padding-box;
   }

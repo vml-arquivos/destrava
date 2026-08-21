@@ -36,8 +36,8 @@ export function GraficoPrevisao({ pontos }: Props) {
   const CustomTooltip = ({ active, payload, label }: any) => {
     if (!active || !payload?.length) return null;
     return (
-      <div className="bg-white border border-gray-200 rounded-lg p-3 shadow-lg text-xs">
-        <p className="font-semibold text-gray-800 mb-1">{label}</p>
+      <div className="bg-card border border-border rounded-lg p-3 shadow-lg text-xs text-card-foreground">
+        <p className="font-semibold text-foreground mb-1">{label}</p>
         {payload.map((entry: any) => (
           entry.value != null && (
             <p key={entry.name} style={{ color: entry.color }}>
@@ -54,15 +54,15 @@ export function GraficoPrevisao({ pontos }: Props) {
   return (
     <ResponsiveContainer width="100%" height={380}>
       <ComposedChart data={dados} margin={{ top: 10, right: 20, left: 20, bottom: 5 }}>
-        <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
+        <CartesianGrid strokeDasharray="3 3" stroke="var(--color-border)" />
         <XAxis
           dataKey="mesAno"
-          tick={{ fontSize: 11 }}
+          tick={{ fontSize: 11, fill: 'var(--color-muted-foreground)' }}
           interval={2}
         />
         <YAxis
           tickFormatter={formatBRL}
-          tick={{ fontSize: 11 }}
+          tick={{ fontSize: 11, fill: 'var(--color-muted-foreground)' }}
           width={105}
         />
         <Tooltip content={<CustomTooltip />} />
@@ -73,7 +73,7 @@ export function GraficoPrevisao({ pontos }: Props) {
           type="monotone"
           dataKey="yhat_upper"
           stroke="none"
-          fill="#94a3b8"
+          fill="var(--color-muted-foreground)"
           fillOpacity={0.2}
           name="Limite superior"
           legendType="none"
@@ -82,7 +82,7 @@ export function GraficoPrevisao({ pontos }: Props) {
           type="monotone"
           dataKey="yhat_lower"
           stroke="none"
-          fill="#ffffff"
+          fill="var(--color-card)"
           fillOpacity={1}
           name="Intervalo de confiança"
           legendType="square"
@@ -92,7 +92,7 @@ export function GraficoPrevisao({ pontos }: Props) {
         <Line
           type="monotone"
           dataKey="historico"
-          stroke="#2563eb"
+          stroke="var(--color-chart-1)"
           strokeWidth={2.5}
           dot={false}
           name="Histórico real"
@@ -103,7 +103,7 @@ export function GraficoPrevisao({ pontos }: Props) {
         <Line
           type="monotone"
           dataKey="previsao"
-          stroke="#ea580c"
+          stroke="var(--color-chart-3)"
           strokeWidth={2}
           strokeDasharray="6 3"
           dot={false}
@@ -115,9 +115,9 @@ export function GraficoPrevisao({ pontos }: Props) {
         {indexDivisor > 0 && (
           <ReferenceLine
             x={dados[indexDivisor]?.mesAno}
-            stroke="#6b7280"
+            stroke="var(--color-muted-foreground)"
             strokeDasharray="4 4"
-            label={{ value: 'Hoje', position: 'top', fontSize: 10, fill: '#6b7280' }}
+            label={{ value: 'Hoje', position: 'top', fontSize: 10, fill: 'var(--color-muted-foreground)' }}
           />
         )}
       </ComposedChart>

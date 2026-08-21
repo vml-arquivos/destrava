@@ -23,26 +23,26 @@ const RISCO_CONFIG: Record<
 > = {
   critico: {
     label: "Crítico",
-    className: "bg-red-100 text-red-800 border-red-200",
-    dotClass: "bg-red-500",
+    className: "bg-destructive/10 text-destructive border-destructive/30",
+    dotClass: "bg-destructive",
     icon: XCircle,
   },
   alto: {
     label: "Alto",
-    className: "bg-orange-100 text-orange-800 border-orange-200",
-    dotClass: "bg-orange-500",
+    className: "bg-warning/10 text-warning border-warning/30",
+    dotClass: "bg-warning",
     icon: AlertTriangle,
   },
   medio: {
     label: "Médio",
-    className: "bg-yellow-100 text-yellow-800 border-yellow-200",
-    dotClass: "bg-yellow-500",
+    className: "bg-secondary/30 text-secondary-foreground border-secondary/50",
+    dotClass: "bg-secondary",
     icon: Info,
   },
   baixo: {
     label: "Baixo",
-    className: "bg-green-100 text-green-800 border-green-200",
-    dotClass: "bg-green-500",
+    className: "bg-success/10 text-success border-success/30",
+    dotClass: "bg-success",
     icon: CheckCircle2,
   },
 };
@@ -51,10 +51,10 @@ const STATUS_CONFIG: Record<
   string,
   { label: string; className: string }
 > = {
-  incompleto: { label: "Incompleto", className: "bg-red-50 text-red-700 border-red-200" },
-  basico:     { label: "Básico",     className: "bg-orange-50 text-orange-700 border-orange-200" },
-  completo:   { label: "Completo",   className: "bg-blue-50 text-blue-700 border-blue-200" },
-  verificado: { label: "Verificado", className: "bg-green-50 text-green-700 border-green-200" },
+  incompleto: { label: "Incompleto", className: "bg-destructive/10 text-destructive border-destructive/30" },
+  basico:     { label: "Básico",     className: "bg-warning/10 text-warning border-warning/30" },
+  completo:   { label: "Completo",   className: "bg-primary/10 text-primary border-primary/30" },
+  verificado: { label: "Verificado", className: "bg-success/10 text-success border-success/30" },
 };
 
 // ─── RiscoBadge ───────────────────────────────────────────────────────────────
@@ -106,17 +106,17 @@ function scoreToRisco(score: number): RiscoClassificacao {
 }
 
 function scoreColor(score: number): string {
-  if (score >= 75) return "text-green-700";
-  if (score >= 50) return "text-yellow-700";
-  if (score >= 25) return "text-orange-700";
-  return "text-red-700";
+  if (score >= 75) return "text-success";
+  if (score >= 50) return "text-secondary-foreground";
+  if (score >= 25) return "text-warning";
+  return "text-destructive";
 }
 
 function barColor(score: number): string {
-  if (score >= 75) return "bg-green-500";
-  if (score >= 50) return "bg-yellow-500";
-  if (score >= 25) return "bg-orange-500";
-  return "bg-red-500";
+  if (score >= 75) return "bg-success";
+  if (score >= 50) return "bg-secondary";
+  if (score >= 25) return "bg-warning";
+  return "bg-destructive";
 }
 
 export function ScoreIndicator({
