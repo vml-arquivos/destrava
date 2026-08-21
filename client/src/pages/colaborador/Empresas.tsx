@@ -1710,15 +1710,30 @@ export default function Empresas() {
   // ── Stats header ───────────────────────────────────────────────────────────
 
   // `empresas` já vem filtrada pelo servidor (busca/status/porte/origem, ver
-  // carregarEmpresas). Aqui só ordena pelas mais recentemente atualizadas e
-  // limita a quantidade mostrada de cara na tela inicial (antes de escolher
-  // uma empresa) -- ordenação e limite são só de exibição, não afetam a busca.
-  const LIMITE_EMPRESAS_RECENTES = 24;
+  // carregarEmpresas). "Empresas recentes" mostra só quem já tem documento
+  // anexado E alguma análise iniciada (ver /api/documentacao/empresas/documentos-resumo,
+  // que já devolve pré-filtrado) -- ordenadas pela mais recentemente atualizada,
+  // limitadas a 6 pra não precisar rolar a tela.
+  const LIMITE_EMPRESAS_RECENTES = 6;
+  const [documentosResumo, setDocumentosResumo] = useState<Record<string, { documentos_count: number; analise_iniciada: boolean }>>({});
+  useEffect(() => {
+    let ativo = true;
+    apiFetch(`/api/documentacao/empresas/documentos-resumo`)
+      .then((data) => {
+        if (!ativo || !Array.isArray(data)) return;
+        const mapa: Record<string, { documentos_count: number; analise_iniciada: boolean }> = {};
+        for (const r of data) mapa[r.empresa_id] = { documentos_count: r.documentos_count || 0, analise_iniciada: !!r.analise_iniciada };
+        setDocumentosResumo(mapa);
+      })
+      .catch(() => { /* silencioso -- widget só some se a chamada falhar, resto da página funciona normal */ });
+    return () => { ativo = false; };
+  }, []);
   const empresasRecentes = useMemo(() => {
     return [...empresas]
+      .filter((emp) => documentosResumo[emp.id])
       .sort((a, b) => new Date(b.updated_at || b.created_at || 0).getTime() - new Date(a.updated_at || a.created_at || 0).getTime())
       .slice(0, LIMITE_EMPRESAS_RECENTES);
-  }, [empresas]);
+  }, [empresas, documentosResumo]);
 
   // ─────────────────────────────────────────────────────────────────────────
   // RENDER
@@ -1958,11 +1973,9 @@ export default function Empresas() {
                   {/* ── Cabeçalho + alternância blocos/lista ── */}
                   <div className="flex items-center justify-between gap-3 px-4 py-3">
                     <div>
-                      <h2 className="text-sm font-bold text-slate-900">
-                        {busca.trim() || filtroStatus !== "todos" || filtroPorte !== "todos" || filtroOrigem !== "todos" ? "Resultado da busca" : "Empresas recentes"}
-                      </h2>
+                      <h2 className="text-sm font-bold text-slate-900">Empresas recentes</h2>
                       <p className="text-[11px] text-slate-400">
-                        {loading ? "Carregando…" : `${empresasRecentes.length} de ${empresas.length} empresa${empresas.length !== 1 ? "s" : ""} · ordenadas pela última movimentação`}
+                        {loading ? "Carregando…" : "com documentos anexados e análise iniciada · mais recentes primeiro"}
                       </p>
                     </div>
                     <div className="flex shrink-0 items-center gap-0.5 rounded-lg border border-slate-200 bg-slate-50 p-0.5">
@@ -1988,8 +2001,8 @@ export default function Empresas() {
                     ) : empresasRecentes.length === 0 ? (
                       <EmptyState
                         preset="empresas"
-                        title="Nenhuma empresa encontrada"
-                        description="Ajuste os filtros acima ou cadastre a primeira empresa para começar."
+                        title="Nenhuma empresa com documentos e análise ainda"
+                        description="Assim que uma empresa tiver documento anexado e análise iniciada no Acervo Documental, ela aparece aqui."
                         action={<button onClick={abrirNova} className="text-xs text-blue-600 hover:underline">+ Cadastrar primeira empresa</button>}
                         className="py-10"
                       />
@@ -2009,20 +2022,17 @@ export default function Empresas() {
                                 </div>
                                 <div className="min-w-0">
                                   <h3 className="truncate text-sm font-bold text-slate-900 leading-tight">{emp.razao_social}</h3>
-                                  {emp.nome_fantasia && <p className="mt-0.5 truncate text-[11px] text-slate-400">{emp.nome_fantasia}</p>}
                                 </div>
                               </div>
                               <StatusBadge status={emp.status} />
                             </div>
                             <div className="mt-3 flex flex-wrap items-center gap-1.5">
-                              {emp.porte && (
-                                <span className={`text-[10px] font-semibold px-2 py-0.5 rounded-full ${PORTE_CFG[emp.porte]?.color || "bg-slate-100 text-slate-500"}`}>
-                                  {PORTE_CFG[emp.porte]?.label}
-                                </span>
-                              )}
-                              {(emp.cidade || emp.estado) && (
-                                <span className="text-[10px] text-slate-400 truncate">{[emp.cidade, emp.estado].filter(Boolean).join(" / ")}</span>
-                              )}
+                              <span className="inline-flex items-center gap-1 rounded-full bg-violet-50 px-2 py-0.5 text-[10px] font-bold text-violet-700">
+                                Análise iniciada
+                              </span>
+                              <span className="text-[10px] font-semibold text-slate-500">
+                                {documentosResumo[emp.id]?.documentos_count || 0} documento{documentosResumo[emp.id]?.documentos_count === 1 ? "" : "s"} anexado{documentosResumo[emp.id]?.documentos_count === 1 ? "" : "s"}
+                              </span>
                             </div>
                             <div className="mt-3 flex w-full items-center justify-between border-t border-slate-100 pt-2">
                               <span className="text-[10px] text-slate-400">Atualizado {fmtDate(emp.updated_at)}</span>
@@ -2046,14 +2056,12 @@ export default function Empresas() {
                             <div className="min-w-0 flex-1">
                               <p className="truncate text-sm font-semibold text-slate-900">{emp.razao_social}</p>
                               <div className="mt-0.5 flex flex-wrap items-center gap-1.5">
-                                {emp.porte && (
-                                  <span className={`text-[10px] font-semibold px-1.5 py-0.5 rounded-full ${PORTE_CFG[emp.porte]?.color || "bg-slate-100 text-slate-500"}`}>
-                                    {PORTE_CFG[emp.porte]?.label}
-                                  </span>
-                                )}
-                                {(emp.cidade || emp.estado) && (
-                                  <span className="text-[10px] text-slate-400 truncate">{[emp.cidade, emp.estado].filter(Boolean).join(", ")}</span>
-                                )}
+                                <span className="inline-flex items-center gap-1 rounded-full bg-violet-50 px-1.5 py-0.5 text-[10px] font-bold text-violet-700">
+                                  Análise iniciada
+                                </span>
+                                <span className="text-[10px] font-semibold text-slate-500">
+                                  {documentosResumo[emp.id]?.documentos_count || 0} documento{documentosResumo[emp.id]?.documentos_count === 1 ? "" : "s"} anexado{documentosResumo[emp.id]?.documentos_count === 1 ? "" : "s"}
+                                </span>
                               </div>
                             </div>
                             <span className="shrink-0 text-[10px] text-slate-400">Atualizado {fmtDate(emp.updated_at)}</span>
@@ -2062,9 +2070,9 @@ export default function Empresas() {
                         ))}
                       </div>
                     )}
-                    {!loading && empresas.length > empresasRecentes.length && (
+                    {!loading && empresas.filter(e => documentosResumo[e.id]).length > empresasRecentes.length && (
                       <p className="mt-3 text-center text-[11px] text-slate-400">
-                        Mostrando {empresasRecentes.length} de {empresas.length} — refine a busca ou os filtros acima para ver outras.
+                        Mostrando as {empresasRecentes.length} mais recentes — refine a busca ou os filtros acima para ver outras.
                       </p>
                     )}
                   </div>
@@ -2075,12 +2083,16 @@ export default function Empresas() {
                   {/* ── Header detalhe ── */}
                   <div className="px-3 sm:px-4 py-2 border-b border-slate-100 shrink-0 bg-white">
                     <div className="flex items-start gap-3">
-                      {/* Botão voltar mobile */}
+                      {/* Botão voltar -- antes só existia no celular; agora aparece em qualquer
+                          tamanho de tela, pra sair da empresa sem precisar clicar em "Trocar
+                          empresa" (que abre a busca) nem usar o botão voltar do navegador. */}
                       <button
                         onClick={() => { setSelecionada(null); setShowDetail(false); setLocation("/colaborador/empresas"); }}
-                        className="sm:hidden mt-0.5 shrink-0 p-1.5 rounded-lg hover:bg-slate-100 text-slate-500"
+                        className="mt-0.5 flex shrink-0 items-center gap-1 rounded-lg px-1.5 py-1.5 text-slate-500 hover:bg-slate-100 hover:text-slate-700 sm:px-2"
+                        title="Voltar para a lista de empresas"
                       >
                         <ArrowLeft className="w-4 h-4" />
+                        <span className="hidden text-xs font-bold sm:inline">Voltar</span>
                       </button>
                       {/* Avatar grande */}
                       <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-blue-600 to-blue-800 flex items-center justify-center text-white text-sm font-black shrink-0 shadow-sm shadow-blue-100">

@@ -2304,6 +2304,44 @@ router.get('/blocos', auth, async (_req: Request, res: Response) => {
   }
 });
 
+// Resumo leve (empresa_id, quantidade de documentos anexados, se já tem
+// alguma análise iniciada) pra TODAS as empresas de uma vez -- usado pela
+// tela de Empresas pra montar o card "Empresas recentes" sem precisar de
+// uma chamada por empresa. Só entram no resultado empresas que já têm pelo
+// menos 1 documento anexado E pelo menos 1 análise iniciada (é exatamente o
+// filtro que a tela precisa); a ordenação/limite de quantas mostrar fica a
+// cargo do front, que já tem `updated_at` de cada empresa carregado.
+router.get('/empresas/documentos-resumo', auth, async (_req: Request, res: Response) => {
+  try {
+    const { rows } = await pool.query(`
+      SELECT
+        e.id AS empresa_id,
+        (
+          SELECT COUNT(DISTINCT dba.arquivo_id)
+          FROM public.documentacao_entidade_blocos deb
+          JOIN public.documentacao_bloco_arquivos dba
+            ON dba.entidade_bloco_id = deb.id AND dba.status <> 'arquivado'
+          WHERE deb.entidade_tipo = 'empresa' AND deb.empresa_id = e.id
+        ) AS documentos_count,
+        EXISTS (
+          SELECT 1 FROM public.documentacao_analises_ia dai WHERE dai.empresa_id = e.id
+        ) AS analise_iniciada
+      FROM public.empresas e
+    `);
+    const resumo = rows
+      .map((r: any) => ({
+        empresa_id: r.empresa_id,
+        documentos_count: Number(r.documentos_count) || 0,
+        analise_iniciada: Boolean(r.analise_iniciada),
+      }))
+      .filter((r: any) => r.documentos_count > 0 && r.analise_iniciada);
+    res.json(resumo);
+  } catch (err: any) {
+    console.error('[GET /api/documentacao/empresas/documentos-resumo]', err);
+    res.status(500).json({ error: 'Erro ao carregar resumo documental das empresas' });
+  }
+});
+
 
 router.get('/empresa/:empresaId/analise-cnpj', auth, async (req: Request, res: Response) => {
   try {

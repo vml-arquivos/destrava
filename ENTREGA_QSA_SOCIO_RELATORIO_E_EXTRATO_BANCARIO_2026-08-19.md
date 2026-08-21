@@ -1302,3 +1302,106 @@ pipeline de renderização própria):
   recentes, substituindo o antigo quadro vazio "Selecione uma empresa".
   Nenhuma rota, filtro server-side ou fluxo de seleção/edição de empresa
   foi alterado.
+
+## Extra 14 — Empresas recentes mais enxuto (só quem tem documento + análise) e botão Voltar (2026-08-20)
+
+### Pedido do usuário
+
+Depois de ver o Extra 13 já no ar, o usuário mandou prints e pediu três
+ajustes na tela de "Clientes PJ":
+
+1. O bloco "Empresas recentes" estava mostrando 24 empresas com rolagem
+   grande demais. Pediu pra reduzir bastante -- na mensagem de voz ele
+   cita "quatro" e depois se corrige pra "seis"; segui a última instrução
+   e deixei em **6**, é uma constante única (`LIMITE_EMPRESAS_RECENTES`)
+   fácil de ajustar se o número certo for outro.
+2. O bloco deveria mostrar **só empresas que já têm documento anexado E
+   alguma análise iniciada** no Acervo Documental -- não qualquer empresa
+   recente.
+3. Cada card deveria trazer só o essencial, sem crescer: nome da empresa,
+   "análise iniciada" e quantos documentos foram anexados -- nada de
+   descrição ou informação extra.
+4. Um botão "Voltar" na tela de detalhe da empresa, pra sair sem precisar
+   clicar em "Trocar empresa ou buscar outra" nem usar o voltar do
+   navegador.
+
+### Causa / situação anterior
+
+O Extra 13 mostrava as 24 empresas mais recentes **de qualquer status**,
+sem considerar se elas já tinham documentação anexada -- por isso a lista
+ficava longa e cheia de empresas que ainda nem começaram o processo
+documental, exigindo rolagem grande. Além disso, `GET /api/empresas` (que
+alimenta a tela) nunca trouxe contagem de documentos nem status de
+análise -- essa informação só existia por empresa, sob demanda, dentro do
+Acervo Documental de cada uma (não havia nenhum endpoint que desse essa
+resposta pra várias empresas de uma vez). E o botão "Voltar" da tela de
+detalhe só existia no celular (`sm:hidden`) -- no desktop, a única forma
+de sair de uma empresa aberta era clicar em "Trocar empresa" (que abre a
+busca) ou usar o botão voltar do navegador.
+
+### Correção
+
+**Novo endpoint leve de resumo documental.** Foi criada a rota
+`GET /api/documentacao/empresas/documentos-resumo`
+(`server/routes/documentacao.ts`), que devolve, pra cada empresa que já
+tem pelo menos 1 documento anexado (`documentacao_bloco_arquivos`, mesma
+tabela usada pelo Acervo Documental, contando arquivos com status
+diferente de `'arquivado'`) **e** pelo menos 1 análise iniciada
+(`documentacao_analises_ia`), um objeto `{ empresa_id, documentos_count,
+analise_iniciada }`. O filtro já acontece no banco -- o front só recebe
+quem já se qualifica. É uma rota nova e só de leitura (`SELECT`), não
+altera nem cria nada; nenhuma rota existente foi tocada.
+
+**"Empresas recentes" agora cruza com esse resumo.** `Empresas.tsx` busca
+esse resumo uma vez ao carregar a página e cruza (por `empresa_id`) com a
+lista de empresas já carregada. O bloco "Empresas recentes" passou a
+mostrar só quem aparece nesse resumo (documento + análise), ordenado pela
+mais recentemente atualizada, limitado a 6 -- sem a rolagem grande de
+antes. Se a chamada ao resumo falhar por qualquer motivo, o bloco
+simplesmente fica vazio (com uma mensagem explicando o critério); o resto
+da tela (busca, filtros, abrir empresa) continua funcionando normalmente.
+
+**Cards enxutos.** Os cards (blocos e lista) trocaram porte/cidade/UF por
+duas informações só: uma etiqueta "Análise iniciada" e "N documento(s)
+anexado(s)" -- sem aumentar o tamanho do card, exatamente o pedido.
+
+**Botão Voltar sempre visível.** O botão que já existia (`ArrowLeft`,
+volta pra lista e limpa a empresa selecionada) deixou de ficar restrito
+ao celular (`sm:hidden` removido) e ganhou o texto "Voltar" ao lado do
+ícone em telas maiores. Mesmo `onClick` de sempre -- nenhum comportamento
+novo, só ficou visível em qualquer tamanho de tela.
+
+### Verificação
+
+- `npx tsc --noEmit` limpo.
+- `npx vitest run` (suíte completa) → **540/540 testes passando**, sem
+  nenhuma mudança de contagem.
+- `npx vite build --mode production` concluído sem erros.
+- Conferido por leitura de código: a query do novo endpoint usa
+  subconsultas correlacionadas (`COUNT(DISTINCT ...)` e `EXISTS`) em vez
+  de `JOIN`s diretos entre `documentacao_bloco_arquivos` e
+  `documentacao_analises_ia` -- evita contar documentos em dobro por
+  causa do cruzamento entre as duas tabelas relacionadas à mesma empresa.
+- Como não há banco de dados de verdade disponível neste ambiente de
+  trabalho pra rodar a query contra dados reais, a verificação foi por
+  leitura cuidadosa do SQL e comparação com o padrão já usado em outras
+  consultas deste mesmo arquivo (`server/routes/documentacao.ts:2244-2254`,
+  que já junta `documentacao_entidade_blocos` → `documentacao_bloco_arquivos`
+  → `documentos_arquivos` pra montar o Acervo Documental) -- mesma
+  tabela, mesmo filtro de status (`<> 'arquivado'`), já usado e testado
+  em produção pelo resto do sistema.
+
+### Escopo desta correção
+
+- `server/routes/documentacao.ts` — nova rota
+  `GET /empresas/documentos-resumo` (dentro do router montado em
+  `/api/documentacao`), só leitura, aditiva.
+- `client/src/pages/colaborador/Empresas.tsx` — novo estado
+  `documentosResumo` + `useEffect` que busca o resumo uma vez;
+  `LIMITE_EMPRESAS_RECENTES` de 24 para 6; `empresasRecentes` agora
+  filtra por quem tem resumo; cards (blocos e lista) trocaram
+  porte/cidade por "Análise iniciada" + contagem de documentos; texto do
+  cabeçalho e da mensagem vazia atualizados; botão "Voltar" da tela de
+  detalhe agora visível em qualquer tamanho de tela. Nenhuma rota
+  existente, filtro server-side ou fluxo de seleção/edição de empresa foi
+  alterado.
