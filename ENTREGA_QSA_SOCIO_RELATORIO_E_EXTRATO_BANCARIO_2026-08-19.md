@@ -1186,3 +1186,119 @@ analisados, 14 faltantes, 2 resultados por etapa etc.):
   mantém `page-break-inside: auto`. Nenhuma outra seção do PDF, rota ou
   cálculo de dados foi alterado -- só a formatação/paginação e o
   template dessa seção específica.
+
+## Extra 13 — Visualização em blocos e empresas recentes (Acompanhamento Bancário + Clientes PJ) (2026-08-20)
+
+### Pedido do usuário
+
+Depois de já ter atualizado o próprio repositório com o Extra 11 (menos
+botões visíveis por linha no Acompanhamento Bancário), o usuário pediu,
+por mensagem de voz, três coisas relacionadas, pra serem feitas nas duas
+telas e "da mesma maneira, sigam um padrão":
+
+1. Opção de **visualização em blocos** (cards), tanto no Acompanhamento
+   Bancário quanto na tela de empresas (Clientes PJ) -- além da tabela/
+   lista que já existe.
+2. Na tela de "Clientes PJ" (`/colaborador/empresas`), filtros mais
+   eficientes e precisos pra buscar empresas -- hoje o único filtro
+   visível é o campo de busca e uns selects escondidos dentro de um
+   combobox que precisa ser aberto.
+3. Que a tela de empresas já mostre, de cara, um conjunto de empresas
+   "com as últimas movimentações" (as mais recentemente atualizadas),
+   em vez de começar vazia esperando uma busca.
+
+### Causa / situação anterior
+
+- **Acompanhamento Bancário**: já tinha tabela (desktop) e cards
+  (mobile, fallback automático em telas pequenas), mas nenhuma opção de
+  alternar pra visualização em blocos no desktop.
+- **Empresas / Clientes PJ**: a lista de empresas só existe dentro do
+  dropdown do combobox de busca (que precisa ser clicado pra abrir); os
+  filtros de status/porte/origem ficam escondidos dentro desse mesmo
+  dropdown; e, antes de escolher uma empresa, a tela principal mostrava
+  só um quadro vazio "Selecione uma empresa" -- nada de lista, blocos ou
+  sugestão de por onde começar.
+
+### Correção
+
+**Acompanhamento Bancário** (`AcompanhamentoBancario.tsx`): um alternador
+"Lista / Blocos" foi adicionado no cabeçalho de "Acompanhamentos
+cadastrados" (visível só em telas grandes -- no celular já era sempre em
+cards, isso não muda). Em "Blocos", a tabela desktop é substituída por
+uma grade de cards (2 a 3 colunas conforme a largura da tela), com os
+mesmos dados de cada linha (empresa, CNPJ, banco, rating, responsável,
+próxima atualização, saldo da semana, status) e as mesmas ações de
+sempre (`renderActionButtons`, sem nenhuma mudança de comportamento). O
+alternador vale tanto pro bloco "Acompanhamentos cadastrados" quanto pro
+bloco recolhido "Sem movimentação" (Extra 11), já que os dois reaproveitam
+a mesma função de renderização.
+
+**Empresas / Clientes PJ** (`Empresas.tsx`): o quadro vazio "Selecione
+uma empresa" foi substituído por um painel com três partes, mostrado
+sempre que nenhuma empresa está aberta:
+
+1. **Filtros rápidos sempre visíveis** -- chips de status (Todos, Ativo,
+   Inativo, Prospecto, Cliente, Ex-cliente) e selects de porte/origem,
+   agora na tela principal, sem precisar abrir o combobox. Usam
+   exatamente os mesmos estados (`filtroStatus`, `filtroPorte`,
+   `filtroOrigem`, `busca`) que o combobox já usava -- filtrar em
+   qualquer um dos dois lugares (combobox ou aqui) dá o mesmo resultado,
+   e um botão "Limpar filtros" aparece quando algum filtro está ativo.
+2. **Empresas recentes** -- lista `empresas` (já carregada e filtrada
+   pelo servidor assim que a página abre, isso já existia) ordenada pela
+   mais recentemente atualizada (`updated_at`, com `created_at` como
+   respaldo) e limitada a 24 pra não sobrecarregar a tela; muda
+   automaticamente pra "Resultado da busca" quando algum filtro ou busca
+   está ativo.
+3. **Alternador Blocos/Lista**, no mesmo padrão visual do Acompanhamento
+   Bancário -- em blocos, cada empresa vira um card clicável (avatar com
+   iniciais, razão social, status, porte, cidade/UF, data da última
+   atualização); em lista, uma versão compacta de uma linha por empresa,
+   igualmente clicável. Clicar em qualquer card ou linha chama a mesma
+   função `selecionar(emp)` que o combobox já usava pra abrir a empresa
+   -- nenhum comportamento de abertura/edição foi alterado.
+
+Em ambas as telas, nenhuma rota de API, cálculo de dado ou ação existente
+foi tocada -- só a forma como a mesma informação já carregada é exibida,
+e dois novos jeitos (blocos/lista) de olhar pra ela.
+
+### Verificação
+
+Como são mudanças de exibição em componentes React que dependem de dados
+carregados de um banco/servidor não disponível neste ambiente de
+trabalho (não há como abrir a tela de verdade e clicar), a verificação
+seguiu o mesmo padrão usado nos Extras 9, 10 e 11 (mudanças de UI sem
+pipeline de renderização própria):
+
+- `npx tsc --noEmit` limpo (o TypeScript valida a estrutura de todo o
+  JSX novo -- inclusive achou e um parâmetro sem tipo explícito, que foi
+  corrigido antes de prosseguir).
+- `npx vitest run` (suíte completa) → **540/540 testes passando**, sem
+  nenhuma mudança de contagem.
+- `npx vite build --mode production` concluído sem erros (bundle de
+  `AcompanhamentoBancario` foi de 151,02 kB para 154,76 kB gzip; o de
+  `Empresas` foi de 266,82 kB para 273,08 kB gzip -- crescimento
+  esperado pelo JSX novo).
+- Conferido por leitura de código que: (a) nenhum `<button>` ficou
+  aninhado dentro de outro `<button>` nos novos cards (o que geraria
+  HTML inválido); (b) o carregamento inicial de `empresas` em
+  `Empresas.tsx` já roda assim que a página abre (não depende do
+  combobox ser aberto), então a grade de "empresas recentes" aparece
+  imediatamente; (c) os filtros novos usam os mesmos estados que o
+  combobox já usava, sem duplicar lógica de busca.
+
+### Escopo desta correção
+
+- `client/src/pages/colaborador/AcompanhamentoBancario.tsx` — novo
+  estado `visualizacao` ("lista" | "blocos"); alternador no cabeçalho de
+  "Acompanhamentos cadastrados"; nova grade de cards desktop dentro de
+  `renderListaAcompanhamentos`, condicionada a `visualizacao === "blocos"`;
+  tabela existente agora condicionada a `visualizacao === "lista"`; bloco
+  mobile (cards) inalterado.
+- `client/src/pages/colaborador/Empresas.tsx` — novo estado
+  `visualizacaoEmpresas`; novo `useMemo` `empresasRecentes` (ordenação
+  client-side por `updated_at`, limite de 24); bloco `!selecionada`
+  reescrito com filtros rápidos + alternador + grade/lista de empresas
+  recentes, substituindo o antigo quadro vazio "Selecione uma empresa".
+  Nenhuma rota, filtro server-side ou fluxo de seleção/edição de empresa
+  foi alterado.
