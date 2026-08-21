@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useRef } from "react";
+import { useState, useEffect, useCallback, useRef, useMemo } from "react";
 import Layout from "./Layout";
 import { apiFetch, apiFetchBlob } from "@/lib/api";
 import { toast } from "sonner";
@@ -19,6 +19,7 @@ import {
   Building, CreditCard, Hash, Calendar, Users, Briefcase,
   ArrowLeft, MoreVertical, ExternalLink, Copy, CheckCheck,
   BarChart3, Banknote, AlertCircle, Info, RotateCw, Zap, FileDown, Download,
+  LayoutGrid, List as ListIcon,
 } from "lucide-react";
 import { EmptyState, LoadingState, ErrorState } from "@/components/ui/states";
 import { RiscoBadge, ScoreIndicator, StatusCadastroBadge } from "@/components/ui/risco-badge";
@@ -975,6 +976,10 @@ export default function Empresas() {
   const [selecionada, setSelecionada] = useState<Empresa | null>(null);
   const [showDetail, setShowDetail] = useState(false); // mobile toggle
   const [comboAberto, setComboAberto] = useState(false);
+  // Tela inicial (antes de escolher uma empresa): mostra as empresas com
+  // movimentação mais recente em blocos ou numa lista compacta -- mesmo
+  // padrão de visualização do Acompanhamento Bancário.
+  const [visualizacaoEmpresas, setVisualizacaoEmpresas] = useState<"blocos" | "lista">("blocos");
   const [abaAtiva, setAbaAtiva] = useState<AbaEmpresa>("visao_geral");
   const [followups, setFollowups] = useState<EmpresaFollowup[]>([]);
   const [historico, setHistorico] = useState<EmpresaHistorico[]>([]);
@@ -1704,6 +1709,17 @@ export default function Empresas() {
 
   // ── Stats header ───────────────────────────────────────────────────────────
 
+  // `empresas` já vem filtrada pelo servidor (busca/status/porte/origem, ver
+  // carregarEmpresas). Aqui só ordena pelas mais recentemente atualizadas e
+  // limita a quantidade mostrada de cara na tela inicial (antes de escolher
+  // uma empresa) -- ordenação e limite são só de exibição, não afetam a busca.
+  const LIMITE_EMPRESAS_RECENTES = 24;
+  const empresasRecentes = useMemo(() => {
+    return [...empresas]
+      .sort((a, b) => new Date(b.updated_at || b.created_at || 0).getTime() - new Date(a.updated_at || a.created_at || 0).getTime())
+      .slice(0, LIMITE_EMPRESAS_RECENTES);
+  }, [empresas]);
+
   // ─────────────────────────────────────────────────────────────────────────
   // RENDER
   // ─────────────────────────────────────────────────────────────────────────
@@ -1889,13 +1905,168 @@ export default function Empresas() {
             {/* ── Detalhe ── */}
             <div className="flex-1 min-w-0">
               {!selecionada ? (
-                <div className="flex flex-col items-center justify-center h-full min-h-[420px] gap-4 rounded-2xl border-2 border-dashed border-slate-200 bg-white">
-                  <div className="w-16 h-16 rounded-2xl bg-slate-100 flex items-center justify-center">
-                    <Building2 className="w-8 h-8 text-slate-300" />
+                <div className="rounded-2xl border border-slate-200 bg-white shadow-sm">
+                  {/* ── Filtros rápidos: status/porte/origem sempre visíveis, sem precisar
+                      abrir o combobox de busca -- usam os mesmos estados dele, então
+                      buscar em qualquer um dos dois lugares filtra o mesmo resultado. ── */}
+                  <div className="flex flex-col gap-2.5 border-b border-slate-100 px-4 py-3">
+                    <div className="flex flex-wrap items-center gap-1.5">
+                      <button
+                        type="button"
+                        onClick={() => setFiltroStatus("todos")}
+                        className={`rounded-full px-2.5 py-1 text-[11px] font-bold transition ${filtroStatus === "todos" ? "bg-slate-900 text-white" : "bg-slate-100 text-slate-600 hover:bg-slate-200"}`}
+                      >Todos</button>
+                      {Object.entries(STATUS_CFG).map(([key, cfg]) => (
+                        <button
+                          key={key}
+                          type="button"
+                          onClick={() => setFiltroStatus(key)}
+                          className={`rounded-full px-2.5 py-1 text-[11px] font-bold transition ${filtroStatus === key ? "bg-slate-900 text-white" : `${cfg.badge} hover:opacity-80`}`}
+                        >{cfg.label}</button>
+                      ))}
+                      <span className="mx-1 hidden h-4 w-px bg-slate-200 sm:block" />
+                      <select
+                        value={filtroPorte}
+                        onChange={e => setFiltroPorte(e.target.value)}
+                        className="h-7 rounded-full border border-slate-200 bg-white px-2.5 text-[11px] font-semibold text-slate-600 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                      >
+                        <option value="todos">Porte (todos)</option>
+                        {Object.entries(PORTE_CFG).map(([key, cfg]) => <option key={key} value={key}>{cfg.label}</option>)}
+                      </select>
+                      <select
+                        value={filtroOrigem}
+                        onChange={e => setFiltroOrigem(e.target.value)}
+                        className="h-7 rounded-full border border-slate-200 bg-white px-2.5 text-[11px] font-semibold text-slate-600 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                      >
+                        <option value="todos">Origem (todas)</option>
+                        <option value="simulador">Simulador</option>
+                        <option value="indicacao">Indicação</option>
+                        <option value="campanha">Campanha</option>
+                        <option value="site">Site</option>
+                        <option value="manual">Manual</option>
+                      </select>
+                      {(filtroStatus !== "todos" || filtroPorte !== "todos" || filtroOrigem !== "todos" || busca.trim()) && (
+                        <button
+                          type="button"
+                          onClick={() => { setFiltroStatus("todos"); setFiltroPorte("todos"); setFiltroOrigem("todos"); setBusca(""); }}
+                          className="rounded-full px-2.5 py-1 text-[11px] font-bold text-blue-600 hover:underline"
+                        >Limpar filtros</button>
+                      )}
+                    </div>
                   </div>
-                  <div className="text-center">
-                    <p className="text-sm font-semibold text-slate-500">Selecione uma empresa</p>
-                    <p className="text-xs text-slate-400 mt-1">Use o campo de busca acima para encontrar e abrir os detalhes</p>
+
+                  {/* ── Cabeçalho + alternância blocos/lista ── */}
+                  <div className="flex items-center justify-between gap-3 px-4 py-3">
+                    <div>
+                      <h2 className="text-sm font-bold text-slate-900">
+                        {busca.trim() || filtroStatus !== "todos" || filtroPorte !== "todos" || filtroOrigem !== "todos" ? "Resultado da busca" : "Empresas recentes"}
+                      </h2>
+                      <p className="text-[11px] text-slate-400">
+                        {loading ? "Carregando…" : `${empresasRecentes.length} de ${empresas.length} empresa${empresas.length !== 1 ? "s" : ""} · ordenadas pela última movimentação`}
+                      </p>
+                    </div>
+                    <div className="flex shrink-0 items-center gap-0.5 rounded-lg border border-slate-200 bg-slate-50 p-0.5">
+                      <button
+                        type="button"
+                        onClick={() => setVisualizacaoEmpresas("blocos")}
+                        className={`inline-flex items-center gap-1 rounded-md px-2 py-1 text-[11px] font-semibold transition ${visualizacaoEmpresas === "blocos" ? "bg-white text-slate-900 shadow-sm" : "text-slate-500 hover:text-slate-700"}`}
+                        title="Ver como blocos"
+                      ><LayoutGrid className="h-3 w-3" /> Blocos</button>
+                      <button
+                        type="button"
+                        onClick={() => setVisualizacaoEmpresas("lista")}
+                        className={`inline-flex items-center gap-1 rounded-md px-2 py-1 text-[11px] font-semibold transition ${visualizacaoEmpresas === "lista" ? "bg-white text-slate-900 shadow-sm" : "text-slate-500 hover:text-slate-700"}`}
+                        title="Ver como lista"
+                      ><ListIcon className="h-3 w-3" /> Lista</button>
+                    </div>
+                  </div>
+
+                  {/* ── Conteúdo: cards recentes em blocos ou lista compacta ── */}
+                  <div className="px-4 pb-4">
+                    {loading ? (
+                      <LoadingState message="Carregando empresas…" className="py-10" />
+                    ) : empresasRecentes.length === 0 ? (
+                      <EmptyState
+                        preset="empresas"
+                        title="Nenhuma empresa encontrada"
+                        description="Ajuste os filtros acima ou cadastre a primeira empresa para começar."
+                        action={<button onClick={abrirNova} className="text-xs text-blue-600 hover:underline">+ Cadastrar primeira empresa</button>}
+                        className="py-10"
+                      />
+                    ) : visualizacaoEmpresas === "blocos" ? (
+                      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-3">
+                        {empresasRecentes.map(emp => (
+                          <button
+                            key={emp.id}
+                            type="button"
+                            onClick={() => selecionar(emp)}
+                            className="flex flex-col items-start rounded-2xl border border-slate-200 bg-white p-4 text-left shadow-sm transition hover:shadow-md hover:border-blue-300"
+                          >
+                            <div className="flex w-full items-start justify-between gap-2">
+                              <div className="flex min-w-0 items-start gap-2.5">
+                                <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-slate-800 text-xs font-black text-white">
+                                  {getInitials(emp.razao_social)}
+                                </div>
+                                <div className="min-w-0">
+                                  <h3 className="truncate text-sm font-bold text-slate-900 leading-tight">{emp.razao_social}</h3>
+                                  {emp.nome_fantasia && <p className="mt-0.5 truncate text-[11px] text-slate-400">{emp.nome_fantasia}</p>}
+                                </div>
+                              </div>
+                              <StatusBadge status={emp.status} />
+                            </div>
+                            <div className="mt-3 flex flex-wrap items-center gap-1.5">
+                              {emp.porte && (
+                                <span className={`text-[10px] font-semibold px-2 py-0.5 rounded-full ${PORTE_CFG[emp.porte]?.color || "bg-slate-100 text-slate-500"}`}>
+                                  {PORTE_CFG[emp.porte]?.label}
+                                </span>
+                              )}
+                              {(emp.cidade || emp.estado) && (
+                                <span className="text-[10px] text-slate-400 truncate">{[emp.cidade, emp.estado].filter(Boolean).join(" / ")}</span>
+                              )}
+                            </div>
+                            <div className="mt-3 flex w-full items-center justify-between border-t border-slate-100 pt-2">
+                              <span className="text-[10px] text-slate-400">Atualizado {fmtDate(emp.updated_at)}</span>
+                              <span className="text-[10px] font-bold text-blue-600">Abrir →</span>
+                            </div>
+                          </button>
+                        ))}
+                      </div>
+                    ) : (
+                      <div className="space-y-1.5">
+                        {empresasRecentes.map(emp => (
+                          <button
+                            key={emp.id}
+                            type="button"
+                            onClick={() => selecionar(emp)}
+                            className="emp-list-item flex w-full items-center gap-2.5 rounded-xl border border-slate-200 bg-white p-2.5 text-left hover:border-blue-300 hover:bg-blue-50/40"
+                          >
+                            <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-slate-800 text-xs font-black text-white">
+                              {getInitials(emp.razao_social)}
+                            </div>
+                            <div className="min-w-0 flex-1">
+                              <p className="truncate text-sm font-semibold text-slate-900">{emp.razao_social}</p>
+                              <div className="mt-0.5 flex flex-wrap items-center gap-1.5">
+                                {emp.porte && (
+                                  <span className={`text-[10px] font-semibold px-1.5 py-0.5 rounded-full ${PORTE_CFG[emp.porte]?.color || "bg-slate-100 text-slate-500"}`}>
+                                    {PORTE_CFG[emp.porte]?.label}
+                                  </span>
+                                )}
+                                {(emp.cidade || emp.estado) && (
+                                  <span className="text-[10px] text-slate-400 truncate">{[emp.cidade, emp.estado].filter(Boolean).join(", ")}</span>
+                                )}
+                              </div>
+                            </div>
+                            <span className="shrink-0 text-[10px] text-slate-400">Atualizado {fmtDate(emp.updated_at)}</span>
+                            <StatusBadge status={emp.status} />
+                          </button>
+                        ))}
+                      </div>
+                    )}
+                    {!loading && empresas.length > empresasRecentes.length && (
+                      <p className="mt-3 text-center text-[11px] text-slate-400">
+                        Mostrando {empresasRecentes.length} de {empresas.length} — refine a busca ou os filtros acima para ver outras.
+                      </p>
+                    )}
                   </div>
                 </div>
               ) : (

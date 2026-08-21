@@ -3,6 +3,7 @@ import ColaboradorLayout from "./Layout";
 import { useAuth } from "@/hooks/useAuth";
 import CompensacaoSemanalCard from "@/components/CompensacaoSemanalCard";
 import { maskCurrencyInput, unmaskCurrencyInput, formatBRLCurrency } from "@/lib/currency";
+import { LayoutGrid, List as ListIcon } from "lucide-react";
 
 // ─── Tipos ────────────────────────────────────────────────────────────────────
 type Acompanhamento = Record<string, any>;
@@ -1034,6 +1035,10 @@ export default function AcompanhamentoBancario() {
   // ficavam todas visíveis ao mesmo tempo; agora só as mais usadas aparecem
   // direto, o resto fica atrás deste menu.
   const [menuAcoesAbertoId, setMenuAcoesAbertoId] = useState<string | null>(null);
+  // Alterna entre a tabela (desktop) e uma grade de cards/blocos -- no celular
+  // já era sempre em cards; isso só afeta telas >= lg. Um único toggle vale
+  // pros dois blocos da tela (cadastrados + sem movimentação).
+  const [visualizacao, setVisualizacao] = useState<"lista" | "blocos">("lista");
 
   const [novoOpen, setNovoOpen] = useState(false);
   const [updOpen, setUpdOpen] = useState<Acompanhamento | null>(null);
@@ -2534,8 +2539,8 @@ export default function AcompanhamentoBancario() {
   // por definição, então esse separador não faz sentido ali.
   const renderListaAcompanhamentos = (lista: Acompanhamento[], opts: { mostrarDivisorPendente: boolean }) => (
     <>
-      {/* Desktop */}
-      <div className="hidden lg:block">
+      {/* Desktop — tabela (visualização "lista") */}
+      <div className={visualizacao === "lista" ? "hidden lg:block" : "hidden"}>
         <table className="w-full table-fixed text-sm">
           <colgroup>
             <col className="w-[22%]" /><col className="w-[13%]" /><col className="w-[10%]" />
@@ -2624,6 +2629,70 @@ export default function AcompanhamentoBancario() {
           </tbody>
         </table>
       </div>
+
+      {/* Desktop — grade de cards (visualização "blocos") */}
+      {visualizacao === "blocos" && (
+        <div className="hidden gap-3 p-4 lg:grid lg:grid-cols-2 xl:grid-cols-3">
+          {loading ? (
+            <div className="col-span-full rounded-lg border border-gray-200 p-4 text-sm text-gray-500">Carregando acompanhamentos...</div>
+          ) : lista.length === 0 ? (
+            <div className="col-span-full rounded-lg border border-gray-200 p-4 text-sm text-gray-500">Nenhum acompanhamento cadastrado.</div>
+          ) : (
+            lista.map((row) => {
+              const pendente = row.status_pendente || row.atualizacao_pendente;
+              const saldo = Number(row.saldo_semanal || row.saldo_ultima_semana || 0);
+              const iniciais = (row.nome_empresa || "-").split(" ").filter(Boolean).slice(0, 2).map((w: string) => w[0]).join("").toUpperCase();
+              return (
+                <article key={row.id} className="flex flex-col rounded-2xl border border-slate-200 bg-white p-4 shadow-sm transition hover:shadow-md hover:border-slate-300">
+                  <div className="flex items-start justify-between gap-2">
+                    <button
+                      type="button"
+                      onClick={() => carregarDetalhe(row.id)}
+                      className="flex min-w-0 items-start gap-2.5 text-left"
+                      title="Abrir detalhes deste acompanhamento"
+                    >
+                      <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-slate-800 text-xs font-black text-white">
+                        {iniciais || "-"}
+                      </div>
+                      <div className="min-w-0">
+                        <h3 className="truncate text-sm font-bold text-slate-900 leading-tight hover:underline">{row.nome_empresa || "-"}</h3>
+                        <p className="mt-0.5 truncate text-[11px] text-slate-400">{row.cnpj || "-"} · {row.banco_observado || "-"}</p>
+                      </div>
+                    </button>
+                    <span className={`shrink-0 rounded-full border px-2 py-1 text-[10px] font-bold ${situacaoBadgeInfo(row).classe}`}>
+                      {situacaoBadgeInfo(row).label}
+                    </span>
+                  </div>
+                  {pendente && (
+                    <span className="mt-2 inline-flex w-fit items-center gap-1 rounded-full bg-orange-100 px-2 py-0.5 text-[10px] font-semibold text-orange-700">
+                      ⚠️ {row.dias_sem_atualizacao > 0 ? `Parado há ${row.dias_sem_atualizacao} dia(s)` : "Pendente hoje"}
+                    </span>
+                  )}
+                  <dl className="mt-3 grid grid-cols-2 gap-2 text-xs">
+                    <div>
+                      <dt className="text-[10px] text-slate-400">Rating</dt>
+                      <dd className="font-semibold text-slate-700">{row.rating_interno_atual || row.rating_bacen_atual || "-"}</dd>
+                    </div>
+                    <div>
+                      <dt className="text-[10px] text-slate-400">Responsável</dt>
+                      <dd className="font-semibold text-slate-700">{row.responsavel_nome || "-"}</dd>
+                    </div>
+                    <div>
+                      <dt className="text-[10px] text-slate-400">Próxima atualização</dt>
+                      <dd className="font-semibold text-slate-700">{formatDateBR(row.proxima_atualizacao)}</dd>
+                    </div>
+                    <div>
+                      <dt className="text-[10px] text-slate-400">Saldo semana</dt>
+                      <dd className={`font-bold ${saldo < 0 ? "text-red-600" : saldo > 0 ? "text-green-700" : "text-slate-700"}`}>{moneyBR(saldo)}</dd>
+                    </div>
+                  </dl>
+                  <div className="mt-3 border-t border-slate-100 pt-3">{renderActionButtons(row)}</div>
+                </article>
+              );
+            })
+          )}
+        </div>
+      )}
 
       {/* Mobile */}
       <div className="grid gap-3 p-3 lg:hidden">
@@ -2827,6 +2896,21 @@ export default function AcompanhamentoBancario() {
             <div>
               <h2 className="text-sm font-bold text-slate-900">Acompanhamentos cadastrados</h2>
               <p className="text-[10px] text-slate-400">{listaEmAndamento.length} registro(s) · ações disponíveis em cada linha</p>
+            </div>
+            {/* Alterna tabela × blocos -- só afeta telas >= lg (no celular já é sempre em cards) */}
+            <div className="hidden shrink-0 items-center gap-0.5 rounded-lg border border-slate-200 bg-slate-50 p-0.5 lg:flex">
+              <button
+                type="button"
+                onClick={() => setVisualizacao("lista")}
+                className={`inline-flex items-center gap-1 rounded-md px-2 py-1 text-[11px] font-semibold transition ${visualizacao === "lista" ? "bg-white text-slate-900 shadow-sm" : "text-slate-500 hover:text-slate-700"}`}
+                title="Ver como lista/tabela"
+              ><ListIcon className="h-3 w-3" /> Lista</button>
+              <button
+                type="button"
+                onClick={() => setVisualizacao("blocos")}
+                className={`inline-flex items-center gap-1 rounded-md px-2 py-1 text-[11px] font-semibold transition ${visualizacao === "blocos" ? "bg-white text-slate-900 shadow-sm" : "text-slate-500 hover:text-slate-700"}`}
+                title="Ver como blocos"
+              ><LayoutGrid className="h-3 w-3" /> Blocos</button>
             </div>
           </div>
           {renderListaAcompanhamentos(listaEmAndamento, { mostrarDivisorPendente: true })}
