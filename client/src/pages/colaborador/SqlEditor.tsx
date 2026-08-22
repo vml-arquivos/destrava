@@ -319,13 +319,13 @@ export default function SqlEditorPage() {
         </div>
 
         {/* Aviso */}
-        <div className="flex items-start gap-2 bg-amber-50 border border-amber-200 rounded-xl px-4 py-3 text-sm text-amber-800">
+        <div className="flex items-start gap-2 bg-warning/10 border border-warning/20 rounded-xl px-4 py-3 text-sm text-warning">
           <AlertCircle className="h-4 w-4 mt-0.5 flex-shrink-0" />
           <span>
-            <strong>Atenção:</strong> Comandos <code className="bg-amber-100 px-1 rounded">DROP</code>,{" "}
-            <code className="bg-amber-100 px-1 rounded">DELETE</code> e{" "}
-            <code className="bg-amber-100 px-1 rounded">TRUNCATE</code> são permanentes.
-            Use com cuidado. O SQL Editor usa a função <code className="bg-amber-100 px-1 rounded">exec_sql</code> do Supabase.
+            <strong>Atenção:</strong> Comandos <code className="bg-warning/20 px-1 rounded">DROP</code>,{" "}
+            <code className="bg-warning/20 px-1 rounded">DELETE</code> e{" "}
+            <code className="bg-warning/20 px-1 rounded">TRUNCATE</code> são permanentes.
+            Use com cuidado. O SQL Editor usa a função <code className="bg-warning/20 px-1 rounded">exec_sql</code> do Supabase.
           </span>
         </div>
 
@@ -417,13 +417,13 @@ export default function SqlEditorPage() {
 
         {/* Resultado */}
         {(resultado !== null || erro) && (
-          <Card className={`shadow-md ${erro ? "border-red-200" : "border-green-200"}`}>
+          <Card className={`shadow-md ${erro ? "border-destructive/20" : "border-success/20"}`}>
             <CardHeader className="pb-3 border-b">
               <div className="flex items-center justify-between">
                 <CardTitle className="text-sm flex items-center gap-2">
                   {erro
-                    ? <AlertCircle className="h-4 w-4 text-red-600" />
-                    : <CheckCircle2 className="h-4 w-4 text-green-600" />
+                    ? <AlertCircle className="h-4 w-4 text-destructive" />
+                    : <CheckCircle2 className="h-4 w-4 text-success" />
                   }
                   {erro ? "Erro na Execução" : `Resultado — ${linhasResultado} linha${linhasResultado !== 1 ? "s" : ""}`}
                 </CardTitle>
@@ -437,7 +437,7 @@ export default function SqlEditorPage() {
             </CardHeader>
             <CardContent className="pt-4">
               {erro ? (
-                <pre className="bg-red-50 border border-red-200 rounded-xl p-4 text-sm text-red-800 overflow-x-auto whitespace-pre-wrap">
+                <pre className="bg-destructive/10 border border-destructive/20 rounded-xl p-4 text-sm text-destructive overflow-x-auto whitespace-pre-wrap">
                   {erro}
                 </pre>
               ) : Array.isArray(resultado) && resultado.length > 0 ? (
@@ -471,7 +471,7 @@ export default function SqlEditorPage() {
                   </table>
                 </div>
               ) : (
-                <div className="bg-green-50 border border-green-200 rounded-xl p-4 text-sm text-green-800">
+                <div className="bg-success/10 border border-success/20 rounded-xl p-4 text-sm text-success">
                   <CheckCircle2 className="h-4 w-4 inline mr-1.5" />
                   Query executada com sucesso. Nenhum dado retornado (INSERT, UPDATE, CREATE, etc.).
                 </div>
@@ -502,8 +502,8 @@ export default function SqlEditorPage() {
                       onClick={() => setSql(item.sql)}
                     >
                       {item.erro
-                        ? <AlertCircle className="h-4 w-4 text-red-500 flex-shrink-0 mt-0.5" />
-                        : <CheckCircle2 className="h-4 w-4 text-green-500 flex-shrink-0 mt-0.5" />
+                        ? <AlertCircle className="h-4 w-4 text-destructive flex-shrink-0 mt-0.5" />
+                        : <CheckCircle2 className="h-4 w-4 text-success flex-shrink-0 mt-0.5" />
                       }
                       <div className="min-w-0 flex-1">
                         <p className="text-xs font-mono truncate text-muted-foreground">
@@ -511,7 +511,7 @@ export default function SqlEditorPage() {
                         </p>
                         <p className="text-xs text-muted-foreground mt-0.5">
                           {item.timestamp.toLocaleTimeString("pt-BR")} · {item.duracao}ms
-                          {item.erro && <span className="text-red-500 ml-2">Erro</span>}
+                          {item.erro && <span className="text-destructive ml-2">Erro</span>}
                         </p>
                       </div>
                     </div>

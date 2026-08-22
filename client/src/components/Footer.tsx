@@ -61,7 +61,7 @@ export default function Footer() {
                 <Linkedin className="h-4 w-4" />
               </a>
               <a href={COMPANY.whatsappLink} target="_blank" rel="noopener noreferrer"
-                className="w-9 h-9 rounded-lg bg-card/10 hover:bg-green-500 flex items-center justify-center transition-all"
+                className="w-9 h-9 rounded-lg bg-card/10 hover:bg-success flex items-center justify-center transition-all"
                 aria-label="WhatsApp">
                 <MessageCircle className="h-4 w-4" />
               </a>

@@ -137,6 +137,7 @@ interface Inteligencia360Data {
   caminho_sugerido: string;
   gerado_em: string;
   fonte: string;
+  falha_consulta_documental?: boolean;
 }
 
 // ─── Utilitários ──────────────────────────────────────────────────────────────
@@ -163,7 +164,7 @@ function fmtDate(v: string | null | undefined): string {
 
 const SAUDE_CFG: Record<string, { label: string; color: string; bg: string; dot: string }> = {
   completo:     { label: "Completo",     color: "text-success", bg: "bg-success/10 border-success/20", dot: "bg-success" },
-  basico:       { label: "Básico",       color: "text-sky-700",     bg: "bg-sky-50 border-sky-200",         dot: "bg-sky-500" },
+  basico:       { label: "Básico",       color: "text-primary",     bg: "bg-primary/10 border-primary/20",         dot: "bg-primary" },
   incompleto:   { label: "Incompleto",   color: "text-warning",   bg: "bg-warning/10 border-warning/20",     dot: "bg-warning/100" },
   parcial:      { label: "Parcial",      color: "text-warning",   bg: "bg-warning/10 border-warning/20",     dot: "bg-warning/100" },
   insuficiente: { label: "Insuficiente", color: "text-warning",  bg: "bg-warning/10 border-warning/20",   dot: "bg-warning" },
@@ -203,7 +204,7 @@ const SEV_CFG: Record<string, { color: string; label: string }> = {
 
 function ScoreBar({ score, max = 100 }: { score: number; max?: number }) {
   const pct = Math.min(100, Math.max(0, (score / max) * 100));
-  const cor = pct >= 70 ? "bg-success" : pct >= 50 ? "bg-amber-400" : pct >= 30 ? "bg-orange-400" : "bg-destructive";
+  const cor = pct >= 70 ? "bg-success" : pct >= 50 ? "bg-warning" : pct >= 30 ? "bg-warning" : "bg-destructive";
   return (
     <div className="flex items-center gap-2">
       <div className="flex-1 h-1.5 rounded-full bg-muted overflow-hidden">
@@ -317,7 +318,7 @@ export default function Inteligencia360({ empresaId, onNavegar }: Props) {
   if (erro || !data) {
     return (
       <div className="p-6 text-center">
-        <AlertCircle className="w-8 h-8 text-red-400 mx-auto mb-2" />
+        <AlertCircle className="w-8 h-8 text-destructive mx-auto mb-2" />
         <p className="text-sm text-destructive font-semibold">{erro || "Dados indisponíveis"}</p>
         <button onClick={carregar} className="mt-3 text-xs text-primary hover:underline font-semibold">Tentar novamente</button>
       </div>
@@ -413,6 +414,13 @@ export default function Inteligencia360({ empresaId, onNavegar }: Props) {
             </div>
           </div>
 
+          {data.falha_consulta_documental === true && (
+            <div className="mt-3 flex items-start gap-2 rounded-xl border border-warning/20 bg-warning/10 p-3 text-warning">
+              <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
+              <p className="text-[11px] leading-relaxed"><span className="font-black">Consulta das análises documentais indisponível.</span> A análise determinística continua disponível; tente recalcular mais tarde para atualizar os pareceres documentais persistidos.</p>
+            </div>
+          )}
+
           {bloqueiosIniciais.length > 0 && (
             <div className="mt-3 rounded-xl border border-destructive/20 bg-card p-3">
               <p className="text-xs font-black text-destructive">O que falta para concluir</p>
@@ -473,6 +481,13 @@ export default function Inteligencia360({ empresaId, onNavegar }: Props) {
           </button>
         </div>
       </div>
+
+      {data.falha_consulta_documental === true && (
+        <div className="flex items-start gap-2 rounded-xl border border-warning/20 bg-warning/10 p-3 text-warning">
+          <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
+          <p className="text-[11px] leading-relaxed"><span className="font-black">Consulta das análises documentais indisponível.</span> A análise determinística continua disponível; tente recalcular mais tarde para atualizar os pareceres documentais persistidos.</p>
+        </div>
+      )}
 
       {/* ── Painel de Scores ── */}
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
@@ -597,7 +612,7 @@ export default function Inteligencia360({ empresaId, onNavegar }: Props) {
         </div>
         {socios.length === 0 ? (
           <div className="flex items-center gap-2 py-3 text-sm text-muted-foreground">
-            <AlertTriangle className="w-4 h-4 text-amber-400" />
+            <AlertTriangle className="w-4 h-4 text-warning" />
             Nenhum sócio cadastrado — necessário para contrato e análise de crédito.
           </div>
         ) : (
@@ -615,9 +630,9 @@ export default function Inteligencia360({ empresaId, onNavegar }: Props) {
                   </div>
                   <div className="flex items-center gap-1.5 shrink-0">
                     {temCpf ? (
-                      <CheckCircle2 className="w-3.5 h-3.5 text-emerald-500" />
+                      <CheckCircle2 className="w-3.5 h-3.5 text-success" />
                     ) : (
-                      <XCircle className="w-3.5 h-3.5 text-red-400" />
+                      <XCircle className="w-3.5 h-3.5 text-destructive" />
                     )}
                     {s?.representante_legal && (
                       <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-primary/20 text-primary font-semibold">Rep. Legal</span>
@@ -663,7 +678,7 @@ export default function Inteligencia360({ empresaId, onNavegar }: Props) {
         </div>
         {documentos.length === 0 ? (
           <div className="flex items-center gap-2 py-3 text-sm text-muted-foreground">
-            <FileWarning className="w-4 h-4 text-amber-400" />
+            <FileWarning className="w-4 h-4 text-warning" />
             Nenhum documento no acervo — faça upload dos documentos necessários.
           </div>
         ) : (
@@ -673,9 +688,9 @@ export default function Inteligencia360({ empresaId, onNavegar }: Props) {
               return (
                 <div key={d?.id ?? i} className="flex items-center gap-2 p-2 rounded-lg border border-border bg-muted">
                   {temArquivo ? (
-                    <CheckCheck className="w-3.5 h-3.5 text-emerald-500 shrink-0" />
+                    <CheckCheck className="w-3.5 h-3.5 text-success shrink-0" />
                   ) : (
-                    <AlertTriangle className="w-3.5 h-3.5 text-amber-400 shrink-0" />
+                    <AlertTriangle className="w-3.5 h-3.5 text-warning shrink-0" />
                   )}
                   <span className="text-xs text-foreground truncate">{d?.tipo || d?.nome_arquivo || "Documento"}</span>
                   {d?.status && d.status !== "ativo" && (
@@ -726,7 +741,7 @@ export default function Inteligencia360({ empresaId, onNavegar }: Props) {
               <ul className="space-y-1.5 pt-2">
                 {pendencias_contrato.map((p, i) => (
                   <li key={i} className="flex items-start gap-2 text-xs text-foreground">
-                    <XCircle className="w-3.5 h-3.5 text-red-400 mt-0.5 shrink-0" />
+                    <XCircle className="w-3.5 h-3.5 text-destructive mt-0.5 shrink-0" />
                     {p}
                   </li>
                 ))}
@@ -739,7 +754,7 @@ export default function Inteligencia360({ empresaId, onNavegar }: Props) {
               <ul className="space-y-1.5 pt-2">
                 {pendencias_credito.map((p, i) => (
                   <li key={i} className="flex items-start gap-2 text-xs text-foreground">
-                    <XCircle className="w-3.5 h-3.5 text-orange-400 mt-0.5 shrink-0" />
+                    <XCircle className="w-3.5 h-3.5 text-warning mt-0.5 shrink-0" />
                     {p}
                   </li>
                 ))}
@@ -752,7 +767,7 @@ export default function Inteligencia360({ empresaId, onNavegar }: Props) {
               <ul className="space-y-1.5 pt-2">
                 {pendencias_faturamento.map((p, i) => (
                   <li key={i} className="flex items-start gap-2 text-xs text-foreground">
-                    <Info className="w-3.5 h-3.5 text-amber-400 mt-0.5 shrink-0" />
+                    <Info className="w-3.5 h-3.5 text-warning mt-0.5 shrink-0" />
                     {p}
                   </li>
                 ))}

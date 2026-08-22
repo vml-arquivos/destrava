@@ -2434,7 +2434,7 @@ export default function AcompanhamentoBancario() {
     return (
       <div className="flex flex-wrap items-center gap-1.5">
         <button
-          className="rounded-lg border border-border bg-white px-2.5 py-1.5 text-xs font-semibold text-muted-foreground transition hover:bg-muted"
+          className="rounded-lg border border-border bg-card px-2.5 py-1.5 text-xs font-semibold text-muted-foreground transition hover:bg-muted"
           onClick={() => carregarDetalhe(row.id)}
         >Detalhes</button>
         {!encerradoJa && (
@@ -2461,10 +2461,10 @@ export default function AcompanhamentoBancario() {
           <button
             type="button"
             onClick={() => setMenuAcoesAbertoId(menuAberto ? null : row.id)}
-            className={`rounded-lg border px-2.5 py-1.5 text-xs font-semibold transition ${menuAberto ? "border-input bg-muted text-foreground" : "border-border bg-white text-muted-foreground hover:bg-muted"}`}
+            className={`rounded-lg border px-2.5 py-1.5 text-xs font-semibold transition ${menuAberto ? "border-input bg-muted text-foreground" : "border-border bg-card text-muted-foreground hover:bg-muted"}`}
           >Mais ações ▾</button>
           {menuAberto && (
-            <div className="absolute left-0 top-full z-20 mt-1 w-52 rounded-lg border border-border bg-white py-1 shadow-lg">
+            <div className="absolute left-0 top-full z-20 mt-1 w-52 rounded-lg border border-border bg-card py-1 shadow-lg">
               <button
                 className="block w-full px-3 py-1.5 text-left text-xs font-medium text-muted-foreground hover:bg-primary/10 hover:text-primary"
                 onClick={() => { setMenuAcoesAbertoId(null); carregarDetalhe(row.id); }}
@@ -2643,7 +2643,7 @@ export default function AcompanhamentoBancario() {
               const saldo = Number(row.saldo_semanal || row.saldo_ultima_semana || 0);
               const iniciais = (row.nome_empresa || "-").split(" ").filter(Boolean).slice(0, 2).map((w: string) => w[0]).join("").toUpperCase();
               return (
-                <article key={row.id} className="flex flex-col rounded-2xl border border-border bg-white p-4 shadow-sm transition hover:shadow-md hover:border-input">
+                <article key={row.id} className="flex flex-col rounded-2xl border border-border bg-card p-4 shadow-sm transition hover:shadow-md hover:border-input">
                   <div className="flex items-start justify-between gap-2">
                     <button
                       type="button"
@@ -2651,7 +2651,7 @@ export default function AcompanhamentoBancario() {
                       className="flex min-w-0 items-start gap-2.5 text-left"
                       title="Abrir detalhes deste acompanhamento"
                     >
-                      <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-brand-navy text-xs font-black text-white">
+                      <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-brand-navy text-xs font-black text-primary-foreground">
                         {iniciais || "-"}
                       </div>
                       <div className="min-w-0">
@@ -2705,7 +2705,7 @@ export default function AcompanhamentoBancario() {
             const pendente = row.status_pendente || row.atualizacao_pendente;
             const saldo = Number(row.saldo_semanal || row.saldo_ultima_semana || 0);
             return (
-              <article key={row.id} className="rounded-xl border border-border bg-white p-4 shadow-sm">
+              <article key={row.id} className="rounded-xl border border-border bg-card p-4 shadow-sm">
                 <div className="flex items-start justify-between gap-3">
                   <div>
                     <h3 className="font-semibold leading-snug text-foreground">{row.nome_empresa || "-"}</h3>
@@ -2775,7 +2775,7 @@ export default function AcompanhamentoBancario() {
       <div className="w-full space-y-3 overflow-x-hidden p-3 md:p-4">
 
         {/* Header */}
-        <div className="flex flex-col items-start justify-between gap-3 rounded-xl border border-border bg-white px-4 py-3 shadow-sm md:flex-row md:items-center">
+        <div className="flex flex-col items-start justify-between gap-3 rounded-xl border border-border bg-card px-4 py-3 shadow-sm md:flex-row md:items-center">
           <div>
             <h1 className="text-lg font-black text-foreground tracking-tight">Acompanhamento Bancário</h1>
             <p className="text-xs text-muted-foreground mt-0.5">
@@ -2783,7 +2783,7 @@ export default function AcompanhamentoBancario() {
             </p>
           </div>
           <button
-            className="inline-flex items-center gap-1.5 rounded-xl bg-primary px-3 py-2 text-xs font-bold text-white hover:bg-primary/90 transition-colors shadow-sm shadow-blue-200 shrink-0"
+            className="inline-flex items-center gap-1.5 rounded-xl bg-primary px-3 py-2 text-xs font-bold text-primary-foreground hover:bg-primary/90 transition-colors shadow-sm shadow-blue-200 shrink-0"
             onClick={() => {
               setEditandoId(null);
               setNovo({ nome_empresa: "", banco_observado: "", data_inicio: hojeISO() });
@@ -2824,22 +2824,22 @@ export default function AcompanhamentoBancario() {
         </div>
 
         {/* Filtros */}
-        <div className="rounded-xl border border-border bg-white px-3 py-2.5">
+        <div className="rounded-xl border border-border bg-card px-3 py-2.5">
           <div className="flex flex-wrap gap-2 items-center">
             <input
-              className="h-8 rounded-lg border border-border px-3 text-xs bg-white focus:outline-none focus:ring-2 focus:ring-primary w-full sm:w-48"
+              className="h-8 rounded-lg border border-border px-3 text-xs bg-card focus:outline-none focus:ring-2 focus:ring-primary w-full sm:w-48"
               placeholder="Buscar empresa/CNPJ..."
               value={search}
               onChange={(e) => setSearch(e.target.value)}
             />
             <input
-              className="h-8 rounded-lg border border-border px-3 text-xs bg-white focus:outline-none focus:ring-2 focus:ring-primary w-full sm:w-36"
+              className="h-8 rounded-lg border border-border px-3 text-xs bg-card focus:outline-none focus:ring-2 focus:ring-primary w-full sm:w-36"
               placeholder="Banco..."
               value={banco}
               onChange={(e) => setBanco(e.target.value)}
             />
             <select
-              className="h-8 rounded-lg border border-border px-2.5 text-xs bg-white focus:outline-none focus:ring-2 focus:ring-primary"
+              className="h-8 rounded-lg border border-border px-2.5 text-xs bg-card focus:outline-none focus:ring-2 focus:ring-primary"
               value={bancoIdFiltro}
               onChange={(e) => { setBancoIdFiltro(e.target.value); setGerenteIdFiltro(""); }}
               title="Filtrar por banco parceiro cadastrado"
@@ -2848,7 +2848,7 @@ export default function AcompanhamentoBancario() {
               {bancosCatalogo.map((b) => <option key={b.id} value={b.id}>{b.nome}</option>)}
             </select>
             <select
-              className="h-8 rounded-lg border border-border px-2.5 text-xs bg-white focus:outline-none focus:ring-2 focus:ring-primary"
+              className="h-8 rounded-lg border border-border px-2.5 text-xs bg-card focus:outline-none focus:ring-2 focus:ring-primary"
               value={gerenteIdFiltro}
               onChange={(e) => setGerenteIdFiltro(e.target.value)}
               title="Filtrar por gerente responsável"
@@ -2859,7 +2859,7 @@ export default function AcompanhamentoBancario() {
                 .map((g) => <option key={g.id} value={g.id}>{g.nome}{g.regiao ? ` — ${g.regiao}` : ""}</option>)}
             </select>
             <select
-              className="h-8 rounded-lg border border-border px-2.5 text-xs bg-white focus:outline-none focus:ring-2 focus:ring-primary"
+              className="h-8 rounded-lg border border-border px-2.5 text-xs bg-card focus:outline-none focus:ring-2 focus:ring-primary"
               value={statusFiltro}
               onChange={(e) => setStatusFiltro(e.target.value)}
             >
@@ -2891,7 +2891,7 @@ export default function AcompanhamentoBancario() {
         </div>
 
         {/* Bloco principal: em acompanhamento */}
-        <div className="rounded-xl border border-border bg-white shadow-sm">
+        <div className="rounded-xl border border-border bg-card shadow-sm">
           <div className="border-b border-border px-4 py-2.5 flex items-center justify-between gap-3">
             <div>
               <h2 className="text-sm font-bold text-foreground">Acompanhamentos cadastrados</h2>
@@ -2902,13 +2902,13 @@ export default function AcompanhamentoBancario() {
               <button
                 type="button"
                 onClick={() => setVisualizacao("lista")}
-                className={`inline-flex items-center gap-1 rounded-md px-2 py-1 text-[11px] font-semibold transition ${visualizacao === "lista" ? "bg-white text-foreground shadow-sm" : "text-muted-foreground hover:text-muted-foreground"}`}
+                className={`inline-flex items-center gap-1 rounded-md px-2 py-1 text-[11px] font-semibold transition ${visualizacao === "lista" ? "bg-card text-foreground shadow-sm" : "text-muted-foreground hover:text-muted-foreground"}`}
                 title="Ver como lista/tabela"
               ><ListIcon className="h-3 w-3" /> Lista</button>
               <button
                 type="button"
                 onClick={() => setVisualizacao("blocos")}
-                className={`inline-flex items-center gap-1 rounded-md px-2 py-1 text-[11px] font-semibold transition ${visualizacao === "blocos" ? "bg-white text-foreground shadow-sm" : "text-muted-foreground hover:text-muted-foreground"}`}
+                className={`inline-flex items-center gap-1 rounded-md px-2 py-1 text-[11px] font-semibold transition ${visualizacao === "blocos" ? "bg-card text-foreground shadow-sm" : "text-muted-foreground hover:text-muted-foreground"}`}
                 title="Ver como blocos"
               ><LayoutGrid className="h-3 w-3" /> Blocos</button>
             </div>
@@ -2931,7 +2931,7 @@ export default function AcompanhamentoBancario() {
                 <h2 className="text-sm font-bold text-warning">Sem movimentação há mais de {DIAS_LIMITE_SEM_MOVIMENTO} dias</h2>
                 <p className="text-[10px] text-warning/80">{listaSemMovimento.length} registro(s) parado(s) — a atualização prevista já passou e nada foi feito desde então</p>
               </div>
-              <span className="shrink-0 rounded-lg border border-warning/20 bg-white px-2.5 py-1 text-xs font-bold text-warning">
+              <span className="shrink-0 rounded-lg border border-warning/20 bg-card px-2.5 py-1 text-xs font-bold text-warning">
                 {semMovimentoAberto ? "Ocultar ▲" : "Mostrar ▼"}
               </span>
             </button>
@@ -2946,7 +2946,7 @@ export default function AcompanhamentoBancario() {
         {/* ── Modal — Novo Acompanhamento ──────────────────────────────────── */}
         {novoOpen && (
           <div className="fixed inset-0 z-[99999] overflow-auto bg-black/40 p-4">
-            <div className="mx-auto max-w-5xl rounded-lg bg-white p-5 shadow-xl">
+            <div className="mx-auto max-w-5xl rounded-lg bg-card p-5 shadow-xl">
               <div className="mb-4 flex items-start justify-between">
                 <div>
                   <h3 className="text-lg font-bold">{editandoId ? "Editar Acompanhamento" : "Novo Acompanhamento"}</h3>
@@ -2965,7 +2965,7 @@ export default function AcompanhamentoBancario() {
                   <button
                     type="button"
                     onClick={() => setComboEmpresaAberto((v) => !v)}
-                    className="w-full flex items-center gap-2.5 h-11 px-3 border border-input rounded-lg bg-white hover:border-input focus:outline-none focus:ring-2 focus:ring-primary text-left"
+                    className="w-full flex items-center gap-2.5 h-11 px-3 border border-input rounded-lg bg-card hover:border-input focus:outline-none focus:ring-2 focus:ring-primary text-left"
                   >
                     {novo.empresa_id ? (
                       <>
@@ -2977,7 +2977,7 @@ export default function AcompanhamentoBancario() {
                     )}
                   </button>
                   {comboEmpresaAberto && (
-                    <div className="absolute z-50 mt-1 w-full bg-white border border-border rounded-lg shadow-lg overflow-hidden">
+                    <div className="absolute z-50 mt-1 w-full bg-card border border-border rounded-lg shadow-lg overflow-hidden">
                       <div className="p-2 border-b border-border">
                         <input
                           autoFocus
@@ -3087,7 +3087,7 @@ export default function AcompanhamentoBancario() {
               )}
 
               <div className="mt-4 flex gap-2">
-                <button className="rounded bg-primary px-4 py-2 text-sm font-semibold text-white disabled:opacity-60" disabled={saving} onClick={salvarNovo}>
+                <button className="rounded bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground disabled:opacity-60" disabled={saving} onClick={salvarNovo}>
                   {saving ? "Salvando..." : editandoId ? "Salvar alterações" : "Salvar acompanhamento"}
                 </button>
                 <button className="rounded border px-4 py-2 text-sm" onClick={limparNovo}>Cancelar</button>
@@ -3099,7 +3099,7 @@ export default function AcompanhamentoBancario() {
         {/* ── Modal — Atualização Semanal ──────────────────────────────────── */}
         {updOpen && (
           <div className="fixed inset-0 z-[99999] overflow-auto bg-black/40 p-4">
-            <div className="mx-auto max-w-5xl rounded-lg bg-white p-5 shadow-xl">
+            <div className="mx-auto max-w-5xl rounded-lg bg-card p-5 shadow-xl">
               <div className="mb-2 flex items-start justify-between">
                 <div>
                   <h3 className="text-lg font-bold">{editandoSemanaNumero ? `Editar Semana ${editandoSemanaNumero}` : "Atualização Semanal"}</h3>
@@ -3295,7 +3295,7 @@ export default function AcompanhamentoBancario() {
 
               <div className="mt-4 flex gap-2">
                 <button
-                  className="rounded bg-primary px-4 py-2 text-sm font-semibold text-white disabled:opacity-60"
+                  className="rounded bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground disabled:opacity-60"
                   disabled={saving}
                   onClick={salvarAtualizacao}
                 >
@@ -3314,7 +3314,7 @@ export default function AcompanhamentoBancario() {
         {/* ── Modal — Detalhes ─────────────────────────────────────────────── */}
         {encerrandoRow && (
           <div className="fixed inset-0 z-50 bg-overlay p-4 flex items-center justify-center" onClick={() => !salvandoEncerramento && setEncerrandoRow(null)}>
-            <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md overflow-hidden" onClick={(e) => e.stopPropagation()}>
+            <div className="bg-card rounded-2xl shadow-2xl w-full max-w-md overflow-hidden" onClick={(e) => e.stopPropagation()}>
               <div className="px-5 py-4 border-b border-border">
                 <h3 className="text-base font-bold text-foreground">Encerrar acompanhamento</h3>
                 <p className="text-xs text-muted-foreground mt-0.5">{encerrandoRow.nome_empresa} — {encerrandoRow.banco_observado}</p>
@@ -3344,7 +3344,7 @@ export default function AcompanhamentoBancario() {
               </div>
               <div className="px-5 py-4 border-t border-border flex justify-end gap-2">
                 <button type="button" onClick={() => setEncerrandoRow(null)} disabled={salvandoEncerramento} className="h-9 px-4 rounded-lg border border-border text-sm font-semibold text-muted-foreground hover:bg-muted disabled:opacity-50">Cancelar</button>
-                <button type="button" onClick={confirmarEncerramento} disabled={salvandoEncerramento} className="h-9 px-4 rounded-lg bg-destructive text-white text-sm font-semibold hover:bg-destructive/90 disabled:opacity-50">
+                <button type="button" onClick={confirmarEncerramento} disabled={salvandoEncerramento} className="h-9 px-4 rounded-lg bg-destructive text-primary-foreground text-sm font-semibold hover:bg-destructive/90 disabled:opacity-50">
                   {salvandoEncerramento ? "Encerrando..." : "Confirmar encerramento"}
                 </button>
               </div>
@@ -3354,8 +3354,8 @@ export default function AcompanhamentoBancario() {
 
         {detalhe && (
           <div className="fixed inset-0 z-[9999] overflow-y-auto bg-overlay p-3 sm:p-5">
-            <div className="mx-auto flex min-h-[calc(100vh-40px)] w-full max-w-7xl flex-col overflow-hidden rounded-2xl bg-white shadow-2xl">
-              <div className="sticky top-0 z-10 border-b border-border bg-white/95 px-4 py-4 backdrop-blur sm:px-6">
+            <div className="mx-auto flex min-h-[calc(100vh-40px)] w-full max-w-7xl flex-col overflow-hidden rounded-2xl bg-card shadow-2xl">
+              <div className="sticky top-0 z-10 border-b border-border bg-card/95 px-4 py-4 backdrop-blur sm:px-6">
                 <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
                   <div>
                     <p className="text-xs font-semibold uppercase tracking-[0.18em] text-primary">Relatório operacional</p>
@@ -3365,10 +3365,10 @@ export default function AcompanhamentoBancario() {
                     </p>
                   </div>
                   <div className="flex flex-wrap items-center gap-2">
-                    <label className="flex items-center gap-1 rounded-xl border border-border bg-white px-2 py-1 text-[11px] font-semibold text-muted-foreground">
+                    <label className="flex items-center gap-1 rounded-xl border border-border bg-card px-2 py-1 text-[11px] font-semibold text-muted-foreground">
                       Prestadora
                       <select
-                        className="rounded-md border border-border bg-white px-2 py-1 text-[11px] text-muted-foreground"
+                        className="rounded-md border border-border bg-card px-2 py-1 text-[11px] text-muted-foreground"
                         value={prestadoraRelatorio}
                         onChange={(e) => setPrestadoraRelatorio(e.target.value as PrestadoraKey)}
                       >
@@ -3411,7 +3411,7 @@ export default function AcompanhamentoBancario() {
                     <button className="rounded-xl border border-success/20 bg-success/10 px-3 py-2 text-xs font-semibold text-success transition hover:bg-success/20" onClick={() => exportarCSV(detalhe, prestadoraRelatorio)}>Exportar XLS</button>
                     <button className="rounded-xl border border-primary/20 bg-primary/10 px-3 py-2 text-xs font-semibold text-primary transition hover:bg-primary/20" onClick={() => abrirRelatorio(detalhe)}>Gerar relatório</button>
                     <button className="rounded-xl border border-primary/20 bg-primary/10 px-3 py-2 text-xs font-semibold text-primary transition hover:bg-primary/10" onClick={() => { setImprimirOpen(detalhe); setDetalhe(null); }}>Imprimir</button>
-                    <button className="rounded-xl border border-border bg-white px-3 py-2 text-xs font-semibold text-muted-foreground transition hover:bg-muted" onClick={() => { setDetalhe(null); setInteligenciaAcompanhamento(null); setErroInteligenciaAcompanhamento(""); }}>Fechar</button>
+                    <button className="rounded-xl border border-border bg-card px-3 py-2 text-xs font-semibold text-muted-foreground transition hover:bg-muted" onClick={() => { setDetalhe(null); setInteligenciaAcompanhamento(null); setErroInteligenciaAcompanhamento(""); }}>Fechar</button>
                   </div>
                 </div>
               </div>
@@ -3422,7 +3422,7 @@ export default function AcompanhamentoBancario() {
                     <span className="font-bold text-muted-foreground">Acompanhamento encerrado</span> — somente consulta. Edição, atualização semanal e vínculo de outro banco ficam disponíveis apenas enquanto o acompanhamento está ativo.
                   </div>
                 )}
-                <section className="rounded-2xl border border-border bg-white p-4 shadow-sm">
+                <section className="rounded-2xl border border-border bg-card p-4 shadow-sm">
                   <h4 className="mb-3 text-sm font-bold uppercase tracking-wide text-muted-foreground">Resumo geral</h4>
                   <div className="grid grid-cols-2 gap-x-6 gap-y-0 sm:grid-cols-3 lg:grid-cols-6">
                     {[
@@ -3442,7 +3442,7 @@ export default function AcompanhamentoBancario() {
                 </section>
 
                 <section className="grid grid-cols-1 gap-4 xl:grid-cols-3">
-                  <div className="rounded-2xl border border-border bg-white p-4 shadow-sm xl:col-span-2">
+                  <div className="rounded-2xl border border-border bg-card p-4 shadow-sm xl:col-span-2">
                     <h4 className="mb-3 text-sm font-bold uppercase tracking-wide text-muted-foreground">Indicadores financeiros e rating</h4>
                     <div className="grid grid-cols-2 gap-x-6 gap-y-0 sm:grid-cols-3">
                       {[
@@ -3463,7 +3463,7 @@ export default function AcompanhamentoBancario() {
                   <div className="rounded-2xl border border-primary/20 bg-primary/10 p-4 shadow-sm">
                     <h4 className="text-sm font-bold uppercase tracking-wide text-primary">Recomendação operacional</h4>
                     <p className="mt-2 text-sm leading-6 text-primary">{calcularRecomendacao(detalhe)}</p>
-                    <div className="mt-4 rounded-xl border border-primary/20 bg-white/70 p-3">
+                    <div className="mt-4 rounded-xl border border-primary/20 bg-card/70 p-3">
                       {(() => {
                         // Mostrar saldo da última semana COM DADOS REAIS
                         // Se a semana atual está zerada (não alimentada), usa a anterior
@@ -3543,12 +3543,12 @@ export default function AcompanhamentoBancario() {
                           </div>
                           </>
                         ) : (
-                          <div className="rounded-xl border border-dashed border-warning/30 bg-white/70 p-4 text-sm text-warning">
+                          <div className="rounded-xl border border-dashed border-warning/30 bg-card/70 p-4 text-sm text-warning">
                             Nenhuma semana preenchida ainda. Clique em <strong>Atualizar semana</strong> para registrar a primeira atualização.
                           </div>
                         )}
                       </div>
-                      <div className="rounded-2xl border border-border bg-white p-4 shadow-sm">
+                      <div className="rounded-2xl border border-border bg-card p-4 shadow-sm">
                         <h4 className="text-sm font-bold uppercase tracking-wide text-muted-foreground">Evolução</h4>
                         <p className="mt-2 text-sm leading-6 text-muted-foreground">{evolucao.leitura}</p>
                         <div className="mt-4 grid grid-cols-1 gap-3">
@@ -3619,7 +3619,7 @@ export default function AcompanhamentoBancario() {
                         <span className={`rounded-full border px-3 py-1 text-xs font-semibold bg-${corStatus}-50 text-${corStatus}-700 border-${corStatus}-200`}>{labelAd}</span>
                       </div>
                       {motivo && (
-                        <div className={`mb-3 rounded-xl border p-3 text-xs ${naoAlimentada ? 'border-warning/20 bg-white/80 text-warning' : 'border-destructive/20 bg-white/80 text-destructive'}`}>{motivo}</div>
+                        <div className={`mb-3 rounded-xl border p-3 text-xs ${naoAlimentada ? 'border-warning/20 bg-card/80 text-warning' : 'border-destructive/20 bg-card/80 text-destructive'}`}>{motivo}</div>
                       )}
                       <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
                         <InfoCard label="Ref. semanal base" value={moneyBR(refSemanal)} />
@@ -3639,14 +3639,14 @@ export default function AcompanhamentoBancario() {
                         </div>
                       )}
                       {diagnostico && (
-                        <div className="mt-3 rounded-xl border border-border bg-white/70 p-3 text-xs text-muted-foreground">
+                        <div className="mt-3 rounded-xl border border-border bg-card/70 p-3 text-xs text-muted-foreground">
                           <strong className="text-muted-foreground">Diagnóstico técnico:</strong> {diagnostico}
                         </div>
                       )}
                     </section>
                   );
                 })()}
-                <section className="overflow-hidden rounded-2xl border border-primary/20 bg-white shadow-sm">
+                <section className="overflow-hidden rounded-2xl border border-primary/20 bg-card shadow-sm">
                   <div className="flex flex-col gap-3 border-b border-primary/20 bg-gradient-to-r from-indigo-50 via-white to-primary/10 px-4 py-4 lg:flex-row lg:items-center lg:justify-between">
                     <div>
                       <p className="text-xs font-bold uppercase tracking-[0.18em] text-primary">Assessoria inteligente de crédito</p>
@@ -3655,12 +3655,12 @@ export default function AcompanhamentoBancario() {
                     </div>
                     <div className="flex flex-wrap items-center gap-2">
                       <button
-                        className="rounded-xl border border-primary/20 bg-white px-3 py-2 text-xs font-semibold text-primary transition hover:bg-primary/10 disabled:cursor-wait disabled:opacity-60"
+                        className="rounded-xl border border-primary/20 bg-card px-3 py-2 text-xs font-semibold text-primary transition hover:bg-primary/10 disabled:cursor-wait disabled:opacity-60"
                         disabled={loadingInteligenciaAcompanhamento}
                         onClick={() => detalhe?.id && carregarInteligenciaAcompanhamento(detalhe.id)}
                       >{loadingInteligenciaAcompanhamento ? "Analisando..." : "Atualizar análise"}</button>
                       <button
-                        className="rounded-xl border border-border bg-white px-3 py-2 text-xs font-semibold text-muted-foreground transition hover:bg-muted"
+                        className="rounded-xl border border-border bg-card px-3 py-2 text-xs font-semibold text-muted-foreground transition hover:bg-muted"
                         onClick={() => copiarTextoInteligencia(inteligenciaAcompanhamento?.parecerTecnico)}
                       >Copiar parecer</button>
                       <button
@@ -3714,7 +3714,7 @@ export default function AcompanhamentoBancario() {
                           </div>
                         </div>
 
-                        <div className="rounded-2xl border border-border bg-white p-4">
+                        <div className="rounded-2xl border border-border bg-card p-4">
                           <h5 className="text-sm font-black text-foreground">Resumo executivo</h5>
                           <p className="mt-2 text-sm leading-6 text-muted-foreground">{inteligenciaAcompanhamento.resumoExecutivo}</p>
                         </div>
@@ -3735,7 +3735,7 @@ export default function AcompanhamentoBancario() {
                             <div className="mt-3 space-y-2">
                               {[...listaItensInteligencia(inteligenciaAcompanhamento.alertas), ...listaItensInteligencia(inteligenciaAcompanhamento.riscos)].length ? (
                                 [...listaItensInteligencia(inteligenciaAcompanhamento.alertas), ...listaItensInteligencia(inteligenciaAcompanhamento.riscos)].slice(0, 6).map((item: any, idx: number) => (
-                                  <div key={`alerta-${idx}`} className="rounded-xl border border-destructive/20 bg-white p-3">
+                                  <div key={`alerta-${idx}`} className="rounded-xl border border-destructive/20 bg-card p-3">
                                     <div className="flex items-center justify-between gap-2">
                                       <strong className="text-xs text-foreground">{item.titulo}</strong>
                                       {item.prioridade && <span className={`rounded-full border px-2 py-0.5 text-[10px] font-bold ${chipInteligenciaClass(item.prioridade)}`}>{labelStatus(item.prioridade)}</span>}
@@ -3754,7 +3754,7 @@ export default function AcompanhamentoBancario() {
                             <div className="mt-3 space-y-2">
                               {[...listaItensInteligencia(inteligenciaAcompanhamento.pontosFortes), ...listaItensInteligencia(inteligenciaAcompanhamento.pontosAtencao)].length ? (
                                 [...listaItensInteligencia(inteligenciaAcompanhamento.pontosFortes), ...listaItensInteligencia(inteligenciaAcompanhamento.pontosAtencao)].slice(0, 6).map((item: any, idx: number) => (
-                                  <div key={`ponto-${idx}`} className="rounded-xl border border-border bg-white p-3">
+                                  <div key={`ponto-${idx}`} className="rounded-xl border border-border bg-card p-3">
                                     <div className="flex items-center justify-between gap-2">
                                       <strong className="text-xs text-foreground">{item.titulo}</strong>
                                       {item.prioridade && <span className={`rounded-full border px-2 py-0.5 text-[10px] font-bold ${chipInteligenciaClass(item.prioridade)}`}>{labelStatus(item.prioridade)}</span>}
@@ -3774,7 +3774,7 @@ export default function AcompanhamentoBancario() {
                             <h5 className="text-sm font-black text-primary">Plano de ação para melhorar rating</h5>
                             <ol className="mt-3 space-y-2">
                               {listaItensInteligencia(inteligenciaAcompanhamento.planoAcao).slice(0, 6).map((item: any, idx: number) => (
-                                <li key={`acao-${idx}`} className="rounded-xl border border-primary/20 bg-white p-3 text-xs leading-5 text-muted-foreground">
+                                <li key={`acao-${idx}`} className="rounded-xl border border-primary/20 bg-card p-3 text-xs leading-5 text-muted-foreground">
                                   <strong className="text-primary">{idx + 1}. {item.titulo}</strong>
                                   <p className="mt-1">{item.descricao}</p>
                                   {item.impactoEsperado && <p className="mt-1 font-semibold text-success">Impacto esperado: {item.impactoEsperado}</p>}
@@ -3782,7 +3782,7 @@ export default function AcompanhamentoBancario() {
                               ))}
                             </ol>
                           </div>
-                          <div className="rounded-2xl border border-border bg-white p-4">
+                          <div className="rounded-2xl border border-border bg-card p-4">
                             <h5 className="text-sm font-black text-foreground">Parecer técnico consultivo</h5>
                             <p className="mt-2 text-sm leading-6 text-muted-foreground">{inteligenciaAcompanhamento.parecerTecnico}</p>
                             <div className="mt-4 rounded-xl border border-warning/20 bg-warning/10 p-3">
@@ -3800,7 +3800,7 @@ export default function AcompanhamentoBancario() {
                   </div>
                 </section>
 
-                <section className="rounded-2xl border border-border bg-white shadow-sm">
+                <section className="rounded-2xl border border-border bg-card shadow-sm">
                   <div className="flex items-center justify-between border-b border-border px-4 py-3">
                     <div>
                       <h4 className="text-sm font-bold uppercase tracking-wide text-muted-foreground">Histórico semanal</h4>
@@ -3873,7 +3873,7 @@ export default function AcompanhamentoBancario() {
                             const isEven = idx % 2 === 0;
                             const isAtual = Number(item.numero_semana) === Number(getSemanaAtual(detalhe)?.numero_semana);
                             return (
-                              <tr key={item.id || item.numero_semana} className={`border-b border-border transition hover:bg-primary/10/40 ${isAtual ? "bg-warning/10/80 ring-1 ring-warning/30" : isEven ? "bg-white" : "bg-muted/50"}`}>
+                              <tr key={item.id || item.numero_semana} className={`border-b border-border transition hover:bg-primary/10/40 ${isAtual ? "bg-warning/10/80 ring-1 ring-warning/30" : isEven ? "bg-card" : "bg-muted/50"}`}>
                                 <td className="px-3 py-2.5 font-bold text-muted-foreground">
                                   <div className="flex items-center gap-1">
                                     <span>S{item.numero_semana}</span>
@@ -3924,7 +3924,7 @@ export default function AcompanhamentoBancario() {
                                     {labelStatus(item.status_semana || item.status)}
                                   </span>
                                   <button
-                                    className="mt-2 block whitespace-nowrap rounded-md border border-warning/30 bg-white px-2 py-1 text-[10px] font-bold text-warning hover:bg-warning/10"
+                                    className="mt-2 block whitespace-nowrap rounded-md border border-warning/30 bg-card px-2 py-1 text-[10px] font-bold text-warning hover:bg-warning/10"
                                     onClick={() => abrirEditarSemana(detalhe, item)}
                                   >
                                     Corrigir semana
@@ -3943,7 +3943,7 @@ export default function AcompanhamentoBancario() {
                   )}
                 </section>
 
-                <section className="rounded-2xl border border-primary/20 bg-white shadow-sm">
+                <section className="rounded-2xl border border-primary/20 bg-card shadow-sm">
                   <div className="border-b border-primary/20 bg-primary/10 px-4 py-4">
                     <div className="flex flex-col gap-2 lg:flex-row lg:items-start lg:justify-between">
                       <div>
@@ -3952,7 +3952,7 @@ export default function AcompanhamentoBancario() {
                           Anexe um extrato em PDF ou imagem para extrair entradas e saídas deste acompanhamento. Os dados ficam em revisão e não alteram o histórico até uma aprovação explícita.
                         </p>
                       </div>
-                      <span className="rounded-full border border-primary/20 bg-white px-3 py-1 text-[11px] font-semibold text-primary">
+                      <span className="rounded-full border border-primary/20 bg-card px-3 py-1 text-[11px] font-semibold text-primary">
                         {lancamentosImportados.filter((item) => item.status === "pendente" && !item.aplicado_em).length} pendente(s)
                       </span>
                     </div>
@@ -3963,7 +3963,7 @@ export default function AcompanhamentoBancario() {
                       <label className="block">
                         <span className="mb-1 block text-xs font-semibold text-muted-foreground">Semana bancária de destino</span>
                         <select
-                          className="h-10 w-full rounded-lg border border-input bg-white px-3 text-sm text-muted-foreground"
+                          className="h-10 w-full rounded-lg border border-input bg-card px-3 text-sm text-muted-foreground"
                           value={semanaImportacaoId}
                           onChange={async (e) => {
                             const value = e.target.value;
@@ -3999,7 +3999,7 @@ export default function AcompanhamentoBancario() {
                             setMensagemImportacao("");
                           }}
                           disabled={analisandoExtrato || aplicandoImportados}
-                          className="block h-10 w-full cursor-pointer rounded-lg border border-input bg-white text-xs text-muted-foreground file:mr-3 file:h-10 file:border-0 file:border-r file:border-border file:bg-muted file:px-3 file:text-xs file:font-semibold file:text-muted-foreground"
+                          className="block h-10 w-full cursor-pointer rounded-lg border border-input bg-card text-xs text-muted-foreground file:mr-3 file:h-10 file:border-0 file:border-r file:border-border file:bg-muted file:px-3 file:text-xs file:font-semibold file:text-muted-foreground"
                         />
                       </label>
 
@@ -4007,7 +4007,7 @@ export default function AcompanhamentoBancario() {
                         type="button"
                         onClick={analisarExtratoBancario}
                         disabled={analisandoExtrato || aplicandoImportados || !arquivoExtrato || !semanaImportacaoId}
-                        className="h-10 rounded-lg bg-primary px-4 text-xs font-bold text-white transition hover:bg-primary disabled:cursor-not-allowed disabled:opacity-50"
+                        className="h-10 rounded-lg bg-primary px-4 text-xs font-bold text-primary-foreground transition hover:bg-primary disabled:cursor-not-allowed disabled:opacity-50"
                       >
                         {analisandoExtrato ? "Analisando..." : "Anexar e analisar"}
                       </button>
@@ -4071,7 +4071,7 @@ export default function AcompanhamentoBancario() {
                                   </tr>
                                 </tfoot>
                               </table>
-                              <div className="border-t border-primary/20 bg-white px-3 py-1.5 text-[10px] leading-4 text-muted-foreground">
+                              <div className="border-t border-primary/20 bg-card px-3 py-1.5 text-[10px] leading-4 text-muted-foreground">
                                 Dinheiro (depósito em espécie) não entra neste total automático — lance manualmente no Histórico Semanal.
                               </div>
                             </div>
@@ -4091,7 +4091,7 @@ export default function AcompanhamentoBancario() {
                               type="button"
                               onClick={aplicarLancamentosImportados}
                               disabled={aplicandoImportados || !lancamentosImportados.some((item) => item.status === "aprovado" && !item.aplicado_em) || !semanaImportacaoId}
-                              className="rounded-lg border border-success/30 bg-white px-3 py-2 text-xs font-semibold text-success hover:bg-success/10 disabled:cursor-not-allowed disabled:opacity-50"
+                              className="rounded-lg border border-success/30 bg-card px-3 py-2 text-xs font-semibold text-success hover:bg-success/10 disabled:cursor-not-allowed disabled:opacity-50"
                               title="Aplica apenas os lançamentos que você já marcou como 'Aprovado' individualmente na lista detalhada."
                             >
                               {aplicandoImportados ? "Aplicando..." : "Aplicar só os aprovados"}
@@ -4100,7 +4100,7 @@ export default function AcompanhamentoBancario() {
                               type="button"
                               onClick={aplicarTodosLancamentosDaSemana}
                               disabled={aplicandoImportados || !lancamentosImportados.some((item) => item.status !== "descartado" && !item.aplicado_em) || !semanaImportacaoId}
-                              className="rounded-lg bg-success px-3 py-2 text-xs font-bold text-white hover:bg-success/90 disabled:cursor-not-allowed disabled:opacity-50"
+                              className="rounded-lg bg-success px-3 py-2 text-xs font-bold text-primary-foreground hover:bg-success/90 disabled:cursor-not-allowed disabled:opacity-50"
                               title="Soma o total de todos os lançamentos lidos do extrato (exceto os descartados) direto na semana, somando ao que já existir de outras origens."
                             >
                               {aplicandoImportados ? "Aplicando..." : "Aplicar tudo (somar total da semana)"}
@@ -4115,7 +4115,7 @@ export default function AcompanhamentoBancario() {
                             const dataValue = String(item.data_movimento_iso || item.data_movimento || "").slice(0, 10);
                             const aplicado = Boolean(item.aplicado_em);
                             return (
-                              <div key={item.id} className={`rounded-xl border p-3 ${aplicado ? "border-success/20 bg-success/10/40" : item.status === "descartado" ? "border-border bg-muted opacity-70" : "border-border bg-white"}`}>
+                              <div key={item.id} className={`rounded-xl border p-3 ${aplicado ? "border-success/20 bg-success/10/40" : item.status === "descartado" ? "border-border bg-muted opacity-70" : "border-border bg-card"}`}>
                                 <div className="grid grid-cols-1 gap-2 md:grid-cols-[130px_110px_minmax(0,1fr)_145px_auto] md:items-end">
                                   <label className="block">
                                     <span className="mb-1 block text-[10px] font-semibold uppercase text-muted-foreground">Data</span>
@@ -4133,7 +4133,7 @@ export default function AcompanhamentoBancario() {
                                       value={item.tipo}
                                       disabled={aplicado}
                                       onChange={(e) => revisarLancamentoImportado(item, { tipo: e.target.value })}
-                                      className="h-9 w-full rounded-md border border-input bg-white px-2 text-xs"
+                                      className="h-9 w-full rounded-md border border-input bg-card px-2 text-xs"
                                     >
                                       <option value="entrada">Entrada</option>
                                       <option value="saida">Saída</option>
@@ -4190,7 +4190,7 @@ export default function AcompanhamentoBancario() {
                 </section>
 
                 {Array.isArray(detalhe.atualizacoes) && detalhe.atualizacoes.some((i: any) => i.analise_semana || i.orientacao_cliente || i.proxima_acao) && (
-                  <section className="rounded-2xl border border-border bg-white shadow-sm">
+                  <section className="rounded-2xl border border-border bg-card shadow-sm">
                     <div className="border-b border-border px-4 py-3">
                       <h4 className="text-sm font-bold uppercase tracking-wide text-muted-foreground">Análises e orientações por semana</h4>
                     </div>
@@ -4219,7 +4219,7 @@ export default function AcompanhamentoBancario() {
                 )}
 
                 <section className="grid grid-cols-1 gap-4 xl:grid-cols-2">
-                  <div className="rounded-2xl border border-border bg-white p-4 shadow-sm">
+                  <div className="rounded-2xl border border-border bg-card p-4 shadow-sm">
                     <h4 className="mb-3 text-sm font-bold uppercase tracking-wide text-muted-foreground">Objetivo e estratégia de crédito</h4>
                     <div className="grid grid-cols-2 gap-x-6 gap-y-0">
                       {[
@@ -4240,7 +4240,7 @@ export default function AcompanhamentoBancario() {
                       </div>
                     )}
                   </div>
-                  <div className="rounded-2xl border border-border bg-white p-4 shadow-sm">
+                  <div className="rounded-2xl border border-border bg-card p-4 shadow-sm">
                     <h4 className="mb-3 text-sm font-bold uppercase tracking-wide text-muted-foreground">Dados bancários e relacionamento</h4>
                     <div className="grid grid-cols-2 gap-x-6 gap-y-0">
                       {[
@@ -4267,7 +4267,7 @@ export default function AcompanhamentoBancario() {
         {/* ── Modal — Gerador de relatório inteligente ─────────────────────── */}
         {relatorioOpen && (
           <div className="fixed inset-0 z-[10000] overflow-y-auto bg-overlay p-4">
-            <div className="mx-auto w-full max-w-3xl rounded-2xl bg-white p-5 shadow-2xl">
+            <div className="mx-auto w-full max-w-3xl rounded-2xl bg-card p-5 shadow-2xl">
               <div className="flex flex-col gap-2 border-b border-border pb-4 sm:flex-row sm:items-start sm:justify-between">
                 <div>
                   <p className="text-xs font-bold uppercase tracking-[0.18em] text-primary">Gerador de relatório bancário</p>
@@ -4276,7 +4276,7 @@ export default function AcompanhamentoBancario() {
                     {relatorioOpen.nome_empresa} — {relatorioOpen.banco_observado || "Banco não informado"}
                   </p>
                 </div>
-                <button className="rounded-xl border border-border bg-white px-3 py-2 text-xs font-semibold text-muted-foreground hover:bg-muted" onClick={() => setRelatorioOpen(null)}>
+                <button className="rounded-xl border border-border bg-card px-3 py-2 text-xs font-semibold text-muted-foreground hover:bg-muted" onClick={() => setRelatorioOpen(null)}>
                   Fechar
                 </button>
               </div>
@@ -4285,7 +4285,7 @@ export default function AcompanhamentoBancario() {
                 <label className="text-xs font-bold uppercase tracking-wide text-muted-foreground">
                   Tipo de relatório
                   <select
-                    className="mt-1 w-full rounded-xl border border-border bg-white px-3 py-2 text-sm font-semibold normal-case text-muted-foreground"
+                    className="mt-1 w-full rounded-xl border border-border bg-card px-3 py-2 text-sm font-semibold normal-case text-muted-foreground"
                     value={opcoesRelatorio.tipo}
                     onChange={(e) => setOpcoesRelatorio((p) => ({ ...p, tipo: e.target.value as OpcoesRelatorioBancario["tipo"] }))}
                   >
@@ -4299,7 +4299,7 @@ export default function AcompanhamentoBancario() {
                 <label className="text-xs font-bold uppercase tracking-wide text-muted-foreground">
                   Formato
                   <select
-                    className="mt-1 w-full rounded-xl border border-border bg-white px-3 py-2 text-sm font-semibold normal-case text-muted-foreground"
+                    className="mt-1 w-full rounded-xl border border-border bg-card px-3 py-2 text-sm font-semibold normal-case text-muted-foreground"
                     value={opcoesRelatorio.formato}
                     onChange={(e) => setOpcoesRelatorio((p) => ({ ...p, formato: e.target.value as OpcoesRelatorioBancario["formato"] }))}
                   >
@@ -4313,7 +4313,7 @@ export default function AcompanhamentoBancario() {
                 <label className="text-xs font-bold uppercase tracking-wide text-muted-foreground">
                   Logo / prestadora
                   <select
-                    className="mt-1 w-full rounded-xl border border-border bg-white px-3 py-2 text-sm font-semibold normal-case text-muted-foreground"
+                    className="mt-1 w-full rounded-xl border border-border bg-card px-3 py-2 text-sm font-semibold normal-case text-muted-foreground"
                     value={opcoesRelatorio.marca}
                     onChange={(e) => setOpcoesRelatorio((p) => ({ ...p, marca: e.target.value as PrestadoraKey }))}
                   >
@@ -4327,7 +4327,7 @@ export default function AcompanhamentoBancario() {
                     <label className="text-xs font-bold uppercase tracking-wide text-muted-foreground">
                       Mês
                       <select
-                        className="mt-1 w-full rounded-xl border border-border bg-white px-3 py-2 text-sm font-semibold normal-case text-muted-foreground"
+                        className="mt-1 w-full rounded-xl border border-border bg-card px-3 py-2 text-sm font-semibold normal-case text-muted-foreground"
                         value={opcoesRelatorio.mes}
                         onChange={(e) => setOpcoesRelatorio((p) => ({ ...p, mes: e.target.value }))}
                       >
@@ -4340,7 +4340,7 @@ export default function AcompanhamentoBancario() {
                       Ano
                       <input
                         type="number"
-                        className="mt-1 w-full rounded-xl border border-border bg-white px-3 py-2 text-sm font-semibold normal-case text-muted-foreground"
+                        className="mt-1 w-full rounded-xl border border-border bg-card px-3 py-2 text-sm font-semibold normal-case text-muted-foreground"
                         value={opcoesRelatorio.ano}
                         onChange={(e) => setOpcoesRelatorio((p) => ({ ...p, ano: e.target.value }))}
                       />
@@ -4354,7 +4354,7 @@ export default function AcompanhamentoBancario() {
                       Data inicial
                       <input
                         type="date"
-                        className="mt-1 w-full rounded-xl border border-border bg-white px-3 py-2 text-sm font-semibold normal-case text-muted-foreground"
+                        className="mt-1 w-full rounded-xl border border-border bg-card px-3 py-2 text-sm font-semibold normal-case text-muted-foreground"
                         value={opcoesRelatorio.dataInicio}
                         onChange={(e) => setOpcoesRelatorio((p) => ({ ...p, dataInicio: e.target.value }))}
                       />
@@ -4363,7 +4363,7 @@ export default function AcompanhamentoBancario() {
                       Data final
                       <input
                         type="date"
-                        className="mt-1 w-full rounded-xl border border-border bg-white px-3 py-2 text-sm font-semibold normal-case text-muted-foreground"
+                        className="mt-1 w-full rounded-xl border border-border bg-card px-3 py-2 text-sm font-semibold normal-case text-muted-foreground"
                         value={opcoesRelatorio.dataFim}
                         onChange={(e) => setOpcoesRelatorio((p) => ({ ...p, dataFim: e.target.value }))}
                       />
@@ -4379,7 +4379,7 @@ export default function AcompanhamentoBancario() {
                 </label>
                 <label className="flex items-center gap-2 text-sm font-semibold text-muted-foreground">
                   <input type="checkbox" checked={opcoesRelatorio.incluirIa} onChange={(e) => setOpcoesRelatorio((p) => ({ ...p, incluirIa: e.target.checked }))} />
-                  Incluir IA/parecer
+                  Incluir parecer técnico
                 </label>
                 <label className="flex items-center gap-2 text-sm font-semibold text-muted-foreground">
                   <input type="checkbox" checked={opcoesRelatorio.incluirAnexos} onChange={(e) => setOpcoesRelatorio((p) => ({ ...p, incluirAnexos: e.target.checked }))} />
@@ -4388,15 +4388,15 @@ export default function AcompanhamentoBancario() {
               </div>
 
               <div className="mt-4 rounded-2xl border border-warning/20 bg-warning/10 p-4 text-sm text-warning">
-                <strong>Como funciona:</strong> o relatório é mensal ou por período, alimentado pelas semanas registradas. Ele mantém a lógica financeira atual, mas adiciona análise inteligente, parecer técnico, plano de ação, alertas e documentos considerados.
+                <strong>Como funciona:</strong> o relatório é mensal ou por período, alimentado pelas semanas registradas. Ele mantém a lógica financeira atual e pode incluir parecer técnico, plano de ação, alertas e documentos considerados.
               </div>
 
               <div className="mt-5 flex flex-wrap justify-end gap-2">
-                <button className="rounded-xl border border-border bg-white px-4 py-2 text-sm font-semibold text-muted-foreground hover:bg-muted" onClick={() => setRelatorioOpen(null)}>
+                <button className="rounded-xl border border-border bg-card px-4 py-2 text-sm font-semibold text-muted-foreground hover:bg-muted" onClick={() => setRelatorioOpen(null)}>
                   Cancelar
                 </button>
                 <button
-                  className="rounded-xl bg-primary px-4 py-2 text-sm font-bold text-white shadow hover:bg-primary/90 disabled:opacity-60"
+                  className="rounded-xl bg-primary px-4 py-2 text-sm font-bold text-primary-foreground shadow hover:bg-primary/90 disabled:opacity-60"
                   disabled={gerandoRelatorio || (opcoesRelatorio.tipo === "periodo" && (!opcoesRelatorio.dataInicio || !opcoesRelatorio.dataFim))}
                   onClick={gerarRelatorioConfigurado}
                 >
@@ -4409,12 +4409,12 @@ export default function AcompanhamentoBancario() {
 
         {/* ── Modal — Impressão ────────────────────────────────────────────── */}
         {imprimirOpen && (
-          <div className="fixed inset-0 z-50 flex flex-col overflow-hidden bg-white">
+          <div className="fixed inset-0 z-50 flex flex-col overflow-hidden bg-card">
             <div className="flex flex-wrap items-center gap-3 border-b bg-muted p-4 print:hidden">
               <label className="flex items-center gap-2 text-sm font-semibold text-muted-foreground">
                 Prestadora
                 <select
-                  className="rounded border border-input bg-white px-3 py-2 text-sm"
+                  className="rounded border border-input bg-card px-3 py-2 text-sm"
                   value={prestadoraRelatorio}
                   onChange={(e) => setPrestadoraRelatorio(e.target.value as PrestadoraKey)}
                 >
@@ -4424,7 +4424,7 @@ export default function AcompanhamentoBancario() {
               </label>
 
               <button
-                className="rounded bg-primary px-4 py-2 text-sm font-semibold text-white hover:bg-primary/90"
+                className="rounded bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground hover:bg-primary/90"
                 onClick={handleImprimir}
               >
                 Imprimir / Salvar PDF
@@ -4453,7 +4453,7 @@ export default function AcompanhamentoBancario() {
               ref={printFrameRef}
               title="Preview do relatório técnico de acompanhamento financeiro semanal"
               srcDoc={gerarHtmlRelatorioA4(imprimirOpen, prestadoraRelatorio)}
-              className="h-full w-full flex-1 border-0 bg-white"
+              className="h-full w-full flex-1 border-0 bg-card"
             />
           </div>
         )}
@@ -4503,7 +4503,7 @@ function InfoCard({ label, value, positive, negative }: {
         ? "border-destructive/20 bg-destructive/10 text-destructive"
         : positive
         ? "border-success/20 bg-success/10 text-success"
-        : "border-border bg-white text-foreground"
+        : "border-border bg-card text-foreground"
     }`}>
       <div className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">{label}</div>
       <div className="mt-1 text-sm font-bold leading-snug">{value || "-"}</div>

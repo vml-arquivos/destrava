@@ -363,7 +363,7 @@ function FieldRow({ label, value, icon, mono }: { label: string; value?: string 
 function InfoTile({ label, value, icon, tone = "slate", mono = false }: { label: string; value?: string | number | null; icon?: React.ReactNode; tone?: "slate" | "blue" | "emerald" | "amber" | "violet"; mono?: boolean }) {
   if (value === undefined || value === null || value === "") return null;
   const palette = {
-    slate: "bg-white border-border text-muted-foreground",
+    slate: "bg-card border-border text-muted-foreground",
     blue: "bg-primary/10 border-primary/20 text-primary",
     emerald: "bg-success/10 border-success/20 text-success",
     amber: "bg-warning/10 border-warning/20 text-warning",
@@ -403,7 +403,7 @@ function SectionCard({ title, icon, children, defaultOpen = true }: {
 }) {
   const [open, setOpen] = useState(defaultOpen);
   return (
-    <div className="rounded-xl border border-border overflow-hidden bg-white">
+    <div className="rounded-xl border border-border overflow-hidden bg-card">
       <button
         type="button"
         onClick={() => setOpen(o => !o)}
@@ -516,7 +516,7 @@ function EmpresaDadosWorkspace({
                 <p className="text-xs text-primary mt-1">Última atualização: {empresa.ultima_sincronizacao_receita ? new Date(empresa.ultima_sincronizacao_receita).toLocaleString("pt-BR") : "Não registrada"}</p>
               </div>
               {empresa.cnpj && onSincronizar && (
-                <button onClick={onSincronizar} disabled={sincronizando} className="inline-flex items-center justify-center gap-2 rounded-xl bg-primary px-4 py-2 text-sm font-bold text-white shadow-sm hover:bg-primary/90 disabled:opacity-50">
+                <button onClick={onSincronizar} disabled={sincronizando} className="inline-flex items-center justify-center gap-2 rounded-xl bg-primary px-4 py-2 text-sm font-bold text-primary-foreground shadow-sm hover:bg-primary/90 disabled:opacity-50">
                   <RotateCw className={`w-4 h-4 ${sincronizando ? "animate-spin" : ""}`} />
                   Atualizar Receita
                 </button>
@@ -538,7 +538,7 @@ function EmpresaDadosWorkspace({
             <div className="rounded-2xl border border-border bg-muted p-3">
               <p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground mb-2">CNAEs secundários</p>
               <div className="flex flex-wrap gap-1.5">
-                {cnaesSecundarios.map((cnae, i) => <span key={`${cnae}-${i}`} className="rounded-full border border-border bg-white px-2.5 py-1 text-[11px] font-semibold text-muted-foreground">{cnae}</span>)}
+                {cnaesSecundarios.map((cnae, i) => <span key={`${cnae}-${i}`} className="rounded-full border border-border bg-card px-2.5 py-1 text-[11px] font-semibold text-muted-foreground">{cnae}</span>)}
               </div>
             </div>
           )}
@@ -562,7 +562,7 @@ function EmpresaDadosWorkspace({
           </div>
           <div className="flex flex-wrap gap-2">
             {onEditar && (
-            <button onClick={onEditar} className="inline-flex items-center gap-2 rounded-xl border border-border bg-white px-4 py-2 text-sm font-bold text-muted-foreground hover:bg-muted">
+            <button onClick={onEditar} className="inline-flex items-center gap-2 rounded-xl border border-border bg-card px-4 py-2 text-sm font-bold text-muted-foreground hover:bg-muted">
               <Edit2 className="w-4 h-4" /> Editar cadastro
             </button>
             )}
@@ -589,7 +589,7 @@ function EmpresaDadosWorkspace({
             c.value ? (
               <a key={c.label} href={c.href} target={c.href?.startsWith("http") ? "_blank" : undefined} rel="noreferrer" className="rounded-2xl border border-border bg-muted p-4 hover:border-primary/20 hover:bg-primary/10 transition-all">
                 <div className="flex items-center gap-3">
-                  <div className="h-10 w-10 rounded-xl border border-border bg-white flex items-center justify-center text-muted-foreground">{c.icon}</div>
+                  <div className="h-10 w-10 rounded-xl border border-border bg-card flex items-center justify-center text-muted-foreground">{c.icon}</div>
                   <div className="min-w-0">
                     <p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">{c.label}</p>
                     <p className="text-sm font-bold text-foreground truncate">{c.value}</p>
@@ -599,7 +599,7 @@ function EmpresaDadosWorkspace({
             ) : (
               <div key={c.label} className="rounded-2xl border border-dashed border-border bg-muted p-4 text-muted-foreground">
                 <div className="flex items-center gap-3">
-                  <div className="h-10 w-10 rounded-xl border border-border bg-white flex items-center justify-center">{c.icon}</div>
+                  <div className="h-10 w-10 rounded-xl border border-border bg-card flex items-center justify-center">{c.icon}</div>
                   <div><p className="text-[10px] font-black uppercase tracking-widest">{c.label}</p><p className="text-sm font-bold">Não informado</p></div>
                 </div>
               </div>
@@ -614,7 +614,7 @@ function EmpresaDadosWorkspace({
         <div className="space-y-4">
           <div className="rounded-3xl border border-border bg-muted p-5">
             <div className="flex items-start gap-4">
-              <div className="h-12 w-12 rounded-2xl bg-white border border-border flex items-center justify-center text-muted-foreground shrink-0"><MapPin className="w-5 h-5" /></div>
+              <div className="h-12 w-12 rounded-2xl bg-card border border-border flex items-center justify-center text-muted-foreground shrink-0"><MapPin className="w-5 h-5" /></div>
               <div>
                 <p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">Endereço principal</p>
                 <p className="text-lg font-black text-foreground mt-1">{enderecoCompleto || "Não informado"}</p>
@@ -658,9 +658,9 @@ function EmpresaDadosWorkspace({
                   const qualificacao = s.qualificacao_socio || s.qualificacao || s.cargo || "Qualificação não informada";
                   const administrador = s.administrador === true || s.representante_legal === true || /administrador|titular|empres[aá]rio individual/i.test(String(qualificacao));
                   return (
-                    <article key={s.id || s.nome} className="rounded-2xl border border-border bg-white p-4 shadow-sm">
+                    <article key={s.id || s.nome} className="rounded-2xl border border-border bg-card p-4 shadow-sm">
                       <div className="flex items-start gap-3">
-                        <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-primary text-sm font-black text-white">{String(s.nome || "?").slice(0, 1).toUpperCase()}</div>
+                        <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-primary text-sm font-black text-primary-foreground">{String(s.nome || "?").slice(0, 1).toUpperCase()}</div>
                         <div className="min-w-0 flex-1">
                           <div className="flex flex-wrap items-center gap-2">
                             <p className="text-sm font-black text-foreground">{s.nome}</p>
@@ -668,7 +668,7 @@ function EmpresaDadosWorkspace({
                               {administrador ? "Sócio-Administrador" : "Sócio"}
                             </span>
                             {onEditarSocio && (
-                              <button type="button" onClick={() => onEditarSocio(s)} className="ml-auto rounded-lg border border-border bg-white px-2 py-1 text-[11px] font-bold text-muted-foreground hover:bg-muted">Editar vínculo</button>
+                              <button type="button" onClick={() => onEditarSocio(s)} className="ml-auto rounded-lg border border-border bg-card px-2 py-1 text-[11px] font-bold text-muted-foreground hover:bg-muted">Editar vínculo</button>
                             )}
                           </div>
                         </div>
@@ -687,7 +687,7 @@ function EmpresaDadosWorkspace({
         <div className="rounded-3xl border border-primary/20 bg-gradient-to-br from-primary/10 to-white p-5">
           <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
             <div className="flex items-start gap-4">
-              <div className="h-14 w-14 rounded-2xl bg-primary text-white flex items-center justify-center shadow-sm"><FileText className="w-7 h-7" /></div>
+              <div className="h-14 w-14 rounded-2xl bg-primary text-primary-foreground flex items-center justify-center shadow-sm"><FileText className="w-7 h-7" /></div>
               <div>
                 <p className="text-[10px] font-black uppercase tracking-[0.24em] text-primary">Central documental</p>
                 <h3 className="text-xl font-black text-foreground mt-1">Anexos e documentos da empresa</h3>
@@ -700,7 +700,7 @@ function EmpresaDadosWorkspace({
               </div>
             </div>
             {onAbrirAcervo && (
-            <button onClick={onAbrirAcervo} className="inline-flex items-center justify-center gap-2 rounded-2xl bg-primary px-5 py-3 text-sm font-black text-white shadow-sm shadow-blue-100 hover:bg-primary/90">
+            <button onClick={onAbrirAcervo} className="inline-flex items-center justify-center gap-2 rounded-2xl bg-primary px-5 py-3 text-sm font-black text-primary-foreground shadow-sm shadow-blue-100 hover:bg-primary/90">
               <ExternalLink className="w-4 h-4" /> Abrir acervo documental
             </button>
             )}
@@ -733,10 +733,10 @@ function EmpresaDadosWorkspace({
 
   return (
     <div className="p-2 sm:p-3 fade-in">
-      <div className="overflow-hidden rounded-3xl border border-border bg-white shadow-sm">
+      <div className="overflow-hidden rounded-3xl border border-border bg-card shadow-sm">
         <div className="grid min-h-[520px] grid-cols-1 lg:grid-cols-[270px_minmax(0,1fr)] xl:grid-cols-[290px_minmax(0,1fr)]">
           <aside className="border-b border-border bg-muted lg:border-b-0 lg:border-r">
-            <div className="border-b border-border bg-white px-3 py-2.5">
+            <div className="border-b border-border bg-card px-3 py-2.5">
               <p className="text-[9px] font-black uppercase tracking-[0.22em] text-primary">Central de informações</p>
               <h3 className="mt-0.5 text-base font-black text-foreground truncate">Dados da empresa</h3>
               <div className="mt-1.5 flex flex-wrap gap-1">
@@ -751,10 +751,10 @@ function EmpresaDadosWorkspace({
                     key={painel.id}
                     type="button"
                     onClick={() => setPainelAtivo(painel.id)}
-                    className={`w-full rounded-xl border px-2.5 py-2 text-left transition-all ${painelAtivo === painel.id ? "border-primary/30 bg-primary/10 shadow-sm" : "border-transparent bg-white hover:border-border hover:bg-white"}`}
+                    className={`w-full rounded-xl border px-2.5 py-2 text-left transition-all ${painelAtivo === painel.id ? "border-primary/30 bg-primary/10 shadow-sm" : "border-transparent bg-card hover:border-border hover:bg-card"}`}
                   >
                     <div className="flex items-center gap-3">
-                      <div className={`h-8 w-8 rounded-lg flex items-center justify-center shrink-0 ${painelAtivo === painel.id ? "bg-primary text-white" : "bg-muted text-muted-foreground"}`}>{painel.icon}</div>
+                      <div className={`h-8 w-8 rounded-lg flex items-center justify-center shrink-0 ${painelAtivo === painel.id ? "bg-primary text-primary-foreground" : "bg-muted text-muted-foreground"}`}>{painel.icon}</div>
                       <div className="min-w-0 flex-1">
                         <div className="flex items-center justify-between gap-2">
                           <p className="text-[13px] font-black text-foreground truncate">{painel.label}</p>
@@ -769,7 +769,7 @@ function EmpresaDadosWorkspace({
             </div>
           </aside>
 
-          <section className="min-w-0 bg-white">
+          <section className="min-w-0 bg-card">
             {/* "Editar"/"Atualizar" não se repetem mais aqui -- são exatamente a mesma
                 ação dos botões já visíveis no cabeçalho da empresa, acima das abas,
                 em qualquer painel. Repeti-los aqui só duplicava a mesma ação duas
@@ -805,7 +805,7 @@ function MField({ label, required, error, children }: {
   );
 }
 
-const inputCls = "h-9 px-3 border border-border rounded-lg text-sm bg-white text-foreground focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent transition-all placeholder:text-muted-foreground w-full";
+const inputCls = "h-9 px-3 border border-border rounded-lg text-sm bg-card text-foreground focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent transition-all placeholder:text-muted-foreground w-full";
 const selectCls = inputCls + " cursor-pointer";
 
 
@@ -1783,7 +1783,7 @@ export default function Empresas() {
           <div className="flex flex-col gap-3 min-h-0">
 
             {/* ── BARRA SUPERIOR: seletor de empresa com busca ── */}
-            <div className={`shrink-0 rounded-2xl border border-border bg-white p-2.5 shadow-sm ${showDetail ? "hidden sm:block" : ""}`}>
+            <div className={`shrink-0 rounded-2xl border border-border bg-card p-2.5 shadow-sm ${showDetail ? "hidden sm:block" : ""}`}>
               <div className="flex items-start justify-between gap-3 mb-2.5">
                 <div className="min-w-0">
                   <h1 className="text-xl font-black text-foreground tracking-tight leading-tight">Empresas</h1>
@@ -1794,7 +1794,7 @@ export default function Empresas() {
                 <div className="flex items-center gap-1.5 shrink-0">
                   <button
                     onClick={() => exportarRelatorio('csv')}
-                    className="inline-flex items-center gap-1 bg-white hover:bg-muted text-muted-foreground border border-border px-2.5 py-2 rounded-xl font-bold text-xs transition-colors shrink-0"
+                    className="inline-flex items-center gap-1 bg-card hover:bg-muted text-muted-foreground border border-border px-2.5 py-2 rounded-xl font-bold text-xs transition-colors shrink-0"
                     title="Exportar relatório CSV"
                   >
                     <FileDown className="w-3.5 h-3.5" />
@@ -1802,7 +1802,7 @@ export default function Empresas() {
                   </button>
                   <button
                     onClick={abrirNova}
-                    className="inline-flex items-center gap-1.5 bg-primary hover:bg-primary/90 text-white px-3 py-2 rounded-xl font-bold text-xs transition-colors shadow-sm shadow-blue-200 shrink-0"
+                    className="inline-flex items-center gap-1.5 bg-primary hover:bg-primary/90 text-primary-foreground px-3 py-2 rounded-xl font-bold text-xs transition-colors shadow-sm shadow-blue-200 shrink-0"
                   >
                     <Plus className="w-3.5 h-3.5" />
                     Nova
@@ -1815,7 +1815,7 @@ export default function Empresas() {
                 <button
                   type="button"
                   onClick={() => { setComboAberto(v => !v); setTimeout(() => searchRef.current?.focus(), 0); }}
-                  className="w-full flex items-center gap-2.5 h-11 px-3 border border-border rounded-xl bg-white hover:border-input focus:outline-none focus:ring-2 focus:ring-primary transition-colors text-left"
+                  className="w-full flex items-center gap-2.5 h-11 px-3 border border-border rounded-xl bg-card hover:border-input focus:outline-none focus:ring-2 focus:ring-primary transition-colors text-left"
                 >
                   {selecionada ? (
                     <>
@@ -1832,7 +1832,7 @@ export default function Empresas() {
                 </button>
 
                 {comboAberto && (
-                  <div className="absolute z-30 mt-1.5 w-full bg-white border border-border rounded-xl shadow-lg overflow-hidden fade-in">
+                  <div className="absolute z-30 mt-1.5 w-full bg-card border border-border rounded-xl shadow-lg overflow-hidden fade-in">
                     <div className="p-2 border-b border-border space-y-1.5">
                       <div className="relative">
                         <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
@@ -1841,7 +1841,7 @@ export default function Empresas() {
                           value={busca}
                           onChange={e => setBusca(e.target.value)}
                           placeholder="Buscar empresa, CNPJ..."
-                          className="w-full pl-9 pr-8 h-9 border border-border rounded-lg text-sm bg-white focus:outline-none focus:ring-2 focus:ring-primary"
+                          className="w-full pl-9 pr-8 h-9 border border-border rounded-lg text-sm bg-card focus:outline-none focus:ring-2 focus:ring-primary"
                         />
                         {busca && (
                           <button onClick={() => setBusca("")} className="absolute right-2.5 top-1/2 -translate-y-1/2">
@@ -1850,21 +1850,21 @@ export default function Empresas() {
                         )}
                       </div>
                       <div className="flex gap-1.5 flex-wrap">
-                        <select value={filtroStatus} onChange={e => setFiltroStatus(e.target.value)} className="flex-1 h-8 border border-border rounded-lg px-2 text-xs bg-white focus:outline-none focus:ring-2 focus:ring-primary">
+                        <select value={filtroStatus} onChange={e => setFiltroStatus(e.target.value)} className="flex-1 h-8 border border-border rounded-lg px-2 text-xs bg-card focus:outline-none focus:ring-2 focus:ring-primary">
                           <option value="todos">Todos os status</option>
                           {Object.entries(STATUS_CFG).map(([k, v]) => (<option key={k} value={k}>{v.label}</option>))}
                         </select>
-                        <select value={filtroPorte} onChange={e => setFiltroPorte(e.target.value)} className="h-8 border border-border rounded-lg px-2 text-xs bg-white focus:outline-none focus:ring-2 focus:ring-primary">
+                        <select value={filtroPorte} onChange={e => setFiltroPorte(e.target.value)} className="h-8 border border-border rounded-lg px-2 text-xs bg-card focus:outline-none focus:ring-2 focus:ring-primary">
                           <option value="todos">Todos os portes</option>
                           <option value="MEI">MEI</option><option value="ME">ME</option><option value="EPP">EPP</option>
                           <option value="Médio">Médio</option><option value="Grande">Grande</option>
                         </select>
-                        <select value={filtroOrigem} onChange={e => setFiltroOrigem(e.target.value)} className="h-8 border border-border rounded-lg px-2 text-xs bg-white focus:outline-none focus:ring-2 focus:ring-primary">
+                        <select value={filtroOrigem} onChange={e => setFiltroOrigem(e.target.value)} className="h-8 border border-border rounded-lg px-2 text-xs bg-card focus:outline-none focus:ring-2 focus:ring-primary">
                           <option value="todos">Todas as origens</option>
                           <option value="simulador">Simulador</option><option value="indicacao">Indicação</option>
                           <option value="campanha">Campanha</option><option value="site">Site</option><option value="manual">Manual</option>
                         </select>
-                        <button onClick={carregarEmpresas} className="h-8 px-2 border border-border rounded-lg bg-white hover:bg-muted text-muted-foreground transition-colors" title="Atualizar">
+                        <button onClick={carregarEmpresas} className="h-8 px-2 border border-border rounded-lg bg-card hover:bg-muted text-muted-foreground transition-colors" title="Atualizar">
                           <RefreshCw className={`w-3.5 h-3.5 ${loading ? "animate-spin" : ""}`} />
                         </button>
                       </div>
@@ -1892,7 +1892,7 @@ export default function Empresas() {
                             }`}
                           >
                             <div className="flex items-center gap-2.5">
-                              <div className={`w-8 h-8 rounded-lg flex items-center justify-center text-white text-xs font-black shrink-0 ${ativa ? "bg-primary" : "bg-primary"}`}>
+                              <div className={`w-8 h-8 rounded-lg flex items-center justify-center text-primary-foreground text-xs font-black shrink-0 ${ativa ? "bg-primary" : "bg-primary"}`}>
                                 {getInitials(emp.razao_social)}
                               </div>
                               <div className="flex-1 min-w-0">
@@ -1920,7 +1920,7 @@ export default function Empresas() {
             {/* ── Detalhe ── */}
             <div className="flex-1 min-w-0">
               {!selecionada ? (
-                <div className="rounded-2xl border border-border bg-white shadow-sm">
+                <div className="rounded-2xl border border-border bg-card shadow-sm">
                   {/* ── Filtros rápidos: status/porte/origem sempre visíveis, sem precisar
                       abrir o combobox de busca -- usam os mesmos estados dele, então
                       buscar em qualquer um dos dois lugares filtra o mesmo resultado. ── */}
@@ -1929,21 +1929,21 @@ export default function Empresas() {
                       <button
                         type="button"
                         onClick={() => setFiltroStatus("todos")}
-                        className={`rounded-full px-2.5 py-1 text-[11px] font-bold transition ${filtroStatus === "todos" ? "bg-brand-navy text-white" : "bg-muted text-muted-foreground hover:bg-muted"}`}
+                        className={`rounded-full px-2.5 py-1 text-[11px] font-bold transition ${filtroStatus === "todos" ? "bg-brand-navy text-primary-foreground" : "bg-muted text-muted-foreground hover:bg-muted"}`}
                       >Todos</button>
                       {Object.entries(STATUS_CFG).map(([key, cfg]) => (
                         <button
                           key={key}
                           type="button"
                           onClick={() => setFiltroStatus(key)}
-                          className={`rounded-full px-2.5 py-1 text-[11px] font-bold transition ${filtroStatus === key ? "bg-brand-navy text-white" : `${cfg.badge} hover:opacity-80`}`}
+                          className={`rounded-full px-2.5 py-1 text-[11px] font-bold transition ${filtroStatus === key ? "bg-brand-navy text-primary-foreground" : `${cfg.badge} hover:opacity-80`}`}
                         >{cfg.label}</button>
                       ))}
                       <span className="mx-1 hidden h-4 w-px bg-muted sm:block" />
                       <select
                         value={filtroPorte}
                         onChange={e => setFiltroPorte(e.target.value)}
-                        className="h-7 rounded-full border border-border bg-white px-2.5 text-[11px] font-semibold text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary"
+                        className="h-7 rounded-full border border-border bg-card px-2.5 text-[11px] font-semibold text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary"
                       >
                         <option value="todos">Porte (todos)</option>
                         {Object.entries(PORTE_CFG).map(([key, cfg]) => <option key={key} value={key}>{cfg.label}</option>)}
@@ -1951,7 +1951,7 @@ export default function Empresas() {
                       <select
                         value={filtroOrigem}
                         onChange={e => setFiltroOrigem(e.target.value)}
-                        className="h-7 rounded-full border border-border bg-white px-2.5 text-[11px] font-semibold text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary"
+                        className="h-7 rounded-full border border-border bg-card px-2.5 text-[11px] font-semibold text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary"
                       >
                         <option value="todos">Origem (todas)</option>
                         <option value="simulador">Simulador</option>
@@ -1982,13 +1982,13 @@ export default function Empresas() {
                       <button
                         type="button"
                         onClick={() => setVisualizacaoEmpresas("blocos")}
-                        className={`inline-flex items-center gap-1 rounded-md px-2 py-1 text-[11px] font-semibold transition ${visualizacaoEmpresas === "blocos" ? "bg-white text-foreground shadow-sm" : "text-muted-foreground hover:text-muted-foreground"}`}
+                        className={`inline-flex items-center gap-1 rounded-md px-2 py-1 text-[11px] font-semibold transition ${visualizacaoEmpresas === "blocos" ? "bg-card text-foreground shadow-sm" : "text-muted-foreground hover:text-muted-foreground"}`}
                         title="Ver como blocos"
                       ><LayoutGrid className="h-3 w-3" /> Blocos</button>
                       <button
                         type="button"
                         onClick={() => setVisualizacaoEmpresas("lista")}
-                        className={`inline-flex items-center gap-1 rounded-md px-2 py-1 text-[11px] font-semibold transition ${visualizacaoEmpresas === "lista" ? "bg-white text-foreground shadow-sm" : "text-muted-foreground hover:text-muted-foreground"}`}
+                        className={`inline-flex items-center gap-1 rounded-md px-2 py-1 text-[11px] font-semibold transition ${visualizacaoEmpresas === "lista" ? "bg-card text-foreground shadow-sm" : "text-muted-foreground hover:text-muted-foreground"}`}
                         title="Ver como lista"
                       ><ListIcon className="h-3 w-3" /> Lista</button>
                     </div>
@@ -2013,11 +2013,11 @@ export default function Empresas() {
                             key={emp.id}
                             type="button"
                             onClick={() => selecionar(emp)}
-                            className="flex flex-col items-start rounded-2xl border border-border bg-white p-4 text-left shadow-sm transition hover:shadow-md hover:border-primary/30"
+                            className="flex flex-col items-start rounded-2xl border border-border bg-card p-4 text-left shadow-sm transition hover:shadow-md hover:border-primary/30"
                           >
                             <div className="flex w-full items-start justify-between gap-2">
                               <div className="flex min-w-0 items-start gap-2.5">
-                                <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-brand-navy text-xs font-black text-white">
+                                <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-brand-navy text-xs font-black text-primary-foreground">
                                   {getInitials(emp.razao_social)}
                                 </div>
                                 <div className="min-w-0">
@@ -2048,9 +2048,9 @@ export default function Empresas() {
                             key={emp.id}
                             type="button"
                             onClick={() => selecionar(emp)}
-                            className="emp-list-item flex w-full items-center gap-2.5 rounded-xl border border-border bg-white p-2.5 text-left hover:border-primary/30 hover:bg-primary/10/40"
+                            className="emp-list-item flex w-full items-center gap-2.5 rounded-xl border border-border bg-card p-2.5 text-left hover:border-primary/30 hover:bg-primary/10/40"
                           >
-                            <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-brand-navy text-xs font-black text-white">
+                            <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-brand-navy text-xs font-black text-primary-foreground">
                               {getInitials(emp.razao_social)}
                             </div>
                             <div className="min-w-0 flex-1">
@@ -2078,10 +2078,10 @@ export default function Empresas() {
                   </div>
                 </div>
               ) : (
-                <div className="bg-white rounded-2xl border border-border shadow-sm overflow-visible slide-up flex flex-col min-w-0">
+                <div className="bg-card rounded-2xl border border-border shadow-sm overflow-visible slide-up flex flex-col min-w-0">
 
                   {/* ── Header detalhe ── */}
-                  <div className="px-3 sm:px-4 py-2 border-b border-border shrink-0 bg-white">
+                  <div className="px-3 sm:px-4 py-2 border-b border-border shrink-0 bg-card">
                     <div className="flex items-start gap-3">
                       {/* Botão voltar -- antes só existia no celular; agora aparece em qualquer
                           tamanho de tela, pra sair da empresa sem precisar clicar em "Trocar
@@ -2095,7 +2095,7 @@ export default function Empresas() {
                         <span className="hidden text-xs font-bold sm:inline">Voltar</span>
                       </button>
                       {/* Avatar grande */}
-                      <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-primary to-primary flex items-center justify-center text-white text-sm font-black shrink-0 shadow-sm shadow-blue-100">
+                      <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-primary to-primary flex items-center justify-center text-primary-foreground text-sm font-black shrink-0 shadow-sm shadow-blue-100">
                         {getInitials(selecionada.razao_social)}
                       </div>
                       <div className="flex-1 min-w-0">
@@ -2168,7 +2168,7 @@ export default function Empresas() {
                             )}
                             {isFeatureEnabled("empresa-action-arquivar") && (confirmDelete === selecionada.id ? (
                               <div className="flex gap-1">
-                                <button onClick={() => handleExcluir(selecionada.id)} className="text-xs font-semibold bg-destructive text-white px-3 py-1.5 rounded-lg hover:bg-destructive/90">Confirmar</button>
+                                <button onClick={() => handleExcluir(selecionada.id)} className="text-xs font-semibold bg-destructive text-primary-foreground px-3 py-1.5 rounded-lg hover:bg-destructive/90">Confirmar</button>
                                 <button onClick={() => setConfirmDelete(null)} className="text-xs text-muted-foreground border border-border px-3 py-1.5 rounded-lg hover:bg-muted">Cancelar</button>
                               </div>
                             ) : (
@@ -2247,7 +2247,7 @@ export default function Empresas() {
                       <div className={`mx-3 sm:mx-4 mt-1 rounded-lg border px-2 py-1 shrink-0 ${rCfg.wrap}`}>
                         <div className="flex flex-col gap-1.5 lg:flex-row lg:items-center">
                           <div className="flex items-center gap-2 min-w-[190px]">
-                            <div className="flex h-6 w-6 items-center justify-center rounded-md bg-white/90 border border-white shadow-sm">
+                            <div className="flex h-6 w-6 items-center justify-center rounded-md bg-card/90 border border-white shadow-sm">
                               <rCfg.Icon className={`w-3.5 h-3.5 ${rCfg.ic}`} />
                             </div>
                             <div>
@@ -2271,7 +2271,7 @@ export default function Empresas() {
 
                           <div className="flex flex-wrap gap-1 lg:max-w-[420px]">
                             {tags.slice(0, 3).map((t, i) => (
-                              <span key={i} className={`rounded-full px-2 py-0.5 text-[10px] font-semibold ${t.ok ? "bg-white text-muted-foreground border border-border" : "bg-white text-destructive border border-destructive/20"}`}>
+                              <span key={i} className={`rounded-full px-2 py-0.5 text-[10px] font-semibold ${t.ok ? "bg-card text-muted-foreground border border-border" : "bg-card text-destructive border border-destructive/20"}`}>
                                 {t.text}
                               </span>
                             ))}
@@ -2282,7 +2282,7 @@ export default function Empresas() {
                   })()}
 
                   {/* ── Abas ── */}
-                  <div className="border-b border-border px-3 sm:px-4 py-1 bg-white shrink-0">
+                  <div className="border-b border-border px-3 sm:px-4 py-1 bg-card shrink-0">
                     <div className="flex flex-wrap gap-1">
                       {([
                         { id: "visao_geral", label: "Dados da Empresa", badge: sociosExibicao.length || undefined },
@@ -2300,14 +2300,14 @@ export default function Empresas() {
                           onClick={() => navegarParaAba(aba.id)}
                           className={`flex items-center gap-1.5 rounded-xl px-3 py-2 text-xs font-bold border transition-all whitespace-nowrap ${
                             abaAtiva === aba.id
-                              ? "border-primary/30 bg-primary text-white shadow-md shadow-blue-100"
-                              : "border-border text-muted-foreground bg-white hover:text-foreground hover:border-input hover:bg-muted"
+                              ? "border-primary/30 bg-primary text-primary-foreground shadow-md shadow-blue-100"
+                              : "border-border text-muted-foreground bg-card hover:text-foreground hover:border-input hover:bg-muted"
                           }`}
                         >
                           {aba.label}
                           {(aba as any).badge > 0 && (
                             <span className={`text-[10px] font-black px-1.5 py-0.5 rounded-full min-w-[18px] text-center ${
-                              abaAtiva === aba.id ? "bg-white/20 text-white" : "bg-primary/20 text-primary"
+                              abaAtiva === aba.id ? "bg-card/20 text-primary-foreground" : "bg-primary/20 text-primary"
                             }`}>{(aba as any).badge}</span>
                           )}
                         </button>
@@ -2351,7 +2351,7 @@ export default function Empresas() {
                     // igual ao padrão já usado na aba "Acervo Documental".
                     : (abaPermitida(abaAtiva) ? abaAtiva : primeiraAbaPermitida()) === "dossie_credito" ? (
                       <div className="p-3 fade-in">
-                        <div className="rounded-2xl border border-border bg-white p-6 shadow-sm flex items-center justify-center gap-3 text-muted-foreground">
+                        <div className="rounded-2xl border border-border bg-card p-6 shadow-sm flex items-center justify-center gap-3 text-muted-foreground">
                           <Loader2 className="h-4 w-4 animate-spin" />
                           <p className="text-sm font-semibold">Abrindo dossiê / laudo IA...</p>
                         </div>
@@ -2434,9 +2434,9 @@ export default function Empresas() {
                               const pendencias = Array.isArray(s.pendencias_contrato) ? s.pendencias_contrato : pendenciasSocioContrato(s);
                               const completo = pendencias.length === 0;
                               return (
-                                <div key={s.id} className="p-4 rounded-xl border border-border bg-white shadow-sm hover:shadow-md transition-shadow space-y-3">
+                                <div key={s.id} className="p-4 rounded-xl border border-border bg-card shadow-sm hover:shadow-md transition-shadow space-y-3">
                                   <div className="flex items-start gap-3 cursor-pointer" onClick={() => setSociosExpandidos(prev => ({ ...prev, [s.id]: !prev[s.id] }))}>
-                                    <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-primary to-primary/90 text-white flex items-center justify-center font-bold text-sm shrink-0">
+                                    <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-primary to-primary/90 text-primary-foreground flex items-center justify-center font-bold text-sm shrink-0">
                                       {(s.nome?.charAt(0) ?? "?").toUpperCase()}
                                     </div>
                                     <div className="flex-1 min-w-0">
@@ -2509,7 +2509,7 @@ export default function Empresas() {
                                     <div className="rounded-lg bg-warning/10 border border-warning/20 p-2">
                                       <p className="text-[11px] font-bold text-warning mb-1">Dados para contratos e etapas futuras — não bloqueiam a Fase 1</p>
                                       <div className="flex flex-wrap gap-1">
-                                        {pendencias.slice(0, 8).map((p: string) => <span key={p} className="text-[11px] px-2 py-0.5 rounded-full bg-white border border-warning/20 text-warning">{p}</span>)}
+                                        {pendencias.slice(0, 8).map((p: string) => <span key={p} className="text-[11px] px-2 py-0.5 rounded-full bg-card border border-warning/20 text-warning">{p}</span>)}
                                       </div>
                                     </div>
                                   )}
@@ -2526,7 +2526,7 @@ export default function Empresas() {
                       <div className="p-5 fade-in">
                         <div className="flex items-center justify-between mb-4">
                           <h3 className="text-sm font-bold text-muted-foreground">Conversas</h3>
-                          <button onClick={() => setShowFollowupForm(true)} className="flex items-center gap-1.5 text-xs font-semibold bg-primary text-white px-3 py-1.5 rounded-lg hover:bg-primary/90 transition-colors">
+                          <button onClick={() => setShowFollowupForm(true)} className="flex items-center gap-1.5 text-xs font-semibold bg-primary text-primary-foreground px-3 py-1.5 rounded-lg hover:bg-primary/90 transition-colors">
                             <PlusCircle className="w-3.5 h-3.5" /> Novo
                           </button>
                         </div>
@@ -2546,8 +2546,8 @@ export default function Empresas() {
                             </div>
                             <textarea className={inputCls + " resize-none h-16 py-2"} placeholder="Descrição (opcional)..." value={novoFollowup.descricao} onChange={e => setNovoFollowup(p => ({ ...p, descricao: e.target.value }))} />
                             <div className="flex gap-2">
-                              <button onClick={salvarFollowup} className="flex-1 bg-primary text-white text-sm font-semibold py-2 rounded-lg hover:bg-primary/90 transition-colors">Salvar</button>
-                              <button onClick={() => setShowFollowupForm(false)} className="flex-1 bg-white border border-border text-muted-foreground text-sm py-2 rounded-lg hover:bg-muted transition-colors">Cancelar</button>
+                              <button onClick={salvarFollowup} className="flex-1 bg-primary text-primary-foreground text-sm font-semibold py-2 rounded-lg hover:bg-primary/90 transition-colors">Salvar</button>
+                              <button onClick={() => setShowFollowupForm(false)} className="flex-1 bg-card border border-border text-muted-foreground text-sm py-2 rounded-lg hover:bg-muted transition-colors">Cancelar</button>
                             </div>
                           </div>
                         )}
@@ -2559,9 +2559,9 @@ export default function Empresas() {
                         ) : (
                           <div className="space-y-2">
                             {followups.map(f => (
-                              <div key={f.id} className={`flex items-start gap-3 p-3 rounded-xl border transition-colors ${f.concluido ? "border-border bg-muted opacity-60" : "border-border bg-white hover:border-primary/20"}`}>
+                              <div key={f.id} className={`flex items-start gap-3 p-3 rounded-xl border transition-colors ${f.concluido ? "border-border bg-muted opacity-60" : "border-border bg-card hover:border-primary/20"}`}>
                                 <button onClick={() => !f.concluido && concluirFollowup(f.id)} className={`mt-0.5 w-5 h-5 rounded-full border-2 flex-shrink-0 flex items-center justify-center transition-colors ${f.concluido ? "bg-success/100 border-success/70" : "border-input hover:border-success/50"}`}>
-                                  {f.concluido && <CheckCircle className="w-3 h-3 text-white" />}
+                                  {f.concluido && <CheckCircle className="w-3 h-3 text-primary-foreground" />}
                                 </button>
                                 <div className="flex-1 min-w-0">
                                   <p className={`text-sm font-medium ${f.concluido ? "line-through text-muted-foreground" : "text-foreground"}`}>{f.titulo}</p>
@@ -2593,7 +2593,7 @@ export default function Empresas() {
                             onChange={e => setNovaObs(e.target.value)}
                             onKeyDown={e => { if (e.key === "Enter" && e.ctrlKey) adicionarHistorico(novaObs); }}
                           />
-                          <button onClick={() => adicionarHistorico(novaObs)} disabled={!novaObs.trim()} className="shrink-0 px-3 bg-primary text-white rounded-lg hover:bg-primary/90 disabled:opacity-40 transition-colors">
+                          <button onClick={() => adicionarHistorico(novaObs)} disabled={!novaObs.trim()} className="shrink-0 px-3 bg-primary text-primary-foreground rounded-lg hover:bg-primary/90 disabled:opacity-40 transition-colors">
                             <Send className="w-4 h-4" />
                           </button>
                         </div>
@@ -2646,7 +2646,7 @@ export default function Empresas() {
                     // entre o clique e o redirecionamento, para nunca aparecer em branco.
                     : (abaPermitida(abaAtiva) ? abaAtiva : primeiraAbaPermitida()) === "documentos" ? (
                       <div className="p-3 fade-in">
-                        <div className="rounded-2xl border border-border bg-white p-6 shadow-sm flex items-center justify-center gap-3 text-muted-foreground">
+                        <div className="rounded-2xl border border-border bg-card p-6 shadow-sm flex items-center justify-center gap-3 text-muted-foreground">
                           <Loader2 className="h-4 w-4 animate-spin" />
                           <p className="text-sm font-semibold">Abrindo acervo documental...</p>
                         </div>
@@ -2665,7 +2665,7 @@ export default function Empresas() {
                         ) : (
                           <div className="space-y-2">
                             {simulacoesEmpresa.map((sim: any) => (
-                              <div key={sim.id} className="flex items-start gap-3 p-3 rounded-xl border border-border bg-white hover:bg-muted transition-colors">
+                              <div key={sim.id} className="flex items-start gap-3 p-3 rounded-xl border border-border bg-card hover:bg-muted transition-colors">
                                 <div className="w-8 h-8 rounded-lg bg-warning/10 flex items-center justify-center shrink-0">
                                   <span className="text-base">🧮</span>
                                 </div>
@@ -2734,7 +2734,7 @@ export default function Empresas() {
                               const statusLabel = assinado ? "Assinado" : cancelado ? "Cancelado" : "Aguardando assinatura";
                               const statusCls = assinado ? "bg-success/20 text-success" : cancelado ? "bg-destructive/20 text-destructive" : "bg-warning/20 text-warning";
                               return (
-                              <div key={cont.id} className={`flex items-start gap-3 p-3 rounded-xl border bg-white hover:bg-muted transition-colors ${assinado ? "border-border" : cancelado ? "border-destructive/20" : "border-warning/20"}`}>
+                              <div key={cont.id} className={`flex items-start gap-3 p-3 rounded-xl border bg-card hover:bg-muted transition-colors ${assinado ? "border-border" : cancelado ? "border-destructive/20" : "border-warning/20"}`}>
                                 <div className={`w-8 h-8 rounded-lg flex items-center justify-center shrink-0 ${assinado ? "bg-success/10" : cancelado ? "bg-destructive/10" : "bg-warning/10"}`}>
                                   <span className="text-base">{assinado ? "✅" : cancelado ? "🚫" : "⏳"}</span>
                                 </div>
@@ -2792,7 +2792,7 @@ export default function Empresas() {
                                       className={
                                         assinado
                                           ? "inline-flex items-center gap-1.5 h-8 px-2.5 rounded-lg text-xs font-semibold cursor-pointer transition-colors text-muted-foreground border border-border hover:bg-muted"
-                                          : "inline-flex items-center gap-1.5 h-9 px-3 rounded-lg text-xs font-bold cursor-pointer transition-colors text-white bg-warning hover:bg-warning/90 shadow-sm"
+                                          : "inline-flex items-center gap-1.5 h-9 px-3 rounded-lg text-xs font-bold cursor-pointer transition-colors text-primary-foreground bg-warning hover:bg-warning/90 shadow-sm"
                                       }
                                       title={assinado ? "Substituir contrato assinado" : "Anexar contrato assinado -- ativa CENPROT semanal e CND mensal"}
                                     >
@@ -2832,8 +2832,8 @@ export default function Empresas() {
       ════════════════════════════════════════════════════════════════════ */}
       {socioEditando && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-overlay backdrop-blur-sm">
-          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-4xl max-h-[92vh] overflow-hidden flex flex-col animate-in zoom-in-95 duration-150">
-            <div className="flex items-center justify-between px-5 py-4 border-b border-border bg-white">
+          <div className="bg-card rounded-2xl shadow-2xl w-full max-w-4xl max-h-[92vh] overflow-hidden flex flex-col animate-in zoom-in-95 duration-150">
+            <div className="flex items-center justify-between px-5 py-4 border-b border-border bg-card">
               <div>
                 <h2 className="text-lg font-bold text-foreground">Sócio / Representante</h2>
                 <p className="text-xs text-muted-foreground">Complete os dados exigidos para contratos, análises e assinatura.</p>
@@ -2896,7 +2896,7 @@ export default function Empresas() {
             </div>
             <div className="flex items-center justify-end gap-2 px-5 py-4 border-t border-border bg-muted shrink-0">
               <button type="button" onClick={() => setSocioEditando(null)} className="h-9 px-4 border border-border rounded-xl text-sm text-muted-foreground hover:bg-muted font-medium">Cancelar</button>
-              <button type="button" onClick={salvarSocio} disabled={salvandoSocio} className="flex items-center gap-2 h-9 px-5 bg-primary hover:bg-primary/90 text-white rounded-xl font-semibold text-sm disabled:opacity-50">
+              <button type="button" onClick={salvarSocio} disabled={salvandoSocio} className="flex items-center gap-2 h-9 px-5 bg-primary hover:bg-primary/90 text-primary-foreground rounded-xl font-semibold text-sm disabled:opacity-50">
                 {salvandoSocio ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
                 Salvar sócio/representante
               </button>
@@ -2907,7 +2907,7 @@ export default function Empresas() {
 
       {modalAberto && (
         <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/50 backdrop-blur-sm p-0 sm:p-4">
-          <div className="bg-white w-full sm:max-w-2xl sm:rounded-2xl rounded-t-2xl shadow-2xl max-h-[95vh] flex flex-col">
+          <div className="bg-card w-full sm:max-w-2xl sm:rounded-2xl rounded-t-2xl shadow-2xl max-h-[95vh] flex flex-col">
 
             {/* Header do modal */}
             <div className="flex items-center justify-between px-5 py-4 border-b border-border shrink-0">
@@ -2918,7 +2918,7 @@ export default function Empresas() {
                   </button>
                 )}
                 <div className="w-8 h-8 rounded-lg bg-primary flex items-center justify-center">
-                  <Building2 className="w-4 h-4 text-white" />
+                  <Building2 className="w-4 h-4 text-primary-foreground" />
                 </div>
                 <h2 className="text-base font-bold text-foreground">
                   {editando ? "Editar Empresa" : etapaModal === "cnpj" ? "Nova Empresa" : "Dados da Empresa"}
@@ -2980,7 +2980,7 @@ export default function Empresas() {
                       <button
                         type="button"
                         onClick={continuarCadastroManual}
-                        className="mt-2 inline-flex items-center justify-center rounded-lg bg-warning px-3 py-2 text-xs font-semibold text-white transition-colors hover:bg-warning/90"
+                        className="mt-2 inline-flex items-center justify-center rounded-lg bg-warning px-3 py-2 text-xs font-semibold text-primary-foreground transition-colors hover:bg-warning/90"
                       >
                         Continuar cadastro manualmente
                       </button>
@@ -3115,7 +3115,7 @@ export default function Empresas() {
                         <p className="text-xs font-semibold text-muted-foreground flex items-center gap-1.5"><Users className="w-3.5 h-3.5" /> Sócios identificados pela Receita Federal</p>
                         {socios.map((s, i) => (
                           <button key={i} type="button" onClick={() => { set("responsavel_nome", s.nome_socio || ""); set("responsavel_cpf", s.cnpj_cpf_do_socio || ""); set("responsavel_cargo", s.descricao_qualificacao_socio || ""); }} className="w-full flex items-center gap-3 p-3 rounded-xl border border-border bg-muted hover:border-primary/30 hover:bg-primary/10 transition-all text-left group">
-                            <div className="w-8 h-8 rounded-lg bg-primary text-white flex items-center justify-center font-bold text-sm shrink-0 group-hover:bg-primary/90">{s.nome_socio?.charAt(0) ?? "?"}</div>
+                            <div className="w-8 h-8 rounded-lg bg-primary text-primary-foreground flex items-center justify-center font-bold text-sm shrink-0 group-hover:bg-primary/90">{s.nome_socio?.charAt(0) ?? "?"}</div>
                             <div className="flex-1 min-w-0">
                               <p className="text-sm font-semibold text-foreground truncate">{s.nome_socio}</p>
                               <p className="text-xs text-muted-foreground">{s.descricao_qualificacao_socio || s.qualificacao_socio}</p>
@@ -3188,7 +3188,7 @@ export default function Empresas() {
                   <button type="button" onClick={fecharModal} className="h-9 px-4 border border-border rounded-xl text-sm text-muted-foreground hover:bg-muted font-medium transition-colors">
                     Cancelar
                   </button>
-                  <button type="button" onClick={handleSalvar} disabled={salvando} className="flex items-center gap-2 h-9 px-5 bg-primary hover:bg-primary/90 text-white rounded-xl font-semibold text-sm disabled:opacity-50 transition-colors shadow-sm">
+                  <button type="button" onClick={handleSalvar} disabled={salvando} className="flex items-center gap-2 h-9 px-5 bg-primary hover:bg-primary/90 text-primary-foreground rounded-xl font-semibold text-sm disabled:opacity-50 transition-colors shadow-sm">
                     {salvando ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
                     {editando ? "Salvar Alterações" : "Cadastrar Empresa"}
                   </button>
@@ -3207,7 +3207,7 @@ export default function Empresas() {
           partes foram conferidas é que o upload de verdade acontece. */}
       {modalAnexoAssinado && (
         <div className="fixed inset-0 z-[60] flex items-center justify-center bg-overlay p-4">
-          <div className="w-full max-w-md rounded-2xl bg-white shadow-2xl overflow-hidden">
+          <div className="w-full max-w-md rounded-2xl bg-card shadow-2xl overflow-hidden">
             <div className="px-5 py-4 border-b border-border flex items-start gap-3">
               <div className="h-10 w-10 rounded-xl bg-warning/10 text-warning flex items-center justify-center shrink-0">
                 <Upload className="w-5 h-5" />
@@ -3248,7 +3248,7 @@ export default function Empresas() {
                 type="button"
                 onClick={() => { setModalAnexoAssinado(null); setConfirmouAssinaturas(false); }}
                 disabled={enviandoAnexoAssinado}
-                className="h-9 px-4 rounded-lg border border-border bg-white text-xs font-semibold text-muted-foreground hover:bg-muted disabled:opacity-50"
+                className="h-9 px-4 rounded-lg border border-border bg-card text-xs font-semibold text-muted-foreground hover:bg-muted disabled:opacity-50"
               >
                 Cancelar
               </button>
@@ -3256,7 +3256,7 @@ export default function Empresas() {
                 type="button"
                 onClick={() => handleAnexarContratoAssinado(modalAnexoAssinado.contrato.id, modalAnexoAssinado.file)}
                 disabled={!confirmouAssinaturas || enviandoAnexoAssinado}
-                className="h-9 px-4 rounded-lg bg-warning text-white text-xs font-bold hover:bg-warning/90 disabled:opacity-50 inline-flex items-center gap-1.5"
+                className="h-9 px-4 rounded-lg bg-warning text-primary-foreground text-xs font-bold hover:bg-warning/90 disabled:opacity-50 inline-flex items-center gap-1.5"
               >
                 {enviandoAnexoAssinado ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Upload className="w-3.5 h-3.5" />}
                 {enviandoAnexoAssinado ? "Enviando..." : "Confirmar e anexar"}

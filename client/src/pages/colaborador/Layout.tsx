@@ -415,7 +415,7 @@ export default function Layout({
                   }`}
                 >
                   <ItemIcon
-                    className={`h-4 w-4 shrink-0 ${isActive ? "text-white" : mod.color}`}
+                    className={`h-4 w-4 shrink-0 ${isActive ? "text-primary-foreground" : mod.color}`}
                   />
                   <span className="truncate">{item.label}</span>
                 </div>

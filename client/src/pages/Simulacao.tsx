@@ -82,13 +82,13 @@ export default function Simulacao() {
       <Header />
 
       {/* Hero */}
-      <section className="bg-gradient-to-br from-primary to-[var(--color-caixa-blue-dark)] text-white py-16">
+      <section className="bg-gradient-to-br from-primary to-[var(--color-caixa-blue-dark)] text-primary-foreground py-16">
         <div className="container">
           <div className="max-w-3xl mx-auto text-center">
             <h1 className="text-4xl md:text-5xl font-bold mb-6">
               Simulação de Crédito
             </h1>
-            <p className="text-xl text-white/90">
+            <p className="text-xl text-primary-foreground/90">
               Preencha o formulário abaixo e nossa equipe entrará em contato
               para orientar todo o processo de solicitação do Giro CAIXA Fácil.
             </p>

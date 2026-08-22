@@ -22,11 +22,11 @@ export default function Blog() {
       <Header />
 
       {/* Hero */}
-      <section className="bg-gradient-to-br from-primary to-[var(--color-caixa-blue-dark)] text-white py-20">
+      <section className="bg-gradient-to-br from-primary to-[var(--color-caixa-blue-dark)] text-primary-foreground py-20">
         <div className="container">
           <div className="max-w-3xl">
             <h1 className="text-4xl md:text-5xl font-bold mb-6">Blog</h1>
-            <p className="text-xl text-white/90">
+            <p className="text-xl text-primary-foreground/90">
               Conteúdos sobre crédito empresarial, gestão financeira e dicas
               para pequenos negócios.
             </p>

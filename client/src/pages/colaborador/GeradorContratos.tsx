@@ -480,7 +480,7 @@ export default function GeradorContratos() {
               onClick={() => setAbaAtiva(key as any)}
               className={`flex items-center gap-2 px-4 py-2 text-sm font-medium border-b-2 transition-colors ${
                 abaAtiva === key
-                  ? 'border-blue-600 text-primary'
+                  ? 'border-primary/30 text-primary'
                   : 'border-transparent text-muted-foreground hover:text-foreground'
               }`}
             >
@@ -578,7 +578,7 @@ export default function GeradorContratos() {
                 </button>
                 <button
                   onClick={() => { setFiltroTipo(''); setFiltroStatus(''); setFiltroDataInicio(''); setFiltroDataFim(''); }}
-                  className="px-3 py-1.5 bg-border text-foreground text-xs rounded-lg hover:bg-gray-300"
+                  className="px-3 py-1.5 bg-border text-foreground text-xs rounded-lg hover:bg-border"
                 >
                   Limpar
                 </button>

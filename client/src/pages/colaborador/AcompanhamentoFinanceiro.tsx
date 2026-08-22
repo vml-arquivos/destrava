@@ -191,11 +191,11 @@ function podeEditarPercentual(user: any): boolean {
 // ─── Status ───────────────────────────────────────────────────────────────────
 
 const STATUS_MAP: Record<string, { label: string; color: string; bg: string; border: string }> = {
-  dentro_da_referencia: { label: "Dentro da Referência", color: "text-green-800", bg: "bg-green-50", border: "border-green-300" },
-  atencao_leve:         { label: "Atenção Leve",         color: "text-yellow-800", bg: "bg-yellow-50", border: "border-yellow-300" },
+  dentro_da_referencia: { label: "Dentro da Referência", color: "text-success", bg: "bg-success/10", border: "border-success/30" },
+  atencao_leve:         { label: "Atenção Leve",         color: "text-warning", bg: "bg-warning/10", border: "border-warning/30" },
   atencao_media:        { label: "Atenção Média",        color: "text-warning", bg: "bg-warning/10", border: "border-warning/30" },
   incompativel:         { label: "Incompatível",         color: "text-destructive",    bg: "bg-destructive/10",    border: "border-destructive/30" },
-  critico:              { label: "Crítico",              color: "text-destructive",    bg: "bg-destructive/20",   border: "border-red-400" },
+  critico:              { label: "Crítico",              color: "text-destructive",    bg: "bg-destructive/20",   border: "border-destructive/30" },
   sem_documentacao:     { label: "Sem Documentação",     color: "text-foreground",   bg: "bg-muted",   border: "border-input" },
   aguardando_atualizacao:{ label: "Aguardando Atualização", color: "text-primary", bg: "bg-primary/10", border: "border-primary/30" },
   regularizado:         { label: "Regularizado",         color: "text-success",bg: "bg-success/10",border: "border-success/30" },
@@ -218,7 +218,7 @@ function StatusBadge({ status }: { status: string }) {
 
 function BarraProgresso({ pct, label }: { pct: number; label: string }) {
   const clamped = Math.min(pct, 200);
-  const cor = pct > 120 ? "bg-destructive" : pct > 100 ? "bg-orange-400" : "bg-green-500";
+  const cor = pct > 120 ? "bg-destructive" : pct > 100 ? "bg-warning" : "bg-success";
   return (
     <div className="w-full">
       <div className="flex justify-between text-xs mb-0.5">
@@ -372,17 +372,17 @@ function FormConfig({
             <div className="text-center bg-card rounded border border-primary/20 p-3">
               <p className="text-xs text-primary uppercase font-medium">Limite Anual</p>
               <p className="text-base font-bold text-primary mt-1">{moneyBR(limites.limite_anual)}</p>
-              <p className="text-xs text-blue-400">{pct}% de {moneyBR(fatNum)}</p>
+              <p className="text-xs text-primary">{pct}% de {moneyBR(fatNum)}</p>
             </div>
             <div className="text-center bg-card rounded border border-primary/20 p-3">
               <p className="text-xs text-primary uppercase font-medium">Limite Mensal</p>
               <p className="text-base font-bold text-primary mt-1">{moneyBR(limites.limite_mensal)}</p>
-              <p className="text-xs text-blue-400">÷ 12 meses</p>
+              <p className="text-xs text-primary">÷ 12 meses</p>
             </div>
             <div className="text-center bg-card rounded border border-primary/20 p-3">
               <p className="text-xs text-primary uppercase font-medium">Limite Semanal</p>
               <p className="text-base font-bold text-primary mt-1">{moneyBR(limites.limite_semanal)}</p>
-              <p className="text-xs text-blue-400">÷ {limites.semanas_no_mes} semanas no mês</p>
+              <p className="text-xs text-primary">÷ {limites.semanas_no_mes} semanas no mês</p>
             </div>
           </div>
         </div>
@@ -578,7 +578,7 @@ function FormSemana({
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-center">
           <div className="bg-card rounded border p-2">
             <p className="text-xs text-muted-foreground">Entradas</p>
-            <p className="text-sm font-bold text-green-700">{moneyBR(totalEntradas)}</p>
+            <p className="text-sm font-bold text-success">{moneyBR(totalEntradas)}</p>
           </div>
           <div className="bg-card rounded border p-2">
             <p className="text-xs text-muted-foreground">Saídas</p>
@@ -834,7 +834,7 @@ function MovimentacaoItem({
           </div>
           <div>
             <span className="text-xs text-muted-foreground block">Tipo</span>
-            <span className={`font-semibold capitalize ${mov.tipo === "entrada" ? "text-green-700" : "text-destructive"}`}>
+            <span className={`font-semibold capitalize ${mov.tipo === "entrada" ? "text-success" : "text-destructive"}`}>
               {mov.tipo === "entrada" ? "Entrada" : "Saída"}
             </span>
           </div>
@@ -844,7 +844,7 @@ function MovimentacaoItem({
           </div>
           <div>
             <span className="text-xs text-muted-foreground block">Valor</span>
-            <span className={`font-bold ${mov.tipo === "entrada" ? "text-green-700" : "text-destructive"}`}>{moneyBR(mov.valor)}</span>
+            <span className={`font-bold ${mov.tipo === "entrada" ? "text-success" : "text-destructive"}`}>{moneyBR(mov.valor)}</span>
           </div>
         </div>
         <div className="flex gap-2 sm:flex-shrink-0">
@@ -1101,7 +1101,7 @@ function ImportacaoExtratoSemana({
                 {selecionados.size === pendentes.length ? "Desmarcar pendentes" : "Selecionar pendentes"}
               </Button>}
               <Button size="sm" variant="outline" className="h-8 text-xs bg-card" onClick={aprovarSelecionados} disabled={!selecionados.size}>
-                <CheckCircle2 className="h-3.5 w-3.5 mr-1 text-green-600" /> Aprovar selecionados
+                <CheckCircle2 className="h-3.5 w-3.5 mr-1 text-success" /> Aprovar selecionados
               </Button>
               <Button size="sm" onClick={aplicarAprovados} disabled={!aprovados.length || aplicando} className="h-8 text-xs">
                 {aplicando ? <Loader2 className="h-3.5 w-3.5 mr-1 animate-spin" /> : <CheckCircle2 className="h-3.5 w-3.5 mr-1" />}
@@ -1130,7 +1130,7 @@ function ImportacaoExtratoSemana({
                     <div className="w-full lg:flex-1"><Label className="text-[11px]">Descrição</Label><Input value={linha.descricao || ""} onChange={(e) => atualizarLinhaLocal(linha.id, "descricao", e.target.value)} disabled={bloqueada} className="h-8 mt-0.5 text-xs" /></div>
                     <div className="w-full lg:w-32"><Label className="text-[11px]">Valor</Label><Input type="text" inputMode="numeric" value={linha.valor ? formatBRLCurrency(Number(linha.valor)) : ""} onChange={(e) => atualizarLinhaLocal(linha.id, "valor", unmaskCurrencyInput(maskCurrencyInput(e.target.value)))} disabled={bloqueada} className="h-8 mt-0.5 text-xs text-right" /></div>
                     <div className="flex items-center gap-1 lg:pb-0.5">
-                      <Badge variant="outline" className={`text-[10px] whitespace-nowrap ${linha.status === "aprovado" ? "border-green-300 text-green-700" : linha.status === "descartado" ? "border-input text-muted-foreground" : "border-warning/30 text-warning"}`}>{bloqueada ? "Aplicado" : linha.status === "aprovado" ? "Aprovado" : linha.status === "descartado" ? "Descartado" : "Pendente"}</Badge>
+                      <Badge variant="outline" className={`text-[10px] whitespace-nowrap ${linha.status === "aprovado" ? "border-success/30 text-success" : linha.status === "descartado" ? "border-input text-muted-foreground" : "border-warning/30 text-warning"}`}>{bloqueada ? "Aplicado" : linha.status === "aprovado" ? "Aprovado" : linha.status === "descartado" ? "Descartado" : "Pendente"}</Badge>
                       {!bloqueada && linha.status !== "descartado" && <Button size="sm" variant="outline" onClick={() => revisarLinha(linha, "pendente")} className="h-8 px-2 text-xs">Salvar</Button>}
                       {!bloqueada && linha.status === "pendente" && <Button size="sm" onClick={() => revisarLinha(linha, "aprovado")} className="h-8 px-2 text-xs"><CheckCircle2 className="h-3 w-3 mr-1" />Aprovar</Button>}
                       {!bloqueada && linha.status !== "descartado" && <Button size="sm" variant="outline" onClick={() => revisarLinha(linha, "descartado")} className="h-8 px-2 text-xs text-destructive border-destructive/20"><XCircle className="h-3 w-3 mr-1" />Descartar</Button>}
@@ -1224,9 +1224,9 @@ function DetalheSemana({
             <p className="text-xs text-muted-foreground">Saldo Inicial</p>
             <p className="text-base font-bold text-foreground">{moneyBR(semana.saldo_inicial)}</p>
           </div>
-          <div className="border rounded-lg p-3 text-center bg-green-50 border-green-200">
-            <p className="text-xs text-green-600">Total de Entradas</p>
-            <p className="text-base font-bold text-green-700">{moneyBR(semana.total_entradas)}</p>
+          <div className="border rounded-lg p-3 text-center bg-success/10 border-success/20">
+            <p className="text-xs text-success">Total de Entradas</p>
+            <p className="text-base font-bold text-success">{moneyBR(semana.total_entradas)}</p>
           </div>
           <div className="border rounded-lg p-3 text-center bg-destructive/10 border-destructive/20">
             <p className="text-xs text-destructive">Total de Saídas</p>
@@ -1255,7 +1255,7 @@ function DetalheSemana({
 
       {/* Diagnóstico técnico */}
       {semana.diagnostico && (
-        <div className="bg-muted border-l-4 border-blue-700 p-3 rounded-r">
+        <div className="bg-muted border-l-4 border-primary/30 p-3 rounded-r">
           <p className="text-xs font-semibold text-primary uppercase mb-1">Diagnóstico Técnico</p>
           <p className="text-xs text-foreground leading-relaxed text-justify">{semana.diagnostico}</p>
         </div>
@@ -1277,7 +1277,7 @@ function DetalheSemana({
                   </div>
                   <div>
                     <span className="text-xs text-muted-foreground block">Tipo</span>
-                    <span className={`font-semibold ${m.tipo === "entrada" ? "text-green-700" : "text-destructive"}`}>
+                    <span className={`font-semibold ${m.tipo === "entrada" ? "text-success" : "text-destructive"}`}>
                       {m.tipo === "entrada" ? "Entrada" : "Saída"}
                     </span>
                   </div>
@@ -1287,7 +1287,7 @@ function DetalheSemana({
                   </div>
                   <div>
                     <span className="text-xs text-muted-foreground block">Valor</span>
-                    <span className={`font-bold ${m.tipo === "entrada" ? "text-green-700" : "text-destructive"}`}>{moneyBR(m.valor)}</span>
+                    <span className={`font-bold ${m.tipo === "entrada" ? "text-success" : "text-destructive"}`}>{moneyBR(m.valor)}</span>
                   </div>
                 </div>
               </div>
@@ -1313,8 +1313,8 @@ function DetalheSemana({
 
       {/* Observações */}
       {semana.observacoes && (
-        <div className="bg-yellow-50 border-l-4 border-yellow-400 p-3 rounded-r">
-          <p className="text-xs font-semibold text-yellow-700 uppercase mb-1">Observações</p>
+        <div className="bg-warning/10 border-l-4 border-warning/30 p-3 rounded-r">
+          <p className="text-xs font-semibold text-warning uppercase mb-1">Observações</p>
           <p className="text-xs text-foreground leading-relaxed">{semana.observacoes}</p>
         </div>
       )}
@@ -1376,7 +1376,7 @@ function CardSemana({
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 mt-3">
           <div>
             <p className="text-xs text-muted-foreground">Entradas</p>
-            <p className="text-sm font-bold text-green-700">{moneyBR(semana.total_entradas)}</p>
+            <p className="text-sm font-bold text-success">{moneyBR(semana.total_entradas)}</p>
           </div>
           <div>
             <p className="text-xs text-muted-foreground">Saídas</p>
@@ -1403,7 +1403,7 @@ function CardSemana({
           </div>
 
           {semana.diagnostico && (
-            <div className="bg-card border-l-4 border-blue-600 p-2 rounded-r text-xs text-foreground leading-relaxed">
+            <div className="bg-card border-l-4 border-primary/30 p-2 rounded-r text-xs text-foreground leading-relaxed">
               {semana.diagnostico}
             </div>
           )}
@@ -1439,7 +1439,7 @@ export default function AcompanhamentoFinanceiro() {
     return (
       <ColaboradorLayout title="Acompanhamento Financeiro">
         <div className="flex flex-col items-center justify-center min-h-[60vh] text-center p-8">
-          <XCircle className="h-16 w-16 text-red-400 mb-4" />
+          <XCircle className="h-16 w-16 text-destructive mb-4" />
           <h2 className="text-xl font-bold text-foreground mb-2">Acesso Restrito</h2>
           <p className="text-muted-foreground max-w-sm">
             Este módulo é exclusivo para Gestores de Crédito, Diretores e Administradores.
@@ -1719,7 +1719,7 @@ export default function AcompanhamentoFinanceiro() {
                           <p className="text-sm font-bold text-primary">
                             {semanas[0] ? moneyBR(semanas[0].limite_semanal_referencia) : "—"}
                           </p>
-                          <p className="text-xs text-blue-400">*do mês atual</p>
+                          <p className="text-xs text-primary">*do mês atual</p>
                         </div>
                       </div>
                     ) : (
@@ -1749,9 +1749,9 @@ export default function AcompanhamentoFinanceiro() {
                   <p className="text-xs text-muted-foreground">Semanas no Período</p>
                   <p className="text-2xl font-bold text-foreground">{semanas.length}</p>
                 </div>
-                <div className="border rounded-lg p-3 bg-green-50 border-green-200 text-center">
-                  <p className="text-xs text-green-600">Total de Entradas</p>
-                  <p className="text-base font-bold text-green-700">{moneyBR(totalEntradasPeriodo)}</p>
+                <div className="border rounded-lg p-3 bg-success/10 border-success/20 text-center">
+                  <p className="text-xs text-success">Total de Entradas</p>
+                  <p className="text-base font-bold text-success">{moneyBR(totalEntradasPeriodo)}</p>
                 </div>
                 <div className="border rounded-lg p-3 bg-destructive/10 border-destructive/20 text-center">
                   <p className="text-xs text-destructive">Total de Saídas</p>
@@ -1787,7 +1787,7 @@ export default function AcompanhamentoFinanceiro() {
               </div>
             ) : semanas.length === 0 ? (
               <div className="text-center py-12 border-2 border-dashed rounded-lg">
-                <TrendingUp className="h-10 w-10 text-gray-300 mx-auto mb-3" />
+                <TrendingUp className="h-10 w-10 text-muted-foreground mx-auto mb-3" />
                 <p className="text-muted-foreground text-sm font-medium">Nenhuma semana registrada</p>
                 <p className="text-muted-foreground text-xs mt-1">
                   {config?.configurado

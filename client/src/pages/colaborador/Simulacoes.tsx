@@ -66,9 +66,9 @@ type Status = "todos" | "pendente" | "em_analise" | "aprovado" | "reprovado" | "
 
 const statusBadge = (status?: string) => {
   switch (status) {
-    case "aprovado": return <Badge className="bg-green-100 text-green-800 border-green-200">Aprovado</Badge>;
+    case "aprovado": return <Badge className="bg-success/20 text-success border-success/20">Aprovado</Badge>;
     case "reprovado": return <Badge variant="destructive">Reprovado</Badge>;
-    case "em_analise": return <Badge className="bg-blue-100 text-blue-800 border-blue-200">Em Análise</Badge>;
+    case "em_analise": return <Badge className="bg-primary/20 text-primary border-primary/20">Em Análise</Badge>;
     case "cancelado": return <Badge variant="outline">Cancelado</Badge>;
     default: return <Badge variant="secondary">Pendente</Badge>;
   }
@@ -359,7 +359,7 @@ export default function Simulacoes() {
                             <Button
                               variant="ghost"
                               size="icon"
-                              className="h-8 w-8 text-blue-700 hover:text-blue-800 hover:bg-blue-50"
+                              className="h-8 w-8 text-primary hover:text-primary hover:bg-primary/10"
                               onClick={() => reimprimirPdf(sim.id)}
                               title="Reimprimir PDF armazenado"
                             >
@@ -405,10 +405,10 @@ export default function Simulacoes() {
               </div>
 
               {/* Resultado principal */}
-              <div className="bg-primary text-white rounded-xl p-4 text-center">
-                <p className="text-xs text-white/70 mb-1">Parcela Mensal</p>
+              <div className="bg-primary text-primary-foreground rounded-xl p-4 text-center">
+                <p className="text-xs text-primary-foreground/70 mb-1">Parcela Mensal</p>
                 <p className="text-3xl font-bold">{fmt.format(Number(selecionada.valor_parcela))}</p>
-                <p className="text-xs text-white/70 mt-1">
+                <p className="text-xs text-primary-foreground/70 mt-1">
                   {selecionada.quantidade_parcelas}x de {fmt.format(Number(selecionada.valor_parcela))}
                 </p>
               </div>
@@ -474,9 +474,9 @@ export default function Simulacoes() {
                       onClick={() => atualizarStatus(selecionada.id, status)}
                       className={
                         status === "aprovado" && selecionada.status !== status
-                          ? "border-green-300 text-green-700 hover:bg-green-50"
+                          ? "border-success/30 text-success hover:bg-success/10"
                           : status === "reprovado" && selecionada.status !== status
-                          ? "border-red-300 text-red-700 hover:bg-red-50"
+                          ? "border-destructive/30 text-destructive hover:bg-destructive/10"
                           : ""
                       }
                     >

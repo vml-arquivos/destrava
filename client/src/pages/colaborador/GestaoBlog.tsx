@@ -247,10 +247,10 @@ export default function GestaoBlog() {
     <Layout title="Gestão de Conteúdo">
       <div className="min-h-full bg-muted p-4 sm:p-6">
         <div className="mx-auto max-w-7xl space-y-5">
-          <header className="overflow-hidden rounded-3xl bg-slate-950 px-6 py-7 text-primary-foreground shadow-sm sm:px-8">
+          <header className="overflow-hidden rounded-3xl bg-brand-navy px-6 py-7 text-primary-foreground shadow-sm sm:px-8">
             <div className="flex flex-col gap-5 sm:flex-row sm:items-end sm:justify-between">
               <div>
-                <div className="mb-3 inline-flex items-center gap-2 rounded-full bg-card/10 px-3 py-1 text-xs font-bold uppercase tracking-[0.18em] text-blue-100">
+                <div className="mb-3 inline-flex items-center gap-2 rounded-full bg-card/10 px-3 py-1 text-xs font-bold uppercase tracking-[0.18em] text-primary">
                   <BookOpenText className="h-3.5 w-3.5" />
                   Conteúdo e SEO
                 </div>
@@ -268,7 +268,7 @@ export default function GestaoBlog() {
           <section className="grid gap-3 sm:grid-cols-3">
             <div className="rounded-2xl bg-card p-5 shadow-sm ring-1 ring-slate-100">
               <div className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Total</div>
-              <div className="mt-1 text-3xl font-black text-slate-950">{posts.length}</div>
+              <div className="mt-1 text-3xl font-black text-foreground">{posts.length}</div>
             </div>
             <div className="rounded-2xl bg-card p-5 shadow-sm ring-1 ring-slate-100">
               <div className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Publicados</div>
@@ -283,7 +283,7 @@ export default function GestaoBlog() {
           <section className="rounded-3xl bg-card p-4 shadow-sm ring-1 ring-slate-100 sm:p-6">
             <div className="mb-5 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
               <div>
-                <h2 className="font-black text-slate-950">Artigos</h2>
+                <h2 className="font-black text-foreground">Artigos</h2>
                 <p className="text-sm text-muted-foreground">Publicar torna o artigo disponível imediatamente no site.</p>
               </div>
               <div className="relative w-full sm:w-80">
@@ -345,12 +345,12 @@ export default function GestaoBlog() {
       </div>
 
       {editorOpen && (
-        <div className="fixed inset-0 z-[100] flex items-start justify-end bg-slate-950/45 backdrop-blur-sm" role="dialog" aria-modal="true" aria-label={editingId ? "Editar artigo" : "Novo artigo"}>
+        <div className="fixed inset-0 z-[100] flex items-start justify-end bg-brand-navy/45 backdrop-blur-sm" role="dialog" aria-modal="true" aria-label={editingId ? "Editar artigo" : "Novo artigo"}>
           <div className="h-full w-full max-w-3xl overflow-y-auto bg-card shadow-2xl">
             <form onSubmit={savePost} className="min-h-full">
               <div className="sticky top-0 z-10 flex items-center justify-between border-b border-border bg-card/95 px-5 py-4 backdrop-blur sm:px-7">
                 <div>
-                  <h2 className="text-lg font-black text-slate-950">{editingId ? "Editar artigo" : "Novo artigo"}</h2>
+                  <h2 className="text-lg font-black text-foreground">{editingId ? "Editar artigo" : "Novo artigo"}</h2>
                   <p className="text-xs text-muted-foreground">Salve como rascunho até a revisão final.</p>
                 </div>
                 <Button type="button" variant="ghost" size="icon" onClick={closeEditor} aria-label="Fechar editor">

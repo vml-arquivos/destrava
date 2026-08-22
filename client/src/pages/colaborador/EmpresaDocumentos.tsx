@@ -39,7 +39,7 @@ export default function EmpresaDocumentos() {
   if (!empresaId) {
     return (
       <Layout>
-        <div className="p-6 text-sm text-slate-500">Empresa não informada.</div>
+        <div className="p-6 text-sm text-muted-foreground">Empresa não informada.</div>
       </Layout>
     );
   }
@@ -48,33 +48,33 @@ export default function EmpresaDocumentos() {
     <Layout>
       <div className="p-3 sm:p-4 space-y-4 max-w-[1600px] mx-auto">
         <div className="flex items-center gap-3">
-          <Link href="/colaborador/empresas" className="inline-flex items-center gap-1.5 text-sm font-semibold text-slate-500 hover:text-slate-700">
+          <Link href="/colaborador/empresas" className="inline-flex items-center gap-1.5 text-sm font-semibold text-muted-foreground hover:text-foreground">
             <ArrowLeft className="w-4 h-4" /> Empresas
           </Link>
-          <span className="text-slate-300">/</span>
+          <span className="text-muted-foreground">/</span>
           <div className="flex items-center gap-2 min-w-0">
-            <div className="w-7 h-7 rounded-lg bg-blue-600 flex items-center justify-center text-white shrink-0">
+            <div className="w-7 h-7 rounded-lg bg-primary flex items-center justify-center text-primary-foreground shrink-0">
               <Building2 className="w-3.5 h-3.5" />
             </div>
             {loading ? (
-              <span className="text-sm text-slate-400">Carregando...</span>
+              <span className="text-sm text-muted-foreground">Carregando...</span>
             ) : (
-              <span className="text-sm font-bold text-slate-800 truncate">{empresa?.razao_social || empresa?.nome_fantasia || "Empresa"}</span>
+              <span className="text-sm font-bold text-foreground truncate">{empresa?.razao_social || empresa?.nome_fantasia || "Empresa"}</span>
             )}
           </div>
         </div>
 
         {loading ? (
-          <div className="flex items-center justify-center py-24 text-sm text-slate-400">Carregando documentos...</div>
+          <div className="flex items-center justify-center py-24 text-sm text-muted-foreground">Carregando documentos...</div>
         ) : !empresa ? (
-          <div className="rounded-xl border border-slate-200 bg-white p-8 text-center text-sm text-slate-500">
+          <div className="rounded-xl border border-border bg-card p-8 text-center text-sm text-muted-foreground">
             Empresa não encontrada.
             <div className="mt-3">
-              <Link href="/colaborador/empresas" className="text-blue-600 hover:underline text-sm font-semibold">Voltar para Empresas</Link>
+              <Link href="/colaborador/empresas" className="text-primary hover:underline text-sm font-semibold">Voltar para Empresas</Link>
             </div>
           </div>
         ) : (
-          <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-4">
+          <div className="bg-card rounded-2xl border border-border shadow-sm p-4">
             <DocumentosEntidade
               entidadeTipo="empresa"
               entidadeId={empresa.id}

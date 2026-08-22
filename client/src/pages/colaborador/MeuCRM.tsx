@@ -63,7 +63,7 @@ const toInputDateTime = (value?: string | null) => {
 };
 
 const TEMP_BADGE: Record<string, string> = {
-  frio: "bg-sky-100 text-sky-700 border-sky-200",
+  frio: "bg-primary/20 text-primary border-primary/20",
   morno: "bg-warning/20 text-warning border-warning/20",
   quente: "bg-warning/20 text-warning border-warning/20",
   urgente: "bg-destructive/20 text-destructive border-destructive/20",
@@ -251,9 +251,9 @@ export default function MeuCRM() {
             <div className="flex items-center gap-2 text-muted-foreground text-xs font-medium mb-1"><UserCheck className="h-4 w-4" /> Leads visíveis</div>
             <p className="text-2xl font-bold text-foreground">{metricas.total}</p>
           </div>
-          <div className="bg-green-50 rounded-xl border border-green-200 p-4">
-            <div className="flex items-center gap-2 text-green-700 text-xs font-medium mb-1"><Target className="h-4 w-4" /> Pipeline estimado</div>
-            <p className="text-2xl font-bold text-green-700">{fmtBRL.format(metricas.valorTotal)}</p>
+          <div className="bg-success/10 rounded-xl border border-success/20 p-4">
+            <div className="flex items-center gap-2 text-success text-xs font-medium mb-1"><Target className="h-4 w-4" /> Pipeline estimado</div>
+            <p className="text-2xl font-bold text-success">{fmtBRL.format(metricas.valorTotal)}</p>
           </div>
           <div className="bg-warning/10 rounded-xl border border-warning/20 p-4">
             <div className="flex items-center gap-2 text-warning text-xs font-medium mb-1"><Thermometer className="h-4 w-4" /> Quentes / urgentes</div>
@@ -284,11 +284,11 @@ export default function MeuCRM() {
             </div>
             {loading ? (
               <div className="flex items-center justify-center py-16">
-                <div className="w-8 h-8 border-4 border-blue-600 border-t-transparent rounded-full animate-spin" />
+                <div className="w-8 h-8 border-4 border-primary/30 border-t-transparent rounded-full animate-spin" />
               </div>
             ) : leadsOrdenados.length === 0 ? (
               <div className="px-6 py-16 text-center">
-                <Target className="h-10 w-10 text-gray-300 mx-auto mb-3" />
+                <Target className="h-10 w-10 text-muted-foreground mx-auto mb-3" />
                 <p className="font-medium text-foreground">Nenhum lead disponível no escopo atual.</p>
                 <p className="text-sm text-muted-foreground mt-1">Altere o escopo ou aguarde novas atribuições.</p>
               </div>

@@ -85,11 +85,11 @@ function gerarSenha(): string {
 
 function badgeCargo(cargo: string) {
   const lower = cargo.toLowerCase();
-  if (lower === "administrador") return "bg-primary/20 text-primary border-purple-300";
-  if (lower === "diretor") return "bg-primary/20 text-primary border-indigo-300";
+  if (lower === "administrador") return "bg-primary/20 text-primary border-primary/30";
+  if (lower === "diretor") return "bg-primary/20 text-primary border-primary/30";
   if (lower === "gerente comercial") return "bg-primary/20 text-primary border-primary/30";
-  if (lower === "analista de crédito") return "bg-sky-100 text-sky-800 border-sky-300";
-  if (lower === "consultor de crédito") return "bg-success/20 text-success border-teal-300";
+  if (lower === "analista de crédito") return "bg-primary/20 text-primary border-primary/30";
+  if (lower === "consultor de crédito") return "bg-success/20 text-success border-success/30";
   if (lower === "captador externo") return "bg-warning/20 text-warning border-warning/30";
   if (lower === "estagiário") return "bg-muted text-muted-foreground border-input";
   return "bg-muted text-foreground border-input";
@@ -361,7 +361,7 @@ export default function UsuariosPage() {
           <Card>
             <CardContent className="pt-5">
               <p className="text-xs text-muted-foreground">Ativos</p>
-              <p className="text-2xl font-bold text-green-700">{resumoPerfis.ativos}</p>
+              <p className="text-2xl font-bold text-success">{resumoPerfis.ativos}</p>
             </CardContent>
           </Card>
           <Card>
@@ -504,14 +504,14 @@ export default function UsuariosPage() {
                     </Button>
                     {senha && (
                       <Button type="button" variant="outline" size="icon" onClick={copiarSenha}>
-                        {senhaCopiada ? <CheckCircle2 className="h-4 w-4 text-green-600" /> : <Copy className="h-4 w-4" />}
+                        {senhaCopiada ? <CheckCircle2 className="h-4 w-4 text-success" /> : <Copy className="h-4 w-4" />}
                       </Button>
                     )}
                   </div>
                 </div>
 
                 {mensagem && (
-                  <div className={`flex items-start gap-2 rounded-xl px-4 py-3 text-sm ${mensagem.tipo === "sucesso" ? "bg-green-50 border border-green-200 text-green-800" : "bg-destructive/10 border border-destructive/20 text-destructive"}`}>
+                  <div className={`flex items-start gap-2 rounded-xl px-4 py-3 text-sm ${mensagem.tipo === "sucesso" ? "bg-success/10 border border-success/20 text-success" : "bg-destructive/10 border border-destructive/20 text-destructive"}`}>
                     {mensagem.tipo === "sucesso" ? <CheckCircle2 className="h-4 w-4 mt-0.5 flex-shrink-0" /> : <AlertCircle className="h-4 w-4 mt-0.5 flex-shrink-0" />}
                     <span>{mensagem.texto}</span>
                   </div>
@@ -548,7 +548,7 @@ export default function UsuariosPage() {
                 </div>
               ) : erroLista ? (
                 <div className="flex flex-col items-center justify-center py-12 text-center gap-2">
-                  <AlertCircle className="h-10 w-10 text-red-400" />
+                  <AlertCircle className="h-10 w-10 text-destructive" />
                   <p className="font-medium text-destructive text-sm">Erro ao carregar colaboradores</p>
                   <p className="text-xs text-destructive">{erroLista}</p>
                 </div>
@@ -631,7 +631,7 @@ export default function UsuariosPage() {
                           </div>
 
                           {mensagemEdit && (
-                            <p className={`text-xs px-3 py-2 rounded ${mensagemEdit.tipo === "sucesso" ? "text-green-700 bg-green-50" : "text-destructive bg-destructive/10"}`}>
+                            <p className={`text-xs px-3 py-2 rounded ${mensagemEdit.tipo === "sucesso" ? "text-success bg-success/10" : "text-destructive bg-destructive/10"}`}>
                               {mensagemEdit.texto}
                             </p>
                           )}
@@ -653,7 +653,7 @@ export default function UsuariosPage() {
                                 <p className="font-semibold text-sm truncate">{col.nome}</p>
                                 <span className={`text-xs px-1.5 py-0.5 rounded border font-medium ${badgeCargo(col.cargo)}`}>{col.cargo}</span>
                                 <Badge variant="outline">{labelPerfil(col.perfil)}</Badge>
-                                <Badge variant={col.ativo ? "default" : "secondary"} className={col.ativo ? "bg-green-600 hover:bg-green-700" : ""}>
+                                <Badge variant={col.ativo ? "default" : "secondary"} className={col.ativo ? "bg-success hover:bg-success" : ""}>
                                   {col.ativo ? "Ativo" : "Inativo"}
                                 </Badge>
                               </div>

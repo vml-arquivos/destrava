@@ -44,6 +44,8 @@
   --color-success-foreground: var(--success-foreground);
   --color-warning: var(--warning);
   --color-warning-foreground: var(--warning-foreground);
+  --color-medium: var(--medium);
+  --color-medium-foreground: var(--medium-foreground);
   --color-border: var(--border);
   --color-input: var(--input);
   --color-ring: var(--ring);
@@ -91,6 +93,8 @@
   --success-foreground: #ffffff;
   --warning: #b45309;
   --warning-foreground: #ffffff;
+  --medium: #a16207;
+  --medium-foreground: #ffffff;
   --border: #d7e0eb;
   --input: #c6d2e0;
   --ring: var(--color-caixa-blue);
@@ -140,6 +144,8 @@
   --success-foreground: #ffffff;
   --warning: #f2a65a;
   --warning-foreground: #111a38;
+  --medium: #eab308;
+  --medium-foreground: #111a38;
   --border: rgba(226, 232, 240, 0.18);
   --input: rgba(226, 232, 240, 0.24);
   --ring: #8ab4ff;

@@ -53,11 +53,11 @@ export function OfertaPosSimulacao({
               <div className="absolute -right-10 -top-10 text-primary-foreground/10">
                 <BookOpen className="w-40 h-40" />
               </div>
-              <BookOpen className="w-12 h-12 mx-auto mb-3 text-yellow-400 relative z-10" />
+              <BookOpen className="w-12 h-12 mx-auto mb-3 text-warning relative z-10" />
               <DialogTitle className="text-2xl font-bold mb-2 relative z-10">
                 O Segredo da Aprovação Bancária
               </DialogTitle>
-              <DialogDescription className="text-blue-100 text-base relative z-10">
+              <DialogDescription className="text-primary text-base relative z-10">
                 Sua simulação está pronta, mas você sabe como garantir a aprovação?
               </DialogDescription>
             </div>
@@ -69,7 +69,7 @@ export function OfertaPosSimulacao({
               
               <div className="bg-muted rounded-xl p-4 mb-5 border border-border">
                 <h4 className="font-bold text-foreground mb-3 flex items-center gap-2">
-                  <CheckCircle2 className="w-5 h-5 text-green-500" />
+                  <CheckCircle2 className="w-5 h-5 text-success" />
                   No E-book Definitivo da Destrava você aprenderá:
                 </h4>
                 <ul className="space-y-2 text-sm text-muted-foreground">
@@ -88,9 +88,9 @@ export function OfertaPosSimulacao({
                 </ul>
               </div>
 
-              <div className="flex flex-col sm:flex-row items-center justify-between gap-4 bg-yellow-50 p-4 rounded-xl border border-yellow-200 mb-6">
+              <div className="flex flex-col sm:flex-row items-center justify-between gap-4 bg-warning/10 p-4 rounded-xl border border-warning/20 mb-6">
                 <div>
-                  <p className="text-xs text-yellow-800 uppercase font-bold tracking-wider mb-1">Oferta Especial</p>
+                  <p className="text-xs text-warning uppercase font-bold tracking-wider mb-1">Oferta Especial</p>
                   <div className="flex items-end gap-2">
                     <span className="text-3xl font-bold text-foreground">R$ 9,90</span>
                     <span className="text-sm text-muted-foreground line-through mb-1">R$ 49,90</span>
@@ -98,7 +98,7 @@ export function OfertaPosSimulacao({
                 </div>
                 <Button 
                   onClick={() => setStep("checkout_ebook")}
-                  className="w-full sm:w-auto bg-green-500 hover:bg-green-600 text-primary-foreground font-bold py-6 px-6 rounded-xl text-lg shadow-lg shadow-green-500/30"
+                  className="w-full sm:w-auto bg-success hover:bg-success text-primary-foreground font-bold py-6 px-6 rounded-xl text-lg shadow-lg shadow-green-500/30"
                 >
                   Quero o E-book Agora
                   <ChevronRight className="w-5 h-5 ml-1" />
@@ -121,7 +121,7 @@ export function OfertaPosSimulacao({
         {step === "checkout_ebook" && (
           <>
             <div className="bg-muted p-4 border-b text-center">
-              <Lock className="w-6 h-6 mx-auto text-green-500 mb-2" />
+              <Lock className="w-6 h-6 mx-auto text-success mb-2" />
               <DialogTitle className="text-lg font-bold text-foreground">
                 Checkout Seguro
               </DialogTitle>
@@ -181,12 +181,12 @@ export function OfertaPosSimulacao({
         {/* Step 3: Oferta de Rating */}
         {step === "rating" && (
           <>
-            <div className="bg-green-500 p-6 text-primary-foreground text-center">
+            <div className="bg-success p-6 text-primary-foreground text-center">
               <CheckCircle2 className="w-12 h-12 mx-auto mb-3 text-primary-foreground" />
               <DialogTitle className="text-2xl font-bold mb-2">
                 Pagamento Confirmado!
               </DialogTitle>
-              <DialogDescription className="text-green-100 text-base">
+              <DialogDescription className="text-success text-base">
                 Seu e-book já está disponível para download.
               </DialogDescription>
             </div>
@@ -205,8 +205,8 @@ export function OfertaPosSimulacao({
 
               <div className="border-t pt-6">
                 <div className="flex items-center gap-3 mb-4">
-                  <div className="w-10 h-10 bg-yellow-100 rounded-full flex items-center justify-center">
-                    <Star className="w-5 h-5 text-yellow-600" />
+                  <div className="w-10 h-10 bg-warning/20 rounded-full flex items-center justify-center">
+                    <Star className="w-5 h-5 text-warning" />
                   </div>
                   <h3 className="text-lg font-bold text-foreground">Próximo Nível: Consulta de Rating</h3>
                 </div>
@@ -216,9 +216,9 @@ export function OfertaPosSimulacao({
                 </p>
                 
                 <ul className="space-y-2 text-sm text-muted-foreground mb-6">
-                  <li className="flex items-center gap-2"><CheckCircle2 className="w-4 h-4 text-green-500" /> Saiba como o mercado vê sua empresa</li>
-                  <li className="flex items-center gap-2"><CheckCircle2 className="w-4 h-4 text-green-500" /> Descubra pendências ocultas</li>
-                  <li className="flex items-center gap-2"><CheckCircle2 className="w-4 h-4 text-green-500" /> Receba orientações para melhorar sua nota</li>
+                  <li className="flex items-center gap-2"><CheckCircle2 className="w-4 h-4 text-success" /> Saiba como o mercado vê sua empresa</li>
+                  <li className="flex items-center gap-2"><CheckCircle2 className="w-4 h-4 text-success" /> Descubra pendências ocultas</li>
+                  <li className="flex items-center gap-2"><CheckCircle2 className="w-4 h-4 text-success" /> Receba orientações para melhorar sua nota</li>
                 </ul>
 
                 <div className="flex gap-3">
@@ -232,7 +232,7 @@ export function OfertaPosSimulacao({
                   <Button 
                     onClick={() => processarCompra("assessoria")}
                     disabled={isProcessing}
-                    className="flex-[2] bg-yellow-500 hover:bg-yellow-600 text-yellow-950 font-bold"
+                    className="flex-[2] bg-warning hover:bg-warning text-warning font-bold"
                   >
                     {isProcessing ? "Processando..." : "Quero meu Rating (R$ 49,90)"}
                   </Button>
@@ -245,8 +245,8 @@ export function OfertaPosSimulacao({
         {/* Step 4: Oferta de Assessoria */}
         {step === "assessoria" && (
           <>
-            <div className="bg-gray-900 p-6 text-primary-foreground text-center">
-              <Briefcase className="w-12 h-12 mx-auto mb-3 text-blue-400" />
+            <div className="bg-brand-navy p-6 text-primary-foreground text-center">
+              <Briefcase className="w-12 h-12 mx-auto mb-3 text-primary" />
               <DialogTitle className="text-2xl font-bold mb-2">
                 Acelere Seus Resultados
               </DialogTitle>
@@ -293,8 +293,8 @@ export function OfertaPosSimulacao({
         {/* Step 5: Concluído */}
         {step === "concluido" && (
           <div className="p-8 text-center">
-            <div className="w-20 h-20 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-5">
-              <CheckCircle2 className="w-10 h-10 text-green-500" />
+            <div className="w-20 h-20 bg-success/20 rounded-full flex items-center justify-center mx-auto mb-5">
+              <CheckCircle2 className="w-10 h-10 text-success" />
             </div>
             <h2 className="text-2xl font-bold text-foreground mb-3">Tudo Certo!</h2>
             <p className="text-muted-foreground mb-6">

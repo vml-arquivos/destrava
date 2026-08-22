@@ -35,7 +35,7 @@ const fmtDataHora = (value?: string) => value
   : "Sem follow-up";
 
 const TEMP_BADGE: Record<string, string> = {
-  frio: "bg-sky-100 text-sky-700 border-sky-200",
+  frio: "bg-primary/20 text-primary border-primary/20",
   morno: "bg-warning/20 text-warning border-warning/20",
   quente: "bg-warning/20 text-warning border-warning/20",
   urgente: "bg-destructive/20 text-destructive border-destructive/20",
@@ -154,15 +154,15 @@ export default function Fila() {
             <p className="text-sm text-muted-foreground mt-1">{descricao}</p>
           </div>
           <div className="flex items-center gap-2 flex-wrap">
-            <Link href="/colaborador/fila?scope=meus" className={`inline-flex items-center rounded-lg border px-3 py-2 text-sm font-medium ${scope === "meus" ? "bg-primary text-primary-foreground border-blue-600" : "bg-card text-foreground border-border hover:bg-muted"}`}>
+            <Link href="/colaborador/fila?scope=meus" className={`inline-flex items-center rounded-lg border px-3 py-2 text-sm font-medium ${scope === "meus" ? "bg-primary text-primary-foreground border-primary/30" : "bg-card text-foreground border-border hover:bg-muted"}`}>
                 Minha fila
               </Link>
             {podeVerTudo && (
               <>
-                <Link href="/colaborador/fila?scope=sem_responsavel" className={`inline-flex items-center rounded-lg border px-3 py-2 text-sm font-medium ${scope === "sem_responsavel" ? "bg-primary text-primary-foreground border-blue-600" : "bg-card text-foreground border-border hover:bg-muted"}`}>
+                <Link href="/colaborador/fila?scope=sem_responsavel" className={`inline-flex items-center rounded-lg border px-3 py-2 text-sm font-medium ${scope === "sem_responsavel" ? "bg-primary text-primary-foreground border-primary/30" : "bg-card text-foreground border-border hover:bg-muted"}`}>
                     Sem responsável
                   </Link>
-                <Link href="/colaborador/fila" className={`inline-flex items-center rounded-lg border px-3 py-2 text-sm font-medium ${scope === "todos" ? "bg-primary text-primary-foreground border-blue-600" : "bg-card text-foreground border-border hover:bg-muted"}`}>
+                <Link href="/colaborador/fila" className={`inline-flex items-center rounded-lg border px-3 py-2 text-sm font-medium ${scope === "todos" ? "bg-primary text-primary-foreground border-primary/30" : "bg-card text-foreground border-border hover:bg-muted"}`}>
                     Fila geral
                   </Link>
               </>
@@ -203,11 +203,11 @@ export default function Fila() {
 
         {loading ? (
           <div className="flex items-center justify-center py-20">
-            <div className="w-8 h-8 border-4 border-blue-600 border-t-transparent rounded-full animate-spin" />
+            <div className="w-8 h-8 border-4 border-primary/30 border-t-transparent rounded-full animate-spin" />
           </div>
         ) : leads.length === 0 ? (
           <div className="bg-card rounded-xl border border-border py-16 px-6 text-center">
-            <Target className="h-10 w-10 text-gray-300 mx-auto mb-3" />
+            <Target className="h-10 w-10 text-muted-foreground mx-auto mb-3" />
             <p className="text-foreground font-medium">Nenhum lead disponível no recorte atual.</p>
             <p className="text-sm text-muted-foreground mt-1">Os leads ativos aparecerão aqui conforme entram no pipeline.</p>
           </div>

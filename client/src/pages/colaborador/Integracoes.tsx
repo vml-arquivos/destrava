@@ -155,7 +155,7 @@ export default function Integracoes() {
         {/* Header */}
         <div>
           <h1 className="text-2xl font-bold text-foreground flex items-center gap-2">
-            <Zap className="w-6 h-6 text-yellow-500" />
+            <Zap className="w-6 h-6 text-warning" />
             Integrações — n8n Webhook
           </h1>
           <p className="text-muted-foreground mt-1">
@@ -166,16 +166,16 @@ export default function Integracoes() {
         {/* Status Card */}
         <div className={`rounded-xl border-2 p-5 ${
           loading ? "border-border bg-muted" :
-          status?.configured ? "border-green-200 bg-green-50" : "border-yellow-200 bg-yellow-50"
+          status?.configured ? "border-success/20 bg-success/10" : "border-warning/20 bg-warning/10"
         }`}>
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-3">
               {loading ? (
                 <Loader2 className="w-6 h-6 text-muted-foreground animate-spin" />
               ) : status?.configured ? (
-                <CheckCircle className="w-6 h-6 text-green-600" />
+                <CheckCircle className="w-6 h-6 text-success" />
               ) : (
-                <AlertCircle className="w-6 h-6 text-yellow-600" />
+                <AlertCircle className="w-6 h-6 text-warning" />
               )}
               <div>
                 <p className="font-semibold text-foreground">
@@ -208,7 +208,7 @@ export default function Integracoes() {
                 <button
                   onClick={testarWebhook}
                   disabled={testando}
-                  className="flex items-center gap-2 px-4 py-2 bg-green-600 text-primary-foreground rounded-lg text-sm font-medium hover:bg-green-700 disabled:opacity-50"
+                  className="flex items-center gap-2 px-4 py-2 bg-success text-primary-foreground rounded-lg text-sm font-medium hover:bg-success disabled:opacity-50"
                 >
                   {testando ? <Loader2 className="w-4 h-4 animate-spin" /> : <Play className="w-4 h-4" />}
                   Testar Webhook
@@ -219,7 +219,7 @@ export default function Integracoes() {
 
           {resultadoTeste && (
             <div className={`mt-4 p-3 rounded-lg flex items-center gap-2 ${
-              resultadoTeste.success ? "bg-green-100 text-green-800" : "bg-destructive/20 text-destructive"
+              resultadoTeste.success ? "bg-success/20 text-success" : "bg-destructive/20 text-destructive"
             }`}>
               {resultadoTeste.success ? <CheckCircle className="w-4 h-4" /> : <XCircle className="w-4 h-4" />}
               <span className="text-sm">{resultadoTeste.message}</span>
@@ -299,14 +299,14 @@ export default function Integracoes() {
                     <p className="text-sm text-muted-foreground mt-0.5">{step.desc}</p>
                     {step.codigo && (
                       <div className="mt-2 flex items-center gap-2">
-                        <code className="flex-1 bg-gray-900 text-green-400 text-xs px-3 py-2 rounded-lg font-mono">
+                        <code className="flex-1 bg-brand-navy text-success text-xs px-3 py-2 rounded-lg font-mono">
                           {step.codigo}
                         </code>
                         <button
                           onClick={() => copiar(step.codigo!, `step-${step.num}`)}
                           className="p-2 text-muted-foreground hover:text-primary hover:bg-primary/10 rounded-lg"
                         >
-                          {copiado === `step-${step.num}` ? <CheckCircle className="w-4 h-4 text-green-500" /> : <Copy className="w-4 h-4" />}
+                          {copiado === `step-${step.num}` ? <CheckCircle className="w-4 h-4 text-success" /> : <Copy className="w-4 h-4" />}
                         </button>
                       </div>
                     )}
@@ -320,7 +320,7 @@ export default function Integracoes() {
         {/* Eventos Disponíveis */}
         <div className="bg-card rounded-xl border p-5 space-y-3">
           <h2 className="font-bold text-foreground flex items-center gap-2">
-            <Zap className="w-5 h-5 text-yellow-500" />
+            <Zap className="w-5 h-5 text-warning" />
             Eventos Disponíveis
           </h2>
           <p className="text-sm text-muted-foreground">
@@ -337,7 +337,7 @@ export default function Integracoes() {
                   <div className="flex items-center gap-3">
                     <span className={`w-2 h-2 rounded-full ${
                       info.cor === "blue" ? "bg-primary" :
-                      info.cor === "green" ? "bg-green-500" : "bg-primary/100"
+                      info.cor === "green" ? "bg-success" : "bg-primary/100"
                     }`} />
                     <div>
                       <p className="font-medium text-foreground">{info.label}</p>
@@ -358,11 +358,11 @@ export default function Integracoes() {
                         onClick={() => copiar(JSON.stringify(PAYLOAD_EXEMPLO[chave as keyof typeof PAYLOAD_EXEMPLO], null, 2), chave)}
                         className="flex items-center gap-1 text-xs text-primary hover:underline"
                       >
-                        {copiado === chave ? <CheckCircle className="w-3 h-3 text-green-500" /> : <Copy className="w-3 h-3" />}
+                        {copiado === chave ? <CheckCircle className="w-3 h-3 text-success" /> : <Copy className="w-3 h-3" />}
                         {copiado === chave ? "Copiado!" : "Copiar"}
                       </button>
                     </div>
-                    <pre className="bg-gray-900 text-green-400 text-xs p-4 rounded-lg overflow-x-auto font-mono leading-relaxed">
+                    <pre className="bg-brand-navy text-success text-xs p-4 rounded-lg overflow-x-auto font-mono leading-relaxed">
                       {JSON.stringify(PAYLOAD_EXEMPLO[chave as keyof typeof PAYLOAD_EXEMPLO], null, 2)}
                     </pre>
                   </div>
@@ -433,7 +433,7 @@ export default function Integracoes() {
               <p>1. Na aba <strong>Inteligência 360</strong> de qualquer empresa, o usuário visualiza as pendências críticas calculadas em tempo real.</p>
               <p>2. Ao clicar em <strong>"Criar tarefa no Nexus"</strong>, um modal de confirmação exibe os detalhes da pendência.</p>
               <p>3. Após confirmar, o backend busca os dados reais da empresa, recalcula as pendências e monta o payload oficial.</p>
-              <p>4. O payload é enviado para <code className="bg-slate-200 px-1 rounded">NEXUS_WEBHOOK_URL</code> (ou <code className="bg-slate-200 px-1 rounded">N8N_WEBHOOK_URL</code> como fallback).</p>
+              <p>4. O payload é enviado para <code className="bg-border px-1 rounded">NEXUS_WEBHOOK_URL</code> (ou <code className="bg-border px-1 rounded">N8N_WEBHOOK_URL</code> como fallback).</p>
               <p>5. A tarefa é registrada com <strong>idempotência dupla</strong> (memória + banco) para evitar duplicatas.</p>
             </div>
           </div>
@@ -461,11 +461,11 @@ export default function Integracoes() {
                 }, null, 2), "nexus-payload")}
                 className="flex items-center gap-1 text-xs text-primary hover:underline"
               >
-                {copiado === "nexus-payload" ? <CheckCircle className="w-3 h-3 text-green-500" /> : <Copy className="w-3 h-3" />}
+                {copiado === "nexus-payload" ? <CheckCircle className="w-3 h-3 text-success" /> : <Copy className="w-3 h-3" />}
                 {copiado === "nexus-payload" ? "Copiado!" : "Copiar"}
               </button>
             </div>
-            <pre className="bg-gray-900 text-green-400 text-xs p-4 rounded-lg overflow-x-auto font-mono leading-relaxed">{JSON.stringify({
+            <pre className="bg-brand-navy text-success text-xs p-4 rounded-lg overflow-x-auto font-mono leading-relaxed">{JSON.stringify({
               evento: "tarefa_nexus",
               timestamp: "2026-07-10T10:30:00.000Z",
               empresaId: "123",

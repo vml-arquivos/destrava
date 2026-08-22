@@ -28,11 +28,11 @@ export default function LimpaNomeCNPJ() {
   };
 
   return (
-    <div className="min-h-screen flex flex-col bg-white">
+    <div className="min-h-screen flex flex-col bg-card">
       <Header />
 
       {/* HERO SECTION - Impacto Imediato para CNPJ */}
-      <section className="bg-gradient-to-br from-[var(--color-caixa-blue)] via-[var(--color-caixa-blue-dark)] to-[#001a4d] text-white py-20 relative overflow-hidden">
+      <section className="bg-gradient-to-br from-[var(--color-caixa-blue)] via-[var(--color-caixa-blue-dark)] to-[#001a4d] text-primary-foreground py-20 relative overflow-hidden">
         <div className="absolute inset-0 opacity-10">
           <div className="absolute top-0 right-0 w-96 h-96 bg-[var(--color-caixa-yellow)] rounded-full blur-3xl"></div>
           <div className="absolute bottom-0 left-0 w-96 h-96 bg-[var(--color-caixa-yellow)] rounded-full blur-3xl"></div>
@@ -44,14 +44,14 @@ export default function LimpaNomeCNPJ() {
               Sua Empresa Está<br />
               <span className="text-[var(--color-caixa-yellow)]">Negativada?</span>
             </h1>
-            <p className="text-xl md:text-2xl text-white/90 mb-8 leading-relaxed">
+            <p className="text-xl md:text-2xl text-primary-foreground/90 mb-8 leading-relaxed">
               Recupere o crédito da sua empresa, negocie dívidas e volte a crescer. Especialistas prontos para ajudar seu negócio.
             </p>
             <div className="flex gap-4 flex-wrap">
-              <Button size="lg" className="bg-[var(--color-caixa-yellow)] hover:bg-yellow-500 text-black font-bold text-lg px-8">
+              <Button size="lg" className="bg-[var(--color-caixa-yellow)] hover:bg-warning text-foreground font-bold text-lg px-8">
                 Falar com Especialista
               </Button>
-              <Button size="lg" variant="outline" className="border-white text-white hover:bg-white/10 font-bold text-lg px-8">
+              <Button size="lg" variant="outline" className="border-white text-primary-foreground hover:bg-card/10 font-bold text-lg px-8">
                 <Phone className="w-5 h-5 mr-2" />
                 WhatsApp (61) 3526-8355
               </Button>
@@ -61,12 +61,12 @@ export default function LimpaNomeCNPJ() {
       </section>
 
       {/* SEÇÃO DE DOR - Conectar com Problema Empresarial */}
-      <section className="py-16 bg-red-50">
+      <section className="py-16 bg-destructive/10">
         <div className="container">
           <h2 className="text-4xl font-bold text-center mb-4 text-[var(--color-caixa-blue-dark)]">
             Sua Empresa Enfrenta Algum Desses Problemas?
           </h2>
-          <p className="text-center text-gray-600 mb-12 max-w-2xl mx-auto text-lg">
+          <p className="text-center text-muted-foreground mb-12 max-w-2xl mx-auto text-lg">
             Muitos empresários enfrentam restrições de crédito. Você não está sozinho, mas precisa agir agora.
           </p>
 
@@ -93,10 +93,10 @@ export default function LimpaNomeCNPJ() {
                 desc: "Está perdendo contratos e negócios porque sua empresa não consegue acessar crédito ou linhas?",
               },
             ].map((item, idx) => (
-              <div key={idx} className="bg-white p-6 rounded-lg border-l-4 border-red-500 shadow-sm hover:shadow-md transition">
-                <item.icon className="w-10 h-10 text-red-500 mb-4" />
+              <div key={idx} className="bg-card p-6 rounded-lg border-l-4 border-destructive/30 shadow-sm hover:shadow-md transition">
+                <item.icon className="w-10 h-10 text-destructive mb-4" />
                 <h3 className="text-xl font-bold mb-2 text-[var(--color-caixa-blue-dark)]">{item.titulo}</h3>
-                <p className="text-gray-600">{item.desc}</p>
+                <p className="text-muted-foreground">{item.desc}</p>
               </div>
             ))}
           </div>
@@ -104,12 +104,12 @@ export default function LimpaNomeCNPJ() {
       </section>
 
       {/* SEÇÃO DE SOLUÇÃO - Esperança Empresarial */}
-      <section className="py-16 bg-white">
+      <section className="py-16 bg-card">
         <div className="container">
           <h2 className="text-4xl font-bold text-center mb-4 text-[var(--color-caixa-blue-dark)]">
             Recupere o Crédito da Sua Empresa
           </h2>
-            <p className="text-center text-gray-600 mb-12 max-w-2xl mx-auto text-lg">
+            <p className="text-center text-muted-foreground mb-12 max-w-2xl mx-auto text-lg">
               Análise, consulta, diagnóstico e plano de ação para limpeza de negativações e restauração do nome limpo
             </p>
 
@@ -122,34 +122,34 @@ export default function LimpaNomeCNPJ() {
                 { titulo: "Independente do Valor", desc: "Trabalhamos com dívidas de qualquer valor, inclusive dívidas estelares" },
               ].map((item, idx) => (
                 <div key={idx} className="flex gap-4">
-                  <CheckCircle2 className="w-6 h-6 text-green-500 flex-shrink-0 mt-1" />
+                  <CheckCircle2 className="w-6 h-6 text-success flex-shrink-0 mt-1" />
                   <div>
                     <h3 className="font-bold text-lg text-[var(--color-caixa-blue-dark)]">{item.titulo}</h3>
-                    <p className="text-gray-600">{item.desc}</p>
+                    <p className="text-muted-foreground">{item.desc}</p>
                   </div>
                 </div>
               ))}
             </div>
 
-            <div className="bg-gradient-to-br from-green-50 to-emerald-50 p-8 rounded-xl border-2 border-green-200">
+            <div className="bg-gradient-to-br from-green-50 to-emerald-50 p-8 rounded-xl border-2 border-success/20">
               <div className="text-center mb-8">
-                <Building2 className="w-16 h-16 text-green-600 mx-auto mb-4" />
+                <Building2 className="w-16 h-16 text-success mx-auto mb-4" />
                 <h3 className="text-2xl font-bold text-[var(--color-caixa-blue-dark)] mb-2">Sua Empresa Merece Crescer</h3>
-                <p className="text-gray-600">Recupere o crédito e volte a expandir seu negócio</p>
+                <p className="text-muted-foreground">Recupere o crédito e volte a expandir seu negócio</p>
               </div>
 
               <div className="space-y-4 text-sm">
-                <div className="bg-white p-4 rounded-lg">
+                <div className="bg-card p-4 rounded-lg">
                   <p className="font-bold text-[var(--color-caixa-blue-dark)] mb-1">✓ Análise Profunda</p>
-                  <p className="text-gray-600">Avaliamos toda a situação creditícia da sua empresa</p>
+                  <p className="text-muted-foreground">Avaliamos toda a situação creditícia da sua empresa</p>
                 </div>
-                <div className="bg-white p-4 rounded-lg">
+                <div className="bg-card p-4 rounded-lg">
                   <p className="font-bold text-[var(--color-caixa-blue-dark)] mb-1">✓ Nome Limpo</p>
-                  <p className="text-gray-600">Sua empresa recupera o nome limpo e acesso a crédito</p>
+                  <p className="text-muted-foreground">Sua empresa recupera o nome limpo e acesso a crédito</p>
                 </div>
-                <div className="bg-white p-4 rounded-lg">
+                <div className="bg-card p-4 rounded-lg">
                   <p className="font-bold text-[var(--color-caixa-blue-dark)] mb-1">✓ Acompanhamento Total</p>
-                  <p className="text-gray-600">Suporte contínuo até a limpeza completa de negativações</p>
+                  <p className="text-muted-foreground">Suporte contínuo até a limpeza completa de negativações</p>
                 </div>
               </div>
             </div>
@@ -158,12 +158,12 @@ export default function LimpaNomeCNPJ() {
       </section>
 
       {/* SEÇÃO DE PROCESSO - Simplicidade */}
-      <section className="py-16 bg-gray-50">
+      <section className="py-16 bg-muted">
         <div className="container">
           <h2 className="text-4xl font-bold text-center mb-4 text-[var(--color-caixa-blue-dark)]">
             Como Recuperamos o Crédito da Sua Empresa
           </h2>
-          <p className="text-center text-gray-600 mb-12 max-w-2xl mx-auto text-lg">
+          <p className="text-center text-muted-foreground mb-12 max-w-2xl mx-auto text-lg">
             Processo consultivo e direto para resolver a situação da sua empresa
           </p>
 
@@ -191,12 +191,12 @@ export default function LimpaNomeCNPJ() {
               },
             ].map((item, idx) => (
               <div key={idx} className="relative">
-                <div className="bg-white p-8 rounded-xl shadow-md h-full">
+                <div className="bg-card p-8 rounded-xl shadow-md h-full">
                   <div className="w-12 h-12 bg-[var(--color-caixa-yellow)] rounded-full flex items-center justify-center text-[var(--color-caixa-blue-dark)] font-bold text-xl mb-4">
                     {item.numero}
                   </div>
                   <h3 className="text-xl font-bold mb-3 text-[var(--color-caixa-blue-dark)]">{item.titulo}</h3>
-                  <p className="text-gray-600">{item.desc}</p>
+                  <p className="text-muted-foreground">{item.desc}</p>
                 </div>
                 {idx < 2 && (
                   <div className="hidden md:block absolute top-1/2 -right-4 w-8 h-1 bg-[var(--color-caixa-yellow)]"></div>
@@ -208,14 +208,14 @@ export default function LimpaNomeCNPJ() {
       </section>
 
       {/* FORMULÁRIO DE CAPTURA - CTA Principal */}
-      <section className="py-16 bg-[var(--color-caixa-blue)] text-white">
+      <section className="py-16 bg-[var(--color-caixa-blue)] text-primary-foreground">
         <div className="container max-w-2xl">
           <h2 className="text-4xl font-bold text-center mb-2">Pronto para Recuperar o Crédito da Sua Empresa?</h2>
-          <p className="text-center text-white/80 mb-8">
+          <p className="text-center text-primary-foreground/80 mb-8">
             Deixe seus dados e nosso especialista em crédito empresarial analisará sua situação e apresentará as melhores soluções
           </p>
 
-          <form onSubmit={handleSubmit} className="bg-white/10 backdrop-blur-sm p-8 rounded-xl border border-white/20 space-y-4">
+          <form onSubmit={handleSubmit} className="bg-card/10 backdrop-blur-sm p-8 rounded-xl border border-white/20 space-y-4">
             <div>
               <label className="block text-sm font-bold mb-2">Razão Social da Empresa *</label>
               <Input
@@ -223,7 +223,7 @@ export default function LimpaNomeCNPJ() {
                 placeholder="Nome da sua empresa"
                 value={formData.razaoSocial}
                 onChange={(e) => setFormData({ ...formData, razaoSocial: e.target.value })}
-                className="bg-white text-black"
+                className="bg-card text-foreground"
               />
             </div>
 
@@ -234,7 +234,7 @@ export default function LimpaNomeCNPJ() {
                 placeholder="00.000.000/0000-00"
                 value={formData.cnpj}
                 onChange={(e) => setFormData({ ...formData, cnpj: e.target.value })}
-                className="bg-white text-black"
+                className="bg-card text-foreground"
               />
             </div>
 
@@ -245,7 +245,7 @@ export default function LimpaNomeCNPJ() {
                 placeholder="seu@empresa.com"
                 value={formData.email}
                 onChange={(e) => setFormData({ ...formData, email: e.target.value })}
-                className="bg-white text-black"
+                className="bg-card text-foreground"
               />
             </div>
 
@@ -256,14 +256,14 @@ export default function LimpaNomeCNPJ() {
                 placeholder="(61) 3526-8355"
                 value={formData.telefone}
                 onChange={(e) => setFormData({ ...formData, telefone: e.target.value })}
-                className="bg-white text-black"
+                className="bg-card text-foreground"
               />
             </div>
 
             <div>
               <label className="block text-sm font-bold mb-2">Tipo de Dívida Principal</label>
               <Select value={formData.tipoDivida} onValueChange={(value) => setFormData({ ...formData, tipoDivida: value })}>
-                <SelectTrigger className="bg-white text-black">
+                <SelectTrigger className="bg-card text-foreground">
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
@@ -281,16 +281,16 @@ export default function LimpaNomeCNPJ() {
                 placeholder="Conte sobre suas dívidas, restrições e o que sua empresa precisa"
                 value={formData.descricao}
                 onChange={(e) => setFormData({ ...formData, descricao: e.target.value })}
-                className="w-full p-3 rounded-lg text-black text-sm"
+                className="w-full p-3 rounded-lg text-foreground text-sm"
                 rows={3}
               />
             </div>
 
-            <Button type="submit" size="lg" className="w-full bg-[var(--color-caixa-yellow)] hover:bg-yellow-500 text-black font-bold text-lg">
+            <Button type="submit" size="lg" className="w-full bg-[var(--color-caixa-yellow)] hover:bg-warning text-foreground font-bold text-lg">
               Falar com Especialista em Crédito Empresarial
             </Button>
 
-            <p className="text-xs text-white/70 text-center">
+            <p className="text-xs text-primary-foreground/70 text-center">
               Seus dados são 100% confidenciais. Você receberá contato em breve para análise personalizada.
             </p>
           </form>
@@ -298,7 +298,7 @@ export default function LimpaNomeCNPJ() {
       </section>
 
       {/* SEÇÃO DE DIFERENCIAL */}
-      <section className="py-16 bg-white">
+      <section className="py-16 bg-card">
         <div className="container">
           <h2 className="text-3xl font-bold text-center mb-12 text-[var(--color-caixa-blue-dark)]">
             Por Que Escolher a Destrava Crédito para Sua Empresa?
@@ -313,7 +313,7 @@ export default function LimpaNomeCNPJ() {
               <div key={idx} className="text-center">
                 <div className="text-4xl font-bold text-[var(--color-caixa-yellow)] mb-2">✓</div>
                 <h3 className="text-xl font-bold mb-2 text-[var(--color-caixa-blue-dark)]">{item.titulo}</h3>
-                <p className="text-gray-600">{item.desc}</p>
+                <p className="text-muted-foreground">{item.desc}</p>
               </div>
             ))}
           </div>
@@ -321,7 +321,7 @@ export default function LimpaNomeCNPJ() {
       </section>
 
       {/* DISCLAIMER */}
-      <section className="bg-gray-100 py-8 text-center text-xs text-gray-600">
+      <section className="bg-muted py-8 text-center text-xs text-muted-foreground">
         <div className="container">
           <p>
             Serviço prestado pela Destrava Crédito como correspondente/assessoria da CAIXA Econômica Federal. Cada situação é única e será analisada individualmente.

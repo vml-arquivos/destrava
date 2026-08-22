@@ -509,8 +509,12 @@ export function analisarLote(payload: PayloadLote): ResultadoLote {
       // Acumula para próxima iteração
       monthlyTotal = r2(monthlyTotal + result.total_week);
       annualTotal  = r2(annualTotal  + result.total_week);
-    } catch {
-      // Semana com dados inválidos é ignorada no lote, não quebra o relatório
+    } catch (error: any) {
+      // Semana com dados inválidos é ignorada no lote, mas permanece rastreável.
+      console.warn(
+        `[analisadorSemanal] Semana com dados inválidos ignorada no lote (client_id=${client_id}, data_referencia_inicio=${w.data_referencia_inicio}):`,
+        error?.message || error
+      );
       continue;
     }
   }

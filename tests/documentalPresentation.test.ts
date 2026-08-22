@@ -193,4 +193,29 @@ describe("construirSecoesAnaliseDocumento", () => {
       { id: "diagnostico_factual", titulo: "Diagnóstico objetivo do documento", texto: "A Junta Comercial registra o ato mais recente em 2025-06-06." },
     ]);
   });
+
+  it("exibe a confiança da leitura no resumo genérico e converte escala de 0 a 1 para percentual", () => {
+    const secoes = construirSecoesAnaliseDocumento({
+      conclusao: "Documento processado pela extração especializada.",
+      nivel_confianca: 0.94,
+    }, { nome: "Comprovante de residência" });
+
+    expect(secoes[0].campos).toContainEqual({ label: "Confiança da leitura", valor: "94%" });
+  });
+
+  it("exibe a confiança da leitura no resumo societário sem duplicar campo existente", () => {
+    const secoes = construirSecoesAnaliseDocumento({
+      conclusao: "QSA lido.",
+      tipo_documento: "qsa",
+      tipo_leitura: "qsa",
+      qsa_leitura: true,
+      socios_lidos: [{ nome: "Jonnathas Rodrigues Pires", administrador: true }],
+      nivel_confianca: 87,
+      campos: [{ label: "Confiança da leitura", valor: "87%" }],
+    }, { codigo: "qsa", nome: "QSA" });
+
+    const campos = secoes.flatMap((secao) => secao.campos || []);
+    expect(campos.filter((campo) => campo.label === "Confiança da leitura")).toHaveLength(1);
+    expect(campos).toContainEqual({ label: "Confiança da leitura", valor: "87%" });
+  });
 });

@@ -108,9 +108,9 @@ export function DocumentoPreview({ dados, onFechar }: Props) {
       <div className="w-full max-w-3xl bg-card rounded-2xl shadow-2xl overflow-hidden">
 
         {/* ── Barra de ações (fora da folha) ──────────────────────────────── */}
-        <div className="flex items-center justify-between bg-gray-900 px-5 py-3">
+        <div className="flex items-center justify-between bg-brand-navy px-5 py-3">
           <div className="flex items-center gap-2">
-            <div className="w-2 h-2 rounded-full bg-emerald-400" />
+            <div className="w-2 h-2 rounded-full bg-success" />
             <span className="text-primary-foreground text-sm font-medium">
               Preview — {isDeclaracao ? 'Declaração de Faturamento' : 'Previsão de Faturamento'}
             </span>
@@ -150,14 +150,14 @@ export function DocumentoPreview({ dados, onFechar }: Props) {
                 <p className="text-primary-foreground text-lg font-bold tracking-wide">
                   {dados.contabilidade.escritorio.toUpperCase()}
                 </p>
-                <p className="text-blue-200 text-xs mt-0.5">
+                <p className="text-primary text-xs mt-0.5">
                   Escritório de Contabilidade — Serviços Contábeis e Fiscais
                 </p>
               </div>
               <div className="text-right">
-                <p className="text-blue-300 text-[10px] font-semibold tracking-wider uppercase">Nº Documento</p>
+                <p className="text-primary text-[10px] font-semibold tracking-wider uppercase">Nº Documento</p>
                 <p className="text-primary-foreground font-mono text-sm font-bold">{numDoc}</p>
-                <p className="text-blue-300 text-[9px] mt-0.5">Emitido em: {dataHoje()}</p>
+                <p className="text-primary text-[9px] mt-0.5">Emitido em: {dataHoje()}</p>
               </div>
             </div>
 
@@ -166,7 +166,7 @@ export function DocumentoPreview({ dados, onFechar }: Props) {
               <p className="text-primary-foreground text-sm font-semibold text-center tracking-wide">
                 {dados.empresa.razaoSocial.toUpperCase()}
                 {dados.empresa.cnpj && (
-                  <span className="font-normal text-blue-200 ml-2">| CNPJ: {dados.empresa.cnpj}</span>
+                  <span className="font-normal text-primary ml-2">| CNPJ: {dados.empresa.cnpj}</span>
                 )}
               </p>
             </div>
@@ -241,7 +241,7 @@ export function DocumentoPreview({ dados, onFechar }: Props) {
               <div className="grid grid-cols-2 gap-8 pt-6">
                 {/* Contador */}
                 <div className="text-center space-y-1">
-                  <div className="border-t border-gray-400 pt-2">
+                  <div className="border-t border-input pt-2">
                     <p className="text-foreground text-[11px] font-bold">
                       {dados.contabilidade.nomeContador}
                     </p>
@@ -252,7 +252,7 @@ export function DocumentoPreview({ dados, onFechar }: Props) {
 
                 {/* Representante Legal */}
                 <div className="text-center space-y-1">
-                  <div className="border-t border-gray-400 pt-2">
+                  <div className="border-t border-input pt-2">
                     <p className="text-foreground text-[11px] font-bold">{dados.empresa.razaoSocial}</p>
                     <p className="text-muted-foreground text-[10px]">Representante Legal</p>
                     {dados.empresa.cnpj && (
@@ -266,7 +266,7 @@ export function DocumentoPreview({ dados, onFechar }: Props) {
 
           {/* Rodapé */}
           <div className="bg-[#1B3A6B] px-8 py-2.5 border-t-2 border-[#b4a05a]">
-            <p className="text-blue-200 text-[9px] text-center">
+            <p className="text-primary text-[9px] text-center">
               Documento gerado eletronicamente — Destrava Crédito  |  destravacreditooficial@gmail.com  |  (61) 3526-8355
             </p>
           </div>

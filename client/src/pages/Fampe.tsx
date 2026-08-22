@@ -32,7 +32,7 @@ export default function Fampe() {
   const [openFaq, setOpenFaq] = useState<number | null>(null);
 
   return (
-    <div className="min-h-screen flex flex-col bg-white">
+    <div className="min-h-screen flex flex-col bg-card">
       <SEO
         title="FAMPE - Fundo de Aval Sebrae para Micro e Pequenas Empresas | Destrava"
         description="Entenda como o FAMPE pode complementar garantias em operações de crédito para pequenos negócios, conforme regulamento e análise da instituição parceira."
@@ -42,22 +42,22 @@ export default function Fampe() {
       <Header />
 
       {/* HERO */}
-      <section className="bg-gradient-to-br from-primary to-[var(--color-caixa-blue-dark)] text-white py-20">
+      <section className="bg-gradient-to-br from-primary to-[var(--color-caixa-blue-dark)] text-primary-foreground py-20">
         <div className="container">
           <div className="max-w-3xl">
             <div className="flex items-center gap-4 mb-6">
-              <div className="bg-white rounded-xl px-4 py-2 flex items-center justify-center h-16">
+              <div className="bg-card rounded-xl px-4 py-2 flex items-center justify-center h-16">
                 <img src="/logo-fampe.webp" alt="FAMPE" className="h-12 w-auto object-contain" />
               </div>
-              <span className="text-sm font-semibold bg-white/20 px-3 py-1 rounded-full border border-white/30">
+              <span className="text-sm font-semibold bg-card/20 px-3 py-1 rounded-full border border-white/30">
                 Sebrae
               </span>
             </div>
             <h1 className="text-4xl md:text-5xl font-bold mb-4">FAMPE</h1>
-            <p className="text-xl text-white/90 mb-2 font-medium">
+            <p className="text-xl text-primary-foreground/90 mb-2 font-medium">
               Fundo de Aval do Sebrae para Micro e Pequenas Empresas
             </p>
-            <p className="text-lg text-white/80 leading-relaxed mb-8">
+            <p className="text-lg text-primary-foreground/80 leading-relaxed mb-8">
               O fundo de aval do Sebrae pode complementar garantias exigidas pelo banco e facilitar o acesso de pequenos negócios ao crédito, conforme regulamento e análise da instituição parceira.
             </p>
             <div className="flex flex-wrap gap-3">
@@ -66,7 +66,7 @@ export default function Fampe() {
                   Simular Agora
                 </Link>
               </Button>
-              <Button asChild size="lg" variant="outline" className="font-semibold border-white text-white hover:bg-white hover:text-primary">
+              <Button asChild size="lg" variant="outline" className="font-semibold border-white text-primary-foreground hover:bg-card hover:text-primary">
                 <a href="https://wa.me/556135268355?text=Ol%C3%A1!%20Quero%20saber%20mais%20sobre%20o%20FAMPE." target="_blank" rel="noopener noreferrer">
                   <Phone className="h-4 w-4 mr-2" /> Falar com Especialista
                 </a>
@@ -243,7 +243,7 @@ export default function Fampe() {
               { n: "04", icon: TrendingUp, title: "Liberação do Crédito", desc: "Acompanhamos até a aprovação e liberação do recurso na sua conta." },
             ].map((step) => (
               <div key={step.n} className="text-center">
-                <div className="w-14 h-14 rounded-full bg-primary text-white flex items-center justify-center text-xl font-bold mx-auto mb-4">
+                <div className="w-14 h-14 rounded-full bg-primary text-primary-foreground flex items-center justify-center text-xl font-bold mx-auto mb-4">
                   {step.n}
                 </div>
                 <step.icon className="h-6 w-6 text-primary mx-auto mb-2" />
@@ -300,10 +300,10 @@ export default function Fampe() {
       </section>
 
       {/* CTA FINAL */}
-      <section className="py-16 bg-gradient-to-br from-primary to-[var(--color-caixa-blue-dark)] text-white">
+      <section className="py-16 bg-gradient-to-br from-primary to-[var(--color-caixa-blue-dark)] text-primary-foreground">
         <div className="container text-center">
           <h2 className="text-3xl md:text-4xl font-bold mb-4">Acesse o FAMPE com a Destrava</h2>
-          <p className="text-lg text-white/80 mb-8 max-w-xl mx-auto">
+          <p className="text-lg text-primary-foreground/80 mb-8 max-w-xl mx-auto">
             O Sebrae complementa suas garantias. Você acessa o crédito que precisa para crescer.
           </p>
           <div className="flex flex-wrap justify-center gap-4">
@@ -312,7 +312,7 @@ export default function Fampe() {
                 Simular Agora
               </Link>
             </Button>
-            <Button asChild size="lg" variant="outline" className="font-semibold border-white text-white hover:bg-white hover:text-primary">
+            <Button asChild size="lg" variant="outline" className="font-semibold border-white text-primary-foreground hover:bg-card hover:text-primary">
               <a href="https://wa.me/556135268355?text=Ol%C3%A1!%20Quero%20saber%20mais%20sobre%20o%20FAMPE." target="_blank" rel="noopener noreferrer">
                 <Phone className="h-4 w-4 mr-2" /> Falar com Especialista
               </a>

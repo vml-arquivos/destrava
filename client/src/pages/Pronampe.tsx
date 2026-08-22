@@ -58,7 +58,7 @@ export default function Pronampe() {
   const [openFaq, setOpenFaq] = useState<number | null>(null);
 
   return (
-    <div className="min-h-screen flex flex-col bg-white">
+    <div className="min-h-screen flex flex-col bg-card">
       <SEO
         title="PRONAMPE 2026: regras, condições e como solicitar | Destrava"
         description="Entenda quem pode solicitar o PRONAMPE, os documentos, as condições divulgadas por instituições participantes e como preparar sua empresa para a análise."
@@ -76,27 +76,27 @@ export default function Pronampe() {
       <Header />
 
       {/* HERO */}
-      <section className="bg-gradient-to-br from-primary to-[var(--color-caixa-blue-dark)] text-white py-20">
+      <section className="bg-gradient-to-br from-primary to-[var(--color-caixa-blue-dark)] text-primary-foreground py-20">
         <div className="container">
           <div className="max-w-3xl">
             <div className="flex items-center gap-4 mb-6">
-              <div className="bg-white rounded-xl px-4 py-2 flex items-center justify-center h-16">
+              <div className="bg-card rounded-xl px-4 py-2 flex items-center justify-center h-16">
                 <img
                   src="/logo-pronampe.webp"
                   alt="PRONAMPE"
                   className="h-12 w-auto object-contain"
                 />
               </div>
-              <span className="text-sm font-semibold bg-white/20 px-3 py-1 rounded-full border border-white/30">
+              <span className="text-sm font-semibold bg-card/20 px-3 py-1 rounded-full border border-white/30">
                 Programa Federal
               </span>
             </div>
             <h1 className="text-4xl md:text-5xl font-bold mb-4">PRONAMPE</h1>
-            <p className="text-xl text-white/90 mb-2 font-medium">
+            <p className="text-xl text-primary-foreground/90 mb-2 font-medium">
               Programa Nacional de Apoio às Microempresas e Empresas de Pequeno
               Porte
             </p>
-            <p className="text-lg text-white/80 leading-relaxed mb-8">
+            <p className="text-lg text-primary-foreground/80 leading-relaxed mb-8">
               Entenda as regras vigentes, organize a documentação e compare as
               condições disponíveis. Na CAIXA, o limite divulgado é de até{" "}
               <strong>R$ 500 mil</strong>, sempre sujeito à análise e à
@@ -111,7 +111,7 @@ export default function Pronampe() {
               <Button asChild
                   size="lg"
                   variant="outline"
-                  className="font-semibold border-white text-white hover:bg-white hover:text-primary"
+                  className="font-semibold border-white text-primary-foreground hover:bg-card hover:text-primary"
                 >
                 <a
                 href="https://wa.me/556135268355?text=Ol%C3%A1!%20Quero%20saber%20mais%20sobre%20o%20PRONAMPE."
@@ -355,7 +355,7 @@ export default function Pronampe() {
               },
             ].map(step => (
               <div key={step.n} className="text-center">
-                <div className="w-14 h-14 rounded-full bg-primary text-white flex items-center justify-center text-xl font-bold mx-auto mb-4">
+                <div className="w-14 h-14 rounded-full bg-primary text-primary-foreground flex items-center justify-center text-xl font-bold mx-auto mb-4">
                   {step.n}
                 </div>
                 <step.icon className="h-6 w-6 text-primary mx-auto mb-2" />
@@ -466,12 +466,12 @@ export default function Pronampe() {
       </section>
 
       {/* CTA FINAL */}
-      <section className="py-16 bg-gradient-to-br from-primary to-[var(--color-caixa-blue-dark)] text-white">
+      <section className="py-16 bg-gradient-to-br from-primary to-[var(--color-caixa-blue-dark)] text-primary-foreground">
         <div className="container text-center">
           <h2 className="text-3xl md:text-4xl font-bold mb-4">
             Pronto para acessar o PRONAMPE?
           </h2>
-          <p className="text-lg text-white/80 mb-8 max-w-xl mx-auto">
+          <p className="text-lg text-primary-foreground/80 mb-8 max-w-xl mx-auto">
             Nossa equipe organiza a análise e orienta a solicitação para você
             decidir com mais clareza e segurança.
           </p>
@@ -484,7 +484,7 @@ export default function Pronampe() {
             <Button asChild
                 size="lg"
                 variant="outline"
-                className="font-semibold border-white text-white hover:bg-white hover:text-primary"
+                className="font-semibold border-white text-primary-foreground hover:bg-card hover:text-primary"
               >
               <a
               href="https://wa.me/556135268355?text=Ol%C3%A1!%20Quero%20saber%20mais%20sobre%20o%20PRONAMPE."

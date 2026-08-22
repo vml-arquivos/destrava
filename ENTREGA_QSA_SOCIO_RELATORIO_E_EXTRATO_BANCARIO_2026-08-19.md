@@ -1405,3 +1405,67 @@ novo, só ficou visível em qualquer tamanho de tela.
   detalhe agora visível em qualquer tamanho de tela. Nenhuma rota
   existente, filtro server-side ou fluxo de seleção/edição de empresa foi
   alterado.
+
+
+## Extra 15 — confiabilidade documental, fallbacks honestos e confiança da leitura (2026-08-22)
+
+Esta etapa consolidou as correções de confiabilidade previstas no documento de execução, sem alterar rotas de negócio existentes, schema, dados persistidos ou a ordem dos fluxos documentais.
+
+### Consulta documental avançada
+
+`buscarAnalisesDocumentaisAvancadas` passou a devolver um resultado estruturado com `analises` e `falhaConsulta`. Ausência da tabela esperada (`42P01`/`does not exist`) é tratada como ausência de histórico e retorna lista vazia sem marcar falha. Erro real de consulta continua sendo distinguido e sinalizado. O resultado de Inteligência 360 propaga esse estado como `falha_consulta_documental`, e a tela exibe um aviso discreto somente quando houve falha real, sem bloquear a análise determinística nem transformar ausência de dados em erro falso.
+
+### Fallback operacional
+
+Os quatro consumidores identificados de `fallback_operacional` — os três fluxos de IA do CRM e a análise de Triagem — passaram a informar de maneira não intrusiva quando o conteúdo exibido veio do fallback operacional. O aviso fica próximo do resultado e não altera geração, edição, qualificação, envio, status ou qualquer ação do usuário. O sistema não apresenta conteúdo determinístico como se fosse uma resposta efetivamente gerada por IA.
+
+### Confiança da leitura
+
+O builder compartilhado de apresentação documental (`shared/documentalPresentation.ts`) passou a incluir o campo **Confiança da leitura** quando `nivel_confianca` é numérico. Valores entre 0 e 1 são convertidos para percentual; valores entre 0 e 100 são preservados como percentual. A alteração mantém a assinatura e o retorno do builder, evita duplicação quando a confiança já aparece na amostra de dados e se aplica aos caminhos genérico e societário, alcançando tela, dossiê e PDF quando o dado existe.
+
+### Cartão CNPJ
+
+Quando o Cartão CNPJ existe, a extração falha e não há data manual disponível, o analisador mantém a redução de score de 5 pontos e agora gera o alerta explícito `cartao_cnpj_extracao_falhou`, com severidade média e recomendação para revisar o documento ou informar a data manual. O cenário manual continua sem esse alerta quando a data foi fornecida.
+
+### Endpoints genéricos sem worker
+
+Os dois endpoints genéricos de IA documental que não possuem consumidor ativo nem worker implementado passaram a responder **HTTP 501 Not Implemented** com mensagem clara, antes de qualquer inserção de pendência ou estado de aguardando. O endpoint de consulta das análises e os endpoints especializados permaneceram intactos. A ausência de consumidores foi confirmada por busca no frontend e no servidor.
+
+### Rotulagem determinística
+
+Os rótulos do Acompanhamento Bancário que chamavam parecer técnico determinístico de IA foram corrigidos para **parecer técnico**, sem alteração do checkbox, dos dados, da geração do relatório ou das rotas. A referência a IA foi mantida somente onde há chamada real a modelo.
+
+## Extra 16 — robustez, limpeza e testes reais (2026-08-22)
+
+### Motor semanal preservado
+
+A varredura confirmou que `analisadorSemanal.ts` não é órfão: `server/services/routesWeeklyMonitor.ts` importa e usa `analisarSemana` e `analisarLote` em rotas acessíveis do Weekly Monitor, enquanto `WeeklyMonitorDashboard.tsx` mantém os tipos e a interface correspondente. Por isso, o motor não foi removido e nenhum comportamento foi alterado. O risco de duplicação entre motores permanece documentado para uma decisão futura de negócio, sem remoção precipitada.
+
+### Descarte seguro de semanas inválidas
+
+O lote semanal mantém o `continue` para ignorar uma semana inválida sem interromper as demais. O descarte agora registra `console.warn` com `client_id`, `data_referencia_inicio` e a causa do erro, permitindo auditoria operacional sem expor dados sensíveis nem alterar o resultado das semanas válidas.
+
+### Cobertura direta de serviços
+
+O teste legado desconectado de IA foi substituído por cobertura direta das funções reais do `aiService`, com mock mínimo de `@google/generative-ai`. Foram cobertos resposta normal, JSON inválido e fallback operacional, sem chamada externa real. Também foi adicionada cobertura direta de `documentDeliveryService`, incluindo envio de e-mail, falha HTTP, WhatsApp e resolução de token, sem depender de Resend, WhatsApp ou banco real.
+
+### Fail-fast de produção
+
+Foi criado `server/productionConfig.ts` para validar `DATABASE_URL` e `JWT_SECRET` somente no modo de produção. O bootstrap do servidor executa a validação antes de aceitar tráfego; configuração ausente produz mensagem clara e encerra o processo. Falha de conexão inicial com PostgreSQL também encerra o processo de produção em vez de deixar um servidor parcialmente inicializado. O caminho de testes e desenvolvimento permanece compatível.
+
+### Itens deliberadamente adiados ou fora de escopo
+
+A expansão de novos documentos não foi executada por falta de priorização de negócio; permanece como backlog e não recebeu alteração especulativa. O upsell de e-book em modo demonstração e o wrapper externo Gemini/GEMINI_API_URL não utilizado foram registrados como fora de escopo e não corrigidos nesta etapa.
+
+## Validação final desta execução
+
+- `git diff --check`: aprovado.
+- `npx tsc --noEmit`: aprovado, sem erros.
+- `npx vitest run`: **49 arquivos de teste e 540 testes aprovados**.
+- `npx vite build --mode production`: aprovado; 2.934 módulos transformados e build concluído sem erros.
+- Nenhum restart, stop, redeploy, migração de schema, alteração de banco de produção ou publicação automática foi executado durante a validação.
+- A execução permaneceu em branch isolado e o pacote de entrega deve excluir `node_modules`, `.git`, `dist` e `coverage`.
+
+## Escopo técnico desta execução
+
+Além do relatório, o lote inclui somente arquivos do frontend, backend compartilhado e testes relacionados aos itens do documento: tokens e telas visuais já presentes no branch, `server/services/inteligencia360Service.ts`, `server/index.ts`, `client/src/pages/colaborador/Inteligencia360.tsx`, `client/src/pages/colaborador/CRM.tsx`, `client/src/pages/colaborador/Triagem.tsx`, `shared/documentalPresentation.ts`, `server/services/analiseCnpjReceitaCartao.ts`, `server/routes/documentacao.ts`, `client/src/pages/colaborador/AcompanhamentoBancario.tsx`, `server/services/analisadorSemanal.ts`, `server/productionConfig.ts` e as suítes correspondentes em `tests/`. Nenhuma funcionalidade usada foi removida.

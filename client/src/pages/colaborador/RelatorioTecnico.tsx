@@ -193,7 +193,7 @@ function InfoRow({ label, value }: { label: string; value: React.ReactNode }) {
 
 function ScoreBar({ score }: { score: number }) {
   const pct = Math.min(100, Math.max(0, score));
-  const cor = pct >= 70 ? "bg-success" : pct >= 50 ? "bg-amber-400" : pct >= 30 ? "bg-orange-400" : "bg-destructive";
+  const cor = pct >= 70 ? "bg-success" : pct >= 50 ? "bg-warning" : pct >= 30 ? "bg-warning" : "bg-destructive";
   return (
     <div className="flex items-center gap-2">
       <div className="flex-1 h-2 rounded-full bg-muted overflow-hidden">
@@ -381,7 +381,7 @@ function ModalPreview({ data, onClose }: { data: RelatorioData; onClose: () => v
                       <p className="text-[11px] text-muted-foreground">{s.cpf} · {s.percentual} · {s.qualificacao}</p>
                     </div>
                     <div className="flex items-center gap-1.5 shrink-0">
-                      {s.tem_cpf ? <CheckCircle2 className="w-3.5 h-3.5 text-emerald-500" /> : <XCircle className="w-3.5 h-3.5 text-red-400" />}
+                      {s.tem_cpf ? <CheckCircle2 className="w-3.5 h-3.5 text-success" /> : <XCircle className="w-3.5 h-3.5 text-destructive" />}
                       {s.representante_legal && <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-primary/20 text-primary font-bold">Rep. Legal</span>}
                     </div>
                   </div>
@@ -404,7 +404,7 @@ function ModalPreview({ data, onClose }: { data: RelatorioData; onClose: () => v
               </div>
               <div className="h-1.5 rounded-full bg-muted overflow-hidden">
                 <div
-                  className={`h-full rounded-full ${(data.analise_documental?.percentual_cobertura ?? 0) >= 80 ? "bg-success" : (data.analise_documental?.percentual_cobertura ?? 0) >= 50 ? "bg-amber-400" : "bg-red-400"}`}
+                  className={`h-full rounded-full ${(data.analise_documental?.percentual_cobertura ?? 0) >= 80 ? "bg-success" : (data.analise_documental?.percentual_cobertura ?? 0) >= 50 ? "bg-warning" : "bg-destructive"}`}
                   style={{ width: `${data.analise_documental?.percentual_cobertura ?? 0}%` }}
                 />
               </div>
@@ -413,7 +413,7 @@ function ModalPreview({ data, onClose }: { data: RelatorioData; onClose: () => v
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-1 max-h-40 overflow-y-auto">
                 {documentos.map((d, i) => (
                   <div key={i} className="flex items-center gap-2 p-2 rounded-lg border border-border bg-muted">
-                    {d.tem_arquivo ? <CheckCheck className="w-3.5 h-3.5 text-emerald-500 shrink-0" /> : <AlertTriangle className="w-3.5 h-3.5 text-amber-400 shrink-0" />}
+                    {d.tem_arquivo ? <CheckCheck className="w-3.5 h-3.5 text-success shrink-0" /> : <AlertTriangle className="w-3.5 h-3.5 text-warning shrink-0" />}
                     <span className="text-xs text-foreground truncate">{d.tipo}</span>
                     {d.validado && <span className="text-[10px] px-1 py-0.5 rounded bg-success/20 text-success font-bold shrink-0">✓</span>}
                   </div>
@@ -426,7 +426,7 @@ function ModalPreview({ data, onClose }: { data: RelatorioData; onClose: () => v
           {pendencias.length > 0 && (
             <div className="rounded-xl border border-border bg-card p-4">
               <div className="flex items-center gap-2 mb-3">
-                <AlertTriangle className="w-4 h-4 text-amber-500" />
+                <AlertTriangle className="w-4 h-4 text-warning" />
                 <h3 className="text-sm font-bold text-foreground">Pendências ({pendencias.length})</h3>
               </div>
               <div className="space-y-2">

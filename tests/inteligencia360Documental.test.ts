@@ -132,16 +132,28 @@ describe('Consistência Documental Avançada no motor 360', () => {
 describe('busca das análises documentais persistidas', () => {
   it('consulta apenas os três prompts especializados', async () => {
     const query = vi.fn().mockResolvedValue({ rows: [{ prompt_codigo: 'qsa_extract' }] });
-    const rows = await buscarAnalisesDocumentaisAvancadas('empresa-1', { query });
+    const resultado = await buscarAnalisesDocumentaisAvancadas('empresa-1', { query });
 
-    expect(rows).toHaveLength(1);
+    expect(resultado.analises).toHaveLength(1);
+    expect(resultado.falhaConsulta).toBe(false);
     expect(query).toHaveBeenCalledTimes(1);
     expect(query.mock.calls[0][1][1]).toEqual(['qsa_extract', 'simples_extract', 'atos_junta_extract']);
   });
 
-  it('retorna vazio quando a tabela estiver indisponível, sem quebrar o motor', async () => {
-    const query = vi.fn().mockRejectedValue(new Error('relation does not exist'));
-    await expect(buscarAnalisesDocumentaisAvancadas('empresa-1', { query })).resolves.toEqual([]);
+  it('retorna vazio quando a tabela estiver ausente, sem marcar falha de consulta', async () => {
+    const query = vi.fn().mockRejectedValue(Object.assign(new Error('relation does not exist'), { code: '42P01' }));
+    await expect(buscarAnalisesDocumentaisAvancadas('empresa-1', { query })).resolves.toEqual({ analises: [], falhaConsulta: false });
+  });
+
+  it('distingue erro real de tabela ausente sem quebrar o motor', async () => {
+    const query = vi.fn().mockRejectedValue(new Error('connection refused'));
+    await expect(buscarAnalisesDocumentaisAvancadas('empresa-1', { query })).resolves.toEqual({ analises: [], falhaConsulta: true });
+  });
+
+  it('propaga a falha real para o resultado de Inteligência 360', () => {
+    const resultado = calcularInteligencia360({ ...base, falhaConsultaDocumental: true });
+    expect(resultado.falha_consulta_documental).toBe(true);
+    expect(resultado.consistencia_documental_avancada.disponivel).toBe(false);
   });
 });
 

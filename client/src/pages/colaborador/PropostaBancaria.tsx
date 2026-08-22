@@ -154,7 +154,7 @@ const IMPACTO_CFG: Record<string, { label: string; color: string }> = {
 
 function ScoreBar({ score, max = 100 }: { score: number; max?: number }) {
   const pct = Math.min(100, Math.max(0, (score / max) * 100));
-  const cor = pct >= 70 ? "bg-success" : pct >= 50 ? "bg-amber-400" : pct >= 30 ? "bg-orange-400" : "bg-destructive";
+  const cor = pct >= 70 ? "bg-success" : pct >= 50 ? "bg-warning" : pct >= 30 ? "bg-warning" : "bg-destructive";
   return (
     <div className="flex items-center gap-2">
       <div className="flex-1 h-1.5 rounded-full bg-muted overflow-hidden">
@@ -370,7 +370,7 @@ export default function PropostaBancaria({ empresaId, onNavegar }: Props) {
               onClick={copiarParecer}
               className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-border bg-card text-xs font-semibold text-muted-foreground hover:bg-muted hover:border-input transition-all"
             >
-              {parecerCopiado ? <CheckCheck className="w-3.5 h-3.5 text-emerald-500" /> : <Copy className="w-3.5 h-3.5" />}
+              {parecerCopiado ? <CheckCheck className="w-3.5 h-3.5 text-success" /> : <Copy className="w-3.5 h-3.5" />}
               {parecerCopiado ? "Copiado!" : "Copiar parecer"}
             </button>
 
@@ -539,7 +539,7 @@ export default function PropostaBancaria({ empresaId, onNavegar }: Props) {
           <ul className="space-y-2 pt-2">
             {pontosFortes.map((p, i) => (
               <li key={i} className="flex items-start gap-2 text-xs text-success">
-                <CheckCircle2 className="w-3.5 h-3.5 text-emerald-500 mt-0.5 shrink-0" />
+                <CheckCircle2 className="w-3.5 h-3.5 text-success mt-0.5 shrink-0" />
                 {p}
               </li>
             ))}
@@ -619,7 +619,7 @@ export default function PropostaBancaria({ empresaId, onNavegar }: Props) {
               <div
                 className={`h-full rounded-full transition-all duration-500 ${
                   (data.documentacao?.percentual_cobertura ?? 0) >= 80 ? "bg-success" :
-                  (data.documentacao?.percentual_cobertura ?? 0) >= 50 ? "bg-amber-400" : "bg-red-400"
+                  (data.documentacao?.percentual_cobertura ?? 0) >= 50 ? "bg-warning" : "bg-destructive"
                 }`}
                 style={{ width: `${data.documentacao?.percentual_cobertura ?? 0}%` }}
               />
@@ -630,9 +630,9 @@ export default function PropostaBancaria({ empresaId, onNavegar }: Props) {
               {docLista.map((d, i) => (
                 <div key={i} className="flex items-center gap-2 p-2 rounded-lg border border-border bg-muted">
                   {d.tem_arquivo ? (
-                    <CheckCheck className="w-3.5 h-3.5 text-emerald-500 shrink-0" />
+                    <CheckCheck className="w-3.5 h-3.5 text-success shrink-0" />
                   ) : (
-                    <AlertTriangle className="w-3.5 h-3.5 text-amber-400 shrink-0" />
+                    <AlertTriangle className="w-3.5 h-3.5 text-warning shrink-0" />
                   )}
                   <span className="text-xs text-foreground truncate">{d.tipo}</span>
                 </div>
@@ -677,7 +677,7 @@ export default function PropostaBancaria({ empresaId, onNavegar }: Props) {
             onClick={copiarParecer}
             className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg border border-primary/20 bg-card text-xs font-semibold text-primary hover:bg-primary/10 transition-all"
           >
-            {parecerCopiado ? <CheckCheck className="w-3 h-3 text-emerald-500" /> : <Copy className="w-3 h-3" />}
+            {parecerCopiado ? <CheckCheck className="w-3 h-3 text-success" /> : <Copy className="w-3 h-3" />}
             {parecerCopiado ? "Copiado!" : "Copiar"}
           </button>
         </div>

@@ -71,13 +71,13 @@ interface Atividade {
 
 // ─── Configurações visuais ────────────────────────────────────
 const STATUS_CONFIG = {
-  lead:       { label: "Lead",        color: "bg-muted text-foreground",    dot: "bg-gray-400",   order: 1 },
+  lead:       { label: "Lead",        color: "bg-muted text-foreground",    dot: "bg-muted",   order: 1 },
   contato:    { label: "Em Contato",  color: "bg-primary/20 text-primary",    dot: "bg-primary",   order: 2 },
   analise:    { label: "Em Análise",  color: "bg-warning/20 text-warning",  dot: "bg-warning/100",  order: 3 },
   aprovado:   { label: "Aprovado",    color: "bg-success/20 text-success", dot: "bg-success", order: 4 },
   convertido: { label: "Convertido",  color: "bg-primary/20 text-primary", dot: "bg-primary/100", order: 5 },
   reprovado:  { label: "Reprovado",   color: "bg-destructive/20 text-destructive",      dot: "bg-destructive",    order: 6 },
-  cancelado:  { label: "Cancelado",   color: "bg-muted text-muted-foreground",    dot: "bg-gray-300",   order: 7 },
+  cancelado:  { label: "Cancelado",   color: "bg-muted text-muted-foreground",    dot: "bg-border",   order: 7 },
 } as const;
 
 const PRIORIDADE_CONFIG = {
@@ -87,7 +87,7 @@ const PRIORIDADE_CONFIG = {
 } as const;
 
 const ORIGEM_CONFIG: Record<string, { label: string; icon: React.ReactNode; color: string; bg: string }> = {
-  whatsapp:  { label: "WhatsApp",   icon: <Smartphone className="w-3 h-3" />, color: "text-green-700",  bg: "bg-green-50 border-green-200" },
+  whatsapp:  { label: "WhatsApp",   icon: <Smartphone className="w-3 h-3" />, color: "text-success",  bg: "bg-success/10 border-success/20" },
   site:      { label: "Site",       icon: <Globe className="w-3 h-3" />,      color: "text-primary",   bg: "bg-primary/10 border-primary/20" },
   campanha:  { label: "Campanha",   icon: <Megaphone className="w-3 h-3" />,  color: "text-primary", bg: "bg-primary/10 border-primary/20" },
   indicacao: { label: "Indicação",  icon: <UserCheck className="w-3 h-3" />,  color: "text-success",   bg: "bg-success/10 border-success/20" },
@@ -627,7 +627,7 @@ export default function Clientes() {
               )}
               <button
                 onClick={() => setShowFiltros(f => !f)}
-                className={`flex items-center gap-1.5 px-3 py-2 text-sm rounded-lg border transition-colors ${showFiltros ? "bg-primary text-primary-foreground border-blue-600" : "text-muted-foreground border-border hover:bg-muted"}`}
+                className={`flex items-center gap-1.5 px-3 py-2 text-sm rounded-lg border transition-colors ${showFiltros ? "bg-primary text-primary-foreground border-primary/30" : "text-muted-foreground border-border hover:bg-muted"}`}
               >
                 <SlidersHorizontal className="w-3.5 h-3.5" />
                 Filtros
@@ -670,7 +670,7 @@ export default function Clientes() {
                   onClick={() => setFiltroOrigem(filtroOrigem === key ? "todos" : key)}
                   className={`flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-medium border transition-all shrink-0 ${
                     filtroOrigem === key
-                      ? "bg-primary text-primary-foreground border-blue-600"
+                      ? "bg-primary text-primary-foreground border-primary/30"
                       : `${cfg.color} ${cfg.bg} border`
                   }`}
                 >
@@ -683,7 +683,7 @@ export default function Clientes() {
             {filtroIncompleto ? (
               <button
                 onClick={() => setFiltroIncompleto(false)}
-                className="flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-medium border bg-warning text-primary-foreground border-orange-600 shrink-0"
+                className="flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-medium border bg-warning text-primary-foreground border-warning/30 shrink-0"
               >
                 <AlertCircle className="w-3 h-3" />
                 Incompletos: {stats.incompletos}
@@ -865,7 +865,7 @@ export default function Clientes() {
                         <span className="text-xs text-muted-foreground">{fmtDate(cliente.created_at)}</span>
                       </div>
 
-                      <ChevronRight className="w-4 h-4 text-gray-300 flex-shrink-0" />
+                      <ChevronRight className="w-4 h-4 text-muted-foreground flex-shrink-0" />
                     </div>
                   );
                 })}
@@ -883,23 +883,23 @@ export default function Clientes() {
                 <div className="min-w-0 flex-1">
                   <h2 className="text-lg font-bold truncate">{clienteSelecionado.nome}</h2>
                   {clienteSelecionado.empresa && (
-                    <p className="text-blue-200 text-sm truncate">{clienteSelecionado.empresa}</p>
+                    <p className="text-primary text-sm truncate">{clienteSelecionado.empresa}</p>
                   )}
                   <div className="flex items-center gap-2 mt-2 flex-wrap">
                     <span className="text-xs px-2 py-0.5 rounded-full font-medium bg-card/20 text-primary-foreground">
                       {STATUS_CONFIG[clienteSelecionado.status]?.label}
                     </span>
-                    <span className="text-xs px-2 py-0.5 rounded-full bg-card/10 text-blue-100">
+                    <span className="text-xs px-2 py-0.5 rounded-full bg-card/10 text-primary">
                       {getTipo(clienteSelecionado) === "pj" ? "Pessoa Jurídica" : "Pessoa Física"}
                     </span>
-                    <span className="text-xs text-blue-200">
+                    <span className="text-xs text-primary">
                       Desde {fmtDate(clienteSelecionado.created_at)}
                     </span>
                   </div>
                 </div>
                 <button
                   onClick={() => setClienteSelecionado(null)}
-                  className="text-blue-200 hover:text-primary-foreground text-lg ml-3 flex-shrink-0"
+                  className="text-primary hover:text-primary-foreground text-lg ml-3 flex-shrink-0"
                 >
                   ✕
                 </button>
@@ -913,7 +913,7 @@ export default function Clientes() {
                   <a
                     href={`https://wa.me/55${clienteSelecionado.telefone.replace(/\D/g, "")}?text=Olá ${clienteSelecionado.nome}, sou da Destrava Crédito!`}
                     target="_blank"
-                    className="flex items-center gap-1 px-3 py-1.5 bg-green-600 text-primary-foreground rounded-lg text-xs font-medium hover:bg-green-700"
+                    className="flex items-center gap-1 px-3 py-1.5 bg-success text-primary-foreground rounded-lg text-xs font-medium hover:bg-success"
                   >
                     💬 WhatsApp
                   </a>
@@ -970,8 +970,8 @@ export default function Clientes() {
                         onClick={() => atualizarStatus(clienteSelecionado.id, k)}
                         className={`text-xs px-2.5 py-1 rounded-full border font-medium transition-all flex items-center gap-1 ${
                           clienteSelecionado.status === k
-                            ? `${v.color} border-current ring-2 ring-offset-1 ring-blue-400`
-                            : "border-border text-muted-foreground hover:border-gray-400 hover:bg-muted"
+                            ? `${v.color} border-current ring-2 ring-offset-1 ring-primary`
+                            : "border-border text-muted-foreground hover:border-input hover:bg-muted"
                         }`}
                       >
                         <span className={`w-1.5 h-1.5 rounded-full ${v.dot}`} />
@@ -998,7 +998,7 @@ export default function Clientes() {
                   ) : (
                     <div>
                       <span className="text-muted-foreground text-xs block">E-mail</span>
-                      <p className="text-orange-500 text-xs font-medium">⚠️ Não informado</p>
+                      <p className="text-warning text-xs font-medium">⚠️ Não informado</p>
                     </div>
                   )}
                   {clienteSelecionado.cpf_cnpj ? (
@@ -1009,7 +1009,7 @@ export default function Clientes() {
                   ) : (
                     <div>
                       <span className="text-muted-foreground text-xs block">CPF/CNPJ</span>
-                      <p className="text-orange-500 text-xs font-medium">⚠️ Não informado</p>
+                      <p className="text-warning text-xs font-medium">⚠️ Não informado</p>
                     </div>
                   )}
                   <div>

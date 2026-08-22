@@ -70,7 +70,7 @@ export default function CargoRoute({
         aria-live="assertive"
       >
         <div className="text-center max-w-sm px-6">
-          <ShieldX className="h-12 w-12 text-red-400 mx-auto mb-3" aria-hidden="true" />
+          <ShieldX className="h-12 w-12 text-destructive mx-auto mb-3" aria-hidden="true" />
           <p className="text-foreground font-semibold text-lg">Acesso não autorizado</p>
           <p className="text-sm text-muted-foreground mt-1">
             Você não tem permissão para acessar esta página.

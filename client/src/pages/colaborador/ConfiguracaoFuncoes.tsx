@@ -184,21 +184,21 @@ export default function ConfiguracaoFuncoes() {
 
   return (
     <Layout title="Menu e Funções">
-      <div className="min-h-full bg-slate-50 p-4 lg:p-6 space-y-4">
-        <div className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
+      <div className="min-h-full bg-muted p-4 lg:p-6 space-y-4">
+        <div className="rounded-3xl border border-border bg-card p-5 shadow-sm">
           <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4">
             <div className="flex items-start gap-3">
-              <div className="h-12 w-12 rounded-2xl bg-blue-600 text-white flex items-center justify-center shadow-sm">
+              <div className="h-12 w-12 rounded-2xl bg-primary text-primary-foreground flex items-center justify-center shadow-sm">
                 <SlidersHorizontal className="h-6 w-6" />
               </div>
               <div>
-                <div className="text-xs font-black uppercase tracking-[0.28em] text-blue-600">
+                <div className="text-xs font-black uppercase tracking-[0.28em] text-primary">
                   Configuração Premium
                 </div>
-                <h1 className="text-2xl font-black text-slate-950">
+                <h1 className="text-2xl font-black text-foreground">
                   Menu e funções do sistema
                 </h1>
-                <p className="text-sm text-slate-500 max-w-3xl">
+                <p className="text-sm text-muted-foreground max-w-3xl">
                   Escolha o que aparece no menu para todos e ajuste exceções por
                   usuário. A configuração é aditiva, segura e não remove rotas,
                   dados ou permissões estruturais do sistema.
@@ -221,7 +221,7 @@ export default function ConfiguracaoFuncoes() {
           </div>
           {mensagem && (
             <div
-              className={`mt-4 rounded-2xl border px-4 py-3 text-sm font-semibold ${mensagem.tipo === "sucesso" ? "border-emerald-200 bg-emerald-50 text-emerald-800" : "border-red-200 bg-red-50 text-red-700"}`}
+              className={`mt-4 rounded-2xl border px-4 py-3 text-sm font-semibold ${mensagem.tipo === "sucesso" ? "border-success/20 bg-success/10 text-success" : "border-destructive/20 bg-destructive/10 text-destructive"}`}
             >
               {mensagem.texto}
             </div>
@@ -233,7 +233,7 @@ export default function ConfiguracaoFuncoes() {
             <CardHeader className="pb-2">
               <CardTitle className="text-sm">Funções catalogadas</CardTitle>
             </CardHeader>
-            <CardContent className="text-3xl font-black text-slate-900">
+            <CardContent className="text-3xl font-black text-foreground">
               {FEATURE_CATALOG.length}
             </CardContent>
           </Card>
@@ -241,7 +241,7 @@ export default function ConfiguracaoFuncoes() {
             <CardHeader className="pb-2">
               <CardTitle className="text-sm">Ocultas para todos</CardTitle>
             </CardHeader>
-            <CardContent className="text-3xl font-black text-red-600">
+            <CardContent className="text-3xl font-black text-destructive">
               {totalGlobalOcultas}
             </CardContent>
           </Card>
@@ -249,7 +249,7 @@ export default function ConfiguracaoFuncoes() {
             <CardHeader className="pb-2">
               <CardTitle className="text-sm">Exceções por usuário</CardTitle>
             </CardHeader>
-            <CardContent className="text-3xl font-black text-blue-600">
+            <CardContent className="text-3xl font-black text-primary">
               {totalUserOverrides}
             </CardContent>
           </Card>
@@ -259,7 +259,7 @@ export default function ConfiguracaoFuncoes() {
           <Card className="overflow-hidden">
             <CardHeader>
               <CardTitle className="flex items-center gap-2">
-                <ShieldCheck className="h-5 w-5 text-blue-600" /> Padrão global
+                <ShieldCheck className="h-5 w-5 text-primary" /> Padrão global
               </CardTitle>
               <CardDescription>
                 O padrão global define o que aparece para todos, salvo exceções
@@ -320,9 +320,9 @@ export default function ConfiguracaoFuncoes() {
                 return (
                   <div
                     key={group}
-                    className="rounded-2xl border border-slate-200 bg-slate-50/60 p-3"
+                    className="rounded-2xl border border-border bg-muted/60 p-3"
                   >
-                    <div className="mb-2 text-xs font-black uppercase tracking-[0.18em] text-slate-500">
+                    <div className="mb-2 text-xs font-black uppercase tracking-[0.18em] text-muted-foreground">
                       {FEATURE_GROUP_LABELS[group as FeatureGroup]}
                     </div>
                     <div className="space-y-2">
@@ -332,7 +332,7 @@ export default function ConfiguracaoFuncoes() {
                         return (
                           <div
                             key={item.key}
-                            className="flex items-start gap-3 rounded-xl bg-white p-3 border border-slate-100"
+                            className="flex items-start gap-3 rounded-xl bg-card p-3 border border-border"
                           >
                             <input
                               type="checkbox"
@@ -345,7 +345,7 @@ export default function ConfiguracaoFuncoes() {
                             />
                             <div className="min-w-0 flex-1">
                               <div className="flex flex-wrap items-center gap-2">
-                                <span className="font-bold text-slate-900">
+                                <span className="font-bold text-foreground">
                                   {item.label}
                                 </span>
                                 <Badge
@@ -363,10 +363,10 @@ export default function ConfiguracaoFuncoes() {
                                   </Badge>
                                 )}
                               </div>
-                              <p className="text-xs text-slate-500">
+                              <p className="text-xs text-muted-foreground">
                                 {item.description}
                               </p>
-                              <p className="text-[11px] font-mono text-slate-400">
+                              <p className="text-[11px] font-mono text-muted-foreground">
                                 {item.href}
                               </p>
                             </div>
@@ -383,7 +383,7 @@ export default function ConfiguracaoFuncoes() {
           <Card className="overflow-hidden">
             <CardHeader>
               <CardTitle className="flex items-center gap-2">
-                <Users className="h-5 w-5 text-blue-600" /> Exceções por usuário
+                <Users className="h-5 w-5 text-primary" /> Exceções por usuário
               </CardTitle>
               <CardDescription>
                 Defina funções específicas para um usuário sem mexer no padrão
@@ -396,7 +396,7 @@ export default function ConfiguracaoFuncoes() {
                 <select
                   value={usuarioSelecionado}
                   onChange={e => setUsuarioSelecionado(e.target.value)}
-                  className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm font-semibold text-slate-700 outline-none focus:ring-2 focus:ring-blue-200"
+                  className="w-full rounded-xl border border-border bg-card px-3 py-2 text-sm font-semibold text-foreground outline-none focus:ring-2 focus:ring-blue-200"
                 >
                   {usuarios.map(u => (
                     <option key={u.id} value={u.id}>
@@ -407,11 +407,11 @@ export default function ConfiguracaoFuncoes() {
               </div>
 
               {usuario && (
-                <div className="rounded-2xl border border-blue-100 bg-blue-50 p-3 text-sm">
-                  <div className="font-black text-slate-900">
+                <div className="rounded-2xl border border-primary/30 bg-primary/10 p-3 text-sm">
+                  <div className="font-black text-foreground">
                     {usuario.nome}
                   </div>
-                  <div className="text-xs text-slate-500">
+                  <div className="text-xs text-muted-foreground">
                     {usuario.email || "sem e-mail"} ·{" "}
                     {usuario.cargo || "sem cargo"}
                   </div>
@@ -427,14 +427,14 @@ export default function ConfiguracaoFuncoes() {
                   return (
                     <div
                       key={item.key}
-                      className="rounded-2xl border border-slate-200 bg-white p-3"
+                      className="rounded-2xl border border-border bg-card p-3"
                     >
                       <div className="flex items-start justify-between gap-3">
                         <div className="min-w-0">
-                          <div className="font-bold text-slate-900">
+                          <div className="font-bold text-foreground">
                             {item.label}
                           </div>
-                          <div className="text-xs text-slate-500">
+                          <div className="text-xs text-muted-foreground">
                             {FEATURE_GROUP_LABELS[item.group]} ·{" "}
                             {statusLabel(override, globalEnabled)}
                           </div>
@@ -488,7 +488,7 @@ export default function ConfiguracaoFuncoes() {
           </Card>
         </div>
 
-        <div className="rounded-3xl border border-emerald-200 bg-emerald-50 p-4 text-sm text-emerald-900">
+        <div className="rounded-3xl border border-success/20 bg-success/10 p-4 text-sm text-success">
           <div className="flex gap-2 font-black">
             <CheckCircle2 className="h-5 w-5" /> Segurança de implantação
           </div>

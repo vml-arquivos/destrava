@@ -345,3 +345,33 @@ export function calcularAcumulados(
 
   return { acumuladoMensalAnterior, acumuladoAnual };
 }
+
+// ─── Posição da semana atual dentro do mês-calendário (para "semanas restantes") ─
+/**
+ * Conta quantas semanas já registradas (incluindo a atual) pertencem ao mesmo
+ * mês-calendário da semana atual, usando a data real de cada semana — e não o
+ * contador global `numero_semana`, que nunca reinicia por mês.
+ */
+export function calcularPosicaoSemanaNoMes(
+  todasAsSemanas: Array<Record<string, unknown>>,
+  numeroSemanaAtual: number,
+  mesRef: number,
+  anoRef: number
+): number {
+  let posicao = 0;
+  for (const s of todasAsSemanas) {
+    const numSem = Number(s.numero_semana ?? 0);
+    if (numSem > numeroSemanaAtual) continue;
+    const dataInicio = s.data_referencia_inicio
+      ? new Date(String(s.data_referencia_inicio).slice(0, 10) + 'T00:00:00Z')
+      : null;
+    if (
+      dataInicio &&
+      dataInicio.getUTCFullYear() === anoRef &&
+      dataInicio.getUTCMonth() + 1 === mesRef
+    ) {
+      posicao += 1;
+    }
+  }
+  return posicao || 1;
+}

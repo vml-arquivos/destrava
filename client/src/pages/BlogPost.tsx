@@ -156,7 +156,7 @@ export default function BlogPost() {
       <article className="py-12">
         <div className="container">
           <div className="max-w-4xl mx-auto">
-            <aside className="mb-8 rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm leading-relaxed text-amber-950" aria-label="Aviso sobre o conteúdo">
+            <aside className="mb-8 rounded-xl border border-warning/20 bg-warning/10 p-4 text-sm leading-relaxed text-warning" aria-label="Aviso sobre o conteúdo">
               Conteúdo educativo. Regras, taxas, limites e prazos podem mudar. Confirme as condições vigentes, o Custo Efetivo Total (CET) e a proposta da instituição antes de contratar. A concessão de crédito depende de análise e aprovação da instituição financeira.
             </aside>
             <div className="prose prose-lg max-w-none">
@@ -182,7 +182,7 @@ export default function BlogPost() {
       </article>
 
       {/* CTA no final do artigo */}
-      <section className="py-16 bg-gradient-to-br from-primary to-[var(--color-caixa-blue-dark)] text-white">
+      <section className="py-16 bg-gradient-to-br from-primary to-[var(--color-caixa-blue-dark)] text-primary-foreground">
         <div className="container">
           <div className="max-w-3xl mx-auto text-center">
             <h2 className="text-3xl md:text-4xl font-bold mb-6">
@@ -192,7 +192,7 @@ export default function BlogPost() {
                   ? "Quer saber como está o seu score de crédito?" 
                   : "Precisa de capital de giro para sua empresa?"}
             </h2>
-            <p className="text-xl text-white/90 mb-8">
+            <p className="text-xl text-primary-foreground/90 mb-8">
               {post.category.toLowerCase().includes("pronampe") 
                 ? "Nossa equipe organiza a análise e orienta a solicitação para você decidir com mais clareza e segurança." 
                 : post.category.toLowerCase().includes("score") || post.category.toLowerCase().includes("gestão") 

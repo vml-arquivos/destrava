@@ -58,7 +58,7 @@ function TarefaCard({ tarefa }: { tarefa: NexusTarefa }) {
             <h5 className="text-xs font-black uppercase tracking-wide text-muted-foreground mb-2">O que precisa ser executado</h5>
             {itens.length ? <div className="space-y-2">{itens.map((item, index) => (
               <div key={String(item.id || index)} className="flex gap-2 rounded-xl bg-muted border border-border p-2.5">
-                <CheckCircle2 className={`w-4 h-4 mt-0.5 shrink-0 ${item.feito ? "text-emerald-500" : "text-muted-foreground"}`} />
+                <CheckCircle2 className={`w-4 h-4 mt-0.5 shrink-0 ${item.feito ? "text-success" : "text-muted-foreground"}`} />
                 <div><p className={`text-xs font-semibold ${item.feito ? "text-muted-foreground line-through" : "text-foreground"}`}>{String(item.texto || item.title || item.label || "Tarefa")}</p>
                   {(item.responsavel_nome || item.executado_por_nome) && <span className="text-[10px] text-muted-foreground">{item.feito ? "Executada" : "Responsável"}: {item.executado_por_nome || item.responsavel_nome}</span>}
                 </div>

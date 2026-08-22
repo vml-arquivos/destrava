@@ -25,13 +25,13 @@ export default function GiroCaixaFacil() {
       />
 
       {/* Hero */}
-      <section className="bg-gradient-to-br from-primary to-[var(--color-caixa-blue-dark)] text-white py-20">
+      <section className="bg-gradient-to-br from-primary to-[var(--color-caixa-blue-dark)] text-primary-foreground py-20">
         <div className="container">
           <div className="max-w-3xl">
             <h1 className="text-4xl md:text-5xl font-bold mb-6">
               Giro CAIXA Fácil
             </h1>
-            <p className="text-xl text-white/90 leading-relaxed mb-8">
+            <p className="text-xl text-primary-foreground/90 leading-relaxed mb-8">
               Linha de crédito empresarial da CAIXA Econômica Federal para
               capital de giro, com assessoria completa da Destrava Crédito.
             </p>
@@ -306,12 +306,12 @@ export default function GiroCaixaFacil() {
       </section>
 
       {/* CTA Final */}
-      <section className="py-20 bg-gradient-to-br from-primary to-[var(--color-caixa-blue-dark)] text-white">
+      <section className="py-20 bg-gradient-to-br from-primary to-[var(--color-caixa-blue-dark)] text-primary-foreground">
         <div className="container text-center">
           <h2 className="text-3xl md:text-4xl font-bold mb-6">
             Pronto para solicitar seu Giro CAIXA Fácil?
           </h2>
-          <p className="text-xl text-white/90 mb-8 max-w-2xl mx-auto">
+          <p className="text-xl text-primary-foreground/90 mb-8 max-w-2xl mx-auto">
             Faça uma simulação gratuita e nossa equipe entrará em contato para
             orientar todo o processo.
           </p>

@@ -96,14 +96,14 @@ export default function CompensacaoSemanalCard({ semana }: Props) {
         </div>
 
         <div className="mt-4 grid gap-3 md:grid-cols-3">
-          <div className={`rounded-xl p-3 ${diferenca > 0 ? "bg-destructive/10" : diferenca < 0 ? "bg-warning/10" : "bg-green-50"}`}>
+          <div className={`rounded-xl p-3 ${diferenca > 0 ? "bg-destructive/10" : diferenca < 0 ? "bg-warning/10" : "bg-success/10"}`}>
             <div className="flex items-center gap-2">
               {diferenca > 0 ? (
                 <TrendingUp className="h-4 w-4 text-destructive" />
               ) : diferenca < 0 ? (
                 <TrendingDown className="h-4 w-4 text-warning" />
               ) : (
-                <CheckCircle2 className="h-4 w-4 text-green-700" />
+                <CheckCircle2 className="h-4 w-4 text-success" />
               )}
               <p className="text-xs font-semibold uppercase">Diferença da referência</p>
             </div>
@@ -149,7 +149,7 @@ export default function CompensacaoSemanalCard({ semana }: Props) {
         </div>
 
         {semana.diagnostico_compensacao && (
-          <div className="mt-4 whitespace-pre-line rounded-xl border-l-4 border-blue-700 bg-primary/10 p-3 text-sm text-foreground">
+          <div className="mt-4 whitespace-pre-line rounded-xl border-l-4 border-primary/30 bg-primary/10 p-3 text-sm text-foreground">
             {semana.diagnostico_compensacao}
           </div>
         )}

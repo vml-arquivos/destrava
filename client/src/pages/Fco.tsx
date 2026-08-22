@@ -50,7 +50,7 @@ export default function Fco() {
   const [openFaq, setOpenFaq] = useState<number | null>(null);
 
   return (
-    <div className="min-h-screen flex flex-col bg-white">
+    <div className="min-h-screen flex flex-col bg-card">
       <SEO
         title="FCO - Fundo Constitucional do Centro-Oeste | Destrava Crédito"
         description="FCO para empresas e produtores de GO, MT, MS e DF. Avalie enquadramento, projeto, documentos e condições da Programação FCO 2026."
@@ -63,26 +63,26 @@ export default function Fco() {
       <Header />
 
       {/* HERO */}
-      <section className="bg-gradient-to-br from-primary to-[var(--color-caixa-blue-dark)] text-white py-20">
+      <section className="bg-gradient-to-br from-primary to-[var(--color-caixa-blue-dark)] text-primary-foreground py-20">
         <div className="container">
           <div className="max-w-3xl">
             <div className="flex items-center gap-4 mb-6">
-              <div className="bg-white rounded-xl px-4 py-2 flex items-center justify-center h-16">
+              <div className="bg-card rounded-xl px-4 py-2 flex items-center justify-center h-16">
                 <img
                   src="/logo-fco.webp"
                   alt="FCO"
                   className="h-12 w-auto object-contain"
                 />
               </div>
-              <span className="text-sm font-semibold bg-white/20 px-3 py-1 rounded-full border border-white/30">
+              <span className="text-sm font-semibold bg-card/20 px-3 py-1 rounded-full border border-white/30">
                 Centro-Oeste
               </span>
             </div>
             <h1 className="text-4xl md:text-5xl font-bold mb-4">FCO</h1>
-            <p className="text-xl text-white/90 mb-2 font-medium">
+            <p className="text-xl text-primary-foreground/90 mb-2 font-medium">
               Fundo Constitucional de Financiamento do Centro-Oeste
             </p>
-            <p className="text-lg text-white/80 leading-relaxed mb-8">
+            <p className="text-lg text-primary-foreground/80 leading-relaxed mb-8">
               Financiamento para empresas, produtores rurais e empreendedores de
               GO, MT, MS e DF, conforme a finalidade e as condições da
               Programação FCO 2026.
@@ -96,7 +96,7 @@ export default function Fco() {
               <Button asChild
                   size="lg"
                   variant="outline"
-                  className="font-semibold border-white text-white hover:bg-white hover:text-primary"
+                  className="font-semibold border-white text-primary-foreground hover:bg-card hover:text-primary"
                 >
                 <a
                 href="https://wa.me/556135268355?text=Ol%C3%A1!%20Quero%20saber%20mais%20sobre%20o%20FCO."
@@ -346,7 +346,7 @@ export default function Fco() {
               },
             ].map(step => (
               <div key={step.n} className="text-center">
-                <div className="w-14 h-14 rounded-full bg-primary text-white flex items-center justify-center text-xl font-bold mx-auto mb-4">
+                <div className="w-14 h-14 rounded-full bg-primary text-primary-foreground flex items-center justify-center text-xl font-bold mx-auto mb-4">
                   {step.n}
                 </div>
                 <step.icon className="h-6 w-6 text-primary mx-auto mb-2" />
@@ -414,12 +414,12 @@ export default function Fco() {
       </section>
 
       {/* CTA FINAL */}
-      <section className="py-16 bg-gradient-to-br from-primary to-[var(--color-caixa-blue-dark)] text-white">
+      <section className="py-16 bg-gradient-to-br from-primary to-[var(--color-caixa-blue-dark)] text-primary-foreground">
         <div className="container text-center">
           <h2 className="text-3xl md:text-4xl font-bold mb-4">
             Acesse o FCO com a Destrava
           </h2>
-          <p className="text-lg text-white/80 mb-8 max-w-xl mx-auto">
+          <p className="text-lg text-primary-foreground/80 mb-8 max-w-xl mx-auto">
             Prepare o projeto e confirme as condições vigentes do FCO para sua
             empresa no Centro-Oeste.
           </p>
@@ -432,7 +432,7 @@ export default function Fco() {
             <Button asChild
                 size="lg"
                 variant="outline"
-                className="font-semibold border-white text-white hover:bg-white hover:text-primary"
+                className="font-semibold border-white text-primary-foreground hover:bg-card hover:text-primary"
               >
               <a
               href="https://wa.me/556135268355?text=Ol%C3%A1!%20Quero%20saber%20mais%20sobre%20o%20FCO."

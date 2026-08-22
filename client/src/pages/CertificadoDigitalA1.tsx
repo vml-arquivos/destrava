@@ -190,7 +190,7 @@ export default function CertificadoDigitalA1() {
   );
 
   return (
-    <div className="min-h-screen bg-card pb-20 text-slate-950 md:pb-0">
+    <div className="min-h-screen bg-card pb-20 text-foreground md:pb-0">
       <SEO
         title="Certificado Digital A1 em até 1 Hora"
         description="Emita seu Certificado Digital A1 online, com orientação especializada e suporte na instalação. Prazo sujeito à validação e disponibilidade."
@@ -204,37 +204,37 @@ export default function CertificadoDigitalA1() {
         <section className="relative overflow-hidden bg-[#07152f] text-primary-foreground" aria-labelledby="a1-hero-title">
           <div className="absolute inset-0" aria-hidden="true">
             <div className="absolute -left-20 top-0 h-80 w-80 rounded-full bg-primary/20 blur-3xl" />
-            <div className="absolute -right-16 bottom-0 h-96 w-96 rounded-full bg-amber-400/10 blur-3xl" />
+            <div className="absolute -right-16 bottom-0 h-96 w-96 rounded-full bg-warning/10 blur-3xl" />
             <div className="absolute inset-0 opacity-[0.035] [background-image:linear-gradient(rgba(255,255,255,.8)_1px,transparent_1px),linear-gradient(90deg,rgba(255,255,255,.8)_1px,transparent_1px)] [background-size:48px_48px]" />
           </div>
 
           <div className="container relative px-4 py-16 sm:py-20 lg:py-24">
             <div className="grid items-center gap-12 lg:grid-cols-[1.08fr_.92fr] lg:gap-16">
               <div className="max-w-3xl">
-                <div className="mb-6 inline-flex items-center gap-2 rounded-full border border-warning/30/30 bg-amber-300/10 px-4 py-2 text-sm font-bold text-amber-200">
+                <div className="mb-6 inline-flex items-center gap-2 rounded-full border border-warning/30/30 bg-warning/10 px-4 py-2 text-sm font-bold text-warning">
                   <Zap className="h-4 w-4" aria-hidden="true" />
                   Atendimento rápido para prazos curtos
                 </div>
 
                 <h1 id="a1-hero-title" className="max-w-3xl text-4xl font-black leading-[1.08] tracking-tight sm:text-5xl lg:text-6xl">
-                  Certificado Digital A1 online com emissão que <span className="text-amber-300">pode ocorrer em até 1 hora</span>
+                  Certificado Digital A1 online com emissão que <span className="text-warning">pode ocorrer em até 1 hora</span>
                 </h1>
 
-                <p className="mt-6 max-w-2xl text-lg leading-8 text-slate-200 sm:text-xl">
+                <p className="mt-6 max-w-2xl text-lg leading-8 text-muted-foreground sm:text-xl">
                   Agilidade, segurança e a credibilidade da Destrava Crédito. Solicite seu e-CNPJ ou e-CPF A1 com orientação especializada do pedido à instalação.
                 </p>
 
-                <ul className="mt-7 grid gap-3 text-sm text-slate-100 sm:grid-cols-3" aria-label="Principais condições do serviço">
+                <ul className="mt-7 grid gap-3 text-sm text-foreground sm:grid-cols-3" aria-label="Principais condições do serviço">
                   {["Processo remoto quando elegível", "Validação segura de identidade", "Suporte na instalação"].map((item) => (
                     <li key={item} className="flex items-start gap-2">
-                      <CheckCircle2 className="mt-0.5 h-5 w-5 shrink-0 text-emerald-400" aria-hidden="true" />
+                      <CheckCircle2 className="mt-0.5 h-5 w-5 shrink-0 text-success" aria-hidden="true" />
                       <span>{item}</span>
                     </li>
                   ))}
                 </ul>
 
                 <div className="mt-9 flex flex-col gap-3 sm:flex-row sm:items-center">
-                  <Button asChild size="lg" className="h-13 rounded-xl bg-amber-300 px-7 text-base font-black text-slate-950 shadow-lg shadow-amber-400/15 hover:bg-amber-200">
+                  <Button asChild size="lg" className="h-13 rounded-xl bg-warning px-7 text-base font-black text-foreground shadow-lg shadow-amber-400/15 hover:bg-warning">
                     <Link href={CAPTURE_URL} data-cta-position="a1-hero">
                       Solicitar Certificado A1
                       <ArrowRight className="h-5 w-5" aria-hidden="true" />
@@ -255,20 +255,20 @@ export default function CertificadoDigitalA1() {
 
               <div className="mx-auto w-full max-w-lg lg:mx-0 lg:justify-self-end">
                 <div className="relative rounded-[2rem] border border-white/10 bg-[#0c1d3b] p-6 shadow-2xl shadow-black/30 sm:p-8">
-                  <div className="absolute right-6 top-6 flex items-center gap-2 text-xs font-bold uppercase tracking-[0.18em] text-emerald-300">
+                  <div className="absolute right-6 top-6 flex items-center gap-2 text-xs font-bold uppercase tracking-[0.18em] text-success">
                     <span className="relative flex h-2.5 w-2.5" aria-hidden="true">
-                      <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-emerald-400 opacity-50" />
-                      <span className="relative inline-flex h-2.5 w-2.5 rounded-full bg-emerald-400" />
+                      <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-success opacity-50" />
+                      <span className="relative inline-flex h-2.5 w-2.5 rounded-full bg-success" />
                     </span>
                     Atendimento
                   </div>
 
-                  <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-amber-300 text-slate-950">
+                  <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-warning text-foreground">
                     <Clock3 className="h-7 w-7" aria-hidden="true" />
                   </div>
                   <p className="mt-7 text-sm font-semibold uppercase tracking-[0.2em] text-muted-foreground">Meta de emissão após validação</p>
                   <div className="mt-2 flex items-baseline gap-2" aria-label="Até uma hora">
-                    <span className="font-mono text-5xl font-black tracking-tight text-amber-300 sm:text-6xl">Até 1h</span>
+                    <span className="font-mono text-5xl font-black tracking-tight text-warning sm:text-6xl">Até 1h</span>
                   </div>
                   <p className="mt-2 text-sm text-muted-foreground">Meta de prazo, não é uma contagem regressiva.</p>
 
@@ -280,8 +280,8 @@ export default function CertificadoDigitalA1() {
                       "Sem token ou cartão físico",
                       "Orientação até a instalação inicial",
                     ].map((item) => (
-                      <li key={item} className="flex items-center gap-3 text-sm font-medium text-slate-100">
-                        <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-emerald-400/15 text-emerald-300">
+                      <li key={item} className="flex items-center gap-3 text-sm font-medium text-foreground">
+                        <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-success/15 text-success">
                           <Check className="h-4 w-4" aria-hidden="true" />
                         </span>
                         {item}
@@ -291,10 +291,10 @@ export default function CertificadoDigitalA1() {
 
                   <div className="mt-6 rounded-xl border border-white/10 bg-card/5 px-4 py-3">
                     <p className="text-[11px] font-bold uppercase tracking-wide text-muted-foreground">Valor</p>
-                    <p className="text-sm font-semibold text-slate-100">Sob consulta — você recebe o valor exato em minutos, sem compromisso.</p>
+                    <p className="text-sm font-semibold text-foreground">Sob consulta — você recebe o valor exato em minutos, sem compromisso.</p>
                   </div>
 
-                  <Button asChild size="lg" className="mt-4 h-12 w-full rounded-xl bg-amber-300 font-black text-slate-950 hover:bg-amber-200">
+                  <Button asChild size="lg" className="mt-4 h-12 w-full rounded-xl bg-warning font-black text-foreground hover:bg-warning">
                     <Link href={CAPTURE_URL}>
                       Solicitar Certificado A1
                       <ArrowRight className="h-5 w-5" aria-hidden="true" />
@@ -346,7 +346,7 @@ export default function CertificadoDigitalA1() {
                   <div className="mb-4 flex h-12 w-12 items-center justify-center rounded-2xl bg-destructive/20 text-destructive">
                     <AlertTriangle className="h-6 w-6" aria-hidden="true" />
                   </div>
-                  <h2 id="a1-pain-title" className="text-3xl font-black tracking-tight text-slate-950 sm:text-4xl">
+                  <h2 id="a1-pain-title" className="text-3xl font-black tracking-tight text-foreground sm:text-4xl">
                     Sua Operação Não Pode Parar. Seu Certificado Digital Venceu ou Está Bloqueado?
                   </h2>
                   <p className="mt-4 leading-7 text-muted-foreground">
@@ -373,7 +373,7 @@ export default function CertificadoDigitalA1() {
                 <Laptop className="h-7 w-7" aria-hidden="true" />
               </div>
               <p className="text-sm font-black uppercase tracking-[0.2em] text-primary">A solução prática</p>
-              <h2 id="a1-solution-title" className="mt-3 text-3xl font-black tracking-tight text-slate-950 sm:text-4xl">
+              <h2 id="a1-solution-title" className="mt-3 text-3xl font-black tracking-tight text-foreground sm:text-4xl">
                 Certificado Digital A1: A Solução Rápida e 100% Digital da Destrava Crédito.
               </h2>
               <p className="mt-5 text-lg leading-8 text-muted-foreground">
@@ -387,7 +387,7 @@ export default function CertificadoDigitalA1() {
                   <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-primary/10 text-primary">
                     <benefit.icon className="h-6 w-6" aria-hidden="true" />
                   </div>
-                  <h3 className="mt-5 text-lg font-black text-slate-950">{benefit.title}</h3>
+                  <h3 className="mt-5 text-lg font-black text-foreground">{benefit.title}</h3>
                   <p className="mt-2 text-sm leading-6 text-muted-foreground">{benefit.description}</p>
                 </article>
               ))}
@@ -417,7 +417,7 @@ export default function CertificadoDigitalA1() {
                 <table className="w-full min-w-[680px] border-collapse text-left">
                   <caption className="sr-only">Comparação entre os certificados digitais A1 e A3</caption>
                   <thead>
-                    <tr className="bg-slate-950 text-primary-foreground">
+                    <tr className="bg-brand-navy text-primary-foreground">
                       <th scope="col" className="px-6 py-5 text-sm font-bold">Critério</th>
                       <th scope="col" className="bg-primary px-6 py-5 text-sm font-black">Certificado A1</th>
                       <th scope="col" className="px-6 py-5 text-sm font-bold">Certificado A3</th>
@@ -433,8 +433,8 @@ export default function CertificadoDigitalA1() {
                       ["Perfil indicado", "Empresas e profissionais com uso frequente", "Quem prioriza chave em mídia ou nuvem"],
                     ].map(([criterion, a1, a3]) => (
                       <tr key={criterion} className="bg-card">
-                        <th scope="row" className="px-6 py-5 text-sm font-bold text-slate-950">{criterion}</th>
-                        <td className="bg-primary/10 px-6 py-5 text-sm font-semibold text-blue-950">
+                        <th scope="row" className="px-6 py-5 text-sm font-bold text-foreground">{criterion}</th>
+                        <td className="bg-primary/10 px-6 py-5 text-sm font-semibold text-primary">
                           <span className="flex items-start gap-2"><CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0 text-success" aria-hidden="true" />{a1}</span>
                         </td>
                         <td className="px-6 py-5 text-sm text-muted-foreground">{a3}</td>
@@ -459,7 +459,7 @@ export default function CertificadoDigitalA1() {
         <section className="bg-[#07152f] py-16 text-primary-foreground sm:py-20" aria-labelledby="a1-process-title">
           <div className="container px-4">
             <div className="mx-auto max-w-3xl text-center">
-              <p className="text-sm font-black uppercase tracking-[0.2em] text-amber-300">Passo a passo</p>
+              <p className="text-sm font-black uppercase tracking-[0.2em] text-warning">Passo a passo</p>
               <h2 id="a1-process-title" className="mt-3 text-3xl font-black tracking-tight sm:text-4xl">Nosso Processo: Simples, Rápido e Seguro.</h2>
               <p className="mt-4 leading-7 text-muted-foreground">Quando elegível para validação remota, você conclui as etapas sem deslocamento e com orientação em cada fase.</p>
             </div>
@@ -468,7 +468,7 @@ export default function CertificadoDigitalA1() {
               {steps.map((step) => (
                 <li key={step.number} className="relative rounded-3xl border border-white/10 bg-card/[0.06] p-6">
                   <div className="flex items-center justify-between">
-                    <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-amber-300 text-slate-950">
+                    <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-warning text-foreground">
                       <step.icon className="h-6 w-6" aria-hidden="true" />
                     </div>
                     <span className="font-mono text-2xl font-black text-primary-foreground/50">{step.number}</span>
@@ -489,7 +489,7 @@ export default function CertificadoDigitalA1() {
                   <BadgeCheck className="h-5 w-5" aria-hidden="true" />
                   Orientação especializada
                 </div>
-                <h2 id="a1-authority-title" className="mt-5 text-3xl font-black tracking-tight text-slate-950 sm:text-4xl">Segurança técnica sem deixar você sozinho no processo.</h2>
+                <h2 id="a1-authority-title" className="mt-5 text-3xl font-black tracking-tight text-foreground sm:text-4xl">Segurança técnica sem deixar você sozinho no processo.</h2>
                 <p className="mt-5 text-lg leading-8 text-muted-foreground">
                   A Destrava orienta sua solicitação e acompanha as etapas de validação e instalação. O certificado é emitido por Autoridade Certificadora integrante da ICP-Brasil, após a confirmação da identidade do titular.
                 </p>
@@ -503,7 +503,7 @@ export default function CertificadoDigitalA1() {
                   ].map((item) => (
                     <div key={item.title} className="rounded-2xl border border-border bg-card p-5">
                       <item.icon className="h-6 w-6 text-primary" aria-hidden="true" />
-                      <h3 className="mt-3 font-black text-slate-950">{item.title}</h3>
+                      <h3 className="mt-3 font-black text-foreground">{item.title}</h3>
                       <p className="mt-1 text-sm leading-6 text-muted-foreground">{item.text}</p>
                     </div>
                   ))}
@@ -517,7 +517,7 @@ export default function CertificadoDigitalA1() {
                   </div>
                   <div>
                     <p className="text-xs font-black uppercase tracking-[0.18em] text-success">Compromisso Destrava</p>
-                    <h3 className="text-xl font-black text-slate-950">Clareza antes da emissão</h3>
+                    <h3 className="text-xl font-black text-foreground">Clareza antes da emissão</h3>
                   </div>
                 </div>
                 <ul className="mt-7 space-y-4">
@@ -549,13 +549,13 @@ export default function CertificadoDigitalA1() {
             <div className="mx-auto max-w-3xl">
               <div className="text-center">
                 <p className="text-sm font-black uppercase tracking-[0.2em] text-primary">Perguntas frequentes</p>
-                <h2 id="a1-faq-title" className="mt-3 text-3xl font-black tracking-tight text-slate-950 sm:text-4xl">Perguntas Frequentes sobre Certificado Digital A1.</h2>
+                <h2 id="a1-faq-title" className="mt-3 text-3xl font-black tracking-tight text-foreground sm:text-4xl">Perguntas Frequentes sobre Certificado Digital A1.</h2>
               </div>
 
               <div className="mt-10 space-y-3">
                 {faqs.map((faq) => (
                   <details key={faq.question} className="group rounded-2xl border border-border bg-card open:border-primary/20 open:shadow-sm">
-                    <summary className="flex cursor-pointer list-none items-center justify-between gap-4 px-5 py-5 font-bold text-slate-950 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-600 focus-visible:ring-offset-2 sm:px-6">
+                    <summary className="flex cursor-pointer list-none items-center justify-between gap-4 px-5 py-5 font-bold text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-600 focus-visible:ring-offset-2 sm:px-6">
                       <span>{faq.question}</span>
                       <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-muted text-foreground transition-transform group-open:rotate-45" aria-hidden="true">+</span>
                     </summary>
@@ -568,16 +568,16 @@ export default function CertificadoDigitalA1() {
         </section>
 
         <section className="relative overflow-hidden bg-gradient-to-br from-blue-700 via-blue-800 to-[#07152f] py-16 text-primary-foreground sm:py-20" aria-labelledby="a1-final-cta-title">
-          <div className="absolute -right-20 -top-24 h-80 w-80 rounded-full bg-amber-300/15 blur-3xl" aria-hidden="true" />
+          <div className="absolute -right-20 -top-24 h-80 w-80 rounded-full bg-warning/15 blur-3xl" aria-hidden="true" />
           <div className="container relative px-4">
             <div className="mx-auto max-w-4xl text-center">
-              <Sparkles className="mx-auto h-9 w-9 text-amber-300" aria-hidden="true" />
+              <Sparkles className="mx-auto h-9 w-9 text-warning" aria-hidden="true" />
               <h2 id="a1-final-cta-title" className="mt-5 text-3xl font-black tracking-tight sm:text-5xl">Resolva sua emissão A1 com orientação do pedido à instalação</h2>
-              <p className="mx-auto mt-5 max-w-2xl text-lg leading-8 text-blue-100">
+              <p className="mx-auto mt-5 max-w-2xl text-lg leading-8 text-primary">
                 Solicite agora a orientação para seu Certificado Digital A1 e avance para a validação com os documentos certos.
               </p>
               <div className="mt-8 flex flex-col justify-center gap-3 sm:flex-row">
-                <Button asChild size="lg" className="h-13 rounded-xl bg-amber-300 px-8 text-base font-black text-slate-950 hover:bg-amber-200">
+                <Button asChild size="lg" className="h-13 rounded-xl bg-warning px-8 text-base font-black text-foreground hover:bg-warning">
                   <Link href={CAPTURE_URL} data-cta-position="a1-final">
                     Solicitar Certificado A1
                     <ArrowRight className="h-5 w-5" aria-hidden="true" />
@@ -590,7 +590,7 @@ export default function CertificadoDigitalA1() {
                   </a>
                 </Button>
               </div>
-              <p className="mt-5 text-xs leading-5 text-blue-200">
+              <p className="mt-5 text-xs leading-5 text-primary">
                 Emissão sujeita à validação documental, às regras da Autoridade Certificadora e à disponibilidade de atendimento.
               </p>
             </div>
@@ -602,7 +602,7 @@ export default function CertificadoDigitalA1() {
 
       <div className="fixed inset-x-0 bottom-0 z-40 border-t border-border bg-card/95 p-3 shadow-[0_-8px_30px_rgba(15,23,42,.12)] backdrop-blur md:hidden" aria-label="Ações rápidas">
         <div className="mx-auto grid max-w-lg grid-cols-[1fr_auto] gap-2">
-          <Button asChild className="h-12 bg-amber-300 font-black text-slate-950 hover:bg-amber-200">
+          <Button asChild className="h-12 bg-warning font-black text-foreground hover:bg-warning">
             <Link href={CAPTURE_URL} data-cta-position="a1-sticky-mobile">Solicitar A1</Link>
           </Button>
           <Button asChild variant="outline" size="icon-lg" className="h-12 w-12 border-success/30 text-success">

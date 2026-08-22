@@ -98,12 +98,12 @@ export default function EnviarDocumento({
     <>
       <div className={`flex items-center gap-2 ${className || ""}`}>
         {podeEmail && (
-          <button type="button" onClick={() => abrir("email")} className="h-9 px-3 rounded-lg border border-slate-200 bg-white text-xs font-bold text-slate-700 hover:bg-slate-50 flex items-center gap-1.5">
+          <button type="button" onClick={() => abrir("email")} className="h-9 px-3 rounded-lg border border-border bg-card text-xs font-bold text-foreground hover:bg-muted flex items-center gap-1.5">
             <Mail className="h-3.5 w-3.5" /> Enviar e-mail
           </button>
         )}
         {podeWhatsapp && (
-          <button type="button" onClick={() => abrir("whatsapp")} className="h-9 px-3 rounded-lg border border-emerald-200 bg-emerald-50 text-xs font-bold text-emerald-700 hover:bg-emerald-100 flex items-center gap-1.5">
+          <button type="button" onClick={() => abrir("whatsapp")} className="h-9 px-3 rounded-lg border border-success/20 bg-success/10 text-xs font-bold text-success hover:bg-success/20 flex items-center gap-1.5">
             <MessageCircle className="h-3.5 w-3.5" /> WhatsApp
           </button>
         )}
@@ -111,42 +111,42 @@ export default function EnviarDocumento({
 
       {canalAberto && (
         <div className="fixed inset-0 z-[100] bg-black/40 flex items-center justify-center p-4" onClick={() => !enviando && setCanalAberto(null)}>
-          <div className="bg-white rounded-2xl shadow-xl w-full max-w-md p-5" onClick={(e) => e.stopPropagation()}>
+          <div className="bg-card rounded-2xl shadow-xl w-full max-w-md p-5" onClick={(e) => e.stopPropagation()}>
             <div className="flex items-center justify-between mb-4">
-              <h3 className="text-sm font-bold text-slate-800 flex items-center gap-2">
+              <h3 className="text-sm font-bold text-foreground flex items-center gap-2">
                 {canalAberto === "email" ? <Mail className="w-4 h-4" /> : <MessageCircle className="w-4 h-4" />}
                 Enviar {rotulo} por {canalAberto === "email" ? "e-mail" : "WhatsApp"}
               </h3>
-              <button type="button" onClick={() => setCanalAberto(null)} disabled={enviando} className="text-slate-400 hover:text-slate-600"><X className="w-4 h-4" /></button>
+              <button type="button" onClick={() => setCanalAberto(null)} disabled={enviando} className="text-muted-foreground hover:text-muted-foreground"><X className="w-4 h-4" /></button>
             </div>
 
             <div className="space-y-3">
               <div>
-                <label className="block text-xs font-semibold text-slate-500 mb-1">Nome do destinatário</label>
-                <input value={nome} onChange={(e) => setNome(e.target.value)} className="w-full h-9 rounded-lg border border-slate-200 px-3 text-sm" placeholder="Nome" />
+                <label className="block text-xs font-semibold text-muted-foreground mb-1">Nome do destinatário</label>
+                <input value={nome} onChange={(e) => setNome(e.target.value)} className="w-full h-9 rounded-lg border border-border px-3 text-sm" placeholder="Nome" />
               </div>
 
               {canalAberto === "email" ? (
                 <div>
-                  <label className="block text-xs font-semibold text-slate-500 mb-1">E-mail</label>
-                  <input value={email} onChange={(e) => setEmail(e.target.value)} type="email" className="w-full h-9 rounded-lg border border-slate-200 px-3 text-sm" placeholder="cliente@exemplo.com" />
+                  <label className="block text-xs font-semibold text-muted-foreground mb-1">E-mail</label>
+                  <input value={email} onChange={(e) => setEmail(e.target.value)} type="email" className="w-full h-9 rounded-lg border border-border px-3 text-sm" placeholder="cliente@exemplo.com" />
                 </div>
               ) : (
                 <div>
-                  <label className="block text-xs font-semibold text-slate-500 mb-1">Telefone / WhatsApp</label>
-                  <input value={telefone} onChange={(e) => setTelefone(e.target.value)} className="w-full h-9 rounded-lg border border-slate-200 px-3 text-sm" placeholder="(61) 99999-9999" />
+                  <label className="block text-xs font-semibold text-muted-foreground mb-1">Telefone / WhatsApp</label>
+                  <input value={telefone} onChange={(e) => setTelefone(e.target.value)} className="w-full h-9 rounded-lg border border-border px-3 text-sm" placeholder="(61) 99999-9999" />
                 </div>
               )}
 
               <div>
-                <label className="block text-xs font-semibold text-slate-500 mb-1">Mensagem (opcional)</label>
-                <textarea value={mensagem} onChange={(e) => setMensagem(e.target.value)} rows={3} className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm resize-none" placeholder={`Mensagem padrão será usada se deixar em branco.`} />
+                <label className="block text-xs font-semibold text-muted-foreground mb-1">Mensagem (opcional)</label>
+                <textarea value={mensagem} onChange={(e) => setMensagem(e.target.value)} rows={3} className="w-full rounded-lg border border-border px-3 py-2 text-sm resize-none" placeholder={`Mensagem padrão será usada se deixar em branco.`} />
               </div>
             </div>
 
             <div className="flex items-center justify-end gap-2 mt-5">
-              <button type="button" onClick={() => setCanalAberto(null)} disabled={enviando} className="h-9 px-4 rounded-lg border border-slate-200 text-xs font-bold text-slate-600 hover:bg-slate-50">Cancelar</button>
-              <button type="button" onClick={confirmar} disabled={enviando} className="h-9 px-4 rounded-lg bg-blue-600 text-white text-xs font-bold hover:bg-blue-700 disabled:opacity-50 flex items-center gap-1.5">
+              <button type="button" onClick={() => setCanalAberto(null)} disabled={enviando} className="h-9 px-4 rounded-lg border border-border text-xs font-bold text-muted-foreground hover:bg-muted">Cancelar</button>
+              <button type="button" onClick={confirmar} disabled={enviando} className="h-9 px-4 rounded-lg bg-primary text-primary-foreground text-xs font-bold hover:bg-primary disabled:opacity-50 flex items-center gap-1.5">
                 {enviando ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Send className="w-3.5 h-3.5" />} Confirmar envio
               </button>
             </div>

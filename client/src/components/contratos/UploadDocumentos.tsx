@@ -102,9 +102,9 @@ const COR_BADGE: Record<string, string> = {
   orange:  'bg-warning/20 text-warning border-warning/20',
   violet:  'bg-primary/10 text-primary border-primary/20',
   cyan:    'bg-primary/20 text-primary border-primary/20',
-  rose:    'bg-rose-100 text-rose-700 border-rose-200',
-  pink:    'bg-pink-100 text-pink-700 border-pink-200',
-  fuchsia: 'bg-fuchsia-100 text-fuchsia-700 border-fuchsia-200',
+  rose:    'bg-destructive/20 text-destructive border-destructive/20',
+  pink:    'bg-destructive/20 text-destructive border-destructive/20',
+  fuchsia: 'bg-destructive/20 text-destructive border-destructive/20',
   teal:    'bg-success/20 text-success border-success/20',
   gray:    'bg-muted text-muted-foreground border-border',
 };
@@ -113,16 +113,16 @@ const COR_PREVIEW: Record<string, string> = {
   blue: 'bg-primary/10 border-primary/20', indigo: 'bg-primary/10 border-primary/20',
   emerald: 'bg-success/10 border-success/20', amber: 'bg-warning/10 border-warning/20',
   orange: 'bg-warning/10 border-warning/20', violet: 'bg-primary/10 border-primary/20',
-  cyan: 'bg-primary/10 border-primary/20', rose: 'bg-rose-50 border-rose-200',
-  pink: 'bg-pink-50 border-pink-200', fuchsia: 'bg-fuchsia-50 border-fuchsia-200',
+  cyan: 'bg-primary/10 border-primary/20', rose: 'bg-destructive/10 border-destructive/20',
+  pink: 'bg-destructive/10 border-destructive/20', fuchsia: 'bg-destructive/10 border-destructive/20',
   teal: 'bg-success/10 border-success/20', gray: 'bg-muted border-border',
 };
 
 const COR_TEXT: Record<string, string> = {
-  blue: 'text-blue-400', indigo: 'text-indigo-400', emerald: 'text-emerald-400',
-  amber: 'text-amber-400', orange: 'text-orange-400', violet: 'text-violet-400',
-  cyan: 'text-cyan-400', rose: 'text-rose-400', pink: 'text-pink-400',
-  fuchsia: 'text-fuchsia-400', teal: 'text-teal-400', gray: 'text-muted-foreground',
+  blue: 'text-primary', indigo: 'text-primary', emerald: 'text-success',
+  amber: 'text-warning', orange: 'text-warning', violet: 'text-primary',
+  cyan: 'text-primary', rose: 'text-destructive', pink: 'text-destructive',
+  fuchsia: 'text-destructive', teal: 'text-success', gray: 'text-muted-foreground',
 };
 
 function getCat(value: CategoriaDocumento): CategoriaDef {
@@ -226,7 +226,7 @@ export function UploadDocumentos({ documentos, onChange, maxArquivos = 30, disab
                   className={`flex items-center gap-1 px-2 py-1 rounded-lg text-[11px] font-medium border transition-all ${
                     categoriaAtiva === cat.value
                       ? COR_BADGE[cat.cor] + ' ring-2 ring-offset-1 ring-current shadow-sm'
-                      : 'bg-card text-muted-foreground border-border hover:border-gray-400'
+                      : 'bg-card text-muted-foreground border-border hover:border-input'
                   }`}
                 >
                   {cat.icon}
@@ -246,8 +246,8 @@ export function UploadDocumentos({ documentos, onChange, maxArquivos = 30, disab
         onClick={() => !disabled && inputRef.current?.click()}
         className={`relative border-2 border-dashed rounded-xl p-5 text-center cursor-pointer transition-all ${
           disabled ? 'opacity-50 cursor-not-allowed border-border bg-muted'
-          : dragOver ? 'border-blue-400 bg-primary/10 scale-[1.01]'
-          : 'border-input bg-muted hover:border-blue-400 hover:bg-primary/10'
+          : dragOver ? 'border-primary/30 bg-primary/10 scale-[1.01]'
+          : 'border-input bg-muted hover:border-primary/30 hover:bg-primary/10'
         }`}
       >
         <input
@@ -292,7 +292,7 @@ export function UploadDocumentos({ documentos, onChange, maxArquivos = 30, disab
       {documentos.length > 0 && (
         <div className="space-y-2">
           <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide flex items-center gap-1.5">
-            <CheckCircle2 className="w-3.5 h-3.5 text-emerald-500" />
+            <CheckCircle2 className="w-3.5 h-3.5 text-success" />
             {documentos.length} documento{documentos.length !== 1 ? 's' : ''} — arraste para reordenar a impressão
           </p>
 
@@ -308,7 +308,7 @@ export function UploadDocumentos({ documentos, onChange, maxArquivos = 30, disab
                 className="flex items-start gap-3 bg-card border border-border rounded-xl p-3 shadow-sm hover:shadow-md transition-shadow"
               >
                 {/* Handle */}
-                <div className="mt-1 cursor-grab text-gray-300 hover:text-muted-foreground flex-shrink-0">
+                <div className="mt-1 cursor-grab text-muted-foreground hover:text-muted-foreground flex-shrink-0">
                   <GripVertical className="w-4 h-4" />
                 </div>
 

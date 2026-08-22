@@ -817,7 +817,7 @@ export default function Orcamentos() {
                         <button
                           type="button"
                           onClick={() => excluirOrcamento(orc)}
-                          className="inline-flex flex-1 items-center justify-center gap-1.5 rounded-xl border border-rose-100 bg-card px-2 py-1.5 text-[11px] font-black text-rose-600 hover:bg-rose-50"
+                          className="inline-flex flex-1 items-center justify-center gap-1.5 rounded-xl border border-destructive/30 bg-card px-2 py-1.5 text-[11px] font-black text-destructive hover:bg-destructive/10"
                         >
                           <Trash2 className="h-3.5 w-3.5" /> Excluir
                         </button>
@@ -1276,7 +1276,7 @@ export default function Orcamentos() {
                                   {!camposBloqueados && idx > 1 && (
                                     <button
                                       onClick={() => removeAssinatura(idx)}
-                                      className="text-rose-500"
+                                      className="text-destructive"
                                     >
                                       <Trash2 className="h-3.5 w-3.5" />
                                     </button>
@@ -1459,7 +1459,7 @@ export default function Orcamentos() {
                                 {!camposBloqueados && (
                                   <button
                                     onClick={() => removerServico(idx)}
-                                    className="rounded-xl p-2 text-rose-400 hover:bg-rose-50 hover:text-rose-600"
+                                    className="rounded-xl p-2 text-destructive hover:bg-destructive/10 hover:text-destructive"
                                     title="Remover serviço"
                                   >
                                     <Trash2 className="h-4 w-4" />
@@ -1486,7 +1486,7 @@ export default function Orcamentos() {
                           {!camposBloqueados && (
                             <button
                               onClick={adicionarServico}
-                              className="rounded-2xl border-2 border-dashed border-primary/20 px-4 py-3 text-sm font-bold text-primary transition hover:border-blue-400 hover:bg-primary/10 hover:text-primary"
+                              className="rounded-2xl border-2 border-dashed border-primary/20 px-4 py-3 text-sm font-bold text-primary transition hover:border-primary/30 hover:bg-primary/10 hover:text-primary"
                             >
                               <Plus className="mr-1.5 inline h-4 w-4" />{" "}
                               Adicionar mais um serviço
@@ -1605,7 +1605,7 @@ export default function Orcamentos() {
                                 </button>
                                 <button
                                   onClick={() => excluirAnexo(anexo.id)}
-                                  className="rounded-xl border border-rose-200 px-3 py-2 text-xs font-bold text-rose-600 hover:bg-rose-50"
+                                  className="rounded-xl border border-destructive/20 px-3 py-2 text-xs font-bold text-destructive hover:bg-destructive/10"
                                 >
                                   Excluir
                                 </button>
@@ -1621,7 +1621,7 @@ export default function Orcamentos() {
                 {aba === "preview" && (
                   <div className="mx-auto max-w-4xl rounded-3xl border border-border bg-card p-8 shadow-sm">
                     <div
-                      className={`mb-6 flex items-center justify-between border-b-4 pb-4 ${marca === "permupay" ? "border-blue-600" : marca === "aragao" ? "border-amber-600" : "border-[#1B3A8C]"}`}
+                      className={`mb-6 flex items-center justify-between border-b-4 pb-4 ${marca === "permupay" ? "border-primary/30" : marca === "aragao" ? "border-warning/30" : "border-[#1B3A8C]"}`}
                     >
                       <img
                         alt={`Logotipo ${marca === "permupay" ? "Permupay" : marca === "aragao" ? "Aragão Serviços" : "Destrava Crédito"}`}
@@ -1701,7 +1701,7 @@ export default function Orcamentos() {
                       <div className="text-xs font-bold uppercase text-primary">Valor total do orçamento</div>
                       <div className="text-3xl font-black text-primary">{moneyBR(valorTotalExibicao)}</div>
                       {form.validade_dias && (
-                        <div className="mt-1 text-xs text-blue-400">Válido por {form.validade_dias} dias</div>
+                        <div className="mt-1 text-xs text-primary">Válido por {form.validade_dias} dias</div>
                       )}
                     </div>
 
@@ -1709,7 +1709,7 @@ export default function Orcamentos() {
                     <div className="mt-10 grid grid-cols-1 gap-8 sm:grid-cols-2">
                       {(form.assinaturas || []).map((a: any, idx: number) => (
                         <div key={idx} className="text-center">
-                          <div className="mb-2 border-t border-slate-900 pt-2" />
+                          <div className="mb-2 border-t border-border pt-2" />
                           <div className="text-sm font-black text-foreground">{a.nome || "Assinante"}</div>
                           <div className="text-xs text-muted-foreground">{a.cargo}</div>
                           <div className="text-xs text-muted-foreground">{a.documento}</div>

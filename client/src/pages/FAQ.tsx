@@ -22,10 +22,10 @@ const categoryLabels = {
 };
 
 const categoryColors = {
-  "credito": "bg-blue-50 border-blue-200",
-  "limpeza-nome": "bg-green-50 border-green-200",
-  "restauracao": "bg-purple-50 border-purple-200",
-  "empresarial": "bg-orange-50 border-orange-200",
+  "credito": "bg-primary/10 border-primary/20",
+  "limpeza-nome": "bg-success/10 border-success/20",
+  "restauracao": "bg-primary/10 border-primary/20",
+  "empresarial": "bg-warning/10 border-warning/20",
 };
 
 const categoryIcons = {
@@ -86,7 +86,7 @@ export default function FAQ() {
       />
 
       {/* Hero Section */}
-      <section className="bg-gradient-to-r from-[var(--color-caixa-blue)] to-[var(--color-caixa-blue-dark)] py-8 md:py-16 text-white">
+      <section className="bg-gradient-to-r from-[var(--color-caixa-blue)] to-[var(--color-caixa-blue-dark)] py-8 md:py-16 text-primary-foreground">
         <div className="container px-4 md:px-6">
           <div className="flex items-center gap-2 md:gap-4 mb-4 md:mb-6">
             <div className="bg-[var(--color-caixa-yellow)] p-2 md:p-3 rounded-lg">
@@ -94,18 +94,18 @@ export default function FAQ() {
             </div>
             <h1 className="text-2xl md:text-3xl lg:text-4xl font-bold">Perguntas Frequentes</h1>
           </div>
-          <p className="text-sm md:text-base lg:text-lg text-white/90 max-w-2xl">
+          <p className="text-sm md:text-base lg:text-lg text-primary-foreground/90 max-w-2xl">
             Encontre respostas para as dúvidas mais comuns sobre crédito, empréstimos, limpeza de nome e restauração de crédito.
           </p>
         </div>
       </section>
 
       {/* Busca */}
-      <section className="bg-gray-50 py-6 md:py-8 border-b border-gray-200">
+      <section className="bg-muted py-6 md:py-8 border-b border-border">
         <div className="container px-4 md:px-6">
           <div className="max-w-2xl">
             <div className="relative">
-              <Search className="absolute left-3 md:left-4 top-2.5 md:top-3.5 h-4 md:h-5 w-4 md:w-5 text-gray-400" />
+              <Search className="absolute left-3 md:left-4 top-2.5 md:top-3.5 h-4 md:h-5 w-4 md:w-5 text-muted-foreground" />
               <Input
                 type="text"
                 aria-label="Buscar perguntas frequentes"
@@ -115,7 +115,7 @@ export default function FAQ() {
                 className="pl-9 md:pl-12 py-2 md:py-3 text-sm md:text-base"
               />
             </div>
-            <p className="text-xs md:text-sm text-gray-600 mt-2 md:mt-3">
+            <p className="text-xs md:text-sm text-muted-foreground mt-2 md:mt-3">
               Encontrados {filteredFAQs.length} resultados
             </p>
           </div>
@@ -123,9 +123,9 @@ export default function FAQ() {
       </section>
 
       {/* Filtro por Categoria */}
-      <section className="py-6 md:py-8 border-b border-gray-200">
+      <section className="py-6 md:py-8 border-b border-border">
         <div className="container px-4 md:px-6">
-          <p className="text-xs md:text-sm font-semibold text-gray-700 mb-3 md:mb-4">
+          <p className="text-xs md:text-sm font-semibold text-foreground mb-3 md:mb-4">
             Filtrar por categoria:
           </p>
           <div className="flex flex-wrap gap-2 md:gap-3">
@@ -165,7 +165,7 @@ export default function FAQ() {
         <div className="container px-4 md:px-6">
           {filteredFAQs.length === 0 ? (
             <div className="text-center py-12">
-              <p className="text-gray-600 text-lg mb-4">
+              <p className="text-muted-foreground text-lg mb-4">
                 Nenhuma pergunta encontrada para sua busca.
               </p>
               <Button
@@ -190,7 +190,7 @@ export default function FAQ() {
                         categoryColors[category as keyof typeof categoryColors]
                       }`}
                     >
-                      <h2 className="text-2xl font-bold text-gray-800">
+                      <h2 className="text-2xl font-bold text-foreground">
                         {categoryIcons[category as keyof typeof categoryIcons]}{" "}
                         {
                           categoryLabels[
@@ -198,7 +198,7 @@ export default function FAQ() {
                           ]
                         }
                       </h2>
-                      <p className="text-gray-600 mt-1">
+                      <p className="text-muted-foreground mt-1">
                         {faqs.length} pergunta{faqs.length !== 1 ? "s" : ""}
                       </p>
                     </div>
@@ -208,12 +208,12 @@ export default function FAQ() {
                         <AccordionItem
                           key={faq.id}
                           value={faq.id}
-                          className="border border-gray-200 rounded-lg px-4 hover:border-[var(--color-caixa-yellow)] transition-colors"
+                          className="border border-border rounded-lg px-4 hover:border-[var(--color-caixa-yellow)] transition-colors"
                         >
                           <AccordionTrigger className="hover:text-[var(--color-caixa-blue)] font-semibold text-left">
                             {faq.question}
                           </AccordionTrigger>
-                          <AccordionContent className="text-gray-700 whitespace-pre-wrap">
+                          <AccordionContent className="text-foreground whitespace-pre-wrap">
                             {faq.answer}
                           </AccordionContent>
                         </AccordionItem>
@@ -228,13 +228,13 @@ export default function FAQ() {
       </section>
 
       {/* CTA Final */}
-      <section className="bg-gradient-to-r from-[var(--color-caixa-blue)] to-[var(--color-caixa-blue-dark)] py-8 md:py-12 text-white">
+      <section className="bg-gradient-to-r from-[var(--color-caixa-blue)] to-[var(--color-caixa-blue-dark)] py-8 md:py-12 text-primary-foreground">
         <div className="container px-4 md:px-6 text-center">
           <div className="flex items-center justify-center gap-2 md:gap-3 mb-3 md:mb-4">
             <TrendingUp className="h-5 md:h-6 w-5 md:w-6" />
             <h2 className="text-2xl md:text-3xl font-bold">Ainda tem dúvidas?</h2>
           </div>
-          <p className="text-sm md:text-base lg:text-lg text-white/90 mb-6 md:mb-8 max-w-2xl mx-auto">
+          <p className="text-sm md:text-base lg:text-lg text-primary-foreground/90 mb-6 md:mb-8 max-w-2xl mx-auto">
             Fale com um especialista da Destrava Crédito. Estamos prontos para orientar você na melhor solução de crédito para seu negócio.
           </p>
           <div className="flex flex-col sm:flex-row flex-wrap gap-3 md:gap-4 justify-center">
@@ -246,7 +246,7 @@ export default function FAQ() {
               </a>
             </Button>
             <Button asChild
-                className="bg-white text-[var(--color-caixa-blue)] hover:bg-gray-100 font-bold text-sm md:text-base py-2 md:py-3 px-4 md:px-6"
+                className="bg-card text-[var(--color-caixa-blue)] hover:bg-muted font-bold text-sm md:text-base py-2 md:py-3 px-4 md:px-6"
               >
               <a
               href="https://wa.me/556135268355?text=Ol%C3%A1! Gostaria de tirar algumas d%C3%BAvidas sobre cr%C3%A9dito."
