@@ -69,14 +69,14 @@ const CONFIG_TIPO: Record<TipoEvento, {
   label: string;
 }> = {
   cadastro:             { cor: "text-primary",   bg: "bg-primary/20",   borda: "border-primary/30",  icone: Building2,     label: "Cadastro" },
-  atualizacao_cadastral:{ cor: "text-primary", bg: "bg-primary/20", borda: "border-indigo-300",icone: RefreshCw,     label: "Atualização" },
+  atualizacao_cadastral:{ cor: "text-primary", bg: "bg-primary/20", borda: "border-primary/30",icone: RefreshCw,     label: "Atualização" },
   documento:            { cor: "text-warning",  bg: "bg-warning/20",  borda: "border-warning/30", icone: FileText,      label: "Documento" },
   simulacao:            { cor: "text-success",bg: "bg-success/20",borda: "border-success/30",icone: TrendingUp,   label: "Simulação" },
-  contrato:             { cor: "text-primary", bg: "bg-primary/20", borda: "border-purple-300",icone: FileSignature, label: "Contrato" },
+  contrato:             { cor: "text-primary", bg: "bg-primary/20", borda: "border-primary/30",icone: FileSignature, label: "Contrato" },
   orcamento:            { cor: "text-warning", bg: "bg-warning/20", borda: "border-warning/30",icone: ClipboardList, label: "Orçamento" },
-  followup:             { cor: "text-sky-700",    bg: "bg-sky-100",    borda: "border-sky-300",   icone: MessageSquare, label: "Follow-up" },
+  followup:             { cor: "text-primary",    bg: "bg-primary/20",    borda: "border-primary/30",   icone: MessageSquare, label: "Follow-up" },
   nota:                 { cor: "text-foreground",  bg: "bg-muted",  borda: "border-input", icone: MessageSquare, label: "Nota" },
-  acompanhamento_bancario:{ cor: "text-success", bg: "bg-success/20",  borda: "border-teal-300",  icone: Banknote,      label: "Bancário" },
+  acompanhamento_bancario:{ cor: "text-success", bg: "bg-success/20",  borda: "border-success/30",  icone: Banknote,      label: "Bancário" },
   analise:              { cor: "text-primary", bg: "bg-primary/10", borda: "border-primary/30",icone: Info,          label: "Análise" },
   tarefa_nexus:         { cor: "text-primary",   bg: "bg-primary/20",   borda: "border-primary/30",  icone: ClipboardList, label: "Tarefa Nexus" },
   sistema:              { cor: "text-muted-foreground",  bg: "bg-muted",   borda: "border-border", icone: RefreshCw,     label: "Sistema" },
@@ -210,7 +210,7 @@ function GrupoDia({ data, eventos, onNavegar }: {
         className="flex items-center gap-2 w-full text-left mb-2 group"
       >
         <div className="flex items-center gap-2 flex-1">
-          <div className="w-2 h-2 rounded-full bg-blue-400 shrink-0" />
+          <div className="w-2 h-2 rounded-full bg-primary shrink-0" />
           <span className="text-[12px] font-bold text-muted-foreground uppercase tracking-wide">
             {formatarDataCurta(data)}
           </span>
@@ -400,8 +400,8 @@ export default function Historico360({ empresaId, onNavegar, modoCompacto = fals
             onClick={() => setFiltroTipo("todos")}
             className={`text-[11px] font-bold px-3 py-1 rounded-full border transition-colors ${
               filtroTipo === "todos"
-                ? "bg-brand-navy text-primary-foreground border-slate-800"
-                : "bg-card text-muted-foreground border-border hover:border-slate-400"
+                ? "bg-brand-navy text-primary-foreground border-border"
+                : "bg-card text-muted-foreground border-border hover:border-input"
             }`}
           >
             Todos ({dados.total_eventos})
@@ -430,7 +430,7 @@ export default function Historico360({ empresaId, onNavegar, modoCompacto = fals
       <div className="rounded-2xl border border-border bg-card shadow-sm p-4">
         {eventosFiltrados.length === 0 && eventosSemDataFiltrados.length === 0 ? (
           <div className="flex flex-col items-center justify-center py-12 gap-3">
-            <History className="w-10 h-10 text-slate-200" />
+            <History className="w-10 h-10 text-muted-foreground" />
             <p className="text-sm text-muted-foreground">Nenhum evento encontrado para o filtro selecionado.</p>
           </div>
         ) : (
@@ -456,7 +456,7 @@ export default function Historico360({ empresaId, onNavegar, modoCompacto = fals
                   onClick={() => setMostrarSemData(v => !v)}
                   className="flex items-center gap-2 text-[12px] font-bold text-muted-foreground hover:text-foreground transition-colors mb-2"
                 >
-                  <AlertCircle className="w-3.5 h-3.5 text-amber-400" />
+                  <AlertCircle className="w-3.5 h-3.5 text-warning" />
                   Data não informada ({eventosSemDataFiltrados.length} evento{eventosSemDataFiltrados.length !== 1 ? "s" : ""})
                   {mostrarSemData ? <ChevronUp className="w-3.5 h-3.5" /> : <ChevronDown className="w-3.5 h-3.5" />}
                 </button>

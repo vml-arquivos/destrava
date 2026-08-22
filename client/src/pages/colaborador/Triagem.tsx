@@ -45,8 +45,8 @@ interface Stats {
 // ─── Configurações de status ──────────────────────────────────────────────────
 
 const STATUS_CONFIG: Record<string, { label: string; color: string; badge: string; icon: React.ElementType }> = {
-  pendente:         { label: "Pendente",          color: "border-yellow-300 bg-yellow-50",  badge: "bg-yellow-100 text-yellow-800",  icon: Clock },
-  possivel_cliente: { label: "Possível Cliente",  color: "border-green-300 bg-green-50",   badge: "bg-green-100 text-green-800",    icon: UserCheck },
+  pendente:         { label: "Pendente",          color: "border-warning/30 bg-warning/10",  badge: "bg-warning/20 text-warning",  icon: Clock },
+  possivel_cliente: { label: "Possível Cliente",  color: "border-success/30 bg-success/10",   badge: "bg-success/20 text-success",    icon: UserCheck },
   curioso:          { label: "Curioso",            color: "border-primary/30 bg-primary/10",     badge: "bg-primary/20 text-primary",      icon: HelpCircle },
   sem_perfil:       { label: "Sem Perfil",         color: "border-warning/30 bg-warning/10", badge: "bg-warning/20 text-warning",  icon: AlertTriangle },
   convertido:       { label: "Convertido",         color: "border-success/30 bg-success/10",badge: "bg-success/20 text-success",icon: CheckCircle2 },
@@ -78,6 +78,7 @@ function ModalQualificacao({
   const [analiseIA, setAnaliseIA] = useState<{
     classificacao: string; score: number; temperatura: string;
     resumo: string; pontos_positivos: string[]; pontos_atencao: string[]; proxima_acao: string;
+    fallback_operacional?: boolean;
   } | null>(() => {
     try { return (item as any).observacoes_ia ? JSON.parse((item as any).observacoes_ia) : null; } catch { return null; }
   });
@@ -87,7 +88,7 @@ function ModalQualificacao({
     try {
       const res = await apiFetch(`/api/triagem/${item.id}/qualificar-ia`, { method: "POST" });
       if (res.analise) {
-        setAnaliseIA(res.analise);
+        setAnaliseIA({ ...res.analise, fallback_operacional: res.fallback_operacional === true });
         setStatus(res.analise.classificacao === "possivel_cliente" ? "possivel_cliente"
           : res.analise.classificacao === "curioso" ? "curioso"
           : res.analise.classificacao === "sem_perfil" ? "sem_perfil" : "pendente");
@@ -182,6 +183,13 @@ function ModalQualificacao({
 
           {/* Resultado da análise IA */}
           {analiseIA && (
+            <div className="space-y-3">
+              {analiseIA.fallback_operacional === true && (
+                <div className="flex items-start gap-2 rounded-xl border border-warning/20 bg-warning/10 p-3 text-warning">
+                  <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
+                  <p className="text-xs leading-relaxed"><span className="font-semibold">Fallback operacional utilizado.</span> Revise a classificação e o resumo antes de registrar uma decisão como parecer de IA.</p>
+                </div>
+              )}
             <div className="bg-primary/10 border border-primary/20 rounded-xl p-4 space-y-3">
               <div className="flex items-center justify-between">
                 <p className="text-xs font-bold text-primary uppercase tracking-wide flex items-center gap-1.5">
@@ -199,10 +207,10 @@ function ModalQualificacao({
               <p className="text-sm text-foreground">{analiseIA.resumo}</p>
               {analiseIA.pontos_positivos?.length > 0 && (
                 <div>
-                  <p className="text-xs font-semibold text-green-700 mb-1">Pontos positivos</p>
+                  <p className="text-xs font-semibold text-success mb-1">Pontos positivos</p>
                   <ul className="space-y-0.5">
                     {analiseIA.pontos_positivos.map((p, i) => (
-                      <li key={i} className="text-xs text-muted-foreground flex items-start gap-1.5"><span className="text-green-500 mt-0.5">✓</span>{p}</li>
+                      <li key={i} className="text-xs text-muted-foreground flex items-start gap-1.5"><span className="text-success mt-0.5">✓</span>{p}</li>
                     ))}
                   </ul>
                 </div>
@@ -212,7 +220,7 @@ function ModalQualificacao({
                   <p className="text-xs font-semibold text-warning mb-1">Pontos de atenção</p>
                   <ul className="space-y-0.5">
                     {analiseIA.pontos_atencao.map((p, i) => (
-                      <li key={i} className="text-xs text-muted-foreground flex items-start gap-1.5"><span className="text-orange-500 mt-0.5">⚠</span>{p}</li>
+                      <li key={i} className="text-xs text-muted-foreground flex items-start gap-1.5"><span className="text-warning mt-0.5">⚠</span>{p}</li>
                     ))}
                   </ul>
                 </div>
@@ -223,6 +231,7 @@ function ModalQualificacao({
                   <p className="text-sm text-foreground">{analiseIA.proxima_acao}</p>
                 </div>
               )}
+            </div>
             </div>
           )}
 
@@ -329,12 +338,12 @@ function CardTriagem({
           <div className="flex items-center gap-3 text-xs text-muted-foreground">
             <span className="flex items-center gap-1"><Phone className="w-3 h-3" />{item.telefone}</span>
             {item.produto && <span className="flex items-center gap-1 text-primary font-medium">· {item.produto}</span>}
-            {item.valor && <span className="text-green-600 font-medium">· {fmtBRL.format(item.valor)}</span>}
+            {item.valor && <span className="text-success font-medium">· {fmtBRL.format(item.valor)}</span>}
           </div>
         </div>
         <div className="flex flex-col items-end gap-1 flex-shrink-0">
           <span className="text-xs text-muted-foreground">{fmtData(item.created_at)}</span>
-          <ChevronRight className="w-4 h-4 text-gray-300 group-hover:text-primary transition-colors" />
+          <ChevronRight className="w-4 h-4 text-muted-foreground group-hover:text-primary transition-colors" />
         </div>
       </div>
     </div>
@@ -408,8 +417,8 @@ export default function Triagem() {
         {/* Header */}
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-3">
-            <div className="p-2.5 bg-yellow-100 rounded-xl">
-              <ShieldAlert className="h-6 w-6 text-yellow-600" />
+            <div className="p-2.5 bg-warning/20 rounded-xl">
+              <ShieldAlert className="h-6 w-6 text-warning" />
             </div>
             <div>
               <h1 className="text-2xl font-bold">Triagem de Leads</h1>
@@ -434,23 +443,23 @@ export default function Triagem() {
             </div>
             <p className="text-2xl font-black text-foreground">{total}</p>
           </div>
-          <div className="bg-yellow-50 border border-yellow-200 rounded-xl p-4">
+          <div className="bg-warning/10 border border-warning/20 rounded-xl p-4">
             <div className="flex items-center gap-2 mb-1">
-              <Clock className="w-4 h-4 text-yellow-500" />
-              <span className="text-xs text-yellow-700 font-medium">Aguardando</span>
+              <Clock className="w-4 h-4 text-warning" />
+              <span className="text-xs text-warning font-medium">Aguardando</span>
             </div>
-            <p className="text-2xl font-black text-yellow-700">{pendentes}</p>
-          </div>
-          <div className="bg-green-50 border border-green-200 rounded-xl p-4">
-            <div className="flex items-center gap-2 mb-1">
-              <UserCheck className="w-4 h-4 text-green-500" />
-              <span className="text-xs text-green-700 font-medium">Possíveis Clientes</span>
-            </div>
-            <p className="text-2xl font-black text-green-700">{possiveis}</p>
+            <p className="text-2xl font-black text-warning">{pendentes}</p>
           </div>
           <div className="bg-success/10 border border-success/20 rounded-xl p-4">
             <div className="flex items-center gap-2 mb-1">
-              <TrendingUp className="w-4 h-4 text-emerald-500" />
+              <UserCheck className="w-4 h-4 text-success" />
+              <span className="text-xs text-success font-medium">Possíveis Clientes</span>
+            </div>
+            <p className="text-2xl font-black text-success">{possiveis}</p>
+          </div>
+          <div className="bg-success/10 border border-success/20 rounded-xl p-4">
+            <div className="flex items-center gap-2 mb-1">
+              <TrendingUp className="w-4 h-4 text-success" />
               <span className="text-xs text-success font-medium">Convertidos</span>
             </div>
             <p className="text-2xl font-black text-success">{convertidos}</p>
@@ -489,11 +498,11 @@ export default function Triagem() {
         {/* Lista */}
         {loading ? (
           <div className="flex items-center justify-center py-16">
-            <div className="w-8 h-8 border-4 border-blue-500 border-t-transparent rounded-full animate-spin" />
+            <div className="w-8 h-8 border-4 border-primary border-t-transparent rounded-full animate-spin" />
           </div>
         ) : itens.length === 0 ? (
           <div className="flex flex-col items-center justify-center py-20 text-center">
-            <ShieldCheck className="w-12 h-12 text-gray-300 mb-3" />
+            <ShieldCheck className="w-12 h-12 text-muted-foreground mb-3" />
             <p className="text-muted-foreground font-medium">Nenhum item na fila</p>
             <p className="text-sm text-muted-foreground mt-1">
               {filtroStatus !== "todos" || busca

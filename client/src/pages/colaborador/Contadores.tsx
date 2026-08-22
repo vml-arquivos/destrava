@@ -225,7 +225,7 @@ export default function Contadores() {
                       <td className="px-4 py-3 text-muted-foreground font-mono text-xs">{c.cpf}</td>
                       <td className="px-4 py-3 text-muted-foreground">{c.crc}</td>
                       <td className="px-4 py-3 text-muted-foreground hidden md:table-cell">
-                        {c.nome_escritorio || <span className="text-gray-300">—</span>}
+                        {c.nome_escritorio || <span className="text-muted-foreground">—</span>}
                       </td>
                       <td className="px-4 py-3 text-muted-foreground hidden lg:table-cell">
                         {c.email || c.telefone ? (
@@ -233,7 +233,7 @@ export default function Contadores() {
                             {c.email && <div className="text-xs">{c.email}</div>}
                             {c.telefone && <div className="text-xs text-muted-foreground">{c.telefone}</div>}
                           </div>
-                        ) : <span className="text-gray-300">—</span>}
+                        ) : <span className="text-muted-foreground">—</span>}
                       </td>
                       <td className="px-4 py-3 text-center">
                         {c.ativo ? (

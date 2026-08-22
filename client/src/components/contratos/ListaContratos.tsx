@@ -79,7 +79,7 @@ const tipoLabelFull: Record<string, string> = {
 
 const tipoCor: Record<string, string> = {
   assessoria:          'bg-primary/20 text-primary',
-  assessoria_pf:       'bg-sky-100 text-sky-800',
+  assessoria_pf:       'bg-primary/20 text-primary',
   limpa_nome:          'bg-primary/20 text-primary',
   limpa_bacen:         'bg-primary/20 text-primary',
   rating:              'bg-warning/20 text-warning',
@@ -447,7 +447,7 @@ export function ListaContratos({ contratos, onStatusChange, onDelete, userCargo,
                       )}
                       <button
                         onClick={() => handleUploadAssinado(c.id)}
-                        className="inline-flex items-center justify-center w-7 h-7 rounded-md border border-primary/20 bg-card hover:bg-primary/10 text-purple-600"
+                        className="inline-flex items-center justify-center w-7 h-7 rounded-md border border-primary/20 bg-card hover:bg-primary/10 text-primary"
                         title="Anexar contrato assinado"
                       >
                         <Upload className="w-3.5 h-3.5" />

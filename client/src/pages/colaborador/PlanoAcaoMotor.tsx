@@ -257,7 +257,7 @@ export default function PlanoAcaoMotor({ empresaId, onNavegar }: Props) {
   // ── Estado inicial ──
   if (!data && !loading) {
     return (
-      <div className="rounded-2xl border border-border bg-gradient-to-br from-slate-50 to-amber-50 p-6">
+      <div className="rounded-2xl border border-border bg-gradient-to-br from-muted to-warning/10 p-6">
         <div className="flex items-start gap-4">
           <div className="w-12 h-12 rounded-2xl bg-warning/100 flex items-center justify-center shrink-0">
             <ClipboardList className="w-6 h-6 text-primary-foreground" />
@@ -285,7 +285,7 @@ export default function PlanoAcaoMotor({ empresaId, onNavegar }: Props) {
   if (loading) {
     return (
       <div className="rounded-2xl border border-border bg-muted p-6 flex items-center gap-3 text-foreground">
-        <RefreshCw className="w-5 h-5 animate-spin text-amber-500" />
+        <RefreshCw className="w-5 h-5 animate-spin text-warning" />
         <span className="text-sm font-semibold">Calculando pendências e plano de ação...</span>
       </div>
     );
@@ -376,7 +376,7 @@ export default function PlanoAcaoMotor({ empresaId, onNavegar }: Props) {
           </div>
           <div className="h-2 rounded-full bg-muted overflow-hidden">
             <div
-              className={`h-full rounded-full transition-all duration-500 ${data.score_completude >= 70 ? "bg-success" : data.score_completude >= 50 ? "bg-amber-400" : data.score_completude >= 30 ? "bg-orange-400" : "bg-destructive"}`}
+              className={`h-full rounded-full transition-all duration-500 ${data.score_completude >= 70 ? "bg-success" : data.score_completude >= 50 ? "bg-warning" : data.score_completude >= 30 ? "bg-warning" : "bg-destructive"}`}
               style={{ width: `${data.score_completude}%` }}
             />
           </div>
@@ -400,7 +400,7 @@ export default function PlanoAcaoMotor({ empresaId, onNavegar }: Props) {
                 <button
                   key={v}
                   onClick={() => setVisao(v)}
-                  className={`px-4 py-2 text-xs font-semibold border-b-2 transition-colors ${visao === v ? "border-amber-500 text-warning" : "border-transparent text-muted-foreground hover:text-foreground"}`}
+                  className={`px-4 py-2 text-xs font-semibold border-b-2 transition-colors ${visao === v ? "border-warning/30 text-warning" : "border-transparent text-muted-foreground hover:text-foreground"}`}
                 >
                   {v === "kanban" ? "Por Prioridade" : "Plano de Ação"}
                 </button>

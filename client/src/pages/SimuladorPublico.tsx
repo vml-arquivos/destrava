@@ -353,16 +353,16 @@ export default function SimuladorPublico() {
       {/* Hero */}
       <section className="bg-gradient-to-br from-[#0033A0] to-[#001f6b] text-primary-foreground py-12 px-4">
         <div className="max-w-3xl mx-auto text-center">
-          <Badge className="bg-yellow-400 text-yellow-900 mb-4 text-sm font-semibold">
+          <Badge className="bg-warning text-warning mb-4 text-sm font-semibold">
             Simulação 100% Gratuita
           </Badge>
           <h1 className="text-3xl md:text-4xl font-bold mb-3">
             Monte um Cenário de Crédito em Poucos Passos
           </h1>
-          <p className="text-blue-100 text-lg mb-6">
+          <p className="text-primary text-lg mb-6">
             Ajuste valor, prazo e taxa para estimar a parcela. O resultado é educativo e um especialista pode orientar os próximos passos.
           </p>
-          <div className="flex flex-wrap justify-center gap-4 text-sm text-blue-200">
+          <div className="flex flex-wrap justify-center gap-4 text-sm text-primary">
             <span className="flex items-center gap-1">
               <Shield className="w-4 h-4" /> Dados protegidos
             </span>
@@ -393,7 +393,7 @@ export default function SimuladorPublico() {
                   <div
                     className={`w-8 h-8 rounded-full flex items-center justify-center text-sm font-bold border-2 transition-all ${
                       step > s.n
-                        ? "bg-green-500 border-green-500 text-primary-foreground"
+                        ? "bg-success border-success/30 text-primary-foreground"
                         : step === s.n
                           ? "bg-[#0033A0] border-[#0033A0] text-primary-foreground"
                           : "border-input text-muted-foreground"
@@ -409,7 +409,7 @@ export default function SimuladorPublico() {
                 </div>
                 {i < 3 && (
                   <div
-                    className={`w-8 sm:w-16 h-0.5 ${step > s.n ? "bg-green-500" : "bg-border"}`}
+                    className={`w-8 sm:w-16 h-0.5 ${step > s.n ? "bg-success" : "bg-border"}`}
                   />
                 )}
               </div>
@@ -503,7 +503,7 @@ export default function SimuladorPublico() {
                       href={COMPANY.whatsappLinkMsg("Olá! Tenho interesse em trabalhar como parceiro da Destrava Crédito.")}
                       target="_blank"
                       rel="noopener noreferrer"
-                      className="inline-flex items-center justify-center gap-2 border border-emerald-600 text-success hover:bg-success/10 font-semibold px-4 py-3 rounded-xl transition-colors"
+                      className="inline-flex items-center justify-center gap-2 border border-success/30 text-success hover:bg-success/10 font-semibold px-4 py-3 rounded-xl transition-colors"
                     >
                       <Users className="w-5 h-5" /> Quero trabalhar com a Destrava
                     </a>
@@ -598,7 +598,7 @@ export default function SimuladorPublico() {
                       <Input
                         id="nome"
                         placeholder="Seu nome completo"
-                        className={`pl-9 ${errors.nome ? "border-red-400" : ""}`}
+                        className={`pl-9 ${errors.nome ? "border-destructive/30" : ""}`}
                         value={form.nome}
                         onChange={(e) =>
                           setForm({ ...form, nome: e.target.value })
@@ -619,7 +619,7 @@ export default function SimuladorPublico() {
                       <Input
                         id="telefone"
                         placeholder="(61) 9 9999-9999"
-                        className={`pl-9 ${errors.telefone ? "border-red-400" : ""}`}
+                        className={`pl-9 ${errors.telefone ? "border-destructive/30" : ""}`}
                         value={form.telefone}
                         onChange={(e) =>
                           setForm({
@@ -814,7 +814,7 @@ export default function SimuladorPublico() {
                         {produtoSelecionado.nome}
                       </p>
                     </div>
-                    <Badge className="bg-green-100 text-green-700 text-xs">
+                    <Badge className="bg-success/20 text-success text-xs">
                       {tipoPessoa === "empresa" ? "Empresarial" : "Pessoal"}
                     </Badge>
                   </div>
@@ -923,7 +923,7 @@ export default function SimuladorPublico() {
                     </p>
                   </div>
                   <div className="text-center p-4 bg-warning/10 rounded-xl">
-                    <TrendingUp className="w-6 h-6 text-orange-500 mx-auto mb-1" />
+                    <TrendingUp className="w-6 h-6 text-warning mx-auto mb-1" />
                     <p className="text-xs text-muted-foreground mb-1">Total de Juros</p>
                     <p className="text-xl font-bold text-warning">
                       {formatCurrency(totalJuros)}
@@ -995,9 +995,9 @@ export default function SimuladorPublico() {
                     <p className="text-xs text-muted-foreground">Prazo</p>
                     <p className="font-bold text-[#0033A0] text-sm mt-1">{prazo} meses</p>
                   </div>
-                  <div className="text-center p-3 bg-green-50 rounded-xl">
+                  <div className="text-center p-3 bg-success/10 rounded-xl">
                     <p className="text-xs text-muted-foreground">Parcela Est.</p>
-                    <p className="font-bold text-green-600 text-sm mt-1">{formatCurrency(parcela)}</p>
+                    <p className="font-bold text-success text-sm mt-1">{formatCurrency(parcela)}</p>
                   </div>
                 </div>
 
@@ -1032,8 +1032,8 @@ export default function SimuladorPublico() {
             <div className="space-y-4">
               {/* Confirmação */}
               <div className="bg-card rounded-2xl shadow-sm border p-6 text-center">
-                <div className="w-16 h-16 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-4">
-                  <CheckCircle2 className="w-8 h-8 text-green-500" />
+                <div className="w-16 h-16 bg-success/20 rounded-full flex items-center justify-center mx-auto mb-4">
+                  <CheckCircle2 className="w-8 h-8 text-success" />
                 </div>
                 <h2 className="text-2xl font-bold text-foreground mb-2">
                   Simulação Recebida!
@@ -1082,22 +1082,22 @@ export default function SimuladorPublico() {
                     <p className="text-xs text-muted-foreground">Prazo</p>
                     <p className="font-bold text-[#0033A0] text-sm mt-1">{prazo} meses</p>
                   </div>
-                  <div className="text-center p-3 bg-green-50 rounded-xl">
+                  <div className="text-center p-3 bg-success/10 rounded-xl">
                     <p className="text-xs text-muted-foreground">Parcela Est.</p>
-                    <p className="font-bold text-green-600 text-sm mt-1">{formatCurrency(parcela)}</p>
+                    <p className="font-bold text-success text-sm mt-1">{formatCurrency(parcela)}</p>
                   </div>
                 </div>
 
                 {/* Responsabilidade pela análise */}
                 <div className="flex items-center gap-3 bg-muted rounded-xl p-3 mb-4">
-                  <Zap className="w-4 h-4 text-yellow-500 flex-shrink-0" />
+                  <Zap className="w-4 h-4 text-warning flex-shrink-0" />
                   <p className="text-sm text-foreground">
                     <strong>Análise e prazo:</strong>{" "}
                     definidos pela instituição financeira conforme modalidade, documentos, garantias e perfil.
                   </p>
                 </div>
 
-                <div className="bg-yellow-50 border border-yellow-200 rounded-xl p-4 text-sm text-yellow-800 mb-4">
+                <div className="bg-warning/10 border border-warning/20 rounded-xl p-4 text-sm text-warning mb-4">
                   <strong>Aviso de Simulação:</strong> Os valores apresentados são estimativas para fins de simulação e podem variar conforme análise de crédito, documentação, perfil do cliente, garantia oferecida e condições vigentes da instituição financeira no momento da contratação. A Destrava Crédito atua como assessoria e não realiza aprovação de crédito. Sujeito à análise e aprovação da instituição financeira.
                 </div>
 
@@ -1107,7 +1107,7 @@ export default function SimuladorPublico() {
                     href={`https://wa.me/556135268355?text=Ol%C3%A1!%20Fiz%20uma%20simula%C3%A7%C3%A3o%20no%20site%20para%20${encodeURIComponent(produtoSelecionado.nome)}%20no%20valor%20de%20${encodeURIComponent(formatCurrency(valor))}%20em%20${prazo}%20meses.%20Meu%20nome%20%C3%A9%20${encodeURIComponent(form.nome)}.%20Gostaria%20de%20avan%C3%A7ar%20com%20a%20proposta.`}
                     target="_blank"
                     rel="noopener noreferrer"
-                    className="flex items-center justify-center gap-2 bg-green-500 hover:bg-green-600 text-primary-foreground font-semibold py-3 px-4 rounded-xl transition-colors"
+                    className="flex items-center justify-center gap-2 bg-success hover:bg-success text-primary-foreground font-semibold py-3 px-4 rounded-xl transition-colors"
                   >
                     <MessageCircle className="w-5 h-5" />
                     Quero Avançar — Falar Agora

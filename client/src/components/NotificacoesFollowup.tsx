@@ -113,7 +113,7 @@ export default function NotificacoesFollowup() {
 
             {!carregando && total === 0 && (
               <div className="flex flex-col items-center justify-center py-8 text-muted-foreground">
-                <CheckCircle2 className="h-8 w-8 mb-2 text-green-500" />
+                <CheckCircle2 className="h-8 w-8 mb-2 text-success" />
                 <p className="text-sm font-medium">Tudo em dia!</p>
                 <p className="text-xs">Nenhum follow-up pendente.</p>
               </div>
@@ -158,7 +158,7 @@ export default function NotificacoesFollowup() {
             {hoje.length > 0 && (
               <div>
                 <div className="flex items-center gap-1.5 px-4 py-2 bg-warning/10 border-b">
-                  <Clock className="h-3.5 w-3.5 text-amber-500" />
+                  <Clock className="h-3.5 w-3.5 text-warning" />
                   <span className="text-xs font-semibold text-warning">
                     Para hoje ({hoje.length})
                   </span>
@@ -168,7 +168,7 @@ export default function NotificacoesFollowup() {
                       className="flex items-start gap-3 px-4 py-3 hover:bg-warning/10 border-b border-border cursor-pointer transition-colors"
                       onClick={() => setAberto(false)}
                     >
-                      <Clock className="h-4 w-4 text-amber-500 mt-0.5 flex-shrink-0" />
+                      <Clock className="h-4 w-4 text-warning mt-0.5 flex-shrink-0" />
                       <div className="flex-1 min-w-0">
                         <p className="text-sm font-medium text-foreground truncate">
                           {lead.nome_completo || lead.nome || "Lead sem nome"}

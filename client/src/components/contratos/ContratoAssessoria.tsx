@@ -391,13 +391,13 @@ export function ContratoAssessoria({ dados, documentosAnexos = [], onClose, onGe
       {/* ── BARRA SUPERIOR ────────────────────────────────────── print:hidden */}
       <div className="flex items-center justify-between px-5 py-2.5 bg-[#1B3A8C] text-primary-foreground shadow-lg flex-shrink-0 print:hidden">
         <div className="flex items-center gap-3">
-          <FileDown className="w-5 h-5 text-amber-400 flex-shrink-0" />
+          <FileDown className="w-5 h-5 text-warning flex-shrink-0" />
           <div>
             <p className="font-bold text-sm leading-tight">Contrato de Assessoria Empresarial</p>
-            <p className="text-xs text-blue-200">
+            <p className="text-xs text-primary">
               Textos sublinhados são editáveis · Configure valores no painel
               {documentosAnexos.length > 0 && (
-                <span className="ml-2 bg-amber-400 text-foreground font-semibold px-2 py-0.5 rounded-full text-[10px]">
+                <span className="ml-2 bg-warning text-foreground font-semibold px-2 py-0.5 rounded-full text-[10px]">
                   {documentosAnexos.length} doc{documentosAnexos.length !== 1 ? 's' : ''} anexo{documentosAnexos.length !== 1 ? 's' : ''}
                 </span>
               )}
@@ -415,7 +415,7 @@ export function ContratoAssessoria({ dados, documentosAnexos = [], onClose, onGe
           <button
             onClick={() => onGerarPdf(d, documentosAnexos)}
             disabled={loadingPdf}
-            className="flex items-center gap-2 px-4 py-1.5 bg-amber-400 hover:bg-warning/100 text-foreground text-sm font-bold rounded-lg disabled:opacity-50 transition-colors"
+            className="flex items-center gap-2 px-4 py-1.5 bg-warning hover:bg-warning/100 text-foreground text-sm font-bold rounded-lg disabled:opacity-50 transition-colors"
           >
             {loadingPdf ? (
               <><Loader2 className="w-4 h-4 animate-spin" />Gerando PDF...</>
@@ -579,7 +579,7 @@ export function ContratoAssessoria({ dados, documentosAnexos = [], onClose, onGe
                       <li key={doc.id} className="text-[10px] text-warning flex items-center gap-1">
                         <span className="font-semibold">#{i + 1}</span>
                         <span>{doc.descricao || doc.categoria}</span>
-                        <span className="text-amber-500 ml-auto">{doc.tipo === 'pdf' ? 'PDF' : 'IMG'}</span>
+                        <span className="text-warning ml-auto">{doc.tipo === 'pdf' ? 'PDF' : 'IMG'}</span>
                       </li>
                     ))}
                   </ul>

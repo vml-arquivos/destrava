@@ -35,8 +35,8 @@ const RISCO_CONFIG: Record<
   },
   medio: {
     label: "Médio",
-    className: "bg-secondary/30 text-secondary-foreground border-secondary/50",
-    dotClass: "bg-secondary",
+    className: "bg-medium/10 text-medium border-medium/30",
+    dotClass: "bg-medium",
     icon: Info,
   },
   baixo: {
@@ -107,14 +107,14 @@ function scoreToRisco(score: number): RiscoClassificacao {
 
 function scoreColor(score: number): string {
   if (score >= 75) return "text-success";
-  if (score >= 50) return "text-secondary-foreground";
+  if (score >= 50) return "text-medium";
   if (score >= 25) return "text-warning";
   return "text-destructive";
 }
 
 function barColor(score: number): string {
   if (score >= 75) return "bg-success";
-  if (score >= 50) return "bg-secondary";
+  if (score >= 50) return "bg-medium";
   if (score >= 25) return "bg-warning";
   return "bg-destructive";
 }

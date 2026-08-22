@@ -4,9 +4,9 @@ import { TrendingUp, ArrowRight } from "lucide-react";
 
 export default function ScoreBanner() {
   return (
-    <div className="my-12 p-8 rounded-2xl bg-gradient-to-r from-[var(--color-caixa-blue)] to-[var(--color-caixa-blue-dark)] text-white shadow-xl border-2 border-[var(--color-caixa-yellow)] relative overflow-hidden group">
+    <div className="my-12 p-8 rounded-2xl bg-gradient-to-r from-[var(--color-caixa-blue)] to-[var(--color-caixa-blue-dark)] text-primary-foreground shadow-xl border-2 border-[var(--color-caixa-yellow)] relative overflow-hidden group">
       {/* Background Pattern */}
-      <div className="absolute top-0 right-0 w-64 h-64 bg-white/5 rounded-full -mr-32 -mt-32 blur-3xl group-hover:bg-white/10 transition-colors duration-500" />
+      <div className="absolute top-0 right-0 w-64 h-64 bg-card/5 rounded-full -mr-32 -mt-32 blur-3xl group-hover:bg-card/10 transition-colors duration-500" />
       <div className="absolute bottom-0 left-0 w-48 h-48 bg-[var(--color-caixa-yellow)]/5 rounded-full -ml-24 -mb-24 blur-2xl" />
 
       <div className="relative z-10 flex flex-col md:flex-row items-center justify-between gap-8">
@@ -18,7 +18,7 @@ export default function ScoreBanner() {
           <h3 className="text-2xl md:text-3xl font-bold mb-3 leading-tight">
             Faça um diagnóstico educativo em 2 minutos
           </h3>
-          <p className="text-white/80 text-lg mb-0">
+          <p className="text-primary-foreground/80 text-lg mb-0">
             A ferramenta gera um índice interno a partir das suas respostas e oferece dicas de organização. Não consulta birôs de crédito.
           </p>
         </div>

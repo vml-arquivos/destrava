@@ -99,7 +99,7 @@ export default function MeuPerfil() {
     <ColaboradorLayout title="Meu Perfil">
       <div className="p-6 space-y-6 max-w-6xl mx-auto">
         <div>
-          <h1 className="text-2xl font-bold text-gray-900">Meu Perfil</h1>
+          <h1 className="text-2xl font-bold text-foreground">Meu Perfil</h1>
           <p className="text-sm text-muted-foreground mt-1">Mantenha seus dados pessoais, endereço, assinatura e senha atualizados.</p>
         </div>
 

@@ -28,7 +28,7 @@ function classesTitulo(secao: DocumentoAnaliseSecao): string {
   if (secao.id === "resumo_alteracao") return "text-primary";
   if (secao.id === "transacoes") return "text-primary";
   if (secao.id === "qsa_nomes") return "text-primary";
-  if (secao.id === "amostra_dados") return "text-sky-800";
+  if (secao.id === "amostra_dados") return "text-primary";
   if (secao.id === "validacoes") return "text-warning";
   if (secao.id === "titular_atual") return "text-primary";
   if (secao.id === "leitura_societaria") return "text-primary";
@@ -52,7 +52,7 @@ function BlocoSecao({ secao, texto }: { secao: DocumentoAnaliseSecao; texto: str
       {!!secao.campos?.length && (
         <div className="mt-1.5 grid gap-1.5 sm:grid-cols-2 lg:grid-cols-4">
           {secao.campos.map((campo, index) => (
-            <div key={`${campo.label}-${index}`} className="rounded-lg border border-border bg-white/80 px-2 py-1.5">
+            <div key={`${campo.label}-${index}`} className="rounded-lg border border-border bg-card/80 px-2 py-1.5">
               <p className="text-[8px] font-black uppercase text-muted-foreground">{campo.label}</p>
               <p className={`mt-0.5 break-words font-semibold text-muted-foreground ${texto}`}>{campo.valor}</p>
             </div>
@@ -94,7 +94,7 @@ export function ResultadoAnaliseDocumento({ resultado, documento, compacto = fal
             type="button"
             onClick={() => setDetalhesAbertos((v) => !v)}
             title="Ver informações técnicas complementares (checklist de validação, texto jurídico completo, evidências)"
-            className="inline-flex items-center gap-1 rounded-full border border-border bg-white px-2 py-1 text-[9px] font-bold text-muted-foreground hover:border-input hover:text-muted-foreground"
+            className="inline-flex items-center gap-1 rounded-full border border-border bg-card px-2 py-1 text-[9px] font-bold text-muted-foreground hover:border-input hover:text-muted-foreground"
           >
             <Info className="h-3 w-3" />
             {detalhesAbertos ? "Ocultar informações técnicas" : "Ver informações técnicas"}

@@ -238,7 +238,7 @@ export default function RelatorioEmpresas() {
     <Layout>
       <div className="w-full space-y-3 p-3 md:p-4 overflow-x-hidden">
         {/* Header */}
-        <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 rounded-xl border border-border bg-white px-4 py-3 shadow-sm">
+        <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 rounded-xl border border-border bg-card px-4 py-3 shadow-sm">
           <div>
             <h1 className="text-lg font-black text-foreground tracking-tight flex items-center gap-2">
               <BarChart3 className="w-5 h-5 text-primary" />
@@ -252,7 +252,7 @@ export default function RelatorioEmpresas() {
             <button
               onClick={carregarEmpresas}
               disabled={loading}
-              className="inline-flex items-center gap-1.5 rounded-xl border border-border bg-white px-3 py-2 text-xs font-semibold text-muted-foreground hover:bg-muted transition-colors"
+              className="inline-flex items-center gap-1.5 rounded-xl border border-border bg-card px-3 py-2 text-xs font-semibold text-muted-foreground hover:bg-muted transition-colors"
             >
               <RefreshCw className={`w-3.5 h-3.5 ${loading ? "animate-spin" : ""}`} />
               Atualizar
@@ -260,7 +260,7 @@ export default function RelatorioEmpresas() {
             <button
               onClick={exportarCSV}
               disabled={exportando || loading}
-              className="inline-flex items-center gap-1.5 rounded-xl bg-primary px-3 py-2 text-xs font-bold text-white hover:bg-primary/90 transition-colors shadow-sm shadow-blue-200 disabled:opacity-60"
+              className="inline-flex items-center gap-1.5 rounded-xl bg-primary px-3 py-2 text-xs font-bold text-primary-foreground hover:bg-primary/90 transition-colors shadow-sm shadow-blue-200 disabled:opacity-60"
             >
               {exportando ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <FileDown className="w-3.5 h-3.5" />}
               Exportar CSV
@@ -278,7 +278,7 @@ export default function RelatorioEmpresas() {
             { label: "Sincronizadas", value: resumo.sincronizadas, icon: TrendingUp, color: "text-primary", bg: "bg-primary/10", border: "border-primary/20" },
           ].map(({ label, value, icon: Icon, color, bg, border }) => (
             <div key={label} className={`rounded-xl border ${border} ${bg} px-3 py-2.5 flex items-center gap-2.5`}>
-              <div className={`w-7 h-7 rounded-lg bg-white flex items-center justify-center shrink-0 shadow-sm`}>
+              <div className={`w-7 h-7 rounded-lg bg-card flex items-center justify-center shrink-0 shadow-sm`}>
                 <Icon className={`w-3.5 h-3.5 ${color}`} />
               </div>
               <div>
@@ -290,19 +290,19 @@ export default function RelatorioEmpresas() {
         </div>
 
         {/* Filtros */}
-        <div className="rounded-xl border border-border bg-white px-3 py-2.5">
+        <div className="rounded-xl border border-border bg-card px-3 py-2.5">
           <div className="flex flex-wrap gap-2 items-center">
             <div className="relative">
               <Search className="w-3.5 h-3.5 absolute left-2.5 top-1/2 -translate-y-1/2 text-muted-foreground" />
               <input
-                className="h-8 rounded-lg border border-border pl-8 pr-3 text-xs bg-white focus:outline-none focus:ring-2 focus:ring-primary w-full sm:w-52"
+                className="h-8 rounded-lg border border-border pl-8 pr-3 text-xs bg-card focus:outline-none focus:ring-2 focus:ring-primary w-full sm:w-52"
                 placeholder="Buscar por nome ou CNPJ..."
                 value={busca}
                 onChange={(e) => setBusca(e.target.value)}
               />
             </div>
             <select
-              className="h-8 rounded-lg border border-border px-2.5 text-xs bg-white focus:outline-none focus:ring-2 focus:ring-primary"
+              className="h-8 rounded-lg border border-border px-2.5 text-xs bg-card focus:outline-none focus:ring-2 focus:ring-primary"
               value={filtroStatus}
               onChange={(e) => setFiltroStatus(e.target.value)}
             >
@@ -311,7 +311,7 @@ export default function RelatorioEmpresas() {
               <option value="inativa">Inativa/Baixada</option>
             </select>
             <select
-              className="h-8 rounded-lg border border-border px-2.5 text-xs bg-white focus:outline-none focus:ring-2 focus:ring-primary"
+              className="h-8 rounded-lg border border-border px-2.5 text-xs bg-card focus:outline-none focus:ring-2 focus:ring-primary"
               value={filtroPorte}
               onChange={(e) => setFiltroPorte(e.target.value)}
             >
@@ -323,7 +323,7 @@ export default function RelatorioEmpresas() {
             </select>
             {estados.length > 0 && (
               <select
-                className="h-8 rounded-lg border border-border px-2.5 text-xs bg-white focus:outline-none focus:ring-2 focus:ring-primary"
+                className="h-8 rounded-lg border border-border px-2.5 text-xs bg-card focus:outline-none focus:ring-2 focus:ring-primary"
                 value={filtroEstado}
                 onChange={(e) => setFiltroEstado(e.target.value)}
               >
@@ -336,7 +336,7 @@ export default function RelatorioEmpresas() {
         </div>
 
         {/* Tabela */}
-        <div className="rounded-xl border border-border bg-white shadow-sm overflow-hidden">
+        <div className="rounded-xl border border-border bg-card shadow-sm overflow-hidden">
           <div className="border-b border-border px-4 py-2.5 flex items-center justify-between">
             <p className="text-xs font-bold text-foreground">Lista de Empresas</p>
             <button

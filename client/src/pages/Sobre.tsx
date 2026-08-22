@@ -22,13 +22,13 @@ export default function Sobre() {
       <Header />
 
       {/* Hero */}
-      <section className="bg-gradient-to-br from-primary to-[var(--color-caixa-blue-dark)] text-white py-20">
+      <section className="bg-gradient-to-br from-primary to-[var(--color-caixa-blue-dark)] text-primary-foreground py-20">
         <div className="container">
           <div className="max-w-3xl">
             <h1 className="text-4xl md:text-5xl font-bold mb-6">
               Sobre a Destrava Crédito
             </h1>
-            <p className="text-xl text-white/90 leading-relaxed">
+            <p className="text-xl text-primary-foreground/90 leading-relaxed">
               Somos especialistas em assessoria de crédito empresarial, com foco
               em diagnóstico, organização documental e acompanhamento claro para
               micro e pequenas empresas.
@@ -62,13 +62,13 @@ export default function Sobre() {
                 </p>
               </div>
             </div>
-            <div className="rounded-2xl border border-blue-100 bg-gradient-to-br from-[#0033A0] to-[#001f66] p-8 text-white shadow-xl">
-              <p className="text-sm font-bold uppercase tracking-[0.18em] text-amber-300">Como atuamos</p>
+            <div className="rounded-2xl border border-primary/30 bg-gradient-to-br from-[#0033A0] to-[#001f66] p-8 text-primary-foreground shadow-xl">
+              <p className="text-sm font-bold uppercase tracking-[0.18em] text-warning">Como atuamos</p>
               <h2 className="mt-3 text-3xl font-black">Estratégia antes da proposta</h2>
-              <ul className="mt-7 space-y-4 text-white/85">
-                <li className="rounded-xl border border-white/15 bg-white/10 p-4">Diagnóstico do perfil e da finalidade do crédito</li>
-                <li className="rounded-xl border border-white/15 bg-white/10 p-4">Organização documental e financeira</li>
-                <li className="rounded-xl border border-white/15 bg-white/10 p-4">Acompanhamento consultivo da operação</li>
+              <ul className="mt-7 space-y-4 text-primary-foreground/85">
+                <li className="rounded-xl border border-white/15 bg-card/10 p-4">Diagnóstico do perfil e da finalidade do crédito</li>
+                <li className="rounded-xl border border-white/15 bg-card/10 p-4">Organização documental e financeira</li>
+                <li className="rounded-xl border border-white/15 bg-card/10 p-4">Acompanhamento consultivo da operação</li>
               </ul>
             </div>
           </div>
@@ -215,12 +215,12 @@ export default function Sobre() {
       </section>
 
       {/* CTA Final */}
-      <section className="py-20 bg-gradient-to-br from-primary to-[var(--color-caixa-blue-dark)] text-white">
+      <section className="py-20 bg-gradient-to-br from-primary to-[var(--color-caixa-blue-dark)] text-primary-foreground">
         <div className="container text-center">
           <h2 className="text-3xl md:text-4xl font-bold mb-6">
             Pronto para destravar o crédito da sua empresa?
           </h2>
-          <p className="text-xl text-white/90 mb-8 max-w-2xl mx-auto">
+          <p className="text-xl text-primary-foreground/90 mb-8 max-w-2xl mx-auto">
             Faça uma simulação gratuita e descubra como podemos ajudar seu
             negócio a crescer.
           </p>

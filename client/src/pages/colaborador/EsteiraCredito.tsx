@@ -100,14 +100,14 @@ function CardEtapa({ etapa, atual, onNavegar }: { etapa: Etapa; atual: boolean; 
   const acoes = safeArr<Acao>(etapa.acoes_recomendadas);
 
   return (
-    <div className={`rounded-xl border-2 overflow-hidden transition-all ${atual ? "border-blue-400 shadow-md" : cfg.border}`}>
+    <div className={`rounded-xl border-2 overflow-hidden transition-all ${atual ? "border-primary/30 shadow-md" : cfg.border}`}>
       {/* Header da etapa */}
       <button
         onClick={() => setExpandido(e => !e)}
         className={`w-full flex items-center gap-3 p-3 text-left transition-colors ${atual ? "bg-primary/10 hover:bg-primary/20" : "bg-card hover:bg-muted"}`}
       >
         {/* Número */}
-        <div className={`w-8 h-8 rounded-full flex items-center justify-center shrink-0 text-xs font-black border-2 ${etapa.status === "concluida" ? "bg-success text-primary-foreground border-emerald-500" : etapa.status === "bloqueada" ? "bg-destructive text-primary-foreground border-red-500" : atual ? "bg-primary text-primary-foreground border-blue-500" : "bg-card text-muted-foreground border-input"}`}>
+        <div className={`w-8 h-8 rounded-full flex items-center justify-center shrink-0 text-xs font-black border-2 ${etapa.status === "concluida" ? "bg-success text-primary-foreground border-success/30" : etapa.status === "bloqueada" ? "bg-destructive text-primary-foreground border-destructive/30" : atual ? "bg-primary text-primary-foreground border-primary" : "bg-card text-muted-foreground border-input"}`}>
           {etapa.status === "concluida" ? <CheckCircle2 className="w-4 h-4" /> : etapa.numero}
         </div>
         {/* Título e status */}
@@ -121,9 +121,9 @@ function CardEtapa({ etapa, atual, onNavegar }: { etapa: Etapa; atual: boolean; 
           </div>
           {/* Barra de progresso */}
           <div className="flex items-center gap-2 mt-1">
-            <div className="flex-1 h-1.5 rounded-full bg-slate-200 overflow-hidden">
+            <div className="flex-1 h-1.5 rounded-full bg-border overflow-hidden">
               <div
-                className={`h-full rounded-full transition-all ${etapa.status === "concluida" ? "bg-success" : etapa.status === "bloqueada" ? "bg-red-400" : "bg-blue-400"}`}
+                className={`h-full rounded-full transition-all ${etapa.status === "concluida" ? "bg-success" : etapa.status === "bloqueada" ? "bg-destructive" : "bg-primary"}`}
                 style={{ width: `${etapa.percentual_conclusao}%` }}
               />
             </div>
@@ -159,7 +159,7 @@ function CardEtapa({ etapa, atual, onNavegar }: { etapa: Etapa; atual: boolean; 
               </p>
               {bloqueios.map(b => (
                 <div key={b.id} className={`flex items-start gap-2 p-2 rounded-lg border ${b.critico ? "bg-destructive/10 border-destructive/20" : "bg-warning/10 border-warning/20"}`}>
-                  <AlertCircle className={`w-3.5 h-3.5 shrink-0 mt-0.5 ${b.critico ? "text-destructive" : "text-amber-500"}`} />
+                  <AlertCircle className={`w-3.5 h-3.5 shrink-0 mt-0.5 ${b.critico ? "text-destructive" : "text-warning"}`} />
                   <div>
                     <p className="text-[11px] font-semibold text-foreground">{b.titulo}</p>
                     <p className="text-[10px] text-muted-foreground">{b.descricao}</p>
@@ -233,7 +233,7 @@ export default function EsteiraCredito({ empresaId, onNavegar }: Props) {
   // ── Estado inicial ──
   if (!data && !loading) {
     return (
-      <div className="rounded-2xl border border-border bg-gradient-to-br from-slate-50 to-violet-50 p-6">
+      <div className="rounded-2xl border border-border bg-gradient-to-br from-muted to-accent/10 p-6">
         <div className="flex items-start gap-4">
           <div className="w-12 h-12 rounded-2xl bg-primary flex items-center justify-center shrink-0">
             <Workflow className="w-6 h-6 text-primary-foreground" />
@@ -261,7 +261,7 @@ export default function EsteiraCredito({ empresaId, onNavegar }: Props) {
   if (loading) {
     return (
       <div className="rounded-2xl border border-border bg-muted p-6 flex items-center gap-3 text-foreground">
-        <RefreshCw className="w-5 h-5 animate-spin text-violet-500" />
+        <RefreshCw className="w-5 h-5 animate-spin text-primary" />
         <span className="text-sm font-semibold">Calculando esteira de crédito e assessoria...</span>
       </div>
     );
@@ -326,7 +326,7 @@ export default function EsteiraCredito({ empresaId, onNavegar }: Props) {
           </div>
           <div className="h-2.5 rounded-full bg-muted overflow-hidden">
             <div
-              className={`h-full rounded-full transition-all duration-700 ${data.progresso_geral >= 80 ? "bg-primary/100" : data.progresso_geral >= 50 ? "bg-primary" : data.progresso_geral >= 30 ? "bg-amber-400" : "bg-red-400"}`}
+              className={`h-full rounded-full transition-all duration-700 ${data.progresso_geral >= 80 ? "bg-primary/100" : data.progresso_geral >= 50 ? "bg-primary" : data.progresso_geral >= 30 ? "bg-warning" : "bg-destructive"}`}
               style={{ width: `${data.progresso_geral}%` }}
             />
           </div>
@@ -355,7 +355,7 @@ export default function EsteiraCredito({ empresaId, onNavegar }: Props) {
             <button
               key={v}
               onClick={() => setVisao(v)}
-              className={`px-4 py-2 text-xs font-semibold border-b-2 transition-colors ${visao === v ? "border-violet-500 text-primary" : "border-transparent text-muted-foreground hover:text-foreground"}`}
+              className={`px-4 py-2 text-xs font-semibold border-b-2 transition-colors ${visao === v ? "border-primary text-primary" : "border-transparent text-muted-foreground hover:text-foreground"}`}
             >
               {v === "timeline" ? "Jornada" : "Histórico"}
             </button>

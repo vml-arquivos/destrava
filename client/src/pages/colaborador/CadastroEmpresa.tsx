@@ -130,7 +130,7 @@ function formatFileSize(bytes: number): string {
 
 // ─── Sub-componentes ──────────────────────────────────────────────────────────
 const inputClass =
-  'h-10 px-3 rounded-xl border border-border bg-white text-sm text-foreground ' +
+  'h-10 px-3 rounded-xl border border-border bg-card text-sm text-foreground ' +
   'focus:outline-none focus:border-primary focus:ring-2 focus:ring-primary/20 ' +
   'transition-all placeholder:text-muted-foreground shadow-sm';
 
@@ -152,9 +152,9 @@ function StepIndicator({ step, current }: { step: number; current: number }) {
   const active = current === step;
   return (
     <div className={`w-9 h-9 rounded-full flex items-center justify-center text-sm font-bold border-2 transition-all ${
-      done ? 'bg-primary border-primary text-white' :
-      active ? 'bg-white border-primary text-primary' :
-      'bg-white border-border text-muted-foreground'
+      done ? 'bg-primary border-primary text-primary-foreground' :
+      active ? 'bg-card border-primary text-primary' :
+      'bg-card border-border text-muted-foreground'
     }`}>
       {done ? <Check className="w-4 h-4" /> : step}
     </div>
@@ -174,15 +174,15 @@ function SocioCard({ socio, selected, onToggle }: {
       className={`relative flex items-start gap-3 p-4 rounded-xl border-2 cursor-pointer transition-all select-none ${
         selected
           ? 'border-primary/70 bg-primary/10 shadow-sm'
-          : 'border-border bg-white hover:border-primary/20 hover:bg-muted'
+          : 'border-border bg-card hover:border-primary/20 hover:bg-muted'
       }`}
     >
       {selected && (
         <div className="absolute top-2 right-2 w-5 h-5 rounded-full bg-primary flex items-center justify-center">
-          <Check className="w-3 h-3 text-white" />
+          <Check className="w-3 h-3 text-primary-foreground" />
         </div>
       )}
-      <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-primary to-primary/90 flex items-center justify-center text-white font-bold text-base shrink-0">
+      <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-primary to-primary/90 flex items-center justify-center text-primary-foreground font-bold text-base shrink-0">
         {initial}
       </div>
       <div className="flex-1 min-w-0">
@@ -484,7 +484,7 @@ export default function CadastroEmpresa() {
         <div className="flex gap-3 justify-center">
           <button
             onClick={handleReset}
-            className="px-5 py-2.5 bg-primary text-white rounded-xl text-sm font-semibold hover:bg-primary/90 transition-colors"
+            className="px-5 py-2.5 bg-primary text-primary-foreground rounded-xl text-sm font-semibold hover:bg-primary/90 transition-colors"
           >
             Cadastrar outra empresa
           </button>
@@ -539,7 +539,7 @@ export default function CadastroEmpresa() {
       {step === 1 && (
         <div className="space-y-6">
           {/* CNPJ */}
-          <div className="p-6 rounded-2xl border border-border bg-white shadow-sm space-y-4">
+          <div className="p-6 rounded-2xl border border-border bg-card shadow-sm space-y-4">
             <div className="flex items-center gap-2 mb-2">
               <Search className="w-4 h-4 text-primary" />
               <span className="text-sm font-bold text-muted-foreground">Consulta de CNPJ</span>
@@ -605,7 +605,7 @@ export default function CadastroEmpresa() {
               )}
 
               {/* Dados Fiscais */}
-              <div className="p-6 rounded-2xl border border-border bg-white shadow-sm space-y-4">
+              <div className="p-6 rounded-2xl border border-border bg-card shadow-sm space-y-4">
                 <div className="flex items-center gap-2 mb-1">
                   <Briefcase className="w-4 h-4 text-primary" />
                   <span className="text-sm font-bold text-muted-foreground">Dados Fiscais</span>
@@ -679,7 +679,7 @@ export default function CadastroEmpresa() {
               </div>
 
               {/* Contato */}
-              <div className="p-6 rounded-2xl border border-border bg-white shadow-sm space-y-4">
+              <div className="p-6 rounded-2xl border border-border bg-card shadow-sm space-y-4">
                 <div className="flex items-center gap-2 mb-1">
                   <Phone className="w-4 h-4 text-primary" />
                   <span className="text-sm font-bold text-muted-foreground">Contato</span>
@@ -698,7 +698,7 @@ export default function CadastroEmpresa() {
               </div>
 
               {/* Endereço */}
-              <div className="p-6 rounded-2xl border border-border bg-white shadow-sm space-y-4">
+              <div className="p-6 rounded-2xl border border-border bg-card shadow-sm space-y-4">
                 <div className="flex items-center gap-2 mb-1">
                   <MapPin className="w-4 h-4 text-primary" />
                   <span className="text-sm font-bold text-muted-foreground">Endereço</span>
@@ -742,7 +742,7 @@ export default function CadastroEmpresa() {
               </div>
 
               {/* Responsável */}
-              <div className="p-6 rounded-2xl border border-border bg-white shadow-sm space-y-4">
+              <div className="p-6 rounded-2xl border border-border bg-card shadow-sm space-y-4">
                 <div className="flex items-center gap-2 mb-1">
                   <User className="w-4 h-4 text-primary" />
                   <span className="text-sm font-bold text-muted-foreground">Responsável Legal</span>
@@ -780,7 +780,7 @@ export default function CadastroEmpresa() {
             <button
               onClick={goToStep2}
               disabled={cnpjStatus !== 'found' && !manualMode}
-              className="flex items-center gap-2 px-6 py-2.5 bg-primary text-white rounded-xl text-sm font-semibold hover:bg-primary/90 disabled:opacity-40 disabled:cursor-not-allowed transition-colors shadow-sm"
+              className="flex items-center gap-2 px-6 py-2.5 bg-primary text-primary-foreground rounded-xl text-sm font-semibold hover:bg-primary/90 disabled:opacity-40 disabled:cursor-not-allowed transition-colors shadow-sm"
             >
               Próximo: Sócios
               <ChevronRight className="w-4 h-4" />
@@ -792,7 +792,7 @@ export default function CadastroEmpresa() {
       {/* ─── PASSO 2: Sócios (QSA) ──────────────────────────────────────────── */}
       {step === 2 && (
         <div className="space-y-6">
-          <div className="p-6 rounded-2xl border border-border bg-white shadow-sm">
+          <div className="p-6 rounded-2xl border border-border bg-card shadow-sm">
             <div className="flex items-center justify-between mb-4">
               <div>
                 <h3 className="text-sm font-bold text-foreground">Quadro de Sócios e Administradores</h3>
@@ -857,7 +857,7 @@ export default function CadastroEmpresa() {
             </button>
             <button
               onClick={goToStep3}
-              className="flex items-center gap-2 px-6 py-2.5 bg-primary text-white rounded-xl text-sm font-semibold hover:bg-primary/90 transition-colors shadow-sm"
+              className="flex items-center gap-2 px-6 py-2.5 bg-primary text-primary-foreground rounded-xl text-sm font-semibold hover:bg-primary/90 transition-colors shadow-sm"
             >
               Próximo: Documentos
               <ChevronRight className="w-4 h-4" />
@@ -869,7 +869,7 @@ export default function CadastroEmpresa() {
       {/* ─── PASSO 3: Upload de Documentos ──────────────────────────────────── */}
       {step === 3 && (
         <div className="space-y-6">
-          <div className="p-6 rounded-2xl border border-border bg-white shadow-sm space-y-5">
+          <div className="p-6 rounded-2xl border border-border bg-card shadow-sm space-y-5">
             <div>
               <h3 className="text-sm font-bold text-foreground">Upload de Documentos</h3>
               <p className="text-xs text-muted-foreground mt-0.5">
@@ -963,7 +963,7 @@ export default function CadastroEmpresa() {
             <button
               onClick={handleSalvar}
               disabled={saving}
-              className="flex items-center gap-2 px-6 py-2.5 bg-success text-white rounded-xl text-sm font-semibold hover:bg-success/90 disabled:opacity-60 transition-colors shadow-sm"
+              className="flex items-center gap-2 px-6 py-2.5 bg-success text-primary-foreground rounded-xl text-sm font-semibold hover:bg-success/90 disabled:opacity-60 transition-colors shadow-sm"
             >
               {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : <CheckCircle className="w-4 h-4" />}
               {saving ? 'Salvando...' : 'Concluir Cadastro'}

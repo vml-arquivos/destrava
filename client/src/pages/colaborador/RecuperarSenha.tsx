@@ -34,24 +34,24 @@ export default function RecuperarSenha() {
   return (
     <div className="min-h-screen flex flex-col bg-gradient-to-br from-[#001f6b] via-[#002d8a] to-[#003db5]">
       <header className="p-6">
-        <a href="/" className="flex items-center gap-2 text-white/80 hover:text-white transition-colors w-fit">
+        <a href="/" className="flex items-center gap-2 text-primary-foreground/80 hover:text-primary-foreground transition-colors w-fit">
           <img src="/destrava-logo.svg" alt="Destrava Crédito" className="h-8 brightness-0 invert" />
         </a>
       </header>
       <div className="flex-1 flex items-center justify-center px-4 pb-12">
         <div className="w-full max-w-md">
           <div className="flex justify-center mb-6">
-            <div className="inline-flex items-center gap-2 bg-white/10 border border-white/20 rounded-full px-4 py-1.5 text-white text-sm">
-              <Shield className="h-4 w-4 text-yellow-400" />
+            <div className="inline-flex items-center gap-2 bg-card/10 border border-white/20 rounded-full px-4 py-1.5 text-primary-foreground text-sm">
+              <Shield className="h-4 w-4 text-warning" />
               <span>Recuperação de acesso</span>
             </div>
           </div>
-          <div className="bg-white rounded-2xl shadow-2xl p-8">
+          <div className="bg-card rounded-2xl shadow-2xl p-8">
             <div className="text-center mb-8">
               <div className="inline-flex items-center justify-center w-16 h-16 rounded-full bg-primary/10 mb-4">
                 <Lock className="h-8 w-8 text-primary" />
               </div>
-              <h1 className="text-2xl font-bold text-gray-900">Esqueci minha senha</h1>
+              <h1 className="text-2xl font-bold text-foreground">Esqueci minha senha</h1>
               <p className="text-muted-foreground text-sm mt-1">Informe seu e-mail corporativo para solicitar a redefinição.</p>
             </div>
             {(erro || mensagem) && (

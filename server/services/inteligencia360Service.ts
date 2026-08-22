@@ -127,6 +127,8 @@ export interface Inteligencia360Result {
   pendencias_cadastrais: string[];
   pontos_atencao: string[];
   consistencia_documental_avancada: ConsistenciaDocumentalAvancada360;
+  // Indica falha real ao consultar o armazenamento das análises; tabela ausente não é falha.
+  falha_consulta_documental: boolean;
 
   // Status de aptidão consolidado: rótulo direto, pensado para exibição na
   // tela e para decisão rápida antes de montar proposta de crédito. Deriva
@@ -372,7 +374,20 @@ function recomendacoesConsistenciaDocumental(consistencia: ConsistenciaDocumenta
   return recomendacoes;
 }
 
-export async function buscarAnalisesDocumentaisAvancadas(empresaId: string, db: Queryable360): Promise<any[]> {
+export interface AnalisesDocumentaisAvancadasResult {
+  analises: any[];
+  falhaConsulta: boolean;
+}
+
+function eTabelaDocumentalAusente(error: unknown): boolean {
+  const candidate = error as { code?: string; message?: string } | null;
+  return candidate?.code === "42P01" || /relation .* does not exist/i.test(String(candidate?.message || error || ""));
+}
+
+export async function buscarAnalisesDocumentaisAvancadas(
+  empresaId: string,
+  db: Queryable360,
+): Promise<AnalisesDocumentaisAvancadasResult> {
   try {
     const { rows } = await db.query(
       `SELECT DISTINCT ON (dei.prompt_codigo)
@@ -389,10 +404,15 @@ export async function buscarAnalisesDocumentaisAvancadas(empresaId: string, db: 
         ORDER BY dei.prompt_codigo, dei.processado_em DESC NULLS LAST, dei.atualizado_em DESC`,
       [empresaId, ["qsa_extract", "simples_extract", "atos_junta_extract"]],
     );
-    return safeArray<any>(rows);
+    return { analises: safeArray<any>(rows), falhaConsulta: false };
   } catch (error: any) {
-    console.warn("[inteligencia360Service] Análises documentais avançadas indisponíveis; fluxo determinístico preservado:", error?.message || error);
-    return [];
+    if (eTabelaDocumentalAusente(error)) {
+      // Instalações antigas podem não ter a tabela; isso é indisponibilidade esperada,
+      // não uma falha de consulta que deva ser exibida ao operador.
+      return { analises: [], falhaConsulta: false };
+    }
+    console.warn("[inteligencia360Service] Falha real ao consultar análises documentais; fluxo determinístico preservado:", error?.message || error);
+    return { analises: [], falhaConsulta: true };
   }
 }
 
@@ -1098,6 +1118,7 @@ export function calcularInteligencia360(params: {
   eventosRotina?: any[];
   // Resultados persistidos de QSA, Simples e atos da Junta. Opcional para preservar chamadores existentes.
   analisesDocumentais?: any[];
+  falhaConsultaDocumental?: boolean;
   // Última análise Receita + Cartão CNPJ, usada apenas no portão inicial.
   analiseCnpj?: any | null;
 }): Inteligencia360Result {
@@ -1106,6 +1127,7 @@ export function calcularInteligencia360(params: {
   const atualizacoesAcompanhamento = safeArray<any>(params.atualizacoesAcompanhamento);
   const eventosRotina = safeArray<any>(params.eventosRotina);
   const analisesDocumentais = safeArray<any>(params.analisesDocumentais);
+  const falhaConsultaDocumental = params.falhaConsultaDocumental === true;
   const consistencia_documental_avancada = consolidarConsistenciaDocumental(analisesDocumentais);
   const etapa_identidade_documental = consolidarEtapaIdentidadeDocumental({
     empresa,
@@ -1301,6 +1323,7 @@ export function calcularInteligencia360(params: {
     pendencias_cadastrais,
     pontos_atencao,
     consistencia_documental_avancada,
+    falha_consulta_documental: falhaConsultaDocumental,
     status_aptidao,
     motivos_aptidao,
 

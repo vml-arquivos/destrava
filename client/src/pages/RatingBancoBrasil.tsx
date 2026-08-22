@@ -29,24 +29,24 @@ export default function RatingBancoBrasil() {
       {/* HERO */}
       <section className="bg-gradient-to-br from-[#003F7F] via-[#002D5C] to-[#001a4d] text-primary-foreground py-14 md:py-20 relative overflow-hidden">
         <div className="absolute inset-0 opacity-10">
-          <div className="absolute top-0 right-0 w-96 h-96 bg-yellow-400 rounded-full blur-3xl" />
-          <div className="absolute bottom-0 left-0 w-96 h-96 bg-yellow-400 rounded-full blur-3xl" />
+          <div className="absolute top-0 right-0 w-96 h-96 bg-warning rounded-full blur-3xl" />
+          <div className="absolute bottom-0 left-0 w-96 h-96 bg-warning rounded-full blur-3xl" />
         </div>
         <div className="container px-4 relative z-10">
           <div className="max-w-3xl">
-            <div className="inline-flex items-center gap-2 bg-yellow-400/20 border border-yellow-400/40 rounded-full px-4 py-2 mb-6">
-              <BarChart3 className="h-4 w-4 text-yellow-400" />
-              <span className="text-yellow-300 text-sm font-semibold">Banco do Brasil</span>
+            <div className="inline-flex items-center gap-2 bg-warning/20 border border-warning/30/40 rounded-full px-4 py-2 mb-6">
+              <BarChart3 className="h-4 w-4 text-warning" />
+              <span className="text-warning text-sm font-semibold">Banco do Brasil</span>
             </div>
             <h1 className="text-4xl md:text-5xl lg:text-6xl font-bold mb-6 leading-tight">
               Preparação para Análise<br />
-              <span className="text-yellow-400">no Banco do Brasil</span>
+              <span className="text-warning">no Banco do Brasil</span>
             </h1>
             <p className="text-lg md:text-xl text-primary-foreground/90 mb-8 leading-relaxed">
               Organize cadastro, documentos e informações financeiras antes da proposta. A metodologia, a classificação interna e a decisão são exclusivas do banco.
             </p>
             <div className="flex flex-col sm:flex-row gap-4">
-              <Button asChild size="lg" className="bg-yellow-400 hover:bg-yellow-500 text-foreground font-bold px-8">
+              <Button asChild size="lg" className="bg-warning hover:bg-warning text-foreground font-bold px-8">
                 <Link href="/simular">
                   Solicitar Diagnóstico
                   <ArrowRight className="ml-2 h-5 w-5" />
@@ -81,7 +81,7 @@ export default function RatingBancoBrasil() {
                     "Relacionamento e política vigente do banco",
                   ].map((item) => (
                     <li key={item} className="flex items-start gap-3">
-                      <CheckCircle2 className="h-5 w-5 text-green-500 flex-shrink-0 mt-0.5" />
+                      <CheckCircle2 className="h-5 w-5 text-success flex-shrink-0 mt-0.5" />
                       <span className="text-foreground text-sm">{item}</span>
                     </li>
                   ))}
@@ -92,7 +92,7 @@ export default function RatingBancoBrasil() {
                 <div className="space-y-3">
                   {[
                     { nivel: "1", cor: "bg-primary", desc: "Conferência cadastral" },
-                    { nivel: "2", cor: "bg-sky-600", desc: "Análise documental" },
+                    { nivel: "2", cor: "bg-primary", desc: "Análise documental" },
                     { nivel: "3", cor: "bg-warning/100", desc: "Leitura financeira" },
                     { nivel: "4", cor: "bg-success", desc: "Preparação da solicitação" },
                   ].map((r) => (
@@ -134,14 +134,14 @@ export default function RatingBancoBrasil() {
                 {
                   icon: FileText,
                   title: "Histórico de Crédito",
-                  color: "text-green-600",
-                  bg: "bg-green-50",
+                  color: "text-success",
+                  bg: "bg-success/10",
                   items: ["Pontualidade nos pagamentos", "Histórico de inadimplência", "Relacionamento com bancos", "Tempo de conta ativa", "Uso de limite"],
                 },
                 {
                   icon: Building2,
                   title: "Dados Cadastrais",
-                  color: "text-purple-600",
+                  color: "text-primary",
                   bg: "bg-primary/10",
                   items: ["Tempo de existência da empresa", "Setor de atuação", "Porte da empresa", "Regularidade fiscal", "Situação na Receita Federal"],
                 },
@@ -154,7 +154,7 @@ export default function RatingBancoBrasil() {
                   <ul className="space-y-2">
                     {f.items.map((item) => (
                       <li key={item} className="flex items-center gap-2 text-sm text-muted-foreground">
-                        <div className="w-1.5 h-1.5 rounded-full bg-gray-400 flex-shrink-0" />
+                        <div className="w-1.5 h-1.5 rounded-full bg-muted flex-shrink-0" />
                         {item}
                       </li>
                     ))}
@@ -231,14 +231,14 @@ export default function RatingBancoBrasil() {
                   icon: TrendingUp,
                   title: "Plano de Melhoria",
                   desc: "Desenvolvemos um plano de preparação para apresentar informações mais consistentes à instituição financeira.",
-                  color: "text-green-600",
-                  bg: "bg-green-50",
+                  color: "text-success",
+                  bg: "bg-success/10",
                 },
                 {
                   icon: Clock,
                   title: "Acompanhamento",
                   desc: "Acompanhamos as pendências e ajustamos a estratégia conforme a evolução da empresa e da solicitação.",
-                  color: "text-purple-600",
+                  color: "text-primary",
                   bg: "bg-primary/10",
                 },
               ].map((s) => (
@@ -264,7 +264,7 @@ export default function RatingBancoBrasil() {
               Nossa equipe analisa seu perfil, identifica oportunidades de melhoria e orienta o caminho para melhores condições de crédito.
             </p>
             <div className="flex flex-col sm:flex-row gap-4 justify-center">
-              <Button asChild size="lg" className="bg-yellow-400 hover:bg-yellow-500 text-foreground font-bold px-8">
+              <Button asChild size="lg" className="bg-warning hover:bg-warning text-foreground font-bold px-8">
                 <Link href="/simular">
                   Solicitar Análise de Perfil
                   <ArrowRight className="ml-2 h-5 w-5" />

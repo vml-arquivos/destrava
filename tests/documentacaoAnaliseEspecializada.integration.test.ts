@@ -170,7 +170,7 @@ describe('POST /api/documentacao/ia/documentos/:documentoId/extrair', () => {
     expect(mocks.analisarQSA).not.toHaveBeenCalled();
   });
 
-  it('preserva o fluxo anterior para tipos não especializados', async () => {
+  it('recusa explicitamente tipos não especializados sem registrar pendência', async () => {
     mocks.poolQuery.mockImplementation(async (text: string) => {
       if (text.includes('FROM public.documentos_arquivos')) {
         return { rows: [{ id: 'doc-2', empresa_id: 'empresa-1', entidade_tipo: 'empresa', tipo_documento: 'balanco' }] };
@@ -185,8 +185,8 @@ describe('POST /api/documentacao/ia/documentos/:documentoId/extrair', () => {
       .post('/api/documentacao/ia/documentos/doc-2/extrair')
       .send({ prompt_codigo: 'balanco_extract' });
 
-    expect(response.status).toBe(202);
-    expect(response.body.message).toBe('Processamento registrado como pendente.');
+    expect(response.status).toBe(501);
+    expect(response.body.error).toContain('Processamento assíncrono genérico ainda não implementado');
     expect(mocks.connect).not.toHaveBeenCalled();
     expect(mocks.analisarQSA).not.toHaveBeenCalled();
   });

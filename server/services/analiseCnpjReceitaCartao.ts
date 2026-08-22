@@ -633,7 +633,7 @@ function classificarSituacao(situacao: unknown): { risco: string; alerta?: Alert
   return { risco: 'alto', alerta: { codigo: 'situacao_cadastral_atencao', mensagem: `Situação cadastral requer atenção: ${situacao}.`, severidade: 'alta', recomendacao: 'Validar situação cadastral antes de seguir.' } };
 }
 
-function calcularScore(input: { camposReceita: any; cartao: DocCartao | null; extracao: ExtracaoCartao | null; divergencias: any[]; alertas: AlertaAnalise[]; socios: any[] }) {
+export function calcularScore(input: { camposReceita: any; cartao: DocCartao | null; extracao: ExtracaoCartao | null; divergencias: any[]; alertas: AlertaAnalise[]; socios: any[] }) {
   let score = 100;
   if (!input.camposReceita.cnpj_limpo || input.camposReceita.cnpj_limpo.length !== 14) score -= 25;
   if (!input.camposReceita.nome_empresarial) score -= 10;
@@ -644,7 +644,15 @@ function calcularScore(input: { camposReceita: any; cartao: DocCartao | null; ex
   if (isSituacaoIrregular(input.camposReceita.situacao_cadastral)) score -= 35;
   if ((input.camposReceita.idade_meses ?? 999) < 12) score -= 15;
   if (!input.cartao) score -= 10;
-  if (input.cartao && !input.extracao && !input.cartao.data_emissao_documento) score -= 5;
+  if (input.cartao && !input.extracao && !input.cartao.data_emissao_documento) {
+    score -= 5;
+    input.alertas.push({
+      codigo: 'cartao_cnpj_extracao_falhou',
+      mensagem: 'Não foi possível ler os dados do Cartão CNPJ automaticamente, e não há data de emissão informada manualmente.',
+      severidade: 'media',
+      recomendacao: 'Revisar manualmente o Cartão CNPJ antes de aprovar — a leitura automática falhou e o documento não foi conferido.',
+    });
+  }
   if (input.divergencias.length) score -= Math.min(30, input.divergencias.length * 10);
   if (input.alertas.some((a) => a.severidade === 'critica')) score -= 25;
   if (input.alertas.some((a) => a.codigo === 'cartao_cnpj_vencido')) score -= 10;

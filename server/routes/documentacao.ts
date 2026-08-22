@@ -2919,13 +2919,7 @@ router.post('/ia/documentos/:documentoId/extrair', auth, async (req: Request, re
 
     const configuracao = ANALISE_ESPECIALIZADA_POR_TIPO[String(documento.tipo_documento || '')];
     if (!configuracao) {
-      const { rows } = await pool.query(
-        `INSERT INTO public.documentos_extracoes_ia (arquivo_id, entidade_bloco_id, status, prompt_codigo, prompt_versao, resultado, pendencias)
-         VALUES ($1,$2,'pendente',$3,'1.0.0','{}'::jsonb,'[]'::jsonb)
-         RETURNING *`,
-        [arquivoId, bloco_entidade_id || null, prompt_codigo || null],
-      );
-      res.status(202).json({ message: 'Processamento registrado como pendente.', extracao: rows[0] });
+      res.status(501).json({ error: 'Processamento assíncrono genérico ainda não implementado. Use os endpoints especializados por tipo de documento.' });
       return;
     }
 
@@ -2960,24 +2954,8 @@ router.post('/ia/documentos/:documentoId/extrair', auth, async (req: Request, re
   }
 });
 
-router.post('/ia/empresa/:empresaId/analisar', auth, async (req: Request, res: Response) => {
-  try {
-    await ensureDocumentacaoSchema(pool);
-    const user = (req as any).colaborador || (req as any).user;
-    const dossie = await montarDossieCreditoEmpresa(req.params.empresaId);
-    if (!dossie) { res.status(404).json({ error: 'Empresa não encontrada' }); return; }
-    const { rows } = await pool.query(
-      `INSERT INTO public.documentacao_analises_ia
-        (entidade_tipo, entidade_id, empresa_id, tipo_analise, status, prompt_codigo, prompt_versao, entrada_contexto, resultado, pendencias, criado_por)
-       VALUES ('empresa',$1,$1,'pre_analise_credito','aguardando','analise_consolidada_credito','1.0.0',$2::jsonb,'{}'::jsonb,$3::jsonb,$4)
-       RETURNING *`,
-      [req.params.empresaId, JSON.stringify({ resumo: dossie.resumo, blocos: dossie.blocos.map((b: any) => ({ codigo: b.codigo, status: b.status, pendencias: b.pendencias })) }), JSON.stringify(dossie.pendencias), user?.id || null]
-    );
-    res.status(202).json({ message: 'Parecer registrado como aguardando processamento.', analise: rows[0] });
-  } catch (err: any) {
-    console.error('[POST /api/documentacao/ia/empresa/:empresaId/analisar]', err);
-    res.status(500).json({ error: 'Erro ao registrar parecer' });
-  }
+router.post('/ia/empresa/:empresaId/analisar', auth, async (_req: Request, res: Response) => {
+  res.status(501).json({ error: 'Processamento assíncrono genérico ainda não implementado. Use os endpoints especializados por tipo de documento.' });
 });
 
 router.get('/ia/analises/:analiseId', auth, async (req: Request, res: Response) => {

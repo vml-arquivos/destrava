@@ -34,7 +34,7 @@ const linhasCredito = [
     carencia: "Conforme instituição",
     publico: ["MEI", "ME", "EPP"],
     badge: "Governo Federal",
-    badgeColor: "bg-green-100 text-green-800",
+    badgeColor: "bg-success/20 text-success",
     destaque: true,
     requisitos: [
       "CNPJ ativo há pelo menos 1 ano",
@@ -78,7 +78,7 @@ const linhasCredito = [
     carencia: "Conforme projeto",
     publico: ["Médio Produtor Rural"],
     badge: "Agronegócio",
-    badgeColor: "bg-yellow-100 text-yellow-800",
+    badgeColor: "bg-warning/20 text-warning",
     destaque: false,
     requisitos: [
       "Renda bruta anual entre R$ 500 mil e R$ 2 milhões",
@@ -221,13 +221,13 @@ export default function CreditoEmpresas() {
         </div>
         <div className="container px-4 relative z-10">
           <div className="max-w-3xl">
-            <div className="inline-flex items-center gap-2 bg-yellow-400/20 border border-yellow-400/40 rounded-full px-4 py-2 mb-6">
-              <Building2 className="h-4 w-4 text-yellow-400" />
-              <span className="text-yellow-300 text-sm font-semibold">Crédito Empresarial</span>
+            <div className="inline-flex items-center gap-2 bg-warning/20 border border-warning/30/40 rounded-full px-4 py-2 mb-6">
+              <Building2 className="h-4 w-4 text-warning" />
+              <span className="text-warning text-sm font-semibold">Crédito Empresarial</span>
             </div>
             <h1 className="text-4xl md:text-5xl lg:text-6xl font-bold mb-6 leading-tight">
               Linhas de Crédito<br />
-              <span className="text-yellow-400">para Empresas</span>
+              <span className="text-warning">para Empresas</span>
             </h1>
             <p className="text-lg md:text-xl text-primary-foreground/90 mb-8 leading-relaxed">
               Soluções de crédito para empresas de todos os portes: MEI, ME, EPP, médio e grande porte. PRONAMPE, Giro CAIXA Fácil, PRONAMP, capital de giro e muito mais.
@@ -240,7 +240,7 @@ export default function CreditoEmpresas() {
               ))}
             </div>
             <div className="flex flex-col sm:flex-row gap-4">
-              <Button asChild size="lg" className="bg-yellow-400 hover:bg-yellow-500 text-foreground font-bold px-8">
+              <Button asChild size="lg" className="bg-warning hover:bg-warning text-foreground font-bold px-8">
                 <Link href="/simular">
                   Simular Crédito Agora
                   <ArrowRight className="ml-2 h-5 w-5" />
@@ -282,7 +282,7 @@ export default function CreditoEmpresas() {
               <h3 className="text-xl font-bold text-foreground mb-4">Diagnóstico antes da proposta</h3>
               <ul className="space-y-3 text-sm text-foreground">
                 {["Finalidade e valor realmente necessários", "Capacidade de pagamento e sazonalidade do caixa", "Porte, faturamento e tempo de atividade", "Documentos fiscais, bancários e societários", "Garantias disponíveis e riscos da operação", "CET, prazo e valor total a pagar"].map((item) => (
-                  <li key={item} className="flex gap-2"><CheckCircle2 className="h-5 w-5 text-green-600 flex-shrink-0" />{item}</li>
+                  <li key={item} className="flex gap-2"><CheckCircle2 className="h-5 w-5 text-success flex-shrink-0" />{item}</li>
                 ))}
               </ul>
             </aside>
@@ -478,7 +478,7 @@ export default function CreditoEmpresas() {
               <p className="text-muted-foreground mb-5 leading-relaxed">A lista depende da linha e do porte, mas a preparação costuma envolver:</p>
               <ul className="space-y-3 text-sm text-foreground">
                 {["Contrato social e alterações ou documento equivalente", "Documentos dos sócios e representantes", "Comprovantes de faturamento e declarações fiscais", "Extratos bancários e informações de endividamento", "Balanço, balancete ou demonstrativos compatíveis com o porte", "Orçamentos, projetos e documentos de garantias, quando aplicável"].map((item) => (
-                  <li key={item} className="flex gap-2"><CheckCircle2 className="h-5 w-5 text-green-600 flex-shrink-0" />{item}</li>
+                  <li key={item} className="flex gap-2"><CheckCircle2 className="h-5 w-5 text-success flex-shrink-0" />{item}</li>
                 ))}
               </ul>
             </div>
@@ -536,7 +536,7 @@ export default function CreditoEmpresas() {
                 "Atendimento personalizado para cada porte",
               ].map((item) => (
                 <div key={item} className="flex items-center gap-3 p-4 bg-card rounded-xl shadow-sm">
-                  <CheckCircle2 className="h-5 w-5 text-green-500 flex-shrink-0" />
+                  <CheckCircle2 className="h-5 w-5 text-success flex-shrink-0" />
                   <span className="text-foreground text-sm font-medium">{item}</span>
                 </div>
               ))}
@@ -554,7 +554,7 @@ export default function CreditoEmpresas() {
               Faça uma simulação gratuita e descubra qual linha de crédito é ideal para o seu negócio. Nossa equipe analisa seu perfil e apresenta as melhores opções.
             </p>
             <div className="flex flex-col sm:flex-row gap-4 justify-center">
-              <Button asChild size="lg" className="bg-yellow-400 hover:bg-yellow-500 text-foreground font-bold px-8">
+              <Button asChild size="lg" className="bg-warning hover:bg-warning text-foreground font-bold px-8">
                 <Link href="/simular">
                   Simular Crédito Grátis
                   <ArrowRight className="ml-2 h-5 w-5" />

@@ -298,33 +298,33 @@ export function EditarContratoDialog({ contratoId, aberto, onClose, onSaved }: P
   if (!aberto) return null;
 
   return (
-    <div className="fixed inset-0 z-[100] flex items-center justify-center bg-slate-950/55 p-4" role="dialog" aria-modal="true">
-      <div className="flex max-h-[92vh] w-full max-w-5xl flex-col overflow-hidden rounded-2xl bg-white shadow-2xl">
-        <div className="flex items-start justify-between border-b border-gray-200 px-5 py-4">
+    <div className="fixed inset-0 z-[100] flex items-center justify-center bg-brand-navy/55 p-4" role="dialog" aria-modal="true">
+      <div className="flex max-h-[92vh] w-full max-w-5xl flex-col overflow-hidden rounded-2xl bg-card shadow-2xl">
+        <div className="flex items-start justify-between border-b border-border px-5 py-4">
           <div className="flex items-start gap-3">
-            <div className="rounded-lg bg-blue-50 p-2 text-blue-700">
+            <div className="rounded-lg bg-primary/10 p-2 text-primary">
               <FilePenLine className="h-5 w-5" />
             </div>
             <div>
-              <h2 className="font-semibold text-gray-900">Editar contrato</h2>
-              <p className="mt-0.5 text-xs text-gray-500">
+              <h2 className="font-semibold text-foreground">Editar contrato</h2>
+              <p className="mt-0.5 text-xs text-muted-foreground">
                 {contrato?.protocolo_contrato || contrato?.numero_contrato || contratoId}
                 {contrato?.tipo_contrato ? ` · ${humanizar(contrato.tipo_contrato)}` : ''}
               </p>
             </div>
           </div>
-          <button onClick={onClose} className="rounded-lg p-2 text-gray-400 hover:bg-gray-100 hover:text-gray-700" aria-label="Fechar">
+          <button onClick={onClose} className="rounded-lg p-2 text-muted-foreground hover:bg-muted hover:text-foreground" aria-label="Fechar">
             <X className="h-5 w-5" />
           </button>
         </div>
 
         <div className="overflow-y-auto px-5 py-4">
           {carregando ? (
-            <div className="flex items-center justify-center gap-2 py-16 text-sm text-gray-500">
+            <div className="flex items-center justify-center gap-2 py-16 text-sm text-muted-foreground">
               <Loader2 className="h-4 w-4 animate-spin" /> Carregando dados do contrato...
             </div>
           ) : bloqueado ? (
-            <div className="flex items-start gap-3 rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900">
+            <div className="flex items-start gap-3 rounded-xl border border-warning/20 bg-warning/10 p-4 text-sm text-warning">
               <LockKeyhole className="mt-0.5 h-5 w-5 shrink-0" />
               <div>
                 <div className="font-semibold">Contrato bloqueado para edição</div>
@@ -333,7 +333,7 @@ export function EditarContratoDialog({ contratoId, aberto, onClose, onSaved }: P
             </div>
           ) : (
             <div className="space-y-5">
-              <div className="rounded-xl border border-blue-100 bg-blue-50 px-4 py-3 text-xs text-blue-900">
+              <div className="rounded-xl border border-primary/30 bg-primary/10 px-4 py-3 text-xs text-primary">
                 A edição altera somente os dados do contrato. O modelo, as cláusulas, a identidade visual e a formatação do PDF permanecem os mesmos.
               </div>
 
@@ -343,8 +343,8 @@ export function EditarContratoDialog({ contratoId, aberto, onClose, onSaved }: P
                 if (!campos.length) return null;
 
                 return (
-                  <section key={secao} className="rounded-xl border border-gray-200 p-4">
-                    <h3 className="mb-3 text-sm font-semibold text-gray-800">{ROTULOS_SECOES[secao] || humanizar(secao)}</h3>
+                  <section key={secao} className="rounded-xl border border-border p-4">
+                    <h3 className="mb-3 text-sm font-semibold text-foreground">{ROTULOS_SECOES[secao] || humanizar(secao)}</h3>
                     <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
                       {campos.map(([campo, valor]) => {
                         const path = `${secao}.${campo}`;
@@ -354,26 +354,26 @@ export function EditarContratoDialog({ contratoId, aberto, onClose, onSaved }: P
                           const texto = jsonDrafts[path] ?? JSON.stringify(valor, null, 2);
                           return (
                             <div key={path} className="md:col-span-2">
-                              <label className="mb-1 block text-xs font-medium text-gray-600">{humanizar(campo)}</label>
+                              <label className="mb-1 block text-xs font-medium text-muted-foreground">{humanizar(campo)}</label>
                               <textarea
                                 value={texto}
                                 onChange={e => atualizarJson(secao, campo, e.target.value)}
                                 rows={Math.min(10, Math.max(4, texto.split('\n').length))}
-                                className={`w-full rounded-lg border px-3 py-2 font-mono text-xs outline-none focus:ring-2 ${jsonErrors[path] ? 'border-red-300 focus:ring-red-200' : 'border-gray-300 focus:ring-blue-200'}`}
+                                className={`w-full rounded-lg border px-3 py-2 font-mono text-xs outline-none focus:ring-2 ${jsonErrors[path] ? 'border-destructive/30 focus:ring-red-200' : 'border-input focus:ring-blue-200'}`}
                               />
-                              {jsonErrors[path] && <p className="mt-1 text-xs text-red-600">{jsonErrors[path]}</p>}
+                              {jsonErrors[path] && <p className="mt-1 text-xs text-destructive">{jsonErrors[path]}</p>}
                             </div>
                           );
                         }
 
                         if (typeof valor === 'boolean') {
                           return (
-                            <label key={path} className="flex items-center gap-2 rounded-lg border border-gray-200 px-3 py-2 text-sm text-gray-700">
+                            <label key={path} className="flex items-center gap-2 rounded-lg border border-border px-3 py-2 text-sm text-foreground">
                               <input
                                 type="checkbox"
                                 checked={valor}
                                 onChange={e => atualizarCampo(secao, campo, e.target.checked)}
-                                className="h-4 w-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                                className="h-4 w-4 rounded border-input text-primary focus:ring-blue-500"
                               />
                               {humanizar(campo)}
                             </label>
@@ -384,13 +384,13 @@ export function EditarContratoDialog({ contratoId, aberto, onClose, onSaved }: P
                         const valorExibido = valor == null ? '' : String(valor);
                         return (
                           <div key={path} className={campoLongo(campo, valor) ? 'md:col-span-2' : ''}>
-                            <label className="mb-1 block text-xs font-medium text-gray-600">{humanizar(campo)}</label>
+                            <label className="mb-1 block text-xs font-medium text-muted-foreground">{humanizar(campo)}</label>
                             {campoLongo(campo, valor) ? (
                               <textarea
                                 value={valorExibido}
                                 onChange={e => atualizarCampo(secao, campo, e.target.value)}
                                 rows={3}
-                                className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-blue-200"
+                                className="w-full rounded-lg border border-input px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-blue-200"
                               />
                             ) : (
                               <input
@@ -398,7 +398,7 @@ export function EditarContratoDialog({ contratoId, aberto, onClose, onSaved }: P
                                 step={tipo === 'number' ? '0.01' : undefined}
                                 value={valorExibido}
                                 onChange={e => atualizarCampo(secao, campo, tipo === 'number' ? (e.target.value === '' ? '' : Number(e.target.value)) : e.target.value)}
-                                className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-blue-200"
+                                className="w-full rounded-lg border border-input px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-blue-200"
                               />
                             )}
                           </div>
@@ -412,15 +412,15 @@ export function EditarContratoDialog({ contratoId, aberto, onClose, onSaved }: P
           )}
         </div>
 
-        <div className="flex items-center justify-end gap-2 border-t border-gray-200 bg-gray-50 px-5 py-4">
-          <button onClick={onClose} disabled={salvando} className="rounded-lg border border-gray-300 bg-white px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 disabled:opacity-50">
+        <div className="flex items-center justify-end gap-2 border-t border-border bg-muted px-5 py-4">
+          <button onClick={onClose} disabled={salvando} className="rounded-lg border border-input bg-card px-4 py-2 text-sm text-foreground hover:bg-muted disabled:opacity-50">
             Cancelar
           </button>
           {!bloqueado && !carregando && (
             <button
               onClick={salvar}
               disabled={salvando || Object.keys(jsonErrors).length > 0}
-              className="inline-flex items-center gap-2 rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-50"
+              className="inline-flex items-center gap-2 rounded-lg bg-primary px-4 py-2 text-sm font-medium text-primary-foreground hover:bg-primary disabled:cursor-not-allowed disabled:opacity-50"
             >
               {salvando && <Loader2 className="h-4 w-4 animate-spin" />}
               {salvando ? 'Salvando...' : 'Salvar e atualizar PDF'}

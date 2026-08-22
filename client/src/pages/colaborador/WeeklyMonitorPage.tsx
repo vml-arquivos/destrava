@@ -40,14 +40,14 @@ export default function WeeklyMonitorPage() {
 
         {/* Seletor de empresa */}
         {!carregando && acompanhamentos.length > 1 && (
-          <div className="bg-white rounded-xl border border-gray-200 p-4">
-            <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">
+          <div className="bg-card rounded-xl border border-border p-4">
+            <label className="block text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-2">
               <Building2 className="w-3.5 h-3.5 inline mr-1" />
               Selecionar empresa
             </label>
             <div className="relative">
               <select
-                className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-400 appearance-none pr-8"
+                className="w-full border border-border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-400 appearance-none pr-8"
                 value={selecionado?.id ?? ""}
                 onChange={e => {
                   const found = acompanhamentos.find(a => a.id === e.target.value);
@@ -64,20 +64,20 @@ export default function WeeklyMonitorPage() {
                   </option>
                 ))}
               </select>
-              <ChevronDown className="w-4 h-4 text-gray-400 absolute right-2.5 top-2.5 pointer-events-none" />
+              <ChevronDown className="w-4 h-4 text-muted-foreground absolute right-2.5 top-2.5 pointer-events-none" />
             </div>
           </div>
         )}
 
         {carregando && (
-          <div className="text-center py-12 text-gray-400 text-sm">
+          <div className="text-center py-12 text-muted-foreground text-sm">
             Carregando acompanhamentos...
           </div>
         )}
 
         {/* Dashboard — modo manual se não houver acompanhamento selecionado */}
         {!carregando && (
-          <div className="bg-white rounded-xl border border-gray-200 p-4 sm:p-6">
+          <div className="bg-card rounded-xl border border-border p-4 sm:p-6">
             {selecionado ? (
               <WeeklyMonitorDashboard
                 key={selecionado.id}

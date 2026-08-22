@@ -149,7 +149,7 @@ const STATUS_CONFIG: Record<StatusSemana, {
   },
   critico: {
     label: "Crítico — Risco COAF",
-    bg: "bg-destructive/20", border: "border-red-400", text: "text-destructive",
+    bg: "bg-destructive/20", border: "border-destructive/30", text: "text-destructive",
     icon: AlertTriangle,
   },
 };
@@ -159,8 +159,8 @@ const ALERT_COLORS: Record<NivelAlerta, { bg: string; border: string; text: stri
   amarelo_baixo:  { bg: "bg-warning/10",   border: "border-warning/20",   text: "text-warning",   badge: "bg-warning/20 text-warning"   },
   amarelo_alto:   { bg: "bg-warning/10",  border: "border-warning/20",  text: "text-warning",  badge: "bg-warning/20 text-warning" },
   vermelho_baixo: { bg: "bg-destructive/10",     border: "border-destructive/20",     text: "text-destructive",     badge: "bg-destructive/20 text-destructive"      },
-  vermelho_alto:  { bg: "bg-destructive/10",     border: "border-destructive/30",     text: "text-destructive",     badge: "bg-red-200 text-destructive"      },
-  critico:        { bg: "bg-destructive/20",    border: "border-red-500",     text: "text-destructive",     badge: "bg-destructive text-primary-foreground"        },
+  vermelho_alto:  { bg: "bg-destructive/10",     border: "border-destructive/30",     text: "text-destructive",     badge: "bg-destructive/20 text-destructive"      },
+  critico:        { bg: "bg-destructive/20",    border: "border-destructive/30",     text: "text-destructive",     badge: "bg-destructive text-primary-foreground"        },
 };
 
 const ALERT_LABELS: Record<NivelAlerta, string> = {
@@ -198,8 +198,8 @@ function BarraCorredor({
   let barColor = "bg-success";
   if (total > ceiling * 1.5) barColor = "bg-destructive";
   else if (total > ceiling)  barColor = "bg-warning";
-  else if (total < floor)    barColor = "bg-red-400";
-  else if (total < reference) barColor = "bg-amber-400";
+  else if (total < floor)    barColor = "bg-destructive";
+  else if (total < reference) barColor = "bg-warning";
 
   return (
     <div className="space-y-2">

@@ -234,10 +234,10 @@ export default function GestaoBanners() {
     <Layout title="Gestão de Banners">
       <div className="min-h-full bg-muted p-4 sm:p-6">
         <div className="mx-auto max-w-7xl space-y-5">
-          <header className="overflow-hidden rounded-3xl bg-slate-950 px-6 py-7 text-primary-foreground shadow-sm sm:px-8">
+          <header className="overflow-hidden rounded-3xl bg-brand-navy px-6 py-7 text-primary-foreground shadow-sm sm:px-8">
             <div className="flex flex-col gap-5 sm:flex-row sm:items-end sm:justify-between">
               <div>
-                <div className="mb-3 inline-flex items-center gap-2 rounded-full bg-card/10 px-3 py-1 text-xs font-bold uppercase tracking-[0.18em] text-blue-100">
+                <div className="mb-3 inline-flex items-center gap-2 rounded-full bg-card/10 px-3 py-1 text-xs font-bold uppercase tracking-[0.18em] text-primary">
                   <ImagePlus className="h-3.5 w-3.5" /> Mídia e conversão
                 </div>
                 <h1 className="text-2xl font-black tracking-tight sm:text-3xl">Banners do site</h1>
@@ -254,7 +254,7 @@ export default function GestaoBanners() {
           <section className="grid gap-3 sm:grid-cols-3">
             <div className="rounded-2xl bg-card p-5 shadow-sm ring-1 ring-slate-100">
               <div className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Total</div>
-              <div className="mt-1 text-3xl font-black text-slate-950">{banners.length}</div>
+              <div className="mt-1 text-3xl font-black text-foreground">{banners.length}</div>
             </div>
             <div className="rounded-2xl bg-card p-5 shadow-sm ring-1 ring-slate-100">
               <div className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Visíveis agora</div>
@@ -269,7 +269,7 @@ export default function GestaoBanners() {
           <section className="rounded-3xl bg-card p-4 shadow-sm ring-1 ring-slate-100 sm:p-6">
             <div className="mb-5 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
               <div>
-                <h2 className="font-black text-slate-950">Campanhas</h2>
+                <h2 className="font-black text-foreground">Campanhas</h2>
                 <p className="text-sm text-muted-foreground">A exibição respeita posição, ativação e janela de datas.</p>
               </div>
               <div className="relative w-full sm:w-80">
@@ -325,12 +325,12 @@ export default function GestaoBanners() {
       </div>
 
       {editorOpen && (
-        <div className="fixed inset-0 z-[100] flex items-start justify-end bg-slate-950/45 backdrop-blur-sm" role="dialog" aria-modal="true" aria-label={editingId ? "Editar banner" : "Novo banner"}>
+        <div className="fixed inset-0 z-[100] flex items-start justify-end bg-brand-navy/45 backdrop-blur-sm" role="dialog" aria-modal="true" aria-label={editingId ? "Editar banner" : "Novo banner"}>
           <div className="h-full w-full max-w-2xl overflow-y-auto bg-card shadow-2xl">
             <form onSubmit={saveBanner} className="min-h-full">
               <div className="sticky top-0 z-10 flex items-center justify-between border-b border-border bg-card/95 px-5 py-4 backdrop-blur sm:px-7">
                 <div>
-                  <h2 className="text-lg font-black text-slate-950">{editingId ? "Editar banner" : "Novo banner"}</h2>
+                  <h2 className="text-lg font-black text-foreground">{editingId ? "Editar banner" : "Novo banner"}</h2>
                   <p className="text-xs text-muted-foreground">Revise a prévia antes de ativar.</p>
                 </div>
                 <Button type="button" variant="ghost" size="icon" onClick={closeEditor} aria-label="Fechar editor"><X className="h-5 w-5" /></Button>

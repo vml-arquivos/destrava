@@ -137,7 +137,7 @@ export default function Home() {
       <Header />
 
       {/* HERO SECTION */}
-      <section className="relative bg-gradient-to-br from-[var(--color-caixa-blue)] via-[#002d8a] to-[var(--color-caixa-blue-dark)] text-white pt-6 pb-10 md:pt-8 md:pb-14 overflow-hidden">
+      <section className="relative bg-gradient-to-br from-[var(--color-caixa-blue)] via-[#002d8a] to-[var(--color-caixa-blue-dark)] text-primary-foreground pt-6 pb-10 md:pt-8 md:pb-14 overflow-hidden">
         {/* Padrão de fundo sutil */}
         <div className="absolute inset-0 bg-[url('data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iNjAiIGhlaWdodD0iNjAiIHhtbG5zPSJodHRwOi8vd3d3LnczLm9yZy8yMDAwL3N2ZyI+PGRlZnM+PHBhdHRlcm4gaWQ9ImdyaWQiIHdpZHRoPSI2MCIgaGVpZ2h0PSI2MCIgcGF0dGVyblVuaXRzPSJ1c2VyU3BhY2VPblVzZSI+PHBhdGggZD0iTSAxMCAwIEwgMCAwIDAgMTAiIGZpbGw9Im5vbmUiIHN0cm9rZT0id2hpdGUiIHN0cm9rZS1vcGFjaXR5PSIwLjA1IiBzdHJva2Utd2lkdGg9IjEiLz48L3BhdHRlcm4+PC9kZWZzPjxyZWN0IHdpZHRoPSIxMDAlIiBoZWlnaHQ9IjEwMCUiIGZpbGw9InVybCgjZ3JpZCkiLz48L3N2Zz4=')] opacity-30"></div>
         {/* Gradiente decorativo */}
@@ -149,17 +149,17 @@ export default function Home() {
                <h1 className="text-4xl md:text-5xl font-bold mb-5 leading-tight">
                  Destrave o crédito da sua empresa com assessoria especializada em crédito bancário e governamental.
                </h1>
-              <p className="text-xl md:text-2xl mb-4 text-white/90 leading-relaxed">
+              <p className="text-xl md:text-2xl mb-4 text-primary-foreground/90 leading-relaxed">
                 A Destrava atua ao lado da sua empresa para identificar as melhores linhas de crédito, organizar a operação e conduzir todo o processo com mais segurança, estratégia e clareza.
               </p>
-              <p className="text-base mb-8 text-white/75 leading-relaxed">
+              <p className="text-base mb-8 text-primary-foreground/75 leading-relaxed">
                 Cuidamos da estruturação da demanda, do direcionamento correto e do acompanhamento da operação para que sua empresa avance com menos desgaste, mais previsibilidade e melhores condições de crédito.
               </p>
               <div className="flex flex-col sm:flex-row gap-4 mb-10">
                  <Button
                      asChild
                      size="lg"
-                     className="bg-[var(--color-caixa-yellow)] hover:bg-yellow-500 text-black font-bold shadow-lg w-full sm:w-auto"
+                     className="bg-[var(--color-caixa-yellow)] hover:bg-warning text-foreground font-bold shadow-lg w-full sm:w-auto"
                    >
                      <Link href="/simular" data-cta-position="home-hero-primary">
                        → Destrave seu crédito
@@ -169,7 +169,7 @@ export default function Home() {
                   asChild
                   variant="outline"
                   size="lg"
-                  className="font-semibold bg-white/10 border-white/30 text-white hover:bg-white/20 w-full sm:w-auto"
+                  className="font-semibold bg-card/10 border-white/30 text-primary-foreground hover:bg-card/20 w-full sm:w-auto"
                 >
                   <a
                     href="https://wa.me/556135268355"
@@ -267,27 +267,27 @@ export default function Home() {
               </p>
             </div>
 
-            <div className="bg-gradient-to-br from-primary to-[var(--color-caixa-blue-dark)] text-white p-8 rounded-lg shadow-lg">
+            <div className="bg-gradient-to-br from-primary to-[var(--color-caixa-blue-dark)] text-primary-foreground p-8 rounded-lg shadow-lg">
               <h3 className="text-2xl font-bold mb-6">Por que empresas escolhem a Destrava</h3>
-              <p className="text-white/80 mb-6">
+              <p className="text-primary-foreground/80 mb-6">
                 Porque encontrar recursos para a empresa exige mais do que tentativa: exige análise, condução, organização e acompanhamento.
               </p>
               <div className="space-y-4">
                 <div>
                   <p className="text-lg font-bold mb-1">Atendimento consultivo de verdade</p>
-                  <p className="text-white/80 text-sm">Sua empresa é atendida com escuta, análise e direcionamento, sem respostas genéricas.</p>
+                  <p className="text-primary-foreground/80 text-sm">Sua empresa é atendida com escuta, análise e direcionamento, sem respostas genéricas.</p>
                 </div>
                 <div className="border-t border-white/20 pt-4">
                   <p className="text-lg font-bold mb-1">Condução completa do processo</p>
-                  <p className="text-white/80 text-sm">A Destrava assume a parte pesada da jornada e organiza cada etapa para reduzir a carga operacional.</p>
+                  <p className="text-primary-foreground/80 text-sm">A Destrava assume a parte pesada da jornada e organiza cada etapa para reduzir a carga operacional.</p>
                 </div>
                 <div className="border-t border-white/20 pt-4">
                   <p className="text-lg font-bold mb-1">Mais clareza para decidir</p>
-                  <p className="text-white/80 text-sm">Você entende melhor o caminho da sua empresa, com mais segurança, mais contexto e menos ruído.</p>
+                  <p className="text-primary-foreground/80 text-sm">Você entende melhor o caminho da sua empresa, com mais segurança, mais contexto e menos ruído.</p>
                 </div>
                 <div className="border-t border-white/20 pt-4">
                   <p className="text-lg font-bold mb-1">Agilidade com organização</p>
-                  <p className="text-white/80 text-sm">Um processo bem conduzido reduz retrabalho, evita perda de tempo e melhora a experiência do início ao fim.</p>
+                  <p className="text-primary-foreground/80 text-sm">Um processo bem conduzido reduz retrabalho, evita perda de tempo e melhora a experiência do início ao fim.</p>
                 </div>
               </div>
             </div>
@@ -404,7 +404,7 @@ export default function Home() {
                 desc: "Programa federal para MEI, micro e pequenas empresas, sujeito às regras vigentes e à análise da instituição financeira.",
                 href: "/pronampe",
                 badge: "Mais popular",
-                badgeColor: "bg-green-100 text-green-700",
+                badgeColor: "bg-success/20 text-success",
               },
               {
                 logo: "/logo-procred360.webp",
@@ -412,7 +412,7 @@ export default function Home() {
                 desc: "Linha para MEI e microempresas, com elegibilidade e limites vinculados às regras vigentes e ao faturamento.",
                 href: "/procred360",
                 badge: "Programa Acredita",
-                badgeColor: "bg-blue-100 text-blue-700",
+                badgeColor: "bg-primary/20 text-primary",
               },
               {
                 logo: "/logo-caixa.png",
@@ -420,7 +420,7 @@ export default function Home() {
                 desc: "Modalidade para capital de giro, com limite, taxa, CET e prazo definidos na proposta conforme análise da CAIXA.",
                 href: "/giro-caixa-facil",
                 badge: "Capital de giro",
-                badgeColor: "bg-orange-100 text-orange-700",
+                badgeColor: "bg-warning/20 text-warning",
               },
               {
                 logo: "/logo-bndes-fgi.jpg",
@@ -428,7 +428,7 @@ export default function Home() {
                 desc: "Programa de garantia do BNDES para apoiar operações empresariais elegíveis, sujeitas à análise da instituição financeira.",
                 href: "/peac-fgi",
                 badge: "Grandes volumes",
-                badgeColor: "bg-purple-100 text-purple-700",
+                badgeColor: "bg-primary/20 text-primary",
               },
               {
                 logo: "/logo-fco.webp",
@@ -436,7 +436,7 @@ export default function Home() {
                 desc: "Financiamento do Fundo Constitucional do Centro-Oeste para empresas e produtores rurais de GO, MT, MS e DF.",
                 href: "/fco",
                 badge: "Centro-Oeste",
-                badgeColor: "bg-violet-100 text-violet-700",
+                badgeColor: "bg-primary/20 text-primary",
               },
               {
                 logo: "/logo-fampe.webp",
@@ -444,7 +444,7 @@ export default function Home() {
                 desc: "Fundo do Sebrae que complementa as garantias exigidas pelos bancos, facilitando o acesso ao crédito para pequenos negócios.",
                 href: "/fampe",
                 badge: "Sebrae",
-                badgeColor: "bg-amber-100 text-amber-700",
+                badgeColor: "bg-warning/20 text-warning",
               },
             ].map((linha) => (
               <div key={linha.title} className="bg-card rounded-xl border border-border p-6 flex flex-col hover:shadow-md transition-shadow">

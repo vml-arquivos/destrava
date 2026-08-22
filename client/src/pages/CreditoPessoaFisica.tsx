@@ -34,7 +34,7 @@ const linhasPF = [
     prazo: "Conforme convênio",
     publico: ["Servidor Público", "Aposentado", "Pensionista INSS"],
     badge: "Consignado",
-    badgeColor: "bg-green-100 text-green-800",
+    badgeColor: "bg-success/20 text-success",
     destaque: true,
     icon: CreditCard,
     cor: "from-green-600 to-green-800",
@@ -78,7 +78,7 @@ const linhasPF = [
     prazo: "Conforme operação",
     publico: ["Pessoa Física"],
     badge: "CAIXA",
-    badgeColor: "bg-yellow-100 text-yellow-800",
+    badgeColor: "bg-warning/20 text-warning",
     destaque: false,
     icon: Home,
     cor: "from-yellow-600 to-yellow-800",
@@ -163,24 +163,24 @@ export default function CreditoPessoaFisica() {
       {/* HERO */}
       <section className="bg-gradient-to-br from-[#1B4F72] via-[#154360] to-[#0d2b45] text-primary-foreground py-14 md:py-20 relative overflow-hidden">
         <div className="absolute inset-0 opacity-10">
-          <div className="absolute top-0 right-0 w-96 h-96 bg-blue-300 rounded-full blur-3xl" />
-          <div className="absolute bottom-0 left-0 w-96 h-96 bg-blue-300 rounded-full blur-3xl" />
+          <div className="absolute top-0 right-0 w-96 h-96 bg-primary rounded-full blur-3xl" />
+          <div className="absolute bottom-0 left-0 w-96 h-96 bg-primary rounded-full blur-3xl" />
         </div>
         <div className="container px-4 relative z-10">
           <div className="max-w-3xl">
-            <div className="inline-flex items-center gap-2 bg-blue-400/20 border border-blue-400/40 rounded-full px-4 py-2 mb-6">
-              <User className="h-4 w-4 text-blue-300" />
-              <span className="text-blue-200 text-sm font-semibold">Pessoa Física</span>
+            <div className="inline-flex items-center gap-2 bg-primary/20 border border-primary/30/40 rounded-full px-4 py-2 mb-6">
+              <User className="h-4 w-4 text-primary" />
+              <span className="text-primary text-sm font-semibold">Pessoa Física</span>
             </div>
             <h1 className="text-4xl md:text-5xl lg:text-6xl font-bold mb-6 leading-tight">
               Crédito para<br />
-              <span className="text-blue-300">Pessoa Física</span>
+              <span className="text-primary">Pessoa Física</span>
             </h1>
             <p className="text-lg md:text-xl text-primary-foreground/90 mb-8 leading-relaxed">
               Encontre a melhor linha de crédito para você: consignado, crédito pessoal, financiamento de imóvel ou veículo. Análise de perfil e orientação especializada.
             </p>
             <div className="flex flex-col sm:flex-row gap-4">
-              <Button asChild size="lg" className="bg-blue-400 hover:bg-primary text-foreground font-bold px-8">
+              <Button asChild size="lg" className="bg-primary hover:bg-primary text-foreground font-bold px-8">
                 <Link href="/simular">
                   Simular Crédito Grátis
                   <ArrowRight className="ml-2 h-5 w-5" />
@@ -323,7 +323,7 @@ export default function CreditoPessoaFisica() {
                   <ul className="space-y-1 mb-4">
                     {linha.beneficios.slice(0, 3).map((b) => (
                       <li key={b} className="flex items-center gap-2 text-xs text-muted-foreground">
-                        <CheckCircle2 className="h-3.5 w-3.5 text-green-500 flex-shrink-0" />
+                        <CheckCircle2 className="h-3.5 w-3.5 text-success flex-shrink-0" />
                         {b}
                       </li>
                     ))}
@@ -402,7 +402,7 @@ export default function CreditoPessoaFisica() {
                 <h3 className="text-xl font-bold text-foreground mb-4">Documentos que podem ser solicitados</h3>
                 <ul className="space-y-3 text-sm text-foreground">
                   {["Documento oficial de identificação e CPF", "Comprovante de residência atualizado", "Comprovantes de renda ou movimentação compatíveis", "Informações bancárias e autorizações necessárias", "Documentos do imóvel ou veículo, quando aplicável"].map((item) => (
-                    <li key={item} className="flex gap-2"><CheckCircle2 className="h-5 w-5 text-green-600 flex-shrink-0" />{item}</li>
+                    <li key={item} className="flex gap-2"><CheckCircle2 className="h-5 w-5 text-success flex-shrink-0" />{item}</li>
                   ))}
                 </ul>
               </div>
@@ -451,8 +451,8 @@ export default function CreditoPessoaFisica() {
             <div className="grid md:grid-cols-3 gap-6">
               {[
                 { icon: Shield, title: "Análise de Perfil", desc: "Avaliamos seu perfil com atenção para encontrar a melhor opção disponível.", color: "text-primary", bg: "bg-primary/10" },
-                { icon: Clock, title: "Processo Ágil", desc: "Simplificamos a burocracia e acompanhamos todo o processo até a aprovação.", color: "text-green-600", bg: "bg-green-50" },
-                { icon: Star, title: "Comparação Transparente", desc: "Compare taxa, CET, prazo e valor total das propostas disponíveis para o seu perfil.", color: "text-yellow-600", bg: "bg-yellow-50" },
+                { icon: Clock, title: "Processo Ágil", desc: "Simplificamos a burocracia e acompanhamos todo o processo até a aprovação.", color: "text-success", bg: "bg-success/10" },
+                { icon: Star, title: "Comparação Transparente", desc: "Compare taxa, CET, prazo e valor total das propostas disponíveis para o seu perfil.", color: "text-warning", bg: "bg-warning/10" },
               ].map((v) => (
                 <div key={v.title} className="text-center p-6 bg-muted rounded-2xl">
                   <div className={`w-14 h-14 rounded-2xl ${v.bg} flex items-center justify-center mx-auto mb-4`}>
@@ -476,7 +476,7 @@ export default function CreditoPessoaFisica() {
               Faça uma simulação gratuita e descubra qual linha de crédito melhor atende às suas necessidades.
             </p>
             <div className="flex flex-col sm:flex-row gap-4 justify-center">
-              <Button asChild size="lg" className="bg-blue-400 hover:bg-primary text-foreground font-bold px-8">
+              <Button asChild size="lg" className="bg-primary hover:bg-primary text-foreground font-bold px-8">
                 <Link href="/simular">
                   Simular Agora
                   <ArrowRight className="ml-2 h-5 w-5" />

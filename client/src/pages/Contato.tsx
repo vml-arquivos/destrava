@@ -84,8 +84,8 @@ export default function Contato() {
               <h2 className="text-2xl font-bold text-foreground mb-8">Informações de Contato</h2>
               <div className="space-y-4">
                 <div className="flex items-start gap-4 p-5 bg-muted rounded-2xl">
-                  <div className="w-12 h-12 rounded-xl bg-green-100 flex items-center justify-center flex-shrink-0">
-                    <MessageCircle className="h-6 w-6 text-green-600" />
+                  <div className="w-12 h-12 rounded-xl bg-success/20 flex items-center justify-center flex-shrink-0">
+                    <MessageCircle className="h-6 w-6 text-success" />
                   </div>
                   <div>
                     <p className="font-bold text-foreground mb-1">WhatsApp</p>
@@ -94,7 +94,7 @@ export default function Contato() {
                       href={COMPANY.whatsappLink}
                       target="_blank"
                       rel="noopener noreferrer"
-                      className="text-green-600 font-semibold hover:underline"
+                      className="text-success font-semibold hover:underline"
                     >
                       {COMPANY.whatsapp}
                     </a>
@@ -116,12 +116,12 @@ export default function Contato() {
 
                 <div className="flex items-start gap-4 p-5 bg-muted rounded-2xl">
                   <div className="w-12 h-12 rounded-xl bg-primary/20 flex items-center justify-center flex-shrink-0">
-                    <Mail className="h-6 w-6 text-purple-600" />
+                    <Mail className="h-6 w-6 text-primary" />
                   </div>
                   <div>
                     <p className="font-bold text-foreground mb-1">E-mail</p>
                     <p className="text-muted-foreground text-sm mb-2">Envie sua dúvida por e-mail</p>
-                    <a href={COMPANY.emailLink} className="text-purple-600 font-semibold hover:underline">
+                    <a href={COMPANY.emailLink} className="text-primary font-semibold hover:underline">
                       {COMPANY.email}
                     </a>
                   </div>
@@ -140,13 +140,13 @@ export default function Contato() {
               </div>
 
               {/* WhatsApp CTA */}
-              <div className="mt-6 p-6 bg-green-50 rounded-2xl border border-green-200 text-center">
-                <MessageCircle className="h-10 w-10 text-green-600 mx-auto mb-3" />
+              <div className="mt-6 p-6 bg-success/10 rounded-2xl border border-success/20 text-center">
+                <MessageCircle className="h-10 w-10 text-success mx-auto mb-3" />
                 <p className="font-bold text-foreground mb-2">Prefere o WhatsApp?</p>
                 <p className="text-sm text-muted-foreground mb-4">Atendimento durante o horário comercial</p>
                 <Button
                   asChild
-                  className="w-full bg-green-600 hover:bg-green-700 text-primary-foreground font-bold"
+                  className="w-full bg-success hover:bg-success text-primary-foreground font-bold"
                 >
                   <a
                     href={COMPANY.whatsappLinkMsg("Olá! Gostaria de falar com um especialista em crédito.")}

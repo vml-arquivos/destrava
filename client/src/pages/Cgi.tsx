@@ -107,7 +107,7 @@ export default function Cgi() {
   );
 
   return (
-    <div className="min-h-screen flex flex-col bg-white">
+    <div className="min-h-screen flex flex-col bg-card">
       <SEO
         title="CGI — Crédito com Garantia de Imóvel | Home Equity | Destrava Crédito"
         description="Assessoria em CGI (Home Equity): crédito com garantia de imóvel para PF e PJ. Valores e condições sujeitos à análise de crédito, documentação e avaliação do imóvel. Atendimento em Brasília e Goiânia."
@@ -117,28 +117,28 @@ export default function Cgi() {
       <Header />
 
       {/* HERO */}
-      <section className="bg-gradient-to-br from-primary to-[var(--color-caixa-blue-dark)] text-white py-20">
+      <section className="bg-gradient-to-br from-primary to-[var(--color-caixa-blue-dark)] text-primary-foreground py-20">
         <div className="container">
           <div className="max-w-3xl">
             <div className="flex items-center gap-3 mb-6">
-              <div className="bg-white/20 rounded-xl px-4 py-2 flex items-center gap-2 border border-white/30">
-                <Home className="h-5 w-5 text-white" />
-                <span className="text-sm font-semibold text-white">Home Equity</span>
+              <div className="bg-card/20 rounded-xl px-4 py-2 flex items-center gap-2 border border-white/30">
+                <Home className="h-5 w-5 text-primary-foreground" />
+                <span className="text-sm font-semibold text-primary-foreground">Home Equity</span>
               </div>
-              <span className="text-sm font-semibold bg-white/20 px-3 py-1 rounded-full border border-white/30">
+              <span className="text-sm font-semibold bg-card/20 px-3 py-1 rounded-full border border-white/30">
                 Crédito com Garantia de Imóvel
               </span>
             </div>
             <h1 className="text-4xl md:text-5xl font-bold mb-4 leading-tight">
               CGI — Crédito com<br />Garantia de Imóvel
             </h1>
-            <p className="text-xl text-white/90 mb-2 font-medium">
+            <p className="text-xl text-primary-foreground/90 mb-2 font-medium">
               Use o patrimônio imobiliário como garantia para acessar crédito com condições diferenciadas
             </p>
-            <p className="text-lg text-white/80 leading-relaxed mb-3">
+            <p className="text-lg text-primary-foreground/80 leading-relaxed mb-3">
               O CGI (também conhecido como Home Equity) é uma linha de crédito em que o imóvel do cliente serve como garantia real da operação. Sujeito a análise de crédito, documentação, avaliação do imóvel e políticas da instituição financeira.
             </p>
-            <p className="text-sm text-white/60 mb-8 italic">
+            <p className="text-sm text-primary-foreground/60 mb-8 italic">
               Os valores, taxas e condições são estimativas e podem variar conforme análise de cada caso.
             </p>
             <div className="flex flex-wrap gap-3">
@@ -147,7 +147,7 @@ export default function Cgi() {
                   Simular Agora
                 </Link>
               </Button>
-              <Button asChild size="lg" variant="outline" className="font-semibold border-white text-white hover:bg-white hover:text-primary">
+              <Button asChild size="lg" variant="outline" className="font-semibold border-white text-primary-foreground hover:bg-card hover:text-primary">
                 <a
                 href={COMPANY.whatsappLinkMsg("Olá! Quero saber mais sobre o CGI — Crédito com Garantia de Imóvel.")}
                 target="_blank"
@@ -207,11 +207,11 @@ export default function Cgi() {
                 </p>
               </div>
               <div className="space-y-4">
-                <div className="bg-blue-50 border border-blue-200 rounded-xl p-5">
-                  <h3 className="font-bold text-blue-900 mb-3 flex items-center gap-2">
+                <div className="bg-primary/10 border border-primary/20 rounded-xl p-5">
+                  <h3 className="font-bold text-primary mb-3 flex items-center gap-2">
                     <TrendingUp className="h-5 w-5" /> Para que pode ser usado
                   </h3>
-                  <ul className="space-y-2 text-sm text-blue-800">
+                  <ul className="space-y-2 text-sm text-primary">
                     {[
                       "Capital de giro para empresas",
                       "Expansão ou modernização do negócio",
@@ -221,7 +221,7 @@ export default function Cgi() {
                       "Outras finalidades, conforme análise",
                     ].map((item) => (
                       <li key={item} className="flex items-start gap-2">
-                        <CheckCircle2 className="h-4 w-4 text-blue-600 flex-shrink-0 mt-0.5" />
+                        <CheckCircle2 className="h-4 w-4 text-primary flex-shrink-0 mt-0.5" />
                         <span>{item}</span>
                       </li>
                     ))}
@@ -289,28 +289,28 @@ export default function Cgi() {
             </p>
             <div className="bg-card rounded-xl border border-border p-8 space-y-5">
               <div className="flex items-start gap-4">
-                <div className="w-10 h-10 rounded-full bg-primary text-white flex items-center justify-center font-bold flex-shrink-0">1</div>
+                <div className="w-10 h-10 rounded-full bg-primary text-primary-foreground flex items-center justify-center font-bold flex-shrink-0">1</div>
                 <div>
                   <h3 className="font-bold mb-1">Alienação Fiduciária</h3>
                   <p className="text-sm text-muted-foreground">O imóvel é dado em garantia por meio de alienação fiduciária, instrumento jurídico em que a propriedade é transferida temporariamente à instituição financeira até a quitação do contrato.</p>
                 </div>
               </div>
               <div className="flex items-start gap-4">
-                <div className="w-10 h-10 rounded-full bg-primary text-white flex items-center justify-center font-bold flex-shrink-0">2</div>
+                <div className="w-10 h-10 rounded-full bg-primary text-primary-foreground flex items-center justify-center font-bold flex-shrink-0">2</div>
                 <div>
                   <h3 className="font-bold mb-1">Uso Normal do Imóvel</h3>
                   <p className="text-sm text-muted-foreground">O proprietário mantém a posse direta e pode continuar usando, morando ou alugando o imóvel normalmente, desde que cumpra as obrigações do contrato.</p>
                 </div>
               </div>
               <div className="flex items-start gap-4">
-                <div className="w-10 h-10 rounded-full bg-primary text-white flex items-center justify-center font-bold flex-shrink-0">3</div>
+                <div className="w-10 h-10 rounded-full bg-primary text-primary-foreground flex items-center justify-center font-bold flex-shrink-0">3</div>
                 <div>
                   <h3 className="font-bold mb-1">Avaliação e LTV</h3>
                   <p className="text-sm text-muted-foreground">A instituição financeira realiza avaliação técnica do imóvel. O valor do crédito é calculado com base em um percentual do valor de avaliação (LTV), definido pelas políticas da instituição.</p>
                 </div>
               </div>
               <div className="flex items-start gap-4">
-                <div className="w-10 h-10 rounded-full bg-primary text-white flex items-center justify-center font-bold flex-shrink-0">4</div>
+                <div className="w-10 h-10 rounded-full bg-primary text-primary-foreground flex items-center justify-center font-bold flex-shrink-0">4</div>
                 <div>
                   <h3 className="font-bold mb-1">Quitação e Liberação da Garantia</h3>
                   <p className="text-sm text-muted-foreground">Ao quitar o contrato, a alienação fiduciária é extinta e a propriedade plena retorna ao titular, com o devido registro em cartório.</p>
@@ -415,9 +415,9 @@ export default function Cgi() {
                 </div>
               </div>
             </div>
-            <div className="mt-6 p-4 bg-amber-50 border border-amber-200 rounded-xl flex items-start gap-3">
-              <AlertCircle className="h-5 w-5 text-amber-600 flex-shrink-0 mt-0.5" />
-              <p className="text-sm text-amber-800">
+            <div className="mt-6 p-4 bg-warning/10 border border-warning/20 rounded-xl flex items-start gap-3">
+              <AlertCircle className="h-5 w-5 text-warning flex-shrink-0 mt-0.5" />
+              <p className="text-sm text-warning">
                 <strong>Atenção:</strong> A lista acima é indicativa. A documentação completa e definitiva é definida pela instituição financeira no momento da análise, podendo incluir documentos adicionais conforme o perfil da operação.
               </p>
             </div>
@@ -460,15 +460,15 @@ export default function Cgi() {
       </section>
 
       {/* CTA WHATSAPP */}
-      <section className="py-16 bg-gradient-to-br from-primary to-[var(--color-caixa-blue-dark)] text-white">
+      <section className="py-16 bg-gradient-to-br from-primary to-[var(--color-caixa-blue-dark)] text-primary-foreground">
         <div className="container text-center">
           <h2 className="text-3xl md:text-4xl font-bold mb-4">
             Quer saber se o CGI é viável para você?
           </h2>
-          <p className="text-xl text-white/90 mb-3 max-w-2xl mx-auto">
+          <p className="text-xl text-primary-foreground/90 mb-3 max-w-2xl mx-auto">
             Fale com nossa equipe. Avaliamos o seu perfil e orientamos sobre as possibilidades, sem compromisso.
           </p>
-          <p className="text-sm text-white/60 mb-8 italic">
+          <p className="text-sm text-primary-foreground/60 mb-8 italic">
             A análise de viabilidade é feita pela nossa equipe especializada. A aprovação final depende da instituição financeira.
           </p>
           <div className="flex flex-wrap gap-4 justify-center">
@@ -481,7 +481,7 @@ export default function Cgi() {
                 <Phone className="h-5 w-5 mr-2" /> Falar no WhatsApp
               </a>
             </Button>
-            <Button asChild size="lg" variant="outline" className="font-semibold border-white text-white hover:bg-white hover:text-primary text-lg px-8">
+            <Button asChild size="lg" variant="outline" className="font-semibold border-white text-primary-foreground hover:bg-card hover:text-primary text-lg px-8">
               <Link href="/contato">
                 Enviar Mensagem
               </Link>
@@ -491,15 +491,15 @@ export default function Cgi() {
       </section>
 
       {/* DISCLAIMER JURÍDICO */}
-      <section className="py-10 bg-gray-50">
+      <section className="py-10 bg-muted">
         <div className="container">
           <div className="max-w-4xl mx-auto">
-            <div className="bg-white border border-gray-200 rounded-xl p-6">
+            <div className="bg-card border border-border rounded-xl p-6">
               <div className="flex items-start gap-3">
-                <AlertCircle className="h-5 w-5 text-gray-400 flex-shrink-0 mt-0.5" />
+                <AlertCircle className="h-5 w-5 text-muted-foreground flex-shrink-0 mt-0.5" />
                 <div>
-                  <p className="text-xs font-bold text-gray-500 uppercase tracking-wider mb-2">Aviso Importante</p>
-                  <p className="text-xs text-gray-500 leading-relaxed">
+                  <p className="text-xs font-bold text-muted-foreground uppercase tracking-wider mb-2">Aviso Importante</p>
+                  <p className="text-xs text-muted-foreground leading-relaxed">
                     As informações apresentadas nesta página têm caráter exclusivamente informativo e educacional, e não constituem proposta, oferta ou garantia de crédito. O CGI — Crédito com Garantia de Imóvel é uma modalidade sujeita a análise cadastral, de crédito, jurídica e avaliação do imóvel pela instituição financeira. Os valores, taxas, prazos e condições apresentados são estimativas de referência e podem variar conforme o perfil do cliente, documentação, avaliação do imóvel e políticas vigentes da instituição financeira no momento da contratação. A Destrava atua como assessoria empresarial e não realiza a concessão de crédito, que é de responsabilidade exclusiva da instituição financeira parceira. Não garantimos aprovação. Sujeito à análise e aprovação.
                   </p>
                 </div>

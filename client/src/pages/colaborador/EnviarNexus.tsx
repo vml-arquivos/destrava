@@ -433,10 +433,10 @@ export default function EnviarNexus({ empresaId, pendencias, onEnviado }: Props)
               <div>
                 <p className="text-xs font-semibold text-foreground">Como configurar a integração</p>
                 <p className="text-xs text-muted-foreground mt-1">
-                  Adicione <code className="bg-slate-200 px-1 rounded text-[10px]">NEXUS_WEBHOOK_URL</code> ou{" "}
-                  <code className="bg-slate-200 px-1 rounded text-[10px]">N8N_WEBHOOK_URL</code> nas variáveis
+                  Adicione <code className="bg-border px-1 rounded text-[10px]">NEXUS_WEBHOOK_URL</code> ou{" "}
+                  <code className="bg-border px-1 rounded text-[10px]">N8N_WEBHOOK_URL</code> nas variáveis
                   de ambiente do servidor Destrava. Opcionalmente, adicione{" "}
-                  <code className="bg-slate-200 px-1 rounded text-[10px]">NEXUS_API_TOKEN</code> para
+                  <code className="bg-border px-1 rounded text-[10px]">NEXUS_API_TOKEN</code> para
                   autenticação segura.
                 </p>
               </div>

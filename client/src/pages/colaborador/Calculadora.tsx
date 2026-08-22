@@ -347,7 +347,7 @@ function SeletorCliente({
           placeholder="Digite razão social, CNPJ ou telefone..."
           className="pl-9"
         />
-        {carregando && <div className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 border-2 border-blue-500 border-t-transparent rounded-full animate-spin" />}
+        {carregando && <div className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 border-2 border-primary border-t-transparent rounded-full animate-spin" />}
       </div>
       {aberto && resultados.length > 0 && (
         <div className="absolute z-50 w-full mt-1 bg-card border border-border rounded-xl shadow-lg overflow-hidden">
@@ -928,7 +928,7 @@ function CenarioComImposto({ initialData }: { initialData?: { nome: string; empr
           <Card className="border-0 shadow-lg sticky top-6">
             <CardHeader className="pb-3 border-b">
               <CardTitle className="text-base flex items-center gap-2 min-w-0">
-                <CheckCircle2 className="h-5 w-5 flex-shrink-0 text-green-600" />
+                <CheckCircle2 className="h-5 w-5 flex-shrink-0 text-success" />
                 <span className="truncate min-w-0 flex-1">Resultado — {form.nome}</span>
                 <Badge className="ml-auto flex-shrink-0 bg-primary text-primary-foreground text-xs">Cenário A · Com Imposto</Badge>
               </CardTitle>
@@ -943,7 +943,7 @@ function CenarioComImposto({ initialData }: { initialData?: { nome: string; empr
               />
               <div className="flex gap-2 mt-5">
                 <Button variant="outline" size="sm" className="flex-1" onClick={handleSalvar} disabled={salvando || salvo}>
-                  {salvo ? <><CheckCircle2 className="mr-1.5 h-4 w-4 text-green-600" />Salvo!</> : <><Save className="mr-1.5 h-4 w-4" />{salvando ? "Salvando..." : "Salvar"}</>}
+                  {salvo ? <><CheckCircle2 className="mr-1.5 h-4 w-4 text-success" />Salvo!</> : <><Save className="mr-1.5 h-4 w-4" />{salvando ? "Salvando..." : "Salvar"}</>}
                 </Button>
                 <Button variant="outline" size="sm" className="flex-1" onClick={() => gerarPdfSimulacao({
                   cliente: { nome: form.nome, empresa: form.empresa, cpfCnpj: form.cpfCnpj, telefone: form.telefone, banco: form.banco, linhaCredito: form.linhaCredito, observacoes: form.observacoes },
@@ -1106,7 +1106,7 @@ function CenarioSemImposto({ initialData }: { initialData?: { nome: string; empr
           <Card className="border-0 shadow-lg sticky top-6">
             <CardHeader className="pb-3 border-b">
               <CardTitle className="text-base flex items-center gap-2 min-w-0">
-                <CheckCircle2 className="h-5 w-5 flex-shrink-0 text-green-600" />
+                <CheckCircle2 className="h-5 w-5 flex-shrink-0 text-success" />
                 <span className="truncate min-w-0 flex-1">Resultado — {form.nome}</span>
                 <Badge variant="outline" className="ml-auto flex-shrink-0 text-xs">Cenário B · Sem Imposto</Badge>
               </CardTitle>
@@ -1121,7 +1121,7 @@ function CenarioSemImposto({ initialData }: { initialData?: { nome: string; empr
               />
               <div className="flex gap-2 mt-5">
                 <Button variant="outline" size="sm" className="flex-1" onClick={handleSalvar} disabled={salvando || salvo}>
-                  {salvo ? <><CheckCircle2 className="mr-1.5 h-4 w-4 text-green-600" />Salvo!</> : <><Save className="mr-1.5 h-4 w-4" />{salvando ? "Salvando..." : "Salvar"}</>}
+                  {salvo ? <><CheckCircle2 className="mr-1.5 h-4 w-4 text-success" />Salvo!</> : <><Save className="mr-1.5 h-4 w-4" />{salvando ? "Salvando..." : "Salvar"}</>}
                 </Button>
                 <Button variant="outline" size="sm" className="flex-1" onClick={() => gerarPdfSimulacao({
                   cliente: { nome: form.nome, empresa: form.empresa, cpfCnpj: form.cpfCnpj, telefone: form.telefone, banco: form.banco, linhaCredito: form.linhaCredito, observacoes: form.observacoes },
@@ -1174,7 +1174,7 @@ function DifTag({ a, b, campo }: { a: number; b: number; campo: "parcela" | "tot
   if (Math.abs(diff) < 0.01) return <span className="text-xs text-muted-foreground flex items-center gap-0.5"><Minus className="w-3 h-3" /> igual</span>;
   const maior = diff > 0;
   return (
-    <span className={`text-xs font-semibold flex items-center gap-0.5 ${maior ? "text-destructive" : "text-green-600"}`}>
+    <span className={`text-xs font-semibold flex items-center gap-0.5 ${maior ? "text-destructive" : "text-success"}`}>
       {maior ? <TrendingUp className="w-3 h-3" /> : <TrendingDown className="w-3 h-3" />}
       {maior ? "+" : ""}{fmtBRL.format(Math.abs(diff))}
     </span>
@@ -1500,7 +1500,7 @@ function CenarioComparativo({ initialData }: { initialData?: { nome: string; emp
           <div className="space-y-1.5">
             <Label className="text-primary">Taxa de Juros Mensal (%) <span className="text-destructive">*</span></Label>
             <div className="relative">
-              <Percent className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-blue-400" />
+              <Percent className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-primary" />
               <Input
                 value={form.taxaA}
                 onChange={e => set("taxaA", e.target.value.replace(",", "."))}
@@ -1516,7 +1516,7 @@ function CenarioComparativo({ initialData }: { initialData?: { nome: string; emp
             <div className="space-y-1.5">
               <Label className="text-primary text-xs">Valor Fiscal Declarado</Label>
               <div className="relative">
-                <span className="absolute left-3 top-1/2 -translate-y-1/2 text-blue-400 text-sm font-semibold">R$</span>
+                <span className="absolute left-3 top-1/2 -translate-y-1/2 text-primary text-sm font-semibold">R$</span>
                 <Input
                   value={form.valorFiscal}
                   onChange={e => set("valorFiscal", formatarMoeda(e.target.value))}
@@ -1529,7 +1529,7 @@ function CenarioComparativo({ initialData }: { initialData?: { nome: string; emp
             <div className="space-y-1.5">
               <Label className="text-primary text-xs">Alíquota Imposto (%)</Label>
               <div className="relative">
-                <Percent className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-blue-400" />
+                <Percent className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-primary" />
                 <Input
                   value={form.pctImposto}
                   onChange={e => set("pctImposto", e.target.value.replace(",", "."))}
@@ -1550,31 +1550,31 @@ function CenarioComparativo({ initialData }: { initialData?: { nome: string; emp
         </div>
 
         {/* Cenário B */}
-        <div className="bg-green-50 border-2 border-green-200 rounded-2xl p-5 space-y-4">
+        <div className="bg-success/10 border-2 border-success/20 rounded-2xl p-5 space-y-4">
           <div className="flex items-center gap-2">
-            <div className="w-7 h-7 rounded-full bg-green-600 text-primary-foreground flex items-center justify-center text-sm font-bold">B</div>
+            <div className="w-7 h-7 rounded-full bg-success text-primary-foreground flex items-center justify-center text-sm font-bold">B</div>
             <div>
-              <p className="font-bold text-green-900">Sem Imposto</p>
-              <p className="text-xs text-green-600">Apenas taxa de juros + comissão</p>
+              <p className="font-bold text-success">Sem Imposto</p>
+              <p className="text-xs text-success">Apenas taxa de juros + comissão</p>
             </div>
           </div>
 
           <div className="space-y-1.5">
-            <Label className="text-green-900">Taxa de Juros Mensal (%) <span className="text-destructive">*</span></Label>
+            <Label className="text-success">Taxa de Juros Mensal (%) <span className="text-destructive">*</span></Label>
             <div className="relative">
-              <Percent className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-green-400" />
+              <Percent className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-success" />
               <Input
                 value={form.taxaB}
                 onChange={e => set("taxaB", e.target.value.replace(",", "."))}
                 placeholder="Ex: 1.89"
-                className={`pl-9 bg-card border-green-300 focus:border-green-500 ${erros.taxaB ? "border-destructive" : ""}`}
+                className={`pl-9 bg-card border-success/30 focus:border-success/30 ${erros.taxaB ? "border-destructive" : ""}`}
                 inputMode="decimal"
               />
             </div>
             {erros.taxaB && <p className="text-xs text-destructive">{erros.taxaB}</p>}
           </div>
 
-          <div className="bg-green-100 rounded-xl px-3 py-2 text-xs text-green-700">
+          <div className="bg-success/20 rounded-xl px-3 py-2 text-xs text-success">
             <Info className="h-3.5 w-3.5 inline mr-1" />
             Neste cenário, o imposto não é cobrado. Apenas a taxa de juros e a comissão compõem o custo.
           </div>
@@ -1594,26 +1594,26 @@ function CenarioComparativo({ initialData }: { initialData?: { nome: string; emp
           <div className="grid grid-cols-3 gap-2 text-center text-xs font-semibold text-muted-foreground uppercase tracking-wide">
             <div className="bg-primary/20 text-primary rounded-lg py-2">Cenário A — Com Imposto</div>
             <div className="bg-muted rounded-lg py-2">Diferença</div>
-            <div className="bg-green-100 text-green-700 rounded-lg py-2">Cenário B — Sem Imposto</div>
+            <div className="bg-success/20 text-success rounded-lg py-2">Cenário B — Sem Imposto</div>
           </div>
 
           {/* Parcela Mensal */}
           <div className="grid grid-cols-3 gap-2 items-center">
             <div className="bg-primary rounded-2xl p-4 text-primary-foreground text-center">
-              <p className="text-blue-200 text-xs mb-1">Parcela Mensal</p>
+              <p className="text-primary text-xs mb-1">Parcela Mensal</p>
               <p className="text-2xl font-bold">{resA ? fmtBRL.format(resA.parcelaMensal) : "—"}</p>
-              <p className="text-blue-300 text-xs mt-1">{prazoNum}x mensais</p>
+              <p className="text-primary text-xs mt-1">{prazoNum}x mensais</p>
             </div>
             <div className="text-center space-y-1">
               <p className="text-xs text-muted-foreground">Parcela</p>
               {resA && resB ? (
                 <DifTag a={resA.parcelaMensal} b={resB.parcelaMensal} campo="parcela" />
-              ) : <span className="text-xs text-gray-300">—</span>}
+              ) : <span className="text-xs text-muted-foreground">—</span>}
             </div>
-            <div className="bg-green-600 rounded-2xl p-4 text-primary-foreground text-center">
-              <p className="text-green-200 text-xs mb-1">Parcela Mensal</p>
+            <div className="bg-success rounded-2xl p-4 text-primary-foreground text-center">
+              <p className="text-success text-xs mb-1">Parcela Mensal</p>
               <p className="text-2xl font-bold">{resB ? fmtBRL.format(resB.parcelaMensal) : "—"}</p>
-              <p className="text-green-300 text-xs mt-1">{prazoNum}x mensais</p>
+              <p className="text-success text-xs mt-1">{prazoNum}x mensais</p>
             </div>
           </div>
 
@@ -1625,7 +1625,7 @@ function CenarioComparativo({ initialData }: { initialData?: { nome: string; emp
                   <th className="text-left px-4 py-3 text-xs font-semibold text-muted-foreground uppercase">Item</th>
                   <th className="text-right px-4 py-3 text-xs font-semibold text-primary uppercase">Cenário A</th>
                   <th className="text-right px-4 py-3 text-xs font-semibold text-muted-foreground uppercase">Diferença</th>
-                  <th className="text-right px-4 py-3 text-xs font-semibold text-green-700 uppercase">Cenário B</th>
+                  <th className="text-right px-4 py-3 text-xs font-semibold text-success uppercase">Cenário B</th>
                 </tr>
               </thead>
               <tbody className="divide-y">
@@ -1671,27 +1671,27 @@ function CenarioComparativo({ initialData }: { initialData?: { nome: string; emp
                     <td className="px-4 py-3 text-right">
                       {row.aNum !== null && row.bNum !== null ? (
                         <DifTag a={row.aNum} b={row.bNum} campo="total" />
-                      ) : <span className="text-gray-300 text-xs">—</span>}
+                      ) : <span className="text-muted-foreground text-xs">—</span>}
                     </td>
-                    <td className={`px-4 py-3 text-right font-semibold ${row.destaque ? "text-muted-foreground" : "text-green-700"}`}>{row.b}</td>
+                    <td className={`px-4 py-3 text-right font-semibold ${row.destaque ? "text-muted-foreground" : "text-success"}`}>{row.b}</td>
                   </tr>
                 ))}
 
                 {/* Linha de total */}
-                <tr className="bg-gray-900 text-primary-foreground">
+                <tr className="bg-brand-navy text-primary-foreground">
                   <td className="px-4 py-4 font-bold text-base">Total da Operação <span className="text-xs font-normal">(cálculo bancário — sem honorários Destrava)</span></td>
-                  <td className="px-4 py-4 text-right font-bold text-lg text-blue-300">
+                  <td className="px-4 py-4 text-right font-bold text-lg text-primary">
                     {resA ? fmtBRL.format(resA.custoTotalOperacao) : "—"}
                   </td>
                   <td className="px-4 py-4 text-right">
                     {resA && resB ? (
-                      <span className={`text-sm font-bold flex items-center justify-end gap-1 ${resA.custoTotalOperacao > resB.custoTotalOperacao ? "text-red-400" : "text-green-400"}`}>
+                      <span className={`text-sm font-bold flex items-center justify-end gap-1 ${resA.custoTotalOperacao > resB.custoTotalOperacao ? "text-destructive" : "text-success"}`}>
                         {resA.custoTotalOperacao > resB.custoTotalOperacao ? <TrendingUp className="w-4 h-4" /> : <TrendingDown className="w-4 h-4" />}
                         {fmtBRL.format(Math.abs(resA.custoTotalOperacao - resB.custoTotalOperacao))}
                       </span>
                     ) : <span className="text-muted-foreground">—</span>}
                   </td>
-                  <td className="px-4 py-4 text-right font-bold text-lg text-green-300">
+                  <td className="px-4 py-4 text-right font-bold text-lg text-success">
                     {resB ? fmtBRL.format(resB.custoTotalOperacao) : "—"}
                   </td>
                 </tr>

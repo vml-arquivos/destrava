@@ -70,7 +70,7 @@ const SEV_CONFIG: Record<string, { cor: string; label: string }> = {
 };
 
 function ScoreBar({ score }: { score: number }) {
-  const cor = score >= 70 ? "bg-success" : score >= 50 ? "bg-amber-400" : score >= 30 ? "bg-orange-400" : "bg-destructive";
+  const cor = score >= 70 ? "bg-success" : score >= 50 ? "bg-warning" : score >= 30 ? "bg-warning" : "bg-destructive";
   return (
     <div className="flex items-center gap-2">
       <div className="flex-1 h-2 rounded-full bg-muted overflow-hidden">
@@ -173,7 +173,7 @@ export default function AssessoriaIA() {
                 <button
                   key={emp.id}
                   onClick={() => abrirEmpresa(emp)}
-                  className={`w-full text-left p-3 transition-all hover:bg-muted ${isAtiva ? "bg-success/10 border-l-2 border-emerald-500" : ""}`}
+                  className={`w-full text-left p-3 transition-all hover:bg-muted ${isAtiva ? "bg-success/10 border-l-2 border-success/30" : ""}`}
                 >
                   <div className="flex items-start justify-between gap-2">
                     <div className="min-w-0">
@@ -213,7 +213,7 @@ export default function AssessoriaIA() {
                   { icon: TrendingUp,  label: "Plano de Ação",   desc: "Passos para aptidão" },
                 ].map(({ icon: Icon, label, desc }) => (
                   <div key={label} className="rounded-2xl border border-border bg-card p-3 text-center">
-                    <Icon className="h-6 w-6 text-emerald-500 mx-auto mb-1.5" />
+                    <Icon className="h-6 w-6 text-success mx-auto mb-1.5" />
                     <div className="text-xs font-bold text-foreground">{label}</div>
                     <div className="text-[10px] text-muted-foreground mt-0.5">{desc}</div>
                   </div>
@@ -246,9 +246,9 @@ export default function AssessoriaIA() {
 
               {analisando && (
                 <div className="rounded-2xl border border-success/20 bg-success/10 p-6 text-center">
-                  <Loader2 className="h-8 w-8 animate-spin text-emerald-500 mx-auto mb-2" />
+                  <Loader2 className="h-8 w-8 animate-spin text-success mx-auto mb-2" />
                   <p className="text-sm font-bold text-success">Analisando empresa com Inteligência Artificial...</p>
-                  <p className="text-xs text-emerald-500 mt-1">Comparando Receita Federal, Cartão CNPJ, documentos e sócios</p>
+                  <p className="text-xs text-success mt-1">Comparando Receita Federal, Cartão CNPJ, documentos e sócios</p>
                 </div>
               )}
 
@@ -270,7 +270,7 @@ export default function AssessoriaIA() {
                       </div>
                     </div>
                     {analise.diagnostico && (
-                      <p className="mt-3 text-sm text-foreground leading-relaxed border-t border-white/50 pt-3">{analise.diagnostico}</p>
+                      <p className="mt-3 text-sm text-foreground leading-relaxed border-t border-border pt-3">{analise.diagnostico}</p>
                     )}
                   </div>
 
@@ -390,7 +390,7 @@ export default function AssessoriaIA() {
                         <ul className="space-y-2">
                           {(Array.isArray(analise.pontos_positivos) ? analise.pontos_positivos : []).map((p, i) => (
                             <li key={i} className="flex items-start gap-2 text-sm text-success">
-                              <CheckCircle2 className="h-4 w-4 text-emerald-500 mt-0.5 shrink-0" />
+                              <CheckCircle2 className="h-4 w-4 text-success mt-0.5 shrink-0" />
                               {p}
                             </li>
                           ))}

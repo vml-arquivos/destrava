@@ -350,7 +350,7 @@ function DocumentosDoBloco({ documentos }: { documentos?: DocumentoBloco[] }) {
               <a href={doc.view_url || `/api/documentos/${doc.id}/view`} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 rounded-lg px-2 py-1 text-[11px] font-bold text-primary bg-primary/10 hover:bg-primary/20" title="Visualizar documento">
                 <ExternalLink className="w-3 h-3" /> Ver
               </a>
-              <a href={doc.download_url || `/api/documentos/${doc.id}/download`} className="inline-flex items-center gap-1 rounded-lg px-2 py-1 text-[11px] font-bold text-muted-foreground bg-white border border-border hover:bg-muted" title="Baixar documento">
+              <a href={doc.download_url || `/api/documentos/${doc.id}/download`} className="inline-flex items-center gap-1 rounded-lg px-2 py-1 text-[11px] font-bold text-muted-foreground bg-card border border-border hover:bg-muted" title="Baixar documento">
                 <Download className="w-3 h-3" /> Baixar
               </a>
             </div>
@@ -440,7 +440,7 @@ function BlocoCard({ bloco, aberto, onToggle }: { bloco: BlocoDossie; aberto: bo
   const docs = Array.isArray(bloco.documentos) ? bloco.documentos : [];
   const isPrioritario = bloco.codigo === "cnpj_receita" || bloco.codigo === "qsa_quadro_societario";
   return (
-    <div className={`rounded-2xl border bg-white shadow-sm overflow-hidden ${isPrioritario ? "border-primary/20" : "border-border"}`}>
+    <div className={`rounded-2xl border bg-card shadow-sm overflow-hidden ${isPrioritario ? "border-primary/20" : "border-border"}`}>
       <button type="button" onClick={onToggle} className="w-full text-left p-4 hover:bg-muted transition-colors">
         <div className="flex items-start gap-3">
           <div className={`w-10 h-10 rounded-xl flex items-center justify-center shrink-0 ${bloco.completo ? "bg-success/20 text-success" : isPrioritario ? "bg-primary/20 text-primary" : "bg-muted text-muted-foreground"}`}>
@@ -449,7 +449,7 @@ function BlocoCard({ bloco, aberto, onToggle }: { bloco: BlocoDossie; aberto: bo
           <div className="flex-1 min-w-0">
             <div className="flex flex-wrap items-center gap-2">
               <h3 className="text-sm font-bold text-foreground truncate">{String(bloco.ordem || "").padStart(2, "0")}. {bloco.nome_amigavel}</h3>
-              {isPrioritario && <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-primary text-white">IMEDIATO</span>}
+              {isPrioritario && <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-primary text-primary-foreground">IMEDIATO</span>}
               {bloco.obrigatorio && <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-muted text-muted-foreground">OBRIGATÓRIO</span>}
             </div>
             <p className="text-xs text-muted-foreground mt-0.5 line-clamp-2">{bloco.descricao}</p>
@@ -463,7 +463,7 @@ function BlocoCard({ bloco, aberto, onToggle }: { bloco: BlocoDossie; aberto: bo
         </div>
       </button>
       {aberto && (
-        <div className="border-t border-border p-4 space-y-4 bg-white">
+        <div className="border-t border-border p-4 space-y-4 bg-card">
           {bloco.codigo === "cnpj_receita" ? <BlocoCnpj bloco={bloco} /> : bloco.codigo === "qsa_quadro_societario" ? <BlocoQsa bloco={bloco} /> : <BlocoGenerico bloco={bloco} />}
 
           {pendencias.length > 0 && (
@@ -490,7 +490,7 @@ function AnaliseCnpjCard({ analise }: { analise: AnaliseCnpjEmpresa | null }) {
   const recomendacoes = Array.isArray(analise?.recomendacoes) ? analise!.recomendacoes : [];
   const positivos = Array.isArray(analise?.pontos_positivos) ? analise!.pontos_positivos : [];
   return (
-    <div className="rounded-2xl border border-border bg-white p-4 shadow-sm">
+    <div className="rounded-2xl border border-border bg-card p-4 shadow-sm">
       <div className="flex flex-col lg:flex-row lg:items-start lg:justify-between gap-3">
         <div>
           <div className="flex flex-wrap items-center gap-2">
@@ -549,7 +549,7 @@ function AnaliseCnpjCard({ analise }: { analise: AnaliseCnpjEmpresa | null }) {
               <p className="text-xs font-black text-destructive mb-2">Divergências encontradas com evidência</p>
               <div className="space-y-2">
                 {analise.divergencias.map((div: any, idx: number) => (
-                  <div key={idx} className="rounded-lg border border-destructive/20 bg-white p-2.5">
+                  <div key={idx} className="rounded-lg border border-destructive/20 bg-card p-2.5">
                     <p className="text-xs font-black text-destructive mb-1">{div.label || div.campo || `Divergência ${idx + 1}`}</p>
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-2 text-[11px]">
                       <div className="rounded-md bg-muted border border-border p-2">
@@ -656,7 +656,7 @@ export function ProntidaoIdentidadeCard({
           <div className="flex flex-wrap items-center gap-2">
             {apto ? <ShieldCheck className="h-5 w-5 text-success" /> : falhasLeitura.length ? <ShieldAlert className="h-5 w-5 text-destructive" /> : <ShieldAlert className="h-5 w-5 text-warning" />}
             <h3 className="text-sm font-extrabold text-foreground">Relatório inicial — Identidade do CNPJ</h3>
-            <span className={`rounded-full border bg-white px-2.5 py-1 text-[11px] font-extrabold ${apto ? "border-success/20 text-success" : falhasLeitura.length ? "border-destructive/20 text-destructive" : "border-warning/20 text-warning"}`}>
+            <span className={`rounded-full border bg-card px-2.5 py-1 text-[11px] font-extrabold ${apto ? "border-success/20 text-success" : falhasLeitura.length ? "border-destructive/20 text-destructive" : "border-warning/20 text-warning"}`}>
               {apto ? "Tudo OK — pode avançar" : processando ? "Lendo e cruzando documentos" : falhasLeitura.length ? `${falhasLeitura.length} falha(s) de leitura` : "Avanço bloqueado"}
             </span>
           </div>
@@ -671,7 +671,7 @@ export function ProntidaoIdentidadeCard({
               type="button"
               onClick={onTentarNovamente}
               disabled={processando}
-              className={`inline-flex items-center justify-center gap-2 rounded-xl border bg-white px-4 py-2.5 text-xs font-extrabold shadow-sm disabled:opacity-60 ${falhasLeitura.length ? "border-destructive/20 text-destructive hover:bg-destructive/10" : "border-primary/20 text-primary hover:bg-primary/10"}`}
+              className={`inline-flex items-center justify-center gap-2 rounded-xl border bg-card px-4 py-2.5 text-xs font-extrabold shadow-sm disabled:opacity-60 ${falhasLeitura.length ? "border-destructive/20 text-destructive hover:bg-destructive/10" : "border-primary/20 text-primary hover:bg-primary/10"}`}
             >
               {processando ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCw className="h-4 w-4" />}
               {processando ? "Processando..." : falhasLeitura.length ? "Tentar leitura novamente" : "Iniciar análise documental"}
@@ -681,7 +681,7 @@ export function ProntidaoIdentidadeCard({
             <button
               type="button"
               onClick={onAvancar}
-              className="inline-flex items-center justify-center gap-2 rounded-xl bg-success px-4 py-2.5 text-xs font-extrabold text-white shadow-sm hover:bg-success/90"
+              className="inline-flex items-center justify-center gap-2 rounded-xl bg-success px-4 py-2.5 text-xs font-extrabold text-primary-foreground shadow-sm hover:bg-success/90"
             >
               Avançar para próxima etapa <ArrowRight className="h-4 w-4" />
             </button>
@@ -690,7 +690,7 @@ export function ProntidaoIdentidadeCard({
       </div>
 
       {processando && (
-        <div className="mt-3 flex items-center gap-2 rounded-xl border border-primary/20 bg-white px-3 py-2 text-xs font-semibold text-primary">
+        <div className="mt-3 flex items-center gap-2 rounded-xl border border-primary/20 bg-card px-3 py-2 text-xs font-semibold text-primary">
           <Loader2 className="h-4 w-4 animate-spin" /> Análise documental em andamento. O resultado será atualizado nesta tela.
         </div>
       )}
@@ -703,7 +703,7 @@ export function ProntidaoIdentidadeCard({
             .slice(0, 4);
           const cor = item.consistente ? "emerald" : item.status === "falha_leitura" ? "red" : "amber";
           return (
-            <article key={item.codigo || item.nome} className="rounded-xl border border-white/90 bg-white p-3 shadow-sm">
+            <article key={item.codigo || item.nome} className="rounded-xl border border-border bg-card p-3 shadow-sm">
               <div className="flex items-start gap-2">
                 {item.consistente
                   ? <CheckCircle className="mt-0.5 h-4 w-4 shrink-0 text-success" />
@@ -730,23 +730,23 @@ export function ProntidaoIdentidadeCard({
       </div>
 
       <div className="mt-3 grid grid-cols-2 gap-2 md:grid-cols-4">
-        <div className="rounded-xl border border-white/80 bg-white p-3"><span className="text-[10px] font-bold uppercase text-muted-foreground">Analisados</span><b className="block text-base text-foreground">{identidade.relatorio?.documentos_analisados ?? documentos.filter((item) => item.analisado).length}/{totalDocumentos}</b></div>
-        <div className="rounded-xl border border-white/80 bg-white p-3"><span className="text-[10px] font-bold uppercase text-muted-foreground">Consistentes</span><b className="block text-base text-foreground">{identidade.relatorio?.documentos_conferidos ?? 0}/{totalDocumentos}</b></div>
-        <div className="rounded-xl border border-white/80 bg-white p-3"><span className="text-[10px] font-bold uppercase text-muted-foreground">Tempo de abertura</span><b className="block text-base text-foreground">{identidade.idade_meses == null ? "Não confirmado" : `${identidade.idade_meses} meses`}</b></div>
-        <div className="rounded-xl border border-white/80 bg-white p-3"><span className="text-[10px] font-bold uppercase text-muted-foreground">Enquadramento</span><b className="block truncate text-sm text-foreground">{identidade.enquadramento_tributario || "Não identificado"}</b></div>
+        <div className="rounded-xl border border-border bg-card p-3"><span className="text-[10px] font-bold uppercase text-muted-foreground">Analisados</span><b className="block text-base text-foreground">{identidade.relatorio?.documentos_analisados ?? documentos.filter((item) => item.analisado).length}/{totalDocumentos}</b></div>
+        <div className="rounded-xl border border-border bg-card p-3"><span className="text-[10px] font-bold uppercase text-muted-foreground">Consistentes</span><b className="block text-base text-foreground">{identidade.relatorio?.documentos_conferidos ?? 0}/{totalDocumentos}</b></div>
+        <div className="rounded-xl border border-border bg-card p-3"><span className="text-[10px] font-bold uppercase text-muted-foreground">Tempo de abertura</span><b className="block text-base text-foreground">{identidade.idade_meses == null ? "Não confirmado" : `${identidade.idade_meses} meses`}</b></div>
+        <div className="rounded-xl border border-border bg-card p-3"><span className="text-[10px] font-bold uppercase text-muted-foreground">Enquadramento</span><b className="block truncate text-sm text-foreground">{identidade.enquadramento_tributario || "Não identificado"}</b></div>
       </div>
 
       {(bloqueios.length > 0 || avisos.length > 0 || positivos.length > 0) && (
         <div className="mt-3 grid grid-cols-1 gap-3 lg:grid-cols-3">
-          <div className="rounded-xl border border-success/20 bg-white p-3">
+          <div className="rounded-xl border border-success/20 bg-card p-3">
             <p className="text-xs font-extrabold text-success">Confirmações</p>
             <div className="mt-2 space-y-1">{positivos.length ? positivos.slice(0, 6).map((item, index) => <p key={index} className="text-[11px] leading-relaxed text-success">• {item}</p>) : <p className="text-[11px] text-muted-foreground">Aguardando confirmações.</p>}</div>
           </div>
-          <div className="rounded-xl border border-destructive/20 bg-white p-3">
+          <div className="rounded-xl border border-destructive/20 bg-card p-3">
             <p className="text-xs font-extrabold text-destructive">O que precisa ser resolvido</p>
             <div className="mt-2 space-y-1">{bloqueios.length ? bloqueios.slice(0, 8).map((item, index) => <p key={index} className="text-[11px] leading-relaxed text-destructive">• {item}</p>) : <p className="text-[11px] text-success">Nenhuma pendência impeditiva.</p>}</div>
           </div>
-          <div className="rounded-xl border border-warning/20 bg-white p-3">
+          <div className="rounded-xl border border-warning/20 bg-card p-3">
             <p className="text-xs font-extrabold text-warning">Avisos estratégicos</p>
             <div className="mt-2 space-y-1">{avisos.length ? avisos.slice(0, 6).map((item, index) => <p key={index} className="text-[11px] leading-relaxed text-warning">• {item}</p>) : <p className="text-[11px] text-muted-foreground">Sem avisos adicionais.</p>}</div>
           </div>
@@ -781,7 +781,7 @@ function DocumentacaoSocietariaCard({
           <div className="flex flex-wrap items-center gap-2">
             {apto ? <ShieldCheck className="h-5 w-5 text-success" /> : <FileText className="h-5 w-5 text-primary" />}
             <h3 className="text-sm font-extrabold text-foreground">{dados.atos_junta_aprovados ? "Etapa 3 — Contrato e histórico mínimo de 12 meses" : "Etapa 2 — Atos da Junta Comercial"}</h3>
-            <span className={`rounded-full border bg-white px-2.5 py-1 text-[11px] font-extrabold ${apto ? "border-success/20 text-success" : "border-primary/20 text-primary"}`}>
+            <span className={`rounded-full border bg-card px-2.5 py-1 text-[11px] font-extrabold ${apto ? "border-success/20 text-success" : "border-primary/20 text-primary"}`}>
               {apto ? "Continuidade comprovada" : dados.analisado ? "Documentos complementares necessários" : "Aguardando validação"}
             </span>
           </div>
@@ -789,18 +789,18 @@ function DocumentacaoSocietariaCard({
         </div>
         <div className="flex flex-wrap gap-2">
           {(!dados.contrato_anexado || !dados.atos_junta_anexados) && onAbrirDocumentos && (
-            <button type="button" onClick={onAbrirDocumentos} className="inline-flex items-center gap-2 rounded-xl bg-primary px-4 py-2.5 text-xs font-extrabold text-white hover:bg-primary/90">
+            <button type="button" onClick={onAbrirDocumentos} className="inline-flex items-center gap-2 rounded-xl bg-primary px-4 py-2.5 text-xs font-extrabold text-primary-foreground hover:bg-primary/90">
               Anexar documentos societários <ArrowRight className="h-4 w-4" />
             </button>
           )}
           {dados.botao_validar_disponivel && !apto && (
-            <button type="button" onClick={onValidar} disabled={processando} className="inline-flex items-center gap-2 rounded-xl bg-primary px-4 py-2.5 text-xs font-extrabold text-white hover:bg-primary/90 disabled:opacity-60">
+            <button type="button" onClick={onValidar} disabled={processando} className="inline-flex items-center gap-2 rounded-xl bg-primary px-4 py-2.5 text-xs font-extrabold text-primary-foreground hover:bg-primary/90 disabled:opacity-60">
               {processando ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCw className="h-4 w-4" />}
               {processando ? "Conferindo..." : dados.atos_junta_aprovados ? "Validar contratos, datas e 12 meses" : "Analisar Atos da Junta"}
             </button>
           )}
           {apto && onAvancar && (
-            <button type="button" onClick={onAvancar} className="inline-flex items-center gap-2 rounded-xl bg-success px-4 py-2.5 text-xs font-extrabold text-white hover:bg-success/90">
+            <button type="button" onClick={onAvancar} className="inline-flex items-center gap-2 rounded-xl bg-success px-4 py-2.5 text-xs font-extrabold text-primary-foreground hover:bg-success/90">
               Montar mapa documental de crédito <ArrowRight className="h-4 w-4" />
             </button>
           )}
@@ -808,21 +808,21 @@ function DocumentacaoSocietariaCard({
       </div>
 
       <div className="mt-4 grid grid-cols-2 gap-3 lg:grid-cols-4">
-        <div className="rounded-xl border border-white bg-white p-3"><p className="text-[10px] font-bold uppercase text-muted-foreground">Atos da Junta</p><p className="mt-1 text-xs font-extrabold text-foreground">{dados.atos_junta_aprovados ? "Analisado e aprovado" : dados.atos_junta_anexados ? "Aguardando análise" : "Não anexado"}</p></div>
-        <div className="rounded-xl border border-white bg-white p-3"><p className="text-[10px] font-bold uppercase text-muted-foreground">Contratos/alterações</p><p className="mt-1 text-xs font-extrabold text-foreground">{dados.total_contratos_anexados || 0} anexado(s)</p></div>
-        <div className="rounded-xl border border-white bg-white p-3"><p className="text-[10px] font-bold uppercase text-muted-foreground">Último registro</p><p className="mt-1 text-xs font-extrabold text-foreground">{formatDate(dados.ultimo_registro_junta?.data || undefined)}</p></div>
-        <div className="rounded-xl border border-white bg-white p-3"><p className="text-[10px] font-bold uppercase text-muted-foreground">Corte mínimo</p><p className="mt-1 text-xs font-extrabold text-foreground">{formatDate(dados.data_corte_12_meses || undefined)}</p></div>
+        <div className="rounded-xl border border-border bg-card p-3"><p className="text-[10px] font-bold uppercase text-muted-foreground">Atos da Junta</p><p className="mt-1 text-xs font-extrabold text-foreground">{dados.atos_junta_aprovados ? "Analisado e aprovado" : dados.atos_junta_anexados ? "Aguardando análise" : "Não anexado"}</p></div>
+        <div className="rounded-xl border border-border bg-card p-3"><p className="text-[10px] font-bold uppercase text-muted-foreground">Contratos/alterações</p><p className="mt-1 text-xs font-extrabold text-foreground">{dados.total_contratos_anexados || 0} anexado(s)</p></div>
+        <div className="rounded-xl border border-border bg-card p-3"><p className="text-[10px] font-bold uppercase text-muted-foreground">Último registro</p><p className="mt-1 text-xs font-extrabold text-foreground">{formatDate(dados.ultimo_registro_junta?.data || undefined)}</p></div>
+        <div className="rounded-xl border border-border bg-card p-3"><p className="text-[10px] font-bold uppercase text-muted-foreground">Corte mínimo</p><p className="mt-1 text-xs font-extrabold text-foreground">{formatDate(dados.data_corte_12_meses || undefined)}</p></div>
       </div>
 
       {!!dados.resultado_analise_atos && (
-        <div className="mt-3 rounded-xl border border-primary/20 bg-white p-3">
+        <div className="mt-3 rounded-xl border border-primary/20 bg-card p-3">
           <p className="text-xs font-extrabold text-primary">Análise detalhada dos Atos da Junta Comercial</p>
           <ResultadoAnaliseDocumento resultado={dados.resultado_analise_atos} documento={{ nome: "Atos da Junta Comercial", bloco: "Atos da Junta Comercial" }} compacto />
         </div>
       )}
 
       {registros.length > 0 && (
-        <div className="mt-3 rounded-xl border border-primary/20 bg-white p-3">
+        <div className="mt-3 rounded-xl border border-primary/20 bg-card p-3">
           <p className="text-xs font-extrabold text-foreground">Cadeia documental exigida</p>
           <p className="mt-1 text-[11px] text-muted-foreground">O sistema parte do último registro e retrocede até alcançar pelo menos 12 meses.</p>
           <div className="mt-2 grid gap-2 md:grid-cols-2">
@@ -841,7 +841,7 @@ function DocumentacaoSocietariaCard({
       )}
 
       {!!dados.documentos_analisados?.length && (
-        <div className="mt-3 rounded-xl border border-primary/20 bg-white p-3">
+        <div className="mt-3 rounded-xl border border-primary/20 bg-card p-3">
           <p className="text-xs font-extrabold text-primary">Análises documentais detalhadas</p>
           <p className="mt-1 text-[11px] text-muted-foreground">Esta seção usa o mesmo resultado normalizado exibido no relatório consolidado e no PDF.</p>
           {dados.documentos_analisados.map((documento, documentoIndex) => {
@@ -877,9 +877,9 @@ function DocumentacaoSocietariaCard({
           })}
         </div>
       )}
-      {!!dados.avisos?.length && <div className="mt-3 rounded-xl border border-primary/20 bg-white p-3"><p className="text-xs font-extrabold text-primary">Avisos da análise</p>{dados.avisos.map((item, index) => <p key={index} className="mt-1 text-[11px] text-primary">• {item}</p>)}</div>}
+      {!!dados.avisos?.length && <div className="mt-3 rounded-xl border border-primary/20 bg-card p-3"><p className="text-xs font-extrabold text-primary">Avisos da análise</p>{dados.avisos.map((item, index) => <p key={index} className="mt-1 text-[11px] text-primary">• {item}</p>)}</div>}
       {!!dados.registros_faltantes?.length && (
-        <div className="mt-3 rounded-xl border border-warning/20 bg-white p-3">
+        <div className="mt-3 rounded-xl border border-warning/20 bg-card p-3">
           <p className="text-xs font-extrabold text-warning">Documentos ainda faltando para completar os 12 meses</p>
           {dados.registros_faltantes.map((item, index) => (
             <p key={index} className="mt-1 text-[11px] text-warning">
@@ -888,7 +888,7 @@ function DocumentacaoSocietariaCard({
           ))}
         </div>
       )}
-      {!!dados.bloqueios?.length && <div className="mt-3 rounded-xl border border-destructive/20 bg-white p-3"><p className="text-xs font-extrabold text-destructive">Pendências</p>{dados.bloqueios.map((item, index) => <p key={index} className="mt-1 text-[11px] text-destructive">• {item}</p>)}</div>}
+      {!!dados.bloqueios?.length && <div className="mt-3 rounded-xl border border-destructive/20 bg-card p-3"><p className="text-xs font-extrabold text-destructive">Pendências</p>{dados.bloqueios.map((item, index) => <p key={index} className="mt-1 text-[11px] text-destructive">• {item}</p>)}</div>}
       <p className="mt-3 text-[11px] text-muted-foreground">O CNPJ na certidão da Junta é complementar. A validação obrigatória usa NIRE, datas dos registros e a cadeia de documentos necessária para comprovar 12 meses.</p>
     </section>
   );
@@ -897,7 +897,7 @@ function DocumentacaoSocietariaCard({
 function MapaDocumentalCreditoCard({ mapa }: { mapa?: MapaDocumentalCredito }) {
   if (!mapa) return null;
   return (
-    <details className="rounded-xl border border-border bg-white">
+    <details className="rounded-xl border border-border bg-card">
       <summary className="flex cursor-pointer list-none items-center justify-between gap-3 p-3 hover:bg-muted">
         <div className="flex min-w-0 items-center gap-2">
           <ClipboardList className="h-4 w-4 shrink-0 text-primary" />
@@ -920,7 +920,7 @@ function MapaDocumentalCreditoCard({ mapa }: { mapa?: MapaDocumentalCredito }) {
               {!!etapa.documentos.length && (
                 <div className="mt-2 space-y-1.5">
                   {etapa.documentos.map((documento) => (
-                    <div key={documento.codigo} className="flex items-start gap-2 rounded-lg border border-white bg-white p-2">
+                    <div key={documento.codigo} className="flex items-start gap-2 rounded-lg border border-border bg-card p-2">
                       {documento.anexado ? <CheckCircle className="mt-0.5 h-3.5 w-3.5 shrink-0 text-success" /> : <FileText className="mt-0.5 h-3.5 w-3.5 shrink-0 text-muted-foreground" />}
                       <div className="min-w-0">
                         <p className="text-[10px] font-bold text-foreground">{documento.nome}{!documento.obrigatorio ? " (quando aplicável)" : ""}</p>
@@ -1133,7 +1133,7 @@ export default function DossieCreditoEmpresa({ empresaId, onAtualizarReceita, on
         </div>
       )}
 
-      <div className="rounded-xl border border-border bg-white">
+      <div className="rounded-xl border border-border bg-card">
         <button
           type="button"
           onClick={() => setMostrarDetalhesIniciais((v) => !v)}
@@ -1170,7 +1170,7 @@ export default function DossieCreditoEmpresa({ empresaId, onAtualizarReceita, on
         )}
       </div>
 
-      <div className="rounded-xl border border-border bg-white">
+      <div className="rounded-xl border border-border bg-card">
         <button
           type="button"
           onClick={() => setMostrarProximasEtapas((v) => !v)}

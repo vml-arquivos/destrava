@@ -153,20 +153,20 @@ export default function CriarTarefaNexusModal({ entidade, onClose }: { entidade:
   }
 
   return (
-    <div className="fixed inset-0 z-[100] bg-slate-950/65 backdrop-blur-sm flex items-center justify-center p-3" role="dialog" aria-modal="true" aria-label="Criar tarefa no Nexus">
+    <div className="fixed inset-0 z-[100] bg-brand-navy/65 backdrop-blur-sm flex items-center justify-center p-3" role="dialog" aria-modal="true" aria-label="Criar tarefa no Nexus">
       <div className="w-full max-w-5xl max-h-[96vh] bg-card rounded-2xl shadow-2xl flex flex-col overflow-hidden border border-primary/20">
         <header className="px-5 py-4 border-b flex items-start justify-between gap-4 bg-gradient-to-r from-blue-950 via-blue-800 to-blue-600 text-primary-foreground">
           <div>
             <h2 className="font-black text-xl tracking-tight">Nova lista de tarefas</h2>
-            <p className="text-xs text-blue-100 mt-1">{entidade.tipo === 'empresa' ? 'Empresa' : 'Cliente PF'} · {entidade.nome}</p>
+            <p className="text-xs text-primary mt-1">{entidade.tipo === 'empresa' ? 'Empresa' : 'Cliente PF'} · {entidade.nome}</p>
           </div>
-          <button type="button" onClick={onClose} className="p-1.5 rounded-lg text-blue-100 hover:text-primary-foreground hover:bg-card/10" aria-label="Fechar"><X className="w-5 h-5" /></button>
+          <button type="button" onClick={onClose} className="p-1.5 rounded-lg text-primary hover:text-primary-foreground hover:bg-card/10" aria-label="Fechar"><X className="w-5 h-5" /></button>
         </header>
 
         <div className="p-5 overflow-y-auto space-y-4">
           <div>
             <label className="block text-xs font-bold text-muted-foreground mb-1">Título automático da lista</label>
-            <input className={`${inputClass} bg-primary/10 text-blue-950 font-semibold`} value={tituloAutomatico} readOnly />
+            <input className={`${inputClass} bg-primary/10 text-primary font-semibold`} value={tituloAutomatico} readOnly />
             <p className="text-[11px] text-muted-foreground mt-1">Cada envio recebe uma identidade própria. Listas da mesma empresa nunca são fundidas.</p>
           </div>
           <div>
@@ -181,12 +181,12 @@ export default function CriarTarefaNexusModal({ entidade, onClose }: { entidade:
           <div className="grid md:grid-cols-2 gap-3">
             <div className="flex items-start gap-3 p-3.5 rounded-xl border border-primary/20 bg-primary/10">
               <CheckSquare className="w-5 h-5 text-primary mt-0.5 shrink-0" />
-              <span><strong className="text-sm text-blue-950">Fonte única no Nexus</strong><br /><small className="text-primary">Lista, responsáveis, recorrência, aprovação, histórico e ranking são armazenados somente no Nexus.</small></span>
+              <span><strong className="text-sm text-primary">Fonte única no Nexus</strong><br /><small className="text-primary">Lista, responsáveis, recorrência, aprovação, histórico e ranking são armazenados somente no Nexus.</small></span>
             </div>
             <div className={`flex items-start gap-3 p-3.5 rounded-xl border ${catalogError ? 'border-warning/30 bg-warning/10' : 'border-success/20 bg-success/10'}`}>
               {catalogLoading ? <Loader2 className="w-5 h-5 text-primary mt-0.5 animate-spin shrink-0" /> : <Users className={`w-5 h-5 mt-0.5 shrink-0 ${catalogError ? 'text-warning' : 'text-success'}`} />}
               <div className="min-w-0 flex-1">
-                <strong className={`text-sm ${catalogError ? 'text-amber-950' : 'text-emerald-950'}`}>{catalogLoading ? 'Carregando equipes e membros…' : catalogError ? 'Catálogo temporariamente indisponível' : `${catalog.total_membros} membros · ${catalog.total_equipes} equipes`}</strong>
+                <strong className={`text-sm ${catalogError ? 'text-warning' : 'text-success'}`}>{catalogLoading ? 'Carregando equipes e membros…' : catalogError ? 'Catálogo temporariamente indisponível' : `${catalog.total_membros} membros · ${catalog.total_equipes} equipes`}</strong>
                 <p className={`text-[11px] mt-0.5 ${catalogError ? 'text-warning' : 'text-success'}`}>{catalogError || 'Todos os perfis ativos são selecionáveis, inclusive gestores e administradores.'}</p>
                 {catalogError && <button type="button" onClick={() => setCatalogRevision(value => value + 1)} className="mt-2 inline-flex items-center gap-1 text-xs font-bold text-warning"><RefreshCw className="w-3.5 h-3.5" /> Tentar novamente</button>}
               </div>
@@ -224,7 +224,7 @@ export default function CriarTarefaNexusModal({ entidade, onClose }: { entidade:
                         </div>
 
                         <div className="rounded-xl border border-primary/20 bg-primary/10 p-3">
-                          <label className="block text-xs font-bold text-blue-950 mb-1">Frequência desta tarefa</label>
+                          <label className="block text-xs font-bold text-primary mb-1">Frequência desta tarefa</label>
                           <div className="grid sm:grid-cols-2 gap-2">
                             <select className={inputClass} value={item.recorrencia} onChange={event => updateItem(item.id, 'recorrencia', event.target.value as ChecklistRecurrence)}>
                               <option value="unica">Uma vez</option><option value="diaria">Todos os dias</option><option value="semanal">Toda semana</option><option value="mensal">Todo mês</option>
@@ -235,7 +235,7 @@ export default function CriarTarefaNexusModal({ entidade, onClose }: { entidade:
                           <p className="text-[11px] text-primary mt-1.5">O Nexus lembra o mesmo item até concluir e aprovar. Não cria outra lista nem duplica a tarefa.</p>
                         </div>
                       </div>
-                      <button type="button" onClick={() => setItems(current => current.filter(value => value.id !== item.id))} disabled={items.length === 1} className="p-2 text-rose-600 hover:bg-rose-50 rounded-lg disabled:opacity-30" title="Remover item"><Trash2 className="w-4 h-4" /></button>
+                      <button type="button" onClick={() => setItems(current => current.filter(value => value.id !== item.id))} disabled={items.length === 1} className="p-2 text-destructive hover:bg-destructive/10 rounded-lg disabled:opacity-30" title="Remover item"><Trash2 className="w-4 h-4" /></button>
                     </div>
                   </div>
                 );

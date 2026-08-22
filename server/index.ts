@@ -47,6 +47,7 @@ import {
   calcularCompensacaoMensal,
   gerarDiagnosticoSemana,
   calcularAcumulados,
+  calcularPosicaoSemanaNoMes,
 } from "./funcoes_acompanhamento.ts";
 import { normalizarPaginacaoCatalogo, normalizarTipoCatalogo } from "./lib/nexusCatalogo";
 import { contactInputSchema, loginInputSchema, leadInputSchema, validateBody } from "./lib/inputValidation";
@@ -54,6 +55,7 @@ import { closeChromium, launchChromium } from "./services/chromiumLauncher";
 import { generateBrandedPdfBuffer, appendAttachmentsToPdf, type AnexoParaMerge } from "./services/brandedPdfLayout";
 import { generateFollowupMessage, generateLeadRecommendations, generateLeadSummary, qualifyTriagemLead } from "./services/aiService";
 import { getDataDir, resolveDocumentPath, saveDocumentBuffer, getDocumentStorageHealth, PersistentStorageError } from "./services/documentStorage";
+import { validateProductionConfig } from "./productionConfig";
 import { buscarAnalisesDocumentaisAvancadas, calcularInteligencia360 } from "./services/inteligencia360Service";
 import { calcularPropostaBancaria } from "./services/propostaBancariaService";
 import { gerarRelatorioTecnico } from "./services/relatorioTecnicoEmpresaService";
@@ -129,6 +131,9 @@ pool.query("SELECT 1").then(() => {
   // Auto-migrate removido. Toda DDL é executada via scripts SQL manuais em /db/.
 }).catch((e) => {
   console.error("🗄️  PostgreSQL: ❌ Falha na conexão —", e.message);
+  if (process.env.NODE_ENV === "production") {
+    process.exit(1);
+  }
 });
 
 // ─── n8n Webhook helper ──────────────────────────────────────────────────────
@@ -1060,6 +1065,10 @@ async function listarConversasChatwoot({
 
 // ─── App ─────────────────────────────────────────────────────────────────────
 async function startServer() {
+  if (process.env.NODE_ENV === "production") {
+    validateProductionConfig();
+  }
+
   const app = express();
   app.set(
     "trust proxy",
@@ -5455,7 +5464,7 @@ async function startServer() {
       } catch { eventosRotina = []; }
 
       // Consistência Documental Avançada: falhas/tabela ausente não interrompem o motor determinístico.
-      const analisesDocumentais = await buscarAnalisesDocumentaisAvancadas(empresaId, pool);
+      const analisesDocumentaisResult = await buscarAnalisesDocumentaisAvancadas(empresaId, pool);
 
       // A análise Receita + Cartão CNPJ é a quarta fonte do portão inicial.
       // Consulta protegida: instalações antigas sem a tabela continuam funcionando.
@@ -5485,7 +5494,8 @@ async function startServer() {
         acompanhamentoAtivo,
         atualizacoesAcompanhamento,
         eventosRotina,
-        analisesDocumentais,
+        analisesDocumentais: analisesDocumentaisResult.analises,
+        falhaConsultaDocumental: analisesDocumentaisResult.falhaConsulta,
         analiseCnpj,
       });
 
@@ -5548,6 +5558,7 @@ async function startServer() {
         pendencias_cadastrais: [],
         pontos_atencao: [],
         consistencia_documental_avancada: { disponivel: false, analises_processadas: 0, tipos_analisados: [], alertas: [], total_criticos: 0, total_altos: 0, total_medios: 0, total_baixos: 0, penalidade_score: 0 },
+        falha_consulta_documental: false,
         simulacoes: [],
         contratos: [],
         faturamento: null,
@@ -15265,7 +15276,8 @@ async function registrarDocumentoContratoGerado(params: {
     );
     const semanasParaAcumulo = todasSemanas.rows.filter((item: any) => String(item.id) !== String(atualizacaoId));
     const { acumuladoMensalAnterior, acumuladoAnual } = calcularAcumulados(semanasParaAcumulo, numeroSemana, mesRef, anoRef);
-    const comp = calcularCompensacaoMensal(totalEntradas, acumuladoMensalAnterior, acumuladoAnual, numeroSemana, refs);
+    const posicaoSemanaNoMes = calcularPosicaoSemanaNoMes(todasSemanas.rows, numeroSemana, mesRef, anoRef);
+    const comp = calcularCompensacaoMensal(totalEntradas, acumuladoMensalAnterior, acumuladoAnual, posicaoSemanaNoMes, refs);
     const diagnostico = gerarDiagnosticoSemana(comp, refs, numeroSemana);
 
     const updated = await db.query(
@@ -16169,7 +16181,8 @@ async function registrarDocumentoContratoGerado(params: {
       );
       const semanasParaAcumulo = todasSemanas.rows.filter((s: any) => Number(s.numero_semana) !== numeroSemana);
       const { acumuladoMensalAnterior, acumuladoAnual } = calcularAcumulados(semanasParaAcumulo, numeroSemana, mesRef, anoRef);
-      const comp = calcularCompensacaoMensal(totalEntradas, acumuladoMensalAnterior, acumuladoAnual, numeroSemana, refs);
+      const posicaoSemanaNoMes = calcularPosicaoSemanaNoMes(todasSemanas.rows, numeroSemana, mesRef, anoRef);
+      const comp = calcularCompensacaoMensal(totalEntradas, acumuladoMensalAnterior, acumuladoAnual, posicaoSemanaNoMes, refs);
       const diagnostico = gerarDiagnosticoSemana(comp, refs, numeroSemana);
       await client.query('BEGIN');
       const { rows } = await client.query(
@@ -16343,6 +16356,10 @@ async function registrarDocumentoContratoGerado(params: {
       const faturamentoAnual = Number(acomp.faturamento_anual || 0);
       // Calcular referências de aderência
       const dataRef = b.data_referencia_inicio;
+      const semanaAtual = {
+        numero_semana: numeroSemana,
+        data_referencia_inicio: dataRef,
+      };
       const anoRef = dataRef ? new Date(String(dataRef) + 'T00:00:00Z').getUTCFullYear() : new Date().getFullYear();
       const mesRef = dataRef ? new Date(String(dataRef) + 'T00:00:00Z').getUTCMonth() + 1 : new Date().getMonth() + 1;
       const refs = calcularReferenciasAcompanhamento(faturamentoAnual, anoRef, mesRef, Number(acomp.percentual_operacional || 30));
@@ -16352,7 +16369,13 @@ async function registrarDocumentoContratoGerado(params: {
         [req.params.id, numeroSemana]
       );
       const { acumuladoMensalAnterior, acumuladoAnual } = calcularAcumulados(semanasAnteriores.rows, numeroSemana, mesRef, anoRef);
-      const comp = calcularCompensacaoMensal(totalEntradas, acumuladoMensalAnterior, acumuladoAnual, numeroSemana, refs);
+      const posicaoSemanaNoMes = calcularPosicaoSemanaNoMes(
+        [...semanasAnteriores.rows, semanaAtual],
+        numeroSemana,
+        mesRef,
+        anoRef
+      );
+      const comp = calcularCompensacaoMensal(totalEntradas, acumuladoMensalAnterior, acumuladoAnual, posicaoSemanaNoMes, refs);
       const diagnostico = gerarDiagnosticoSemana(comp, refs, numeroSemana);
       const { rows } = await pool.query(
         `INSERT INTO acompanhamento_bancario_atualizacoes (
@@ -18910,4 +18933,9 @@ Responda em JSON com:
   iniciarAutomationScheduler(pool);
 }
 
-startServer().catch(console.error);
+startServer().catch((error) => {
+  console.error("[BOOT] Falha ao iniciar o servidor:", error);
+  if (process.env.NODE_ENV === "production") {
+    process.exit(1);
+  }
+});

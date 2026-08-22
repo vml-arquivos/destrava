@@ -120,17 +120,17 @@ export default function HeroCarousel() {
         >
           <div>
             <div className="mb-8 inline-flex items-center gap-2 rounded-full border border-white/25 bg-card/10 px-4 py-2 text-sm font-bold text-primary-foreground backdrop-blur-sm">
-              <ShieldCheck className="h-4 w-4 text-amber-300" aria-hidden="true" />
+              <ShieldCheck className="h-4 w-4 text-warning" aria-hidden="true" />
               Condições sujeitas à análise
             </div>
-            <p className="mb-3 text-sm font-black uppercase tracking-[0.18em] text-amber-300">{slides[current].label}</p>
+            <p className="mb-3 text-sm font-black uppercase tracking-[0.18em] text-warning">{slides[current].label}</p>
             <h2 className="max-w-md text-3xl font-black leading-tight text-primary-foreground sm:text-4xl">{slides[current].title}</h2>
             <p className="mt-5 max-w-md text-base leading-relaxed text-primary-foreground/80 sm:text-lg">{slides[current].description}</p>
           </div>
           <Link
             href={slides[current].href}
             data-cta-position="home-carousel"
-            className="inline-flex w-fit items-center gap-2 rounded-xl bg-card px-5 py-3 font-bold text-[#0033A0] transition hover:bg-amber-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-300"
+            className="inline-flex w-fit items-center gap-2 rounded-xl bg-card px-5 py-3 font-bold text-[#0033A0] transition hover:bg-warning focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-300"
           >
             Conhecer esta opção
             <ArrowRight className="h-4 w-4" aria-hidden="true" />

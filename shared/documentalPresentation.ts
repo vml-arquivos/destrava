@@ -112,6 +112,36 @@ function formatarDataBr(data: Date): string {
   return data.toLocaleDateString("pt-BR", { timeZone: "UTC" });
 }
 
+function formatarConfiancaLeitura(value: unknown): string {
+  const numeric = typeof value === "number" ? value : Number(value);
+  if (!Number.isFinite(numeric)) return "";
+  const percentual = numeric >= 0 && numeric <= 1 ? numeric * 100 : numeric;
+  return `${Math.round(percentual)}%`;
+}
+
+function adicionarConfiancaLeitura(
+  secoes: DocumentoAnaliseSecao[],
+  resultado: any,
+  documento: any,
+): DocumentoAnaliseSecao[] {
+  const valorBruto = resultado?.nivel_confianca
+    ?? resultado?.confianca
+    ?? documento?.nivel_confianca
+    ?? documento?.confianca;
+  if (valorBruto === null || valorBruto === undefined || valorBruto === "") return secoes;
+
+  const valor = formatarConfiancaLeitura(valorBruto);
+  if (!valor) return secoes;
+  const jaExiste = secoes.some((secao) => secao.campos?.some((campo) => normalizar(campo.label) === "confianca da leitura"));
+  if (jaExiste) return secoes;
+
+  const indiceAlvo = secoes.findIndex((secao) => !secao.colapsavel);
+  if (indiceAlvo < 0) return secoes;
+  return secoes.map((secao, indice) => indice === indiceAlvo
+    ? { ...secao, campos: [...(secao.campos || []), { label: "Confiança da leitura", valor }] }
+    : secao);
+}
+
 function formatarAlteracaoResumo(alteracao: any): string {
   const cedente = texto(alteracao?.cedente?.nome || alteracao?.socio_retirante?.nome);
   const cessionario = texto(alteracao?.cessionario?.nome || alteracao?.socio_admitido?.nome);
@@ -313,7 +343,11 @@ export function construirSecoesAnaliseDocumento(resultado: any = {}, documento: 
   const socios = sociosLidos(resultado, documento);
   const qsa = ehQsa(resultado, documento, socios);
   const societario = qsa || alteracoes.length > 0 || quadroFinal.length > 0 || Boolean(resultado?.analise_societaria_auditavel) || Boolean(resultado?.status_societario);
-  if (societario) return secoesSocietariasCompactas(resultado, documento, conclusao, socios, qsa);
+  if (societario) return adicionarConfiancaLeitura(
+    secoesSocietariasCompactas(resultado, documento, conclusao, socios, qsa),
+    resultado,
+    documento,
+  );
 
   const secoes: DocumentoAnaliseSecao[] = [{ id: "resultado", titulo: "Resultado da análise", texto: conclusao }];
   const diagnosticoFactual = texto(resultado?.diagnostico_factual || resultado?.diagnostico);
@@ -326,5 +360,5 @@ export function construirSecoesAnaliseDocumento(resultado: any = {}, documento: 
   if (campos.length) secoes.push({ id: "campos", titulo: "Amostra objetiva dos dados lidos", campos });
   const validacoesRealizadas = validacoes(resultado, documento, false, [], campos);
   if (validacoesRealizadas.length) secoes.push({ id: "validacoes", titulo: "Checklist técnico de validação", itens: validacoesRealizadas, colapsavel: true });
-  return secoes;
+  return adicionarConfiancaLeitura(secoes, resultado, documento);
 }

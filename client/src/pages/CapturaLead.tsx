@@ -288,16 +288,16 @@ export default function CapturaLead() {
       <Header />
 
       <main className="min-h-screen bg-gradient-to-b from-[#001f6b]/5 to-white">
-        <section className="bg-gradient-to-br from-[#001f6b] via-[#002d8a] to-[#003db5] text-white py-14 px-4">
+        <section className="bg-gradient-to-br from-[#001f6b] via-[#002d8a] to-[#003db5] text-primary-foreground py-14 px-4">
           <div className="max-w-3xl mx-auto text-center">
             {meta.label && (
-              <Badge className="bg-white/20 text-white border-white/30 mb-4">
+              <Badge className="bg-card/20 text-primary-foreground border-white/30 mb-4">
                 <FileText className="h-3.5 w-3.5 mr-1.5" />
                 {meta.label}
               </Badge>
             )}
             {!meta.label && (
-              <Badge className="bg-white/20 text-white border-white/30 mb-4">
+              <Badge className="bg-card/20 text-primary-foreground border-white/30 mb-4">
                 <Calculator className="h-3.5 w-3.5 mr-1.5" />
                 Simulação 100% Gratuita
               </Badge>
@@ -305,20 +305,20 @@ export default function CapturaLead() {
             <h1 className="text-3xl md:text-4xl font-bold mb-4 leading-tight">
               {meta.titulo}
             </h1>
-            <p className="text-white/80 text-lg mb-6">
+            <p className="text-primary-foreground/80 text-lg mb-6">
               {meta.subtitulo}
             </p>
-            <div className="flex flex-wrap justify-center gap-5 text-sm text-white/70">
+            <div className="flex flex-wrap justify-center gap-5 text-sm text-primary-foreground/70">
               <span className="flex items-center gap-1.5">
-                <Shield className="h-4 w-4 text-green-400" />
+                <Shield className="h-4 w-4 text-success" />
                 Dados protegidos
               </span>
               <span className="flex items-center gap-1.5">
-                <Clock className="h-4 w-4 text-yellow-400" />
+                <Clock className="h-4 w-4 text-warning" />
                 Retorno em horário comercial
               </span>
               <span className="flex items-center gap-1.5">
-                <Shield className="h-4 w-4 text-yellow-400" />
+                <Shield className="h-4 w-4 text-warning" />
                 Dados tratados conforme a LGPD
               </span>
             </div>
@@ -560,7 +560,7 @@ export default function CapturaLead() {
                     )}
 
                     <p className="text-xs text-muted-foreground bg-muted/50 rounded-lg p-3">
-                      <Shield className="h-3.5 w-3.5 inline mr-1 text-green-600" />
+                      <Shield className="h-3.5 w-3.5 inline mr-1 text-success" />
                       Seus dados serão usados para atender esta solicitação, conforme nossa Política de Privacidade.
                     </p>
 
@@ -606,14 +606,14 @@ export default function CapturaLead() {
             {etapa === "resultado" && (
               <div className="space-y-6">
                 <Card className="shadow-xl border-0 overflow-hidden">
-                  <div className="bg-gradient-to-r from-[#001f6b] to-[#003db5] p-6 text-white text-center">
-                    <div className="inline-flex items-center justify-center w-16 h-16 rounded-full bg-white/20 mb-4">
-                      <CheckCircle2 className="h-8 w-8 text-green-400" />
+                  <div className="bg-gradient-to-r from-[#001f6b] to-[#003db5] p-6 text-primary-foreground text-center">
+                    <div className="inline-flex items-center justify-center w-16 h-16 rounded-full bg-card/20 mb-4">
+                      <CheckCircle2 className="h-8 w-8 text-success" />
                     </div>
                     <h2 className="text-2xl font-bold mb-1">
                       {isServico ? `Solicitação Recebida, ${form.nome.split(" ")[0]}!` : `Interesse Registrado, ${form.nome.split(" ")[0]}!`}
                     </h2>
-                    <p className="text-white/80 text-sm">
+                    <p className="text-primary-foreground/80 text-sm">
                       {isServico
                         ? "Nossa equipe entrará em contato em breve para dar continuidade ao seu pedido."
                         : "Nossa equipe analisará as informações antes de apresentar qualquer cenário de crédito"}
@@ -622,20 +622,20 @@ export default function CapturaLead() {
 
                   <CardContent className="p-6 space-y-5">
                     {!isServico && form.valorDesejado ? (
-                      <div className="bg-blue-50 border border-blue-200 rounded-xl p-4 text-sm text-blue-900">
+                      <div className="bg-primary/10 border border-primary/20 rounded-xl p-4 text-sm text-primary">
                         <p className="font-semibold">Dados enviados para orientação</p>
                         <p className="mt-1">
                           Valor de referência: <strong>{fmt.format(parseFloat(form.valorDesejado))}</strong> em até <strong>{parcelas} meses</strong>.
                         </p>
-                        <p className="mt-2 text-blue-800">
+                        <p className="mt-2 text-primary">
                           Taxa, CET, prazo e parcela só podem ser informados após análise da instituição financeira. Este registro não é proposta, pré-aprovação ou garantia de crédito.
                         </p>
                       </div>
                     ) : isServico ? (
-                      <div className="bg-green-50 border border-green-200 rounded-xl p-4 text-center text-sm text-green-800">
-                        <CheckCircle2 className="h-6 w-6 text-green-600 mx-auto mb-2" />
+                      <div className="bg-success/10 border border-success/20 rounded-xl p-4 text-center text-sm text-success">
+                        <CheckCircle2 className="h-6 w-6 text-success mx-auto mb-2" />
                         <p className="font-semibold">Pedido registrado com sucesso!</p>
-                        <p className="mt-1 text-green-700">Um especialista em <strong>{meta.label}</strong> entrará em contato durante o horário comercial.</p>
+                        <p className="mt-1 text-success">Um especialista em <strong>{meta.label}</strong> entrará em contato durante o horário comercial.</p>
                       </div>
                     ) : (
                       <div className="text-center py-4 text-muted-foreground text-sm">
@@ -655,7 +655,7 @@ export default function CapturaLead() {
                     </div>
 
                     <div className="space-y-3">
-                      <Button asChild size="lg" className="w-full font-bold bg-green-600 hover:bg-green-700 h-14">
+                      <Button asChild size="lg" className="w-full font-bold bg-success hover:bg-success h-14">
                         <a
                           href={whatsappUrl}
                           target="_blank"

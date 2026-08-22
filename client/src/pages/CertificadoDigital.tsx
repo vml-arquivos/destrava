@@ -58,24 +58,24 @@ export default function CertificadoDigital() {
       {/* HERO */}
       <section className="bg-gradient-to-br from-[#1a5276] via-[#154360] to-[#0d2b45] text-primary-foreground py-14 md:py-20 relative overflow-hidden">
         <div className="absolute inset-0 opacity-10">
-          <div className="absolute top-0 right-0 w-96 h-96 bg-cyan-400 rounded-full blur-3xl" />
-          <div className="absolute bottom-0 left-0 w-96 h-96 bg-cyan-400 rounded-full blur-3xl" />
+          <div className="absolute top-0 right-0 w-96 h-96 bg-primary rounded-full blur-3xl" />
+          <div className="absolute bottom-0 left-0 w-96 h-96 bg-primary rounded-full blur-3xl" />
         </div>
         <div className="container px-4 relative z-10">
           <div className="max-w-3xl">
-            <div className="inline-flex items-center gap-2 bg-cyan-400/20 border border-cyan-400/40 rounded-full px-4 py-2 mb-6">
-              <Shield className="h-4 w-4 text-cyan-400" />
-              <span className="text-cyan-300 text-sm font-semibold">Certificado Digital</span>
+            <div className="inline-flex items-center gap-2 bg-primary/20 border border-primary/30/40 rounded-full px-4 py-2 mb-6">
+              <Shield className="h-4 w-4 text-primary" />
+              <span className="text-primary text-sm font-semibold">Certificado Digital</span>
             </div>
             <h1 className="text-4xl md:text-5xl lg:text-6xl font-bold mb-6 leading-tight">
               Certificado Digital<br />
-              <span className="text-cyan-400">para Empresa e PF</span>
+              <span className="text-primary">para Empresa e PF</span>
             </h1>
             <p className="text-lg md:text-xl text-primary-foreground/90 mb-8 leading-relaxed">
               Emita seu certificado digital com agilidade e segurança. Indispensável para emissão de nota fiscal eletrônica, acesso a sistemas governamentais e assinatura de documentos digitais.
             </p>
             <div className="flex flex-col sm:flex-row gap-4">
-              <Button asChild size="lg" className="bg-cyan-400 hover:bg-primary/100 text-foreground font-bold px-8">
+              <Button asChild size="lg" className="bg-primary hover:bg-primary/100 text-foreground font-bold px-8">
                 <Link href="/captura?produto=certificado-digital">
                   Solicitar Certificado
                   <ArrowRight className="ml-2 h-5 w-5" />
@@ -142,7 +142,7 @@ export default function CertificadoDigital() {
                     "Backup facilitado",
                   ].map((item) => (
                     <li key={item} className="flex items-center gap-3 text-sm text-foreground">
-                      <CheckCircle2 className="h-4 w-4 text-green-500 flex-shrink-0" />
+                      <CheckCircle2 className="h-4 w-4 text-success flex-shrink-0" />
                       {item}
                     </li>
                   ))}
@@ -163,14 +163,14 @@ export default function CertificadoDigital() {
               <div className="bg-card rounded-2xl border-2 border-primary/20 p-8 shadow-sm">
                 <div className="flex items-center gap-3 mb-6">
                   <div className="w-12 h-12 rounded-xl bg-primary/20 flex items-center justify-center">
-                    <CreditCard className="h-6 w-6 text-purple-600" />
+                    <CreditCard className="h-6 w-6 text-primary" />
                   </div>
                   <div>
                     <h3 className="text-2xl font-bold text-foreground">Tipo A3</h3>
                     <p className="text-sm text-muted-foreground">Token USB ou cartão inteligente</p>
                   </div>
                 </div>
-                <div className="mb-5 rounded-xl border border-purple-100 bg-primary/10/60 px-4 py-3">
+                <div className="mb-5 rounded-xl border border-primary/30 bg-primary/10/60 px-4 py-3">
                   <p className="text-xs font-bold uppercase tracking-wide text-primary">Valor</p>
                   <p className="text-sm text-primary">Sob consulta — resposta com o valor exato em minutos, sem compromisso.</p>
                 </div>
@@ -184,7 +184,7 @@ export default function CertificadoDigital() {
                     "Ideal para assinatura de contratos",
                   ].map((item) => (
                     <li key={item} className="flex items-center gap-3 text-sm text-foreground">
-                      <CheckCircle2 className="h-4 w-4 text-green-500 flex-shrink-0" />
+                      <CheckCircle2 className="h-4 w-4 text-success flex-shrink-0" />
                       {item}
                     </li>
                   ))}
@@ -193,7 +193,7 @@ export default function CertificadoDigital() {
                   <p className="text-sm font-semibold text-primary">Ideal para:</p>
                   <p className="text-sm text-primary">Contadores, advogados, médicos, empresas que assinam contratos digitais e precisam de maior segurança.</p>
                 </div>
-                <Button asChild className="w-full bg-purple-600 hover:bg-purple-700 text-primary-foreground font-bold">
+                <Button asChild className="w-full bg-primary hover:bg-primary text-primary-foreground font-bold">
                   <Link href="/captura?produto=certificado-digital">
                     Solicitar A3
                     <ArrowRight className="ml-2 h-4 w-4" />
@@ -230,7 +230,7 @@ export default function CertificadoDigital() {
                     "Acesso ao Portal do Simples Nacional",
                   ].map((item) => (
                     <div key={item} className="flex items-center gap-3 text-sm text-foreground">
-                      <CheckCircle2 className="h-4 w-4 text-green-500 flex-shrink-0" />
+                      <CheckCircle2 className="h-4 w-4 text-success flex-shrink-0" />
                       {item}
                     </div>
                   ))}
@@ -253,7 +253,7 @@ export default function CertificadoDigital() {
                     "Representação legal em sistemas governamentais",
                   ].map((item) => (
                     <div key={item} className="flex items-center gap-3 text-sm text-foreground">
-                      <CheckCircle2 className="h-4 w-4 text-green-500 flex-shrink-0" />
+                      <CheckCircle2 className="h-4 w-4 text-success flex-shrink-0" />
                       {item}
                     </div>
                   ))}
@@ -301,8 +301,8 @@ export default function CertificadoDigital() {
             <div className="grid md:grid-cols-3 gap-6">
               {[
                 { icon: Clock, title: "Agilidade", desc: "Processo simplificado com orientação completa da nossa equipe do início ao fim.", color: "text-primary", bg: "bg-primary/10" },
-                { icon: Shield, title: "Segurança", desc: "Trabalhamos com Autoridades Certificadoras credenciadas pelo ITI (ICP-Brasil).", color: "text-green-600", bg: "bg-green-50" },
-                { icon: Star, title: "Suporte", desc: "Acompanhamento completo após a emissão, incluindo renovação e suporte técnico.", color: "text-yellow-600", bg: "bg-yellow-50" },
+                { icon: Shield, title: "Segurança", desc: "Trabalhamos com Autoridades Certificadoras credenciadas pelo ITI (ICP-Brasil).", color: "text-success", bg: "bg-success/10" },
+                { icon: Star, title: "Suporte", desc: "Acompanhamento completo após a emissão, incluindo renovação e suporte técnico.", color: "text-warning", bg: "bg-warning/10" },
               ].map((v) => (
                 <div key={v.title} className="bg-card rounded-2xl p-6 shadow-sm border border-border text-center">
                   <div className={`w-14 h-14 rounded-2xl ${v.bg} flex items-center justify-center mx-auto mb-4`}>
@@ -343,7 +343,7 @@ export default function CertificadoDigital() {
               Não deixe sua empresa sem o certificado digital. Regularize hoje mesmo com a ajuda da nossa equipe especializada.
             </p>
             <div className="flex flex-col sm:flex-row gap-4 justify-center">
-              <Button asChild size="lg" className="bg-cyan-400 hover:bg-primary/100 text-foreground font-bold px-8">
+              <Button asChild size="lg" className="bg-primary hover:bg-primary/100 text-foreground font-bold px-8">
                 <Link href="/captura?produto=certificado-digital">
                   Solicitar Agora
                   <ArrowRight className="ml-2 h-5 w-5" />

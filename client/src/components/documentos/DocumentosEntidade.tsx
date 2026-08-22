@@ -405,7 +405,7 @@ function ResumoLaudoDocumento({ analise }: { analise: any }) {
       {!!badges.length && (
         <div className="grid grid-cols-2 gap-1">
           {badges.map((item) => (
-            <div key={item.label} className="rounded border border-white bg-white px-1.5 py-1">
+            <div key={item.label} className="rounded border border-border bg-card px-1.5 py-1">
               <p className="text-[8px] font-bold uppercase text-muted-foreground">{item.label}</p>
               <p className="text-[9px] font-semibold text-muted-foreground">{item.value}</p>
             </div>
@@ -437,7 +437,7 @@ function CardDocumentoFaltante({ documento }: { documento: any }) {
   const [aberto, setAberto] = useState(false);
   const temDetalhes = Boolean(documento.etapa || documento.finalidade || documento.origem);
   return (
-    <div className="rounded-xl border border-warning/20 bg-white p-3">
+    <div className="rounded-xl border border-warning/20 bg-card p-3">
       <div className="flex items-start justify-between gap-2">
         <div className="flex min-w-0 items-center gap-1.5">
           <p className="text-[10px] font-black text-foreground">{documento.nome}</p>
@@ -1152,13 +1152,13 @@ export default function DocumentosEntidade({
                 {carregandoRelatorio ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <FileText className="w-3.5 h-3.5" />}
                 {carregandoRelatorio ? "Analisando..." : "Relatório da análise"}
               </button>
-              <button type="button" onClick={baixarRelatorioDocumentalPdf} disabled={baixandoRelatorioPdf} className="inline-flex items-center justify-center gap-1.5 h-9 px-3 rounded-lg bg-primary text-white text-xs font-semibold hover:bg-primary/90 disabled:opacity-50">
+              <button type="button" onClick={baixarRelatorioDocumentalPdf} disabled={baixandoRelatorioPdf} className="inline-flex items-center justify-center gap-1.5 h-9 px-3 rounded-lg bg-primary text-primary-foreground text-xs font-semibold hover:bg-primary/90 disabled:opacity-50">
                 {baixandoRelatorioPdf ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Download className="w-3.5 h-3.5" />}
                 {baixandoRelatorioPdf ? "Gerando PDF..." : "Baixar relatório PDF"}
               </button>
             </>
           )}
-          <button type="button" onClick={abrirChecklistExportacao} disabled={docs.length === 0} className="inline-flex items-center justify-center gap-1.5 h-9 px-3 rounded-lg bg-brand-navy text-white text-xs font-semibold hover:bg-brand-navy disabled:opacity-50">
+          <button type="button" onClick={abrirChecklistExportacao} disabled={docs.length === 0} className="inline-flex items-center justify-center gap-1.5 h-9 px-3 rounded-lg bg-brand-navy text-primary-foreground text-xs font-semibold hover:bg-brand-navy disabled:opacity-50">
             <FileArchive className="w-3.5 h-3.5" /> Exportar documentos
           </button>
         </div>
@@ -1171,31 +1171,31 @@ export default function DocumentosEntidade({
           descartar o resultado já carregado (reabrir não refaz a consulta). */}
       {entidadeTipo === "empresa" && empresaId && relatorioDocumental && relatorioModalAberto && (
         <div className="fixed inset-0 z-50 bg-overlay p-4 flex items-center justify-center">
-          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-5xl max-h-[90vh] flex flex-col overflow-hidden">
+          <div className="bg-card rounded-2xl shadow-2xl w-full max-w-5xl max-h-[90vh] flex flex-col overflow-hidden">
             <div className="px-4 py-3 border-b border-primary/20 bg-primary/10 flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
               <div>
                 <p className="flex items-center gap-2 text-sm font-black text-primary"><FileText className="h-4 w-4" /> Relatório consolidado da análise documental</p>
                 <p className="mt-1 text-[11px] text-primary">Visualização completa do estado atual antes da geração do PDF. Atualizado em {new Date(relatorioDocumental.gerado_em || Date.now()).toLocaleString("pt-BR")} — {relatorioDocumental.regime?.descricao || "regime ainda não identificado"}.</p>
               </div>
               <div className="flex items-center gap-2 shrink-0">
-                <button type="button" onClick={baixarRelatorioDocumentalPdf} disabled={baixandoRelatorioPdf} className="inline-flex items-center justify-center gap-1.5 rounded-lg bg-white px-3 py-2 text-[11px] font-black text-primary shadow-sm ring-1 ring-primary/30 hover:bg-primary/10 disabled:opacity-50">
+                <button type="button" onClick={baixarRelatorioDocumentalPdf} disabled={baixandoRelatorioPdf} className="inline-flex items-center justify-center gap-1.5 rounded-lg bg-card px-3 py-2 text-[11px] font-black text-primary shadow-sm ring-1 ring-primary/30 hover:bg-primary/10 disabled:opacity-50">
                   {baixandoRelatorioPdf ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Download className="h-3.5 w-3.5" />}
                   {baixandoRelatorioPdf ? "Gerando..." : "Gerar PDF deste estado"}
                 </button>
-                <button type="button" onClick={() => setRelatorioModalAberto(false)} className="p-2 rounded-lg hover:bg-white/70 text-primary"><X className="h-5 w-5" /></button>
+                <button type="button" onClick={() => setRelatorioModalAberto(false)} className="p-2 rounded-lg hover:bg-card/70 text-primary"><X className="h-5 w-5" /></button>
               </div>
             </div>
 
             <div className="flex-1 overflow-y-auto bg-primary/10/40 p-4 space-y-4">
           <div className="grid grid-cols-2 gap-2 md:grid-cols-5">
-            <div className="rounded-xl border border-white bg-white p-2.5"><p className="text-[9px] font-black uppercase text-muted-foreground">Status geral</p><p className="mt-1 text-[11px] font-black text-foreground">{relatorioDocumental.status_geral}</p></div>
-            <div className="rounded-xl border border-white bg-white p-2.5"><p className="text-[9px] font-black uppercase text-muted-foreground">Anexados e analisados</p><p className="mt-1 text-lg font-black text-success">{relatorioDocumental.resumo?.documentos_analisados ?? 0}</p></div>
-            <div className="rounded-xl border border-white bg-white p-2.5"><p className="text-[9px] font-black uppercase text-muted-foreground">Anexados aguardando análise</p><p className="mt-1 text-lg font-black text-warning">{relatorioDocumental.resumo?.documentos_pendentes_analise ?? 0}</p></div>
-            <div className="rounded-xl border border-white bg-white p-2.5"><p className="text-[9px] font-black uppercase text-muted-foreground">Ainda faltam anexar</p><p className="mt-1 text-lg font-black text-warning">{relatorioDocumental.resumo?.documentos_faltantes ?? 0}</p></div>
-            <div className="rounded-xl border border-white bg-white p-2.5"><p className="text-[9px] font-black uppercase text-muted-foreground">Blocos com registro</p><p className="mt-1 text-lg font-black text-foreground">{relatorioDocumental.resumo?.blocos_analisados ?? 0}</p></div>
+            <div className="rounded-xl border border-border bg-card p-2.5"><p className="text-[9px] font-black uppercase text-muted-foreground">Status geral</p><p className="mt-1 text-[11px] font-black text-foreground">{relatorioDocumental.status_geral}</p></div>
+            <div className="rounded-xl border border-border bg-card p-2.5"><p className="text-[9px] font-black uppercase text-muted-foreground">Anexados e analisados</p><p className="mt-1 text-lg font-black text-success">{relatorioDocumental.resumo?.documentos_analisados ?? 0}</p></div>
+            <div className="rounded-xl border border-border bg-card p-2.5"><p className="text-[9px] font-black uppercase text-muted-foreground">Anexados aguardando análise</p><p className="mt-1 text-lg font-black text-warning">{relatorioDocumental.resumo?.documentos_pendentes_analise ?? 0}</p></div>
+            <div className="rounded-xl border border-border bg-card p-2.5"><p className="text-[9px] font-black uppercase text-muted-foreground">Ainda faltam anexar</p><p className="mt-1 text-lg font-black text-warning">{relatorioDocumental.resumo?.documentos_faltantes ?? 0}</p></div>
+            <div className="rounded-xl border border-border bg-card p-2.5"><p className="text-[9px] font-black uppercase text-muted-foreground">Blocos com registro</p><p className="mt-1 text-lg font-black text-foreground">{relatorioDocumental.resumo?.blocos_analisados ?? 0}</p></div>
           </div>
 
-          <div className="rounded-xl border border-border bg-white p-3">
+          <div className="rounded-xl border border-border bg-card p-3">
             <p className="text-[11px] font-black text-foreground">Como ler este relatório</p>
             <div className="mt-2 grid gap-2 text-[10px] text-muted-foreground md:grid-cols-3">
               <p><span className="font-black text-success">Anexados e analisados:</span> o arquivo foi localizado e existe resultado de leitura ou validação.</p>
@@ -1211,7 +1211,7 @@ export default function DocumentosEntidade({
               {(Array.isArray(relatorioDocumental.documentos_analisados) ? relatorioDocumental.documentos_analisados : []).map((documento: any, index: number) => {
                 const resultado = documento.resultado_analise || {};
                 return (
-                  <div key={`${documento.codigo}-${index}`} className="rounded-xl border border-success/20 bg-white p-3">
+                  <div key={`${documento.codigo}-${index}`} className="rounded-xl border border-success/20 bg-card p-3">
                     <div className="flex flex-col gap-1.5 md:flex-row md:items-start md:justify-between">
                       <div><p className="text-[11px] font-black text-foreground">{documento.nome}</p><p className="text-[9px] text-muted-foreground">{documento.bloco} {documento.criado_em ? `• ${new Date(documento.criado_em).toLocaleDateString("pt-BR")}` : ""}</p></div>
                       <span className="w-fit rounded-full bg-success/20 px-2 py-0.5 text-[9px] font-black text-success">{documento.status || (documento.consistente ? "Validado" : "Analisado")}</span>
@@ -1220,7 +1220,7 @@ export default function DocumentosEntidade({
                   </div>
                 );
               })}
-              {!relatorioDocumental.documentos_analisados?.length && <p className="rounded-lg border border-dashed border-success/30 bg-white p-3 text-[10px] text-muted-foreground">Nenhum documento analisado até o momento.</p>}
+              {!relatorioDocumental.documentos_analisados?.length && <p className="rounded-lg border border-dashed border-success/30 bg-card p-3 text-[10px] text-muted-foreground">Nenhum documento analisado até o momento.</p>}
             </div>
           </div>
 
@@ -1230,9 +1230,9 @@ export default function DocumentosEntidade({
             <div className="mt-3 grid gap-2 md:grid-cols-2">
               {(Array.isArray(relatorioDocumental.documentos_pendentes_analise) ? relatorioDocumental.documentos_pendentes_analise : []).map((documento: any, index: number) => {
                 const resultado = documento.resultado_analise || {};
-                return <div key={`${documento.codigo}-${index}`} className="rounded-xl border border-warning/20 bg-white p-3"><div className="flex items-start justify-between gap-2"><div><p className="text-[10px] font-black text-foreground">{documento.nome}</p><p className="text-[9px] text-muted-foreground">{documento.bloco}</p></div><span className="rounded-full bg-warning/20 px-2 py-0.5 text-[9px] font-black text-warning">Aguardando análise</span></div><p className="mt-2 text-[10px] text-warning">{resultado.diagnostico || documento.observacao || "Executar a leitura documental antes de considerar o arquivo válido."}</p></div>;
+                return <div key={`${documento.codigo}-${index}`} className="rounded-xl border border-warning/20 bg-card p-3"><div className="flex items-start justify-between gap-2"><div><p className="text-[10px] font-black text-foreground">{documento.nome}</p><p className="text-[9px] text-muted-foreground">{documento.bloco}</p></div><span className="rounded-full bg-warning/20 px-2 py-0.5 text-[9px] font-black text-warning">Aguardando análise</span></div><p className="mt-2 text-[10px] text-warning">{resultado.diagnostico || documento.observacao || "Executar a leitura documental antes de considerar o arquivo válido."}</p></div>;
               })}
-              {!relatorioDocumental.documentos_pendentes_analise?.length && <p className="rounded-lg border border-dashed border-warning/30 bg-white p-3 text-[10px] text-success">Não há anexos aguardando análise.</p>}
+              {!relatorioDocumental.documentos_pendentes_analise?.length && <p className="rounded-lg border border-dashed border-warning/30 bg-card p-3 text-[10px] text-success">Não há anexos aguardando análise.</p>}
             </div>
           </div>
 
@@ -1241,24 +1241,24 @@ export default function DocumentosEntidade({
             <p className="mt-1 text-[10px] text-warning">Itens calculados pelo mapa documental do regime tributário identificado e pelas pendências do dossiê.</p>
             <div className="mt-3 grid gap-2 md:grid-cols-2">
               {(Array.isArray(relatorioDocumental.documentos_faltantes) ? relatorioDocumental.documentos_faltantes : []).map((documento: any, index: number) => <CardDocumentoFaltante key={`${documento.codigo}-${index}`} documento={documento} />)}
-              {!relatorioDocumental.documentos_faltantes?.length && <p className="rounded-lg border border-dashed border-warning/30 bg-white p-3 text-[10px] text-success">Nenhum documento obrigatório pendente foi identificado.</p>}
+              {!relatorioDocumental.documentos_faltantes?.length && <p className="rounded-lg border border-dashed border-warning/30 bg-card p-3 text-[10px] text-success">Nenhum documento obrigatório pendente foi identificado.</p>}
             </div>
           </div>
 
-          <div className="rounded-xl border border-primary/20 bg-white p-3">
+          <div className="rounded-xl border border-primary/20 bg-card p-3">
             <p className="text-xs font-black text-primary">4. Resultados consolidados por etapa</p>
             <div className="mt-3 grid gap-2 lg:grid-cols-2">
               {(Array.isArray(relatorioDocumental.resultados_analises) ? relatorioDocumental.resultados_analises : []).map((analise: any, index: number) => <CardResultadoEtapa key={`${analise.codigo}-${index}`} analise={analise} />)}
             </div>
           </div>
 
-          <div className="rounded-xl border border-border bg-white p-3">
+          <div className="rounded-xl border border-border bg-card p-3">
             <p className="text-xs font-black text-foreground">5. Observações e anotações gerais</p>
             <div className="mt-2 grid gap-1.5 md:grid-cols-2">{itensTextoRelatorio(relatorioDocumental.anotacoes).map((item, index) => <p key={index} className="rounded-lg bg-muted px-2.5 py-2 text-[10px] text-muted-foreground">• {item}</p>)}</div>
             {!relatorioDocumental.anotacoes?.length && <p className="mt-2 text-[10px] text-muted-foreground">Nenhuma observação adicional registrada.</p>}
           </div>
 
-          <div className="rounded-xl border border-primary/20 bg-white p-3">
+          <div className="rounded-xl border border-primary/20 bg-card p-3">
             <p className="text-xs font-black text-primary">6. Próxima ação recomendada</p>
             <p className="mt-1 text-[10px] font-semibold text-foreground">{relatorioDocumental.proxima_acao}</p>
             {!!relatorioDocumental.pendencias?.length && <div className="mt-2 space-y-1">{relatorioDocumental.pendencias.map((pendencia: any, index: number) => <p key={`${pendencia.codigo}-${index}`} className="text-[10px] text-destructive">• <strong>{String(pendencia.severidade || "atenção").toUpperCase()}:</strong> {pendencia.mensagem || pendencia.recomendacao || pendencia.codigo}</p>)}</div>}
@@ -1269,7 +1269,7 @@ export default function DocumentosEntidade({
       )}
 
       {permitirUpload && (
-        <div className="rounded-xl border border-border bg-white p-4 space-y-3">
+        <div className="rounded-xl border border-border bg-card p-4 space-y-3">
           <div>
             <p className="text-sm font-bold text-muted-foreground">Checklist de inclusão de documentos</p>
             <p className="text-[11px] text-muted-foreground mt-0.5">Anexe cada documento no campo certo. Visualizar, baixar, validar e excluir ficam disponíveis ali mesmo, sem precisar procurar em outro lugar da tela.</p>
@@ -1290,15 +1290,15 @@ export default function DocumentosEntidade({
                   onClick={() => setSecaoAtiva(secao.titulo)}
                   className={`inline-flex items-center gap-1.5 px-3 py-2 rounded-full text-xs font-semibold border transition-colors ${
                     ativa
-                      ? "bg-primary border-primary text-white"
+                      ? "bg-primary border-primary text-primary-foreground"
                       : completa
                         ? "border-success/20 bg-success/10 text-success hover:bg-success/20"
-                        : "bg-white border-border text-muted-foreground hover:bg-muted"
+                        : "bg-card border-border text-muted-foreground hover:bg-muted"
                   }`}
                 >
                   {completa && !ativa && <ShieldCheck className="h-3 w-3 shrink-0" />}
                   <span className={ativa ? "font-black" : ""}>Etapa {index + 1} — {secao.titulo}</span>
-                  <span className={`px-1.5 py-0.5 rounded-full text-[10px] font-bold ${ativa ? "bg-white/20 text-white" : completa ? "bg-success/20 text-success" : "bg-muted text-muted-foreground"}`}>
+                  <span className={`px-1.5 py-0.5 rounded-full text-[10px] font-bold ${ativa ? "bg-card/20 text-primary-foreground" : completa ? "bg-success/20 text-success" : "bg-muted text-muted-foreground"}`}>
                     {preenchidos}/{secao.slots.length}
                   </span>
                 </button>
@@ -1319,11 +1319,11 @@ export default function DocumentosEntidade({
                   <div>
                     <div className="flex flex-wrap items-center gap-2">
                       <p className="text-sm font-black text-foreground">Etapa 1 — Identidade do CNPJ</p>
-                      <span className={`rounded-full border bg-white px-2 py-0.5 text-[10px] font-black ${identidadeObrigatorios.preenchidos === identidadeObrigatorios.total ? "border-success/20 text-success" : "border-primary/20 text-primary"}`}>
+                      <span className={`rounded-full border bg-card px-2 py-0.5 text-[10px] font-black ${identidadeObrigatorios.preenchidos === identidadeObrigatorios.total ? "border-success/20 text-success" : "border-primary/20 text-primary"}`}>
                         {identidadeObrigatorios.preenchidos}/{identidadeObrigatorios.total} obrigatórios anexados
                       </span>
                       {identidadeInicialPreenchida > identidadeObrigatorios.preenchidos && (
-                        <span className="rounded-full border border-border bg-white px-2 py-0.5 text-[10px] font-black text-muted-foreground">
+                        <span className="rounded-full border border-border bg-card px-2 py-0.5 text-[10px] font-black text-muted-foreground">
                           +{identidadeInicialPreenchida - identidadeObrigatorios.preenchidos} opcional
                         </span>
                       )}
@@ -1331,8 +1331,8 @@ export default function DocumentosEntidade({
                     <p className="mt-1 text-[11px] text-muted-foreground">Cartão CNPJ e QSA formam o primeiro laudo. O Enquadramento Tributário vem da consulta de CNPJ (upload opcional). Contrato/Alteração e Atos da Junta pertencem à Etapa 2.</p>
                   </div>
                   <div className="flex flex-wrap items-center justify-end gap-2 text-[11px]">
-                    <span className="rounded-lg border border-white bg-white px-2.5 py-1.5 font-semibold text-muted-foreground"><b className="text-foreground">{docs.length}</b> arquivos</span>
-                    <span className="rounded-lg border border-white bg-white px-2.5 py-1.5 font-semibold text-muted-foreground"><b className="text-success">{documentosValidados}</b> validados</span>
+                    <span className="rounded-lg border border-border bg-card px-2.5 py-1.5 font-semibold text-muted-foreground"><b className="text-foreground">{docs.length}</b> arquivos</span>
+                    <span className="rounded-lg border border-border bg-card px-2.5 py-1.5 font-semibold text-muted-foreground"><b className="text-success">{documentosValidados}</b> validados</span>
                     {/* Depois da primeira análise, o cartão completo (ProntidaoIdentidadeCard,
                         logo abaixo) já traz seu próprio botão de "iniciar/tentar novamente" --
                         este botão fica só pra disparar a primeira leitura, sem duplicar ação. */}
@@ -1341,7 +1341,7 @@ export default function DocumentosEntidade({
                         type="button"
                         onClick={() => void iniciarAnaliseIdentidade()}
                         disabled={analisandoIdentidade || identidadeObrigatorios.preenchidos !== identidadeObrigatorios.total}
-                        className="inline-flex h-9 items-center justify-center gap-1.5 rounded-xl bg-primary px-3 text-xs font-black text-white hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-50"
+                        className="inline-flex h-9 items-center justify-center gap-1.5 rounded-xl bg-primary px-3 text-xs font-black text-primary-foreground hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-50"
                       >
                         {analisandoIdentidade ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <FileText className="h-3.5 w-3.5" />}
                         {analisandoIdentidade ? "Iniciando análise..." : "Iniciar análise documental"}
@@ -1418,7 +1418,7 @@ export default function DocumentosEntidade({
                       <p className="text-sm font-black text-foreground">
                         {societaria.atos_junta_aprovados ? "Etapa 3 — Contrato e histórico mínimo de 12 meses" : "Etapa 2 — Atos da Junta Comercial"}
                       </p>
-                      <span className={`rounded-full border bg-white px-2 py-0.5 text-[10px] font-black ${apto ? "border-success/20 text-success" : "border-warning/20 text-warning"}`}>
+                      <span className={`rounded-full border bg-card px-2 py-0.5 text-[10px] font-black ${apto ? "border-success/20 text-success" : "border-warning/20 text-warning"}`}>
                         {apto ? "Continuidade comprovada" : analisandoSocietario ? "Analisando..." : societaria.analisado ? "Documento(s) pendente(s)" : "Aguardando análise"}
                       </span>
                     </div>
@@ -1435,7 +1435,7 @@ export default function DocumentosEntidade({
                     type="button"
                     onClick={() => void iniciarAnaliseSocietaria()}
                     disabled={analisandoSocietario}
-                    className="inline-flex h-9 shrink-0 items-center justify-center gap-1.5 rounded-xl bg-primary px-3 text-xs font-black text-white hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-60"
+                    className="inline-flex h-9 shrink-0 items-center justify-center gap-1.5 rounded-xl bg-primary px-3 text-xs font-black text-primary-foreground hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-60"
                   >
                     {analisandoSocietario ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <RefreshCw className="h-3.5 w-3.5" />}
                     {analisandoSocietario ? "Conferindo..." : societaria.atos_junta_aprovados ? "Validar contratos, datas e 12 meses" : "Analisar Atos da Junta"}
@@ -1446,7 +1446,7 @@ export default function DocumentosEntidade({
                     próprio status -- comprovado (documento já lido e conferido) ou pendente
                     (ainda precisa ser anexado), com data e origem de cada ato. */}
                 {registros.length > 0 && (
-                  <div className="mt-3 rounded-xl border border-white bg-white p-2.5">
+                  <div className="mt-3 rounded-xl border border-border bg-card p-2.5">
                     <p className="text-[11px] font-black text-foreground">Histórico da cadeia societária (mínimo 12 meses)</p>
                     <div className="mt-2 grid gap-1.5 md:grid-cols-2">
                       {registros.map((registro: any, index: number) => (
@@ -1469,14 +1469,14 @@ export default function DocumentosEntidade({
                     divergências de NIRE/data) -- antes calculados no backend mas nunca exibidos
                     em nenhuma tela. */}
                 {!!societaria.avisos?.length && (
-                  <div className="mt-3 rounded-xl border border-primary/20 bg-white p-2.5">
+                  <div className="mt-3 rounded-xl border border-primary/20 bg-card p-2.5">
                     <p className="text-[11px] font-black text-primary">Avisos da análise</p>
                     {societaria.avisos.map((item: string, index: number) => <p key={index} className="mt-1 text-[10px] text-primary">• {item}</p>)}
                   </div>
                 )}
 
                 {!!societaria.bloqueios?.length && (
-                  <div className="mt-3 rounded-xl border border-destructive/20 bg-white p-2.5">
+                  <div className="mt-3 rounded-xl border border-destructive/20 bg-card p-2.5">
                     <p className="text-[11px] font-black text-destructive">Pendências que bloqueiam o avanço</p>
                     {societaria.bloqueios.map((item: string, index: number) => <p key={index} className="mt-1 text-[10px] text-destructive">• {item}</p>)}
                   </div>
@@ -1487,7 +1487,7 @@ export default function DocumentosEntidade({
                     documentos vêm do mapa documental de crédito, que já é sensível ao
                     regime tributário identificado (Simples Nacional, MEI, Lucro Presumido...). */}
                 {apto && proximaLevaCredito && (
-                  <div className="mt-3 rounded-xl border border-primary/20 bg-white p-2.5">
+                  <div className="mt-3 rounded-xl border border-primary/20 bg-card p-2.5">
                     <p className="text-[11px] font-black text-foreground">
                       Próxima leva de documentos{mapaCredito?.regime_descricao ? ` — regime: ${mapaCredito.regime_descricao}` : ""}
                     </p>
@@ -1513,7 +1513,7 @@ export default function DocumentosEntidade({
                   </div>
                 )}
                 {apto && !proximaLevaCredito && mapaCredito && (
-                  <div className="mt-3 rounded-xl border border-success/20 bg-white p-2.5">
+                  <div className="mt-3 rounded-xl border border-success/20 bg-card p-2.5">
                     <p className="text-[11px] font-black text-success">Dossiê documental completo</p>
                     <p className="mt-1 text-[10px] text-success">Toda a documentação obrigatória de cadastro, regularidade e fiscal já foi anexada. {mapaCredito.proxima_acao}</p>
                   </div>
@@ -1537,7 +1537,7 @@ export default function DocumentosEntidade({
                   <p className="text-xs font-bold text-muted-foreground">{secaoAtivaObj.titulo}</p>
                   {secaoAtivaObj.descricao && <p className="text-[11px] text-muted-foreground mt-0.5">{secaoAtivaObj.descricao}</p>}
                 </div>
-                <span className="text-[11px] font-semibold px-2 py-0.5 rounded-full bg-white border border-border text-muted-foreground shrink-0 whitespace-nowrap">{secaoAtivaObj.slots.length} campo(s)</span>
+                <span className="text-[11px] font-semibold px-2 py-0.5 rounded-full bg-card border border-border text-muted-foreground shrink-0 whitespace-nowrap">{secaoAtivaObj.slots.length} campo(s)</span>
               </div>
               {temObrigatorios && !liberarComplementares && (
                 <button
@@ -1592,12 +1592,12 @@ export default function DocumentosEntidade({
                       (tipoSatisfaz) => docs.some((d) => d.tipo_documento === tipoSatisfaz && (!documentoSlot.porSocio || !socioVinculado || d.socio_id === socioVinculado))
                     );
                     return (
-                      <div key={tipo} className={`rounded-lg border p-3 space-y-2.5 self-start ${satisfeitoPorOutro ? "border-success/20 bg-success/10/40" : "border-border bg-white shadow-sm shadow-slate-100/30"}`}>
+                      <div key={tipo} className={`rounded-lg border p-3 space-y-2.5 self-start ${satisfeitoPorOutro ? "border-success/20 bg-success/10/40" : "border-border bg-card shadow-sm shadow-slate-100/30"}`}>
                         <div className="flex items-center justify-between gap-2">
                           <div className="min-w-0">
                             <div className="flex items-center gap-1.5 flex-wrap">
                               <p className="text-xs font-bold text-muted-foreground leading-tight">{documentoSlot.titulo}</p>
-                              {documentoSlot.obrigatorio && !satisfeitoPorOutro && <span className="text-[9px] font-bold px-1.5 py-0.5 rounded-full bg-brand-navy text-white shrink-0">OBRIGATÓRIO NA ETAPA</span>}
+                              {documentoSlot.obrigatorio && !satisfeitoPorOutro && <span className="text-[9px] font-bold px-1.5 py-0.5 rounded-full bg-brand-navy text-primary-foreground shrink-0">OBRIGATÓRIO NA ETAPA</span>}
                               {(documentoSlot.descricao || tipo === "cartao_cnpj") && (
                                 <button
                                   type="button"
@@ -1616,7 +1616,7 @@ export default function DocumentosEntidade({
                           {/* Já coberto por outro documento (ex: CND cobre CADIN/PGFN) -- não faz
                               sentido oferecer anexar algo que não é mais necessário. */}
                           {!satisfeitoPorOutro && (
-                            <label title={motivoBloqueio || undefined} className={`h-8 inline-flex items-center justify-center gap-1 text-[11px] font-semibold px-3 rounded-lg transition-colors shrink-0 ${motivoBloqueio || (exigeVinculoSocio && !socioVinculado) ? "bg-border text-white cursor-not-allowed" : "bg-primary text-white cursor-pointer hover:bg-primary/90"}`}>
+                            <label title={motivoBloqueio || undefined} className={`h-8 inline-flex items-center justify-center gap-1 text-[11px] font-semibold px-3 rounded-lg transition-colors shrink-0 ${motivoBloqueio || (exigeVinculoSocio && !socioVinculado) ? "bg-border text-primary-foreground cursor-not-allowed" : "bg-primary text-primary-foreground cursor-pointer hover:bg-primary/90"}`}>
                               {uploading ? <Loader2 className="w-3 h-3 animate-spin" /> : <Upload className="w-3 h-3" />} Anexar
                               <input type="file" accept=".pdf,.jpg,.jpeg,.png,.webp,.xlsx,.csv,.docx" className="hidden" disabled={uploading || !!motivoBloqueio || (exigeVinculoSocio && !socioVinculado)} onChange={(e) => { const file = e.target.files?.[0]; if (file) enviar(tipo, file, socioVinculado); e.currentTarget.value = ""; }} />
                             </label>
@@ -1637,7 +1637,7 @@ export default function DocumentosEntidade({
                               <select
                                 value={socioVinculado || ""}
                                 onChange={(e) => setSocioSelecionadoPorTipo((prev) => ({ ...prev, [tipo]: e.target.value }))}
-                                className="h-8 w-full rounded-md border border-primary/20 bg-white px-2.5 text-[11px] font-semibold text-muted-foreground"
+                                className="h-8 w-full rounded-md border border-primary/20 bg-card px-2.5 text-[11px] font-semibold text-muted-foreground"
                               >
                                 {socios.map((socio) => (
                                   <option key={socio.id} value={socio.id}>{socio.nome || "Sócio sem nome"}{socio.administrador ? " · Administrador" : ""}</option>
@@ -1660,7 +1660,7 @@ export default function DocumentosEntidade({
                                 value={nomeCustomizadoPorTipo[tipo] || ""}
                                 onChange={(e) => setNomeCustomizadoPorTipo((prev) => ({ ...prev, [tipo]: e.target.value }))}
                                 placeholder={documentoSlot.placeholderNome || "Nome do documento"}
-                                className="h-8 rounded-md border border-border bg-white px-2.5 text-[11px] text-muted-foreground"
+                                className="h-8 rounded-md border border-border bg-card px-2.5 text-[11px] text-muted-foreground"
                                 list={documentoSlot.sugestoesNome?.length ? `sugestoes-${tipo}` : undefined}
                               />
                               {documentoSlot.sugestoesNome?.length ? (
@@ -1676,7 +1676,7 @@ export default function DocumentosEntidade({
                               onChange={(e) => alterarObservacao(tipo, socioVinculado, e.target.value)}
                               onBlur={() => salvarObservacaoAgora(tipo, socioVinculado)}
                               placeholder={exigeVinculoSocio ? "Observação deste sócio" : "Observação opcional"}
-                              className="h-8 w-full rounded-md border border-border bg-white px-2.5 pr-16 text-[11px] text-muted-foreground"
+                              className="h-8 w-full rounded-md border border-border bg-card px-2.5 pr-16 text-[11px] text-muted-foreground"
                             />
                             {statusObservacoes[chaveSlot] && (
                               <span className={`absolute right-2 top-1/2 -translate-y-1/2 text-[9px] font-semibold ${statusObservacoes[chaveSlot] === "erro" ? "text-destructive" : statusObservacoes[chaveSlot] === "salvo" ? "text-success" : "text-muted-foreground"}`}>
@@ -1708,7 +1708,7 @@ export default function DocumentosEntidade({
                                 const validadoComEvidencia = doc.validado === true
                                   && (!tipoTemAnaliseAutomatica || validacaoDocumentalConcluida);
                                 return (
-                                <div key={doc.id} className="rounded-md bg-white border border-border px-2 py-1">
+                                <div key={doc.id} className="rounded-md bg-card border border-border px-2 py-1">
                                   <div className="flex items-center justify-between gap-2">
                                   <div className="min-w-0">
                                     <div className="flex items-center gap-1 flex-wrap">
@@ -1774,7 +1774,7 @@ export default function DocumentosEntidade({
 
       {modalExportacao && (
         <div className="fixed inset-0 z-50 bg-overlay p-4 flex items-center justify-center">
-          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-4xl max-h-[90vh] flex flex-col overflow-hidden">
+          <div className="bg-card rounded-2xl shadow-2xl w-full max-w-4xl max-h-[90vh] flex flex-col overflow-hidden">
             <div className="h-14 px-4 border-b border-border flex items-center justify-between gap-3">
               <div>
                 <p className="text-sm font-bold text-foreground">Exportar documentos</p>
@@ -1783,8 +1783,8 @@ export default function DocumentosEntidade({
               <button onClick={() => setModalExportacao(false)} className="p-2 rounded-lg hover:bg-muted text-muted-foreground"><X className="w-5 h-5" /></button>
             </div>
             <div className="p-4 border-b border-border flex flex-wrap gap-2 text-xs">
-              <button type="button" onClick={() => marcarDocs(docs, true)} className="px-3 py-1.5 rounded-lg border border-border bg-white font-semibold text-muted-foreground hover:bg-muted">Selecionar todos</button>
-              <button type="button" onClick={() => marcarDocs(docs, false)} className="px-3 py-1.5 rounded-lg border border-border bg-white font-semibold text-muted-foreground hover:bg-muted">Desmarcar todos</button>
+              <button type="button" onClick={() => marcarDocs(docs, true)} className="px-3 py-1.5 rounded-lg border border-border bg-card font-semibold text-muted-foreground hover:bg-muted">Selecionar todos</button>
+              <button type="button" onClick={() => marcarDocs(docs, false)} className="px-3 py-1.5 rounded-lg border border-border bg-card font-semibold text-muted-foreground hover:bg-muted">Desmarcar todos</button>
               <span className="self-center text-muted-foreground">{selecionadosIds.length} selecionado(s) de {docs.length}</span>
             </div>
             <div className="flex-1 overflow-auto p-4 space-y-3">
@@ -1812,10 +1812,10 @@ export default function DocumentosEntidade({
               })}
             </div>
             <div className="p-4 border-t border-border flex flex-col sm:flex-row justify-end gap-2">
-              <button type="button" onClick={() => exportar(docs.map((doc) => doc.id), "acervo-documental-destrava.zip")} disabled={exportando || docs.length === 0} className="h-10 px-4 rounded-lg border border-border bg-white text-xs font-semibold text-muted-foreground hover:bg-muted disabled:opacity-50">
+              <button type="button" onClick={() => exportar(docs.map((doc) => doc.id), "acervo-documental-destrava.zip")} disabled={exportando || docs.length === 0} className="h-10 px-4 rounded-lg border border-border bg-card text-xs font-semibold text-muted-foreground hover:bg-muted disabled:opacity-50">
                 Exportar todo o acervo
               </button>
-              <button type="button" onClick={() => exportar(selecionadosIds, "documentos-selecionados-destrava.zip")} disabled={exportando || selecionadosIds.length === 0} className="h-10 px-4 rounded-lg bg-brand-navy text-white text-xs font-semibold hover:bg-brand-navy disabled:opacity-50">
+              <button type="button" onClick={() => exportar(selecionadosIds, "documentos-selecionados-destrava.zip")} disabled={exportando || selecionadosIds.length === 0} className="h-10 px-4 rounded-lg bg-brand-navy text-primary-foreground text-xs font-semibold hover:bg-brand-navy disabled:opacity-50">
                 {exportando ? <Loader2 className="w-3.5 h-3.5 animate-spin inline mr-1" /> : <FileArchive className="w-3.5 h-3.5 inline mr-1" />} Exportar selecionados
               </button>
             </div>
@@ -1825,7 +1825,7 @@ export default function DocumentosEntidade({
 
       {previewUrl && previewDoc && (
         <div className="fixed inset-0 z-50 bg-overlay p-4 flex items-center justify-center">
-          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-6xl h-[90vh] flex flex-col overflow-hidden">
+          <div className="bg-card rounded-2xl shadow-2xl w-full max-w-6xl h-[90vh] flex flex-col overflow-hidden">
             <div className="h-14 px-4 border-b border-border flex items-center justify-between gap-3">
               <div className="min-w-0">
                 <p className="text-sm font-bold text-foreground truncate">{previewDoc.nome_customizado || previewDoc.nome_original}</p>

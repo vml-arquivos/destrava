@@ -1405,3 +1405,101 @@ novo, só ficou visível em qualquer tamanho de tela.
   detalhe agora visível em qualquer tamanho de tela. Nenhuma rota
   existente, filtro server-side ou fluxo de seleção/edição de empresa foi
   alterado.
+
+
+## Extra 15 — confiabilidade documental, fallbacks honestos e confiança da leitura (2026-08-22)
+
+Esta etapa consolidou as correções de confiabilidade previstas no documento de execução, sem alterar rotas de negócio existentes, schema, dados persistidos ou a ordem dos fluxos documentais.
+
+### Consulta documental avançada
+
+`buscarAnalisesDocumentaisAvancadas` passou a devolver um resultado estruturado com `analises` e `falhaConsulta`. Ausência da tabela esperada (`42P01`/`does not exist`) é tratada como ausência de histórico e retorna lista vazia sem marcar falha. Erro real de consulta continua sendo distinguido e sinalizado. O resultado de Inteligência 360 propaga esse estado como `falha_consulta_documental`, e a tela exibe um aviso discreto somente quando houve falha real, sem bloquear a análise determinística nem transformar ausência de dados em erro falso.
+
+### Fallback operacional
+
+Os quatro consumidores identificados de `fallback_operacional` — os três fluxos de IA do CRM e a análise de Triagem — passaram a informar de maneira não intrusiva quando o conteúdo exibido veio do fallback operacional. O aviso fica próximo do resultado e não altera geração, edição, qualificação, envio, status ou qualquer ação do usuário. O sistema não apresenta conteúdo determinístico como se fosse uma resposta efetivamente gerada por IA.
+
+### Confiança da leitura
+
+O builder compartilhado de apresentação documental (`shared/documentalPresentation.ts`) passou a incluir o campo **Confiança da leitura** quando `nivel_confianca` é numérico. Valores entre 0 e 1 são convertidos para percentual; valores entre 0 e 100 são preservados como percentual. A alteração mantém a assinatura e o retorno do builder, evita duplicação quando a confiança já aparece na amostra de dados e se aplica aos caminhos genérico e societário, alcançando tela, dossiê e PDF quando o dado existe.
+
+### Cartão CNPJ
+
+Quando o Cartão CNPJ existe, a extração falha e não há data manual disponível, o analisador mantém a redução de score de 5 pontos e agora gera o alerta explícito `cartao_cnpj_extracao_falhou`, com severidade média e recomendação para revisar o documento ou informar a data manual. O cenário manual continua sem esse alerta quando a data foi fornecida.
+
+### Endpoints genéricos sem worker
+
+Os dois endpoints genéricos de IA documental que não possuem consumidor ativo nem worker implementado passaram a responder **HTTP 501 Not Implemented** com mensagem clara, antes de qualquer inserção de pendência ou estado de aguardando. O endpoint de consulta das análises e os endpoints especializados permaneceram intactos. A ausência de consumidores foi confirmada por busca no frontend e no servidor.
+
+### Rotulagem determinística
+
+Os rótulos do Acompanhamento Bancário que chamavam parecer técnico determinístico de IA foram corrigidos para **parecer técnico**, sem alteração do checkbox, dos dados, da geração do relatório ou das rotas. A referência a IA foi mantida somente onde há chamada real a modelo.
+
+## Extra 16 — robustez, limpeza e testes reais (2026-08-22)
+
+### Motor semanal preservado
+
+A varredura confirmou que `analisadorSemanal.ts` não é órfão: `server/services/routesWeeklyMonitor.ts` importa e usa `analisarSemana` e `analisarLote` em rotas acessíveis do Weekly Monitor, enquanto `WeeklyMonitorDashboard.tsx` mantém os tipos e a interface correspondente. Por isso, o motor não foi removido e nenhum comportamento foi alterado. O risco de duplicação entre motores permanece documentado para uma decisão futura de negócio, sem remoção precipitada.
+
+### Descarte seguro de semanas inválidas
+
+O lote semanal mantém o `continue` para ignorar uma semana inválida sem interromper as demais. O descarte agora registra `console.warn` com `client_id`, `data_referencia_inicio` e a causa do erro, permitindo auditoria operacional sem expor dados sensíveis nem alterar o resultado das semanas válidas.
+
+### Cobertura direta de serviços
+
+O teste legado desconectado de IA foi substituído por cobertura direta das funções reais do `aiService`, com mock mínimo de `@google/generative-ai`. Foram cobertos resposta normal, JSON inválido e fallback operacional, sem chamada externa real. Também foi adicionada cobertura direta de `documentDeliveryService`, incluindo envio de e-mail, falha HTTP, WhatsApp e resolução de token, sem depender de Resend, WhatsApp ou banco real.
+
+### Fail-fast de produção
+
+Foi criado `server/productionConfig.ts` para validar `DATABASE_URL` e `JWT_SECRET` somente no modo de produção. O bootstrap do servidor executa a validação antes de aceitar tráfego; configuração ausente produz mensagem clara e encerra o processo. Falha de conexão inicial com PostgreSQL também encerra o processo de produção em vez de deixar um servidor parcialmente inicializado. O caminho de testes e desenvolvimento permanece compatível.
+
+### Itens deliberadamente adiados ou fora de escopo
+
+A expansão de novos documentos não foi executada por falta de priorização de negócio; permanece como backlog e não recebeu alteração especulativa. O upsell de e-book em modo demonstração e o wrapper externo Gemini/GEMINI_API_URL não utilizado foram registrados como fora de escopo e não corrigidos nesta etapa.
+
+## Validação final desta execução
+
+- `git diff --check`: aprovado.
+- `npx tsc --noEmit`: aprovado, sem erros.
+- `npx vitest run`: **49 arquivos de teste e 540 testes aprovados**.
+- `npx vite build --mode production`: aprovado; 2.934 módulos transformados e build concluído sem erros.
+- Nenhum restart, stop, redeploy, migração de schema, alteração de banco de produção ou publicação automática foi executado durante a validação.
+- A execução permaneceu em branch isolado e o pacote de entrega deve excluir `node_modules`, `.git`, `dist` e `coverage`.
+
+## Escopo técnico desta execução
+
+Além do relatório, o lote inclui somente arquivos do frontend, backend compartilhado e testes relacionados aos itens do documento: tokens e telas visuais já presentes no branch, `server/services/inteligencia360Service.ts`, `server/index.ts`, `client/src/pages/colaborador/Inteligencia360.tsx`, `client/src/pages/colaborador/CRM.tsx`, `client/src/pages/colaborador/Triagem.tsx`, `shared/documentalPresentation.ts`, `server/services/analiseCnpjReceitaCartao.ts`, `server/routes/documentacao.ts`, `client/src/pages/colaborador/AcompanhamentoBancario.tsx`, `server/services/analisadorSemanal.ts`, `server/productionConfig.ts` e as suítes correspondentes em `tests/`. Nenhuma funcionalidade usada foi removida.
+
+## Extra 17 — fechamento da migração de cor (resíduos que passavam pelo grep mas quebravam no modo escuro) (2026-08-22)
+
+### Causa
+
+A verificação independente da entrega anterior (Extra 15/16) confirmou que o comando de checagem original (`bg-white` + classes de cor numeradas) retornava vazio, mas esse comando não cobria dois padrões que geram exatamente o mesmo problema visual — card claro sobre fundo escuro:
+
+1. **`border-white`** (com ou sem opacidade, ex. `border-white/80`) usado ao lado de `bg-card` em cards que já tinham sido migrados — sobrava uma borda branca sólida em volta de um card escuro no modo escuro. Encontrado em `DocumentosEntidade.tsx` (9), `DossieCreditoEmpresa.tsx` (10), `Inteligencia360.tsx` (4), `Empresas.tsx` (1) e um divisor (`border-t border-white/50`) em `AssessoriaIA.tsx` (1) — 25 ocorrências no total.
+2. **Gradientes com cor fixa terminando em branco ou tom pastel `-50`** (ex. `bg-gradient-to-br from-amber-50 to-white`, `from-slate-50 to-blue-50`, `from-blue-50 to-indigo-50`) — o mesmo efeito de "card claro" só que via gradiente em vez de `bg-white` puro, então não aparecia no grep original. Encontrado em `AcompanhamentoBancario.tsx` (2), `CRM.tsx` (2), `PlanoAcaoMotor.tsx` (1), `RelatorioTecnico.tsx` (1), `PropostaBancaria.tsx` (1), `EsteiraCredito.tsx` (1), `Inteligencia360.tsx` (1), `NexusTarefasEmpresa.tsx` (1) e `Empresas.tsx` (1) — 11 ocorrências no total.
+
+### Correção
+
+- Todos os 25 `border-white` residuais viraram `border-border` (o token de borda que já se adapta a cada tema) — confirmado, zero ocorrências restantes nesses 5 arquivos.
+- Os 11 gradientes trocaram a cor fixa terminal (branco/pastel) por uma versão em token com opacidade (`to-card`, `from-muted`, `from-warning/10`, `from-primary/10`, `from-accent/10` etc.), preservando a mesma intenção visual (um card com leve tingimento de cor) mas agora coerente nos dois temas.
+
+**O que foi deliberadamente deixado de fora, e por quê:** `border-white/20` em `Login.tsx`, `RecuperarSenha.tsx`, `RedefinirSenha.tsx` e `DocumentoPreview.tsx`, os spinners `border-white border-t-transparent` em `Triagem.tsx`, e os gradientes escuros e saturados usados como barra de cabeçalho fixa (`from-blue-900 to-blue-700` em `CRM.tsx`/`Clientes.tsx`/`Calculadora.tsx`, `from-violet-900 to-violet-700` em `ClientesPF.tsx`, `from-blue-950 via-blue-800 to-blue-600` em `CriarTarefaNexusModal.tsx`, entre outros) — todos esses ficam sobre um fundo que já é sólido e colorido (ou é um anel translúcido/spinner branco sobre um botão colorido), então não criam o problema de card claro em fundo escuro; são estilisticamente aceitáveis nos dois temas e não foram tocados para não ampliar o escopo além do que estava realmente quebrado. `Footer.tsx` e `HeroCarousel.tsx` também não foram tocados — confirmado que são usados só nas páginas públicas/institucionais, que não têm o alternador de tema.
+
+### Decisão registrada sobre o item 2.3 (motor semanal `analisadorSemanal.ts` / Weekly Monitor)
+
+Confirmado nesta etapa: as rotas registradas por `registerWeeklyMonitorRoutes` usam o mesmo middleware de autenticação e permissão (`auth`, `requireAcessoAcompanhamento`) que o resto do módulo de Acompanhamento Bancário — não há brecha de acesso. Como a ativação corrige um bug real e bem evidenciado (a tela `WeeklyMonitorDashboard` chamando rotas que não existiam, retornando 404), a decisão é **manter ativa**. Registrado aqui como decisão consciente, não como um efeito colateral não revisado.
+
+### Verificação
+
+- `npx tsc --noEmit`: limpo.
+- `npx vitest run`: **540/540 testes passando**, sem nenhuma mudança de contagem (o ajuste é só de classes CSS, não toca lógica).
+- `npx vite build --mode production`: concluído sem erros.
+- Varredura final confirmando zero resíduos: nenhum `bg-white`, `border-white` (fora dos casos intencionais documentados acima) ou gradiente terminando em branco/pastel nas páginas e componentes autenticados (`client/src/pages/colaborador/` e `client/src/components/`).
+
+### Escopo desta correção
+
+- `client/src/components/documentos/DocumentosEntidade.tsx`, `client/src/components/documentacao/DossieCreditoEmpresa.tsx`, `client/src/pages/colaborador/Inteligencia360.tsx`, `client/src/pages/colaborador/Empresas.tsx`, `client/src/pages/colaborador/AssessoriaIA.tsx` — `border-white` → `border-border`.
+- `client/src/pages/colaborador/AcompanhamentoBancario.tsx`, `client/src/pages/colaborador/CRM.tsx`, `client/src/pages/colaborador/PlanoAcaoMotor.tsx`, `client/src/pages/colaborador/RelatorioTecnico.tsx`, `client/src/pages/colaborador/PropostaBancaria.tsx`, `client/src/pages/colaborador/EsteiraCredito.tsx`, `client/src/pages/colaborador/NexusTarefasEmpresa.tsx`, `client/src/pages/colaborador/Empresas.tsx` — gradientes com cor fixa trocados por tokens.
+
+Nenhuma rota, cálculo ou dado foi alterado — só classes CSS.

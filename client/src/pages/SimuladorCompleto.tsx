@@ -101,7 +101,7 @@ export default function SimuladorCompleto() {
       <Header />
 
       {/* Hero */}
-      <section className="bg-gradient-to-br from-primary to-[var(--color-caixa-blue-dark)] text-white py-16">
+      <section className="bg-gradient-to-br from-primary to-[var(--color-caixa-blue-dark)] text-primary-foreground py-16">
         <div className="container">
           <div className="max-w-3xl">
             <div className="flex items-center gap-3 mb-4">
@@ -110,7 +110,7 @@ export default function SimuladorCompleto() {
                 Simulador de Crédito
               </h1>
             </div>
-            <p className="text-xl text-white/90">
+            <p className="text-xl text-primary-foreground/90">
               Monte cenários educativos de parcela e custo total. Use os dados
               de uma proposta real para uma comparação mais útil.
             </p>
@@ -140,8 +140,8 @@ export default function SimuladorCompleto() {
                     }}
                     className={`flex-1 px-4 py-2 rounded-lg font-medium text-sm transition-colors ${
                       productCategory === "empresa"
-                        ? "bg-[var(--color-caixa-blue)] text-white"
-                        : "bg-gray-100 text-gray-700 hover:bg-gray-200"
+                        ? "bg-[var(--color-caixa-blue)] text-primary-foreground"
+                        : "bg-muted text-foreground hover:bg-border"
                     }`}
                   >
                     Empresas
@@ -154,8 +154,8 @@ export default function SimuladorCompleto() {
                     }}
                     className={`flex-1 px-4 py-2 rounded-lg font-medium text-sm transition-colors ${
                       productCategory === "pessoa-fisica"
-                        ? "bg-[var(--color-caixa-blue)] text-white"
-                        : "bg-gray-100 text-gray-700 hover:bg-gray-200"
+                        ? "bg-[var(--color-caixa-blue)] text-primary-foreground"
+                        : "bg-muted text-foreground hover:bg-border"
                     }`}
                   >
                     Pessoa Física
@@ -206,7 +206,7 @@ export default function SimuladorCompleto() {
                 </p>
               </CardHeader>
               <CardContent className="space-y-6">
-                <div className="rounded-lg border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900">
+                <div className="rounded-lg border border-warning/20 bg-warning/10 p-4 text-sm text-warning">
                   As faixas abaixo controlam apenas a calculadora. Elas não representam limite, taxa disponível, elegibilidade ou pré-aprovação. Insira a taxa e o prazo de uma proposta para comparar o cenário.
                 </div>
                 {/* Valor do Empréstimo */}
@@ -383,7 +383,7 @@ export default function SimuladorCompleto() {
                 <CardTitle>Resultado da Simulação</CardTitle>
               </CardHeader>
               <CardContent>
-                <p className="mb-6 rounded-lg border border-blue-200 bg-blue-50 p-4 text-sm text-blue-900">
+                <p className="mb-6 rounded-lg border border-primary/20 bg-primary/10 p-4 text-sm text-primary">
                   Resultado matemático ilustrativo pelo sistema Price. Não constitui proposta e pode diferir do contrato e do CET da instituição.
                 </p>
                 <div className="grid md:grid-cols-3 gap-6 mb-6">
@@ -464,14 +464,14 @@ export default function SimuladorCompleto() {
                                     maximumFractionDigits: 2,
                                   })}
                                 </td>
-                                <td className="p-3 text-right text-red-600">
+                                <td className="p-3 text-right text-destructive">
                                   R${" "}
                                   {row.interest.toLocaleString("pt-BR", {
                                     minimumFractionDigits: 2,
                                     maximumFractionDigits: 2,
                                   })}
                                 </td>
-                                <td className="p-3 text-right text-green-600">
+                                <td className="p-3 text-right text-success">
                                   R${" "}
                                   {row.amortization.toLocaleString("pt-BR", {
                                     minimumFractionDigits: 2,
@@ -506,20 +506,20 @@ export default function SimuladorCompleto() {
               </CardHeader>
               <CardContent className="space-y-4">
                 {eligibility.eligible ? (
-                  <div className="p-4 bg-green-50 border border-green-200 rounded-lg">
-                    <p className="text-sm font-medium text-green-800">
+                  <div className="p-4 bg-success/10 border border-success/20 rounded-lg">
+                    <p className="text-sm font-medium text-success">
                       Cenário preenchido
                     </p>
-                    <p className="text-xs text-green-700 mt-1">
+                    <p className="text-xs text-success mt-1">
                       Isto não representa elegibilidade ou pré-aprovação.
                     </p>
                   </div>
                 ) : (
-                  <div className="p-4 bg-amber-50 border border-amber-200 rounded-lg">
-                    <p className="text-sm font-medium text-amber-900 mb-2">
+                  <div className="p-4 bg-warning/10 border border-warning/20 rounded-lg">
+                    <p className="text-sm font-medium text-warning mb-2">
                       Pontos de atenção:
                     </p>
-                    <ul className="text-xs text-amber-800 space-y-1">
+                    <ul className="text-xs text-warning space-y-1">
                       {eligibility.reasons.map((reason, idx) => (
                         <li key={idx}>• {reason}</li>
                       ))}

@@ -270,7 +270,7 @@ export default function ClientesPF() {
                         <span className="text-xs text-muted-foreground truncate max-w-[100px]">{c.profissao}</span>
                       )}
                     </div>
-                    <ChevronRight className="w-4 h-4 text-gray-300 flex-shrink-0" />
+                    <ChevronRight className="w-4 h-4 text-muted-foreground flex-shrink-0" />
                   </div>
                 ))}
               </div>
@@ -290,9 +290,9 @@ export default function ClientesPF() {
                     <h2 className="text-base font-bold">
                       {editando ? `Editar: ${editando.nome}` : 'Novo Cliente PF'}
                     </h2>
-                    <p className="text-violet-200 text-xs mt-0.5">Pessoa Física • CPF obrigatório e único</p>
+                    <p className="text-primary text-xs mt-0.5">Pessoa Física • CPF obrigatório e único</p>
                   </div>
-                  <button onClick={fecharForm} className="text-violet-200 hover:text-primary-foreground">
+                  <button onClick={fecharForm} className="text-primary hover:text-primary-foreground">
                     <X className="w-5 h-5" />
                   </button>
                 </div>
@@ -409,25 +409,25 @@ export default function ClientesPF() {
                     <div className="min-w-0 flex-1">
                       <h2 className="text-lg font-bold truncate">{selecionado.nome}</h2>
                       {selecionado.profissao && (
-                        <p className="text-violet-200 text-sm truncate">{selecionado.profissao}</p>
+                        <p className="text-primary text-sm truncate">{selecionado.profissao}</p>
                       )}
                       <div className="flex items-center gap-2 mt-2 flex-wrap">
                         <span className="text-xs px-2 py-0.5 rounded-full font-medium bg-card/20 text-primary-foreground">
                           Pessoa Física
                         </span>
                         {selecionado.estado_civil && (
-                          <span className="text-xs px-2 py-0.5 rounded-full bg-card/10 text-violet-100 capitalize">
+                          <span className="text-xs px-2 py-0.5 rounded-full bg-card/10 text-primary capitalize">
                             {selecionado.estado_civil}
                           </span>
                         )}
-                        <span className="text-xs text-violet-200">
+                        <span className="text-xs text-primary">
                           Desde {fmtDate(selecionado.created_at)}
                         </span>
                       </div>
                     </div>
                     <button
                       onClick={() => setSelecionado(null)}
-                      className="text-violet-200 hover:text-primary-foreground ml-3 flex-shrink-0"
+                      className="text-primary hover:text-primary-foreground ml-3 flex-shrink-0"
                     >
                       <X className="w-5 h-5" />
                     </button>
@@ -444,7 +444,7 @@ export default function ClientesPF() {
                           href={`https://wa.me/55${selecionado.telefone.replace(/\D/g, '')}?text=Olá ${selecionado.nome}, sou da Destrava Crédito!`}
                           target="_blank"
                           rel="noreferrer"
-                          className="flex items-center gap-1 px-3 py-1.5 bg-green-600 text-primary-foreground rounded-lg text-xs font-medium hover:bg-green-700 transition-colors"
+                          className="flex items-center gap-1 px-3 py-1.5 bg-success text-primary-foreground rounded-lg text-xs font-medium hover:bg-success transition-colors"
                         >
                           💬 WhatsApp
                         </a>
@@ -529,7 +529,7 @@ export default function ClientesPF() {
                           <span className="font-medium">{selecionado.telefone}</span>
                         </div>
                       ) : (
-                        <div className="flex items-center gap-2 text-orange-500">
+                        <div className="flex items-center gap-2 text-warning">
                           <AlertCircle className="w-3.5 h-3.5 flex-shrink-0" />
                           <span className="text-xs font-medium">Telefone não informado</span>
                         </div>
@@ -540,7 +540,7 @@ export default function ClientesPF() {
                           <span className="font-medium truncate">{selecionado.email}</span>
                         </div>
                       ) : (
-                        <div className="flex items-center gap-2 text-orange-500">
+                        <div className="flex items-center gap-2 text-warning">
                           <AlertCircle className="w-3.5 h-3.5 flex-shrink-0" />
                           <span className="text-xs font-medium">E-mail não informado</span>
                         </div>

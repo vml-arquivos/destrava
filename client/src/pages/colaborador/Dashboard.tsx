@@ -240,7 +240,7 @@ export default function Dashboard() {
               <RefreshCw className="w-4 h-4" />
             </button>
             <Link href="/colaborador/calculadora">
-              <button className="flex items-center gap-2 px-3 py-2 bg-primary text-white rounded-lg hover:bg-primary/90 text-xs font-bold">
+              <button className="flex items-center gap-2 px-3 py-2 bg-primary text-primary-foreground rounded-lg hover:bg-primary/90 text-xs font-bold">
                 <Plus className="w-4 h-4" /> Simulação Premium
               </button>
             </Link>
@@ -262,7 +262,7 @@ export default function Dashboard() {
                     key={p}
                     onClick={() => setPeriodo(p)}
                     className={`px-3 py-1 rounded-md text-xs font-medium transition-colors ${
-                      periodo === p ? "bg-primary text-white" : "text-muted-foreground hover:bg-muted"
+                      periodo === p ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:bg-muted"
                     }`}
                   >
                     {p === "7d" ? "7 dias" : p === "30d" ? "30 dias" : p === "90d" ? "90 dias" : "Tudo"}
@@ -516,7 +516,7 @@ export default function Dashboard() {
                               className={`h-full rounded-full ${colors} transition-all duration-700 flex items-center justify-end pr-2`}
                               style={{ width: `${Math.max(pct, 4)}%` }}
                             >
-                              <span className="text-[10px] text-white font-bold">{etapa.total}</span>
+                              <span className="text-[10px] text-primary-foreground font-bold">{etapa.total}</span>
                             </div>
                           </div>
                           {etapa.taxa_conversao !== null && i > 0 && (
@@ -754,7 +754,7 @@ export default function Dashboard() {
                 </div>
                 <div className="flex items-center gap-2">
                   <Link href="/colaborador/calculadora">
-                    <button className="flex items-center gap-1 text-xs bg-primary text-white px-3 py-1.5 rounded-lg hover:bg-primary/90 font-medium">
+                    <button className="flex items-center gap-1 text-xs bg-primary text-primary-foreground px-3 py-1.5 rounded-lg hover:bg-primary/90 font-medium">
                       <Plus className="w-3 h-3" /> Nova
                     </button>
                   </Link>
@@ -807,7 +807,7 @@ export default function Dashboard() {
               </div>
               <div className="flex items-center gap-2">
                 <Link href="/colaborador/calculadora">
-                  <button className="flex items-center gap-1 text-xs bg-primary text-white px-3 py-1.5 rounded-lg hover:bg-primary/90 font-medium">
+                  <button className="flex items-center gap-1 text-xs bg-primary text-primary-foreground px-3 py-1.5 rounded-lg hover:bg-primary/90 font-medium">
                     <Plus className="w-3 h-3" /> Nova
                   </button>
                 </Link>

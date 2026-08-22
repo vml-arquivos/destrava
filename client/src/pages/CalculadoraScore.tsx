@@ -124,9 +124,9 @@ export default function CalculadoraScore() {
   const score = showResult ? calculateScore() : 0;
 
   const getScoreCategory = (score: number) => {
-    if (score >= 800) return { label: "Excelente", color: "text-green-600", bgColor: "bg-green-100" };
+    if (score >= 800) return { label: "Excelente", color: "text-success", bgColor: "bg-success/20" };
     if (score >= 600) return { label: "Bom", color: "text-primary", bgColor: "bg-primary/20" };
-    if (score >= 400) return { label: "Regular", color: "text-yellow-600", bgColor: "bg-yellow-100" };
+    if (score >= 400) return { label: "Regular", color: "text-warning", bgColor: "bg-warning/20" };
     return { label: "Ruim", color: "text-destructive", bgColor: "bg-destructive/20" };
   };
 
@@ -534,9 +534,9 @@ export default function CalculadoraScore() {
                       {tips.map((tip, index) => (
                         <li key={index} className="flex items-start gap-3">
                           {score >= 600 ? (
-                            <CheckCircle2 className="h-5 w-5 text-green-600 mt-0.5 flex-shrink-0" />
+                            <CheckCircle2 className="h-5 w-5 text-success mt-0.5 flex-shrink-0" />
                           ) : (
-                            <AlertCircle className="h-5 w-5 text-yellow-600 mt-0.5 flex-shrink-0" />
+                            <AlertCircle className="h-5 w-5 text-warning mt-0.5 flex-shrink-0" />
                           )}
                           <span className="text-foreground">{tip}</span>
                         </li>
@@ -606,13 +606,13 @@ export default function CalculadoraScore() {
                     </CardContent>
                   </Card>
                 ) : (
-                  <Card className="shadow-lg mb-8 bg-green-50 border-green-200">
+                  <Card className="shadow-lg mb-8 bg-success/10 border-success/20">
                     <CardContent className="pt-8 pb-8 text-center">
-                      <CheckCircle2 className="h-16 w-16 text-green-600 mx-auto mb-4" />
-                      <h3 className="text-2xl font-bold text-green-800 mb-2">
+                      <CheckCircle2 className="h-16 w-16 text-success mx-auto mb-4" />
+                      <h3 className="text-2xl font-bold text-success mb-2">
                         Dados recebidos!
                       </h3>
-                      <p className="text-green-700 mb-6">
+                      <p className="text-success mb-6">
                         Registramos seu diagnóstico para <strong>{email}</strong>. Nossa equipe poderá entrar em contato com orientações para o seu perfil.
                       </p>
                     </CardContent>

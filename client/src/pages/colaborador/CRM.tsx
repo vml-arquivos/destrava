@@ -124,16 +124,16 @@ interface Colaborador {
 
 // ─── Configurações ────────────────────────────────────────────
 const ETAPA_FUNIL_STYLE: Record<string, { color: string; text: string; dot: string }> = {
-  entrada:      { color: "bg-muted border-input",    text: "text-foreground",   dot: "bg-gray-400" },
+  entrada:      { color: "bg-muted border-input",    text: "text-foreground",   dot: "bg-muted" },
   triagem:      { color: "bg-muted border-input",   text: "text-foreground",  dot: "bg-muted0" },
   contato:      { color: "bg-primary/10 border-primary/30",     text: "text-primary",   dot: "bg-primary" },
-  qualificacao: { color: "bg-primary/10 border-cyan-300",     text: "text-primary",   dot: "bg-primary/100" },
+  qualificacao: { color: "bg-primary/10 border-primary/30",     text: "text-primary",   dot: "bg-primary/100" },
   documentos:   { color: "bg-warning/10 border-warning/30", text: "text-warning", dot: "bg-warning" },
-  analise:      { color: "bg-lime-50 border-lime-300",     text: "text-lime-700",   dot: "bg-lime-500" },
+  analise:      { color: "bg-success/10 border-success/30",     text: "text-success",   dot: "bg-success" },
   proposta:     { color: "bg-primary/10 border-primary/30", text: "text-primary", dot: "bg-primary/100" },
-  negociacao:   { color: "bg-yellow-50 border-yellow-300", text: "text-yellow-700", dot: "bg-yellow-500" },
-  ganho:        { color: "bg-green-50 border-green-300",   text: "text-green-700",  dot: "bg-green-500" },
-  perdido:      { color: "bg-destructive/10 border-destructive/30",       text: "text-destructive",    dot: "bg-red-400" },
+  negociacao:   { color: "bg-warning/10 border-warning/30", text: "text-warning", dot: "bg-warning" },
+  ganho:        { color: "bg-success/10 border-success/30",   text: "text-success",  dot: "bg-success" },
+  perdido:      { color: "bg-destructive/10 border-destructive/30",       text: "text-destructive",    dot: "bg-destructive" },
   reativacao:   { color: "bg-warning/10 border-warning/30",   text: "text-warning",  dot: "bg-warning/100" },
   carteira:     { color: "bg-success/10 border-success/30", text: "text-success", dot: "bg-success" },
 };
@@ -146,7 +146,7 @@ const ETAPAS_FUNIL = ETAPAS_FUNIL_VALIDAS.map((id) => ({
 
 const TEMPERATURA_CONFIG: Record<string, { label: string; color: string; bg: string; icon: React.ElementType }> = {
   frio:    { label: "Frio",    color: "text-primary",  bg: "bg-primary/10",   icon: Snowflake },
-  morno:   { label: "Morno",   color: "text-yellow-600",bg: "bg-yellow-50", icon: Thermometer },
+  morno:   { label: "Morno",   color: "text-warning",bg: "bg-warning/10", icon: Thermometer },
   quente:  { label: "Quente",  color: "text-warning",bg: "bg-warning/10", icon: Flame },
   urgente: { label: "Urgente", color: "text-destructive",   bg: "bg-destructive/10",    icon: Zap },
 };
@@ -190,8 +190,8 @@ const fmtDateTime = (d?: string) =>
 // ─── Componente Score ─────────────────────────────────────────
 function ScoreBadge({ score }: { score?: number }) {
   if (score == null) return <span className="text-muted-foreground text-xs">—</span>;
-  const color = score >= 75 ? "text-green-600 bg-green-50" :
-                score >= 50 ? "text-yellow-600 bg-yellow-50" :
+  const color = score >= 75 ? "text-success bg-success/10" :
+                score >= 50 ? "text-warning bg-warning/10" :
                 score >= 25 ? "text-warning bg-warning/10" :
                               "text-destructive bg-destructive/10";
   return (
@@ -219,7 +219,7 @@ function KanbanCard({
     <div
       draggable
       onDragStart={e => { e.dataTransfer.effectAllowed = "move"; onDragStart(lead); }}
-      className="bg-card rounded-lg border border-border p-2.5 cursor-grab active:cursor-grabbing hover:border-blue-400 hover:shadow-md transition-all group select-none"
+      className="bg-card rounded-lg border border-border p-2.5 cursor-grab active:cursor-grabbing hover:border-primary/30 hover:shadow-md transition-all group select-none"
       onClick={onClick}
     >
       {/* Header */}
@@ -266,7 +266,7 @@ function KanbanCard({
             </span>
           )}
         </div>
-        <span className="text-[11px] text-gray-300 flex-shrink-0">{fmtDate(lead.created_at)}</span>
+        <span className="text-[11px] text-muted-foreground flex-shrink-0">{fmtDate(lead.created_at)}</span>
       </div>
     </div>
   );
@@ -289,7 +289,7 @@ function KanbanColuna({
   return (
     <div
       className={`flex-shrink-0 w-52 rounded-xl border-2 flex flex-col transition-all ${
-        isDragOver ? "border-blue-400 bg-primary/10 scale-[1.01] shadow-lg" : etapa.color
+        isDragOver ? "border-primary/30 bg-primary/10 scale-[1.01] shadow-lg" : etapa.color
       }`}
       style={{ minHeight: 160 }}
       onDragOver={e => { e.preventDefault(); setIsDragOver(true); }}
@@ -320,7 +320,7 @@ function KanbanColuna({
       )}
       {/* Drop zone hint */}
       {isDragOver && (
-        <div className="mx-2 mb-1 border-2 border-dashed border-blue-400 rounded-lg py-2 text-center text-xs text-primary font-medium">
+        <div className="mx-2 mb-1 border-2 border-dashed border-primary/30 rounded-lg py-2 text-center text-xs text-primary font-medium">
           Soltar aqui
         </div>
       )}
@@ -367,9 +367,10 @@ function FichaLead({
   const [novaTemp, setNovaTemp] = useState(lead.temperatura ?? "frio");
 
   // IA state
-  const [iaResumo, setIaResumo] = useState<{ resumo: string; pontos_atencao: string[]; gerado_em: string } | null>(null);
+  const [iaResumo, setIaResumo] = useState<{ resumo: string; pontos_atencao: string[]; gerado_em: string; fallback_operacional?: boolean } | null>(null);
   const [iaRecomendacoes, setIaRecomendacoes] = useState<Array<{ titulo: string; descricao: string; prioridade: string; tipo: string }>>([]);
-  const [iaFollowup, setIaFollowup] = useState<{ mensagem: string; link_whatsapp?: string; assunto?: string } | null>(null);
+  const [iaRecomendacoesFallback, setIaRecomendacoesFallback] = useState(false);
+  const [iaFollowup, setIaFollowup] = useState<{ mensagem: string; link_whatsapp?: string; assunto?: string; fallback_operacional?: boolean } | null>(null);
   const [iaLoading, setIaLoading] = useState<"resumo" | "recomendacoes" | "followup" | null>(null);
   const [showIaModal, setShowIaModal] = useState<"resumo" | "recomendacoes" | "followup" | null>(null);
   const [followupTipo, setFollowupTipo] = useState<"primeiro_contato" | "proposta_enviada" | "reativacao" | "pos_aprovacao">("primeiro_contato");
@@ -396,6 +397,7 @@ function FichaLead({
         body: JSON.stringify({ lead_id: lead.id }),
       });
       setIaRecomendacoes(data.recomendacoes || []);
+      setIaRecomendacoesFallback(data.fallback_operacional === true);
       setShowIaModal("recomendacoes");
     } catch {
       toast.error("Erro ao gerar recomendações. Tente novamente.");
@@ -621,7 +623,7 @@ function FichaLead({
                 <ScoreBadge score={lead.score_efetivo ?? lead.score_ia} />
               </div>
               <h2 className="text-xl font-bold truncate">{lead.nome}</h2>
-              {lead.empresa && <p className="text-blue-200 text-sm">{lead.empresa}</p>}
+              {lead.empresa && <p className="text-primary text-sm">{lead.empresa}</p>}
             </div>
             <div className="flex items-center gap-2 flex-shrink-0">
               {lead.chatwoot_conv_id && (
@@ -642,7 +644,7 @@ function FichaLead({
           </div>
 
           {/* Contatos rápidos */}
-          <div className="flex items-center gap-4 mt-3 text-sm text-blue-100">
+          <div className="flex items-center gap-4 mt-3 text-sm text-primary">
             <a href={`tel:${lead.telefone}`} className="flex items-center gap-1 hover:text-primary-foreground">
               <Phone className="h-3.5 w-3.5" />
               {lead.telefone}
@@ -859,7 +861,7 @@ function FichaLead({
                 </div>
 
                 {/* IA Actions */}
-                <div className="bg-gradient-to-br from-violet-50 to-blue-50 rounded-xl border border-primary/20 p-4">
+                <div className="bg-gradient-to-br from-accent/10 to-primary/10 rounded-xl border border-primary/20 p-4">
                   <h3 className="text-sm font-semibold text-primary mb-3 flex items-center gap-2">
                     <Sparkles className="h-4 w-4" />
                     Assistente IA
@@ -913,6 +915,12 @@ function FichaLead({
                         Resumo do Lead — IA
                       </DialogTitle>
                     </DialogHeader>
+                    {iaResumo?.fallback_operacional === true && (
+                      <div className="flex items-start gap-2 rounded-lg border border-warning/20 bg-warning/10 p-3 text-warning">
+                        <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
+                        <p className="text-xs leading-relaxed"><span className="font-semibold">Fallback operacional utilizado.</span> Revise o conteúdo antes de tomar decisões ou registrar a informação como parecer de IA.</p>
+                      </div>
+                    )}
                     {iaResumo && (
                       <div className="space-y-4">
                         <div className="bg-primary/10 rounded-lg p-4">
@@ -948,10 +956,16 @@ function FichaLead({
                         Recomendações — IA
                       </DialogTitle>
                     </DialogHeader>
+                    {iaRecomendacoesFallback && (
+                      <div className="flex items-start gap-2 rounded-lg border border-warning/20 bg-warning/10 p-3 text-warning">
+                        <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
+                        <p className="text-xs leading-relaxed"><span className="font-semibold">Fallback operacional utilizado.</span> Revise as recomendações antes de executar qualquer ação.</p>
+                      </div>
+                    )}
                     <div className="space-y-3 max-h-96 overflow-y-auto">
                       {iaRecomendacoes.map((r, i) => {
-                        const prioColor = r.prioridade === "alta" ? "border-destructive/30 bg-destructive/10" : r.prioridade === "media" ? "border-yellow-300 bg-yellow-50" : "border-green-300 bg-green-50";
-                        const prioText = r.prioridade === "alta" ? "text-destructive" : r.prioridade === "media" ? "text-yellow-700" : "text-green-700";
+                        const prioColor = r.prioridade === "alta" ? "border-destructive/30 bg-destructive/10" : r.prioridade === "media" ? "border-warning/30 bg-warning/10" : "border-success/30 bg-success/10";
+                        const prioText = r.prioridade === "alta" ? "text-destructive" : r.prioridade === "media" ? "text-warning" : "text-success";
                         return (
                           <div key={i} className={`rounded-lg border p-3 ${prioColor}`}>
                             <div className="flex items-center justify-between mb-1">
@@ -978,6 +992,12 @@ function FichaLead({
                         Mensagem de Follow-up — IA
                       </DialogTitle>
                     </DialogHeader>
+                    {iaFollowup?.fallback_operacional === true && (
+                      <div className="flex items-start gap-2 rounded-lg border border-warning/20 bg-warning/10 p-3 text-warning">
+                        <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
+                        <p className="text-xs leading-relaxed"><span className="font-semibold">Fallback operacional utilizado.</span> Revise e ajuste a mensagem antes de enviar ou disparar o follow-up.</p>
+                      </div>
+                    )}
                     <div className="space-y-3">
                       <div className="grid grid-cols-2 gap-3">
                         <div>
@@ -1027,7 +1047,7 @@ function FichaLead({
                           </div>
                           <div className="flex gap-2">
                             {iaFollowup.link_whatsapp && (
-                              <Button asChild size="sm" className="w-full bg-green-600 hover:bg-green-700 gap-2">
+                              <Button asChild size="sm" className="w-full bg-success hover:bg-success gap-2">
                                 <a
                                 href={iaFollowup.link_whatsapp}
                                 target="_blank"
@@ -1119,7 +1139,7 @@ function FichaLead({
                             {a.descricao && <p className="text-xs text-muted-foreground mt-0.5">{a.descricao}</p>}
                             {a.resultado && (
                               <span className={`text-xs mt-1 inline-block px-1.5 py-0.5 rounded ${
-                                a.resultado === "positivo" ? "bg-green-100 text-green-700" :
+                                a.resultado === "positivo" ? "bg-success/20 text-success" :
                                 a.resultado === "negativo" ? "bg-destructive/20 text-destructive" :
                                 "bg-muted text-muted-foreground"
                               }`}>
@@ -1162,11 +1182,11 @@ function FichaLead({
                     {documentos.map(doc => (
                       <div key={doc.id} className="flex items-center gap-3 p-3 bg-card rounded-lg border border-border">
                         <div className={`w-2 h-2 rounded-full flex-shrink-0 ${
-                          doc.status === "aprovado" ? "bg-green-500" :
+                          doc.status === "aprovado" ? "bg-success" :
                           doc.status === "recebido" ? "bg-primary" :
-                          doc.status === "solicitado" ? "bg-yellow-500" :
+                          doc.status === "solicitado" ? "bg-warning" :
                           doc.status === "rejeitado" ? "bg-destructive" :
-                          "bg-gray-300"
+                          "bg-border"
                         }`} />
                         <div className="flex-1 min-w-0">
                           <p className="text-sm font-medium text-foreground">{doc.nome}</p>
@@ -1202,13 +1222,13 @@ function FichaLead({
                   <div className="flex justify-center py-8"><Loader2 className="h-6 w-6 animate-spin text-primary" /></div>
                 ) : qualificacoes.length === 0 ? (
                   <div className="text-center py-12">
-                    <Brain className="h-12 w-12 text-gray-300 mx-auto mb-3" />
+                    <Brain className="h-12 w-12 text-muted-foreground mx-auto mb-3" />
                     <p className="text-muted-foreground text-sm">Nenhuma qualificação da IA ainda.</p>
                     <p className="text-muted-foreground text-xs mt-1">O agente qualificará este lead automaticamente via WhatsApp.</p>
                   </div>
                 ) : (
                   qualificacoes.map(q => (
-                    <div key={q.id} className="bg-gradient-to-br from-blue-50 to-indigo-50 rounded-xl border border-primary/20 p-4">
+                    <div key={q.id} className="bg-gradient-to-br from-primary/10 to-accent/10 rounded-xl border border-primary/20 p-4">
                       <div className="flex items-center justify-between mb-3">
                         <div className="flex items-center gap-2">
                           <Brain className="h-5 w-5 text-primary" />
@@ -1220,7 +1240,7 @@ function FichaLead({
                       {/* Score e probabilidade */}
                       <div className="flex items-center gap-4 mb-3">
                         <div className="text-center">
-                          <div className={`text-3xl font-black ${q.score >= 75 ? "text-green-600" : q.score >= 50 ? "text-yellow-600" : "text-destructive"}`}>
+                          <div className={`text-3xl font-black ${q.score >= 75 ? "text-success" : q.score >= 50 ? "text-warning" : "text-destructive"}`}>
                             {q.score}
                           </div>
                           <div className="text-xs text-muted-foreground">Score</div>
@@ -1243,10 +1263,10 @@ function FichaLead({
 
                       {q.pontos_positivos && q.pontos_positivos.length > 0 && (
                         <div className="mb-2">
-                          <p className="text-xs font-semibold text-green-700 mb-1">✅ Pontos positivos</p>
+                          <p className="text-xs font-semibold text-success mb-1">✅ Pontos positivos</p>
                           <ul className="space-y-0.5">
                             {q.pontos_positivos.map((p, i) => (
-                              <li key={i} className="text-xs text-green-700 flex gap-1"><span>•</span>{p}</li>
+                              <li key={i} className="text-xs text-success flex gap-1"><span>•</span>{p}</li>
                             ))}
                           </ul>
                         </div>
@@ -1481,8 +1501,8 @@ export default function CRM() {
                 </div>
               </div>
               <div className="flex items-center gap-2">
-                <div className="w-8 h-8 bg-green-100 rounded-lg flex items-center justify-center">
-                  <DollarSign className="h-4 w-4 text-green-600" />
+                <div className="w-8 h-8 bg-success/20 rounded-lg flex items-center justify-center">
+                  <DollarSign className="h-4 w-4 text-success" />
                 </div>
                 <div>
                   <p className="text-xs text-muted-foreground">Pipeline</p>
