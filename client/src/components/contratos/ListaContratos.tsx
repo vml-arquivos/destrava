@@ -105,6 +105,14 @@ function podeExcluirCargo(cargo: string | undefined | null): boolean {
   return ['administrador', 'admin', 'diretor'].includes(c);
 }
 
+// Contrato assinado é definitivo: não pode ser excluído nem substituído (só
+// pode existir um novo contrato à parte, para complementos/aditivos). Mesma
+// checagem usada no backend (POST /api/contratos/:id/anexo-assinado e
+// DELETE /api/contratos/:id).
+function contratoEstaAssinado(c: Contrato): boolean {
+  return c.status === 'assinado' || !!c.assinado_em || !!c.assinado_pdf_path;
+}
+
 const nomeArquivoContrato = (contrato: Contrato): string => {
   const base = contrato.protocolo_contrato || contrato.numero_contrato || `contrato-${contrato.id}`;
   return `${String(base)
@@ -139,18 +147,27 @@ export function ListaContratos({ contratos, onStatusChange, onDelete, userCargo,
     );
   }, [contratos]);
 
+  // Contrato assinado nunca entra em seleção/exclusão em lote -- só os que
+  // ainda podem ser excluídos (não assinados) contam para "selecionar todos".
+  const contratosExcluiveis = useMemo(
+    () => contratosSemDuplicatas.filter(c => !contratoEstaAssinado(c)),
+    [contratosSemDuplicatas]
+  );
+
   const totalSelecionados = selectedIds.size;
-  const todosSelecionados = contratosSemDuplicatas.length > 0 && selectedIds.size === contratosSemDuplicatas.length;
+  const todosSelecionados = contratosExcluiveis.length > 0 && selectedIds.size === contratosExcluiveis.length;
 
   const toggleAll = () => {
     if (todosSelecionados) {
       setSelectedIds(new Set());
     } else {
-      setSelectedIds(new Set(contratosSemDuplicatas.map(c => c.id)));
+      setSelectedIds(new Set(contratosExcluiveis.map(c => c.id)));
     }
   };
 
   const toggleOne = (id: string) => {
+    const contrato = contratosSemDuplicatas.find(c => c.id === id);
+    if (contrato && contratoEstaAssinado(contrato)) return; // travado -- nunca selecionável
     setSelectedIds(prev => {
       const next = new Set(prev);
       if (next.has(id)) next.delete(id);
@@ -389,7 +406,7 @@ export function ListaContratos({ contratos, onStatusChange, onDelete, userCargo,
               const tipoCorClass = tipoCor[c.tipo_contrato || ''] || 'bg-muted text-foreground';
               const numRef = c.protocolo_contrato || c.numero_contrato;
               const responsavel = c.responsavel_contrato_nome || c.criado_por_nome || '—';
-              const contratoAssinado = c.status === 'assinado' || !!c.assinado_em || !!c.assinado_pdf_path;
+              const contratoAssinado = contratoEstaAssinado(c);
 
               return (
                 <tr
@@ -401,8 +418,10 @@ export function ListaContratos({ contratos, onStatusChange, onDelete, userCargo,
                       <input
                         type="checkbox"
                         checked={isSelected}
+                        disabled={contratoAssinado}
                         onChange={() => toggleOne(c.id)}
-                        className="w-3.5 h-3.5 rounded border-input text-primary focus:ring-primary"
+                        title={contratoAssinado ? 'Contrato assinado não pode ser selecionado para exclusão' : undefined}
+                        className="w-3.5 h-3.5 rounded border-input text-primary focus:ring-primary disabled:opacity-30 disabled:cursor-not-allowed"
                       />
                     </td>
                   )}
@@ -525,7 +544,7 @@ export function ListaContratos({ contratos, onStatusChange, onDelete, userCargo,
                           </button>
                         </>
                       )}
-                      {podeExcluirContrato && (
+                      {podeExcluirContrato && !contratoAssinado && (
                         <button
                           onClick={() => handleDelete(c.id)}
                           className="inline-flex items-center justify-center w-7 h-7 rounded-md border border-destructive/20 bg-card hover:bg-destructive/10 text-destructive"

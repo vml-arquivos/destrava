@@ -1672,3 +1672,49 @@ Depois que um contrato já estava assinado, a interface trocava o botão de "Ane
 - `client/src/components/contratos/ListaContratos.tsx` — ícone de upload de assinatura trocado por indicador travado quando já assinado.
 
 Nenhuma coluna de schema foi criada ou alterada — é só regra de negócio (o que a API aceita) e o reflexo dela na interface.
+
+## Extra 22 — "Empresas recentes" reflete movimentação real; contrato assinado também não pode ser excluído (2026-08-24)
+
+### Pedido do usuário
+
+"essa visualização não muda, quero que as empresas mudem de acordo com as que foram movimentadas recente, e o contrato fica travado mas pode anexar outros contratos, não pode substituir o mesmo contrato do mesmo serviço, mas pode ter de outras opções, mas o que já está assinado não pode ser apagado nem substituído"
+
+Duas partes: (1) o card "Empresas recentes" na lista de Empresas estava sempre mostrando as duas mesmas empresas, mesmo depois de mexer em outras; (2) confirmação/reforço do Extra 21 — contrato assinado, além de não poder ser substituído, também não pode ser **excluído**; só é permitido criar um contrato à parte (outro serviço/aditivo).
+
+### Causa
+
+**"Empresas recentes" travada:** dois problemas somados.
+1. A ordenação usava só `empresas.updated_at`, coluna que praticamente só muda quando o cadastro da empresa é editado diretamente. Anexar documento, gerar contrato, assinar contrato, registrar simulação etc. não tocam nesse campo — então essas movimentações não "subiam" a empresa na lista.
+2. O resumo usado pra montar essa lista (`/api/documentacao/empresas/documentos-resumo`) era buscado **uma única vez**, no primeiro carregamento da página. Como a ficha da empresa é a mesma página (troca só o estado interno, sem recarregar), trabalhar numa empresa e voltar para a lista não disparava uma nova busca — a lista ficava com a "foto" de quando a página abriu.
+
+**Exclusão de contrato assinado:** o Extra 21 bloqueou a *substituição* (upload que sobrescreve o PDF assinado), mas a rota de exclusão (`DELETE /api/contratos/:id`) continuava sem nenhuma checagem — um Administrador/Diretor conseguia excluir um contrato já assinado (e o PDF era apagado do disco junto).
+
+### Correção
+
+- **`server/routes/documentacao.ts`** (`GET /empresas/documentos-resumo`): a consulta agora calcula `ultima_movimentacao` como o maior timestamp entre a própria empresa, os documentos anexados (`documentos_arquivos`), o histórico de eventos da empresa (`empresa_historico` — cobre nota, simulação, sincronização, Nexus, contrato editado/assinado) e os contratos gerados/atualizados (`contratos_gerados`). É um retrato bem mais completo de "a empresa foi mexida" do que só o cadastro em si.
+- **`client/src/pages/colaborador/Empresas.tsx`**:
+  - `empresasRecentes` agora ordena por `ultima_movimentacao` (com fallback pro `updated_at`/`created_at` da empresa, caso o resumo ainda não tenha chegado).
+  - O fetch do resumo foi extraído para `carregarDocumentosResumo()` e passou a ser chamado de novo toda vez que o usuário clica em "Voltar para a lista de empresas" saindo da ficha de uma empresa — antes disso só rodava no primeiro carregamento da página inteira.
+- **`server/index.ts`** (`DELETE /api/contratos/:id`): passou a buscar `status`, `assinado_em` e `assinado_pdf_path` do contrato antes de excluir e usa a mesma função `contratoEstaAssinado()` do Extra 21/backend para recusar (**409**) a exclusão de um contrato já assinado, com a mensagem "Este contrato já foi assinado e não pode ser excluído."
+- **`client/src/components/contratos/ListaContratos.tsx`** (tela "Gerador de Contratos", única tela com botão de excluir contrato): 
+  - Novo helper `contratoEstaAssinado(c)` (mesma regra do backend) reaproveitado em vários pontos, no lugar da expressão repetida antes.
+  - O botão de excluir (ícone de lixeira) some para contratos já assinados.
+  - O checkbox de seleção em lote também fica desabilitado para contratos assinados, e "selecionar todos"/exclusão em lote passam a considerar só os contratos que ainda podem ser excluídos — não é mais possível incluir um contrato assinado numa exclusão em lote.
+
+### Verificação
+
+- `npx tsc --noEmit`: limpo.
+- `npx vitest run`: **540/540 testes passando**, mesma contagem de antes.
+- `npx vite build --mode production`: concluído sem erros.
+- Conferido que o bloqueio de exclusão reaproveita a mesma função `contratoEstaAssinado()` já usada para bloquear substituição (Extra 21), edição e regeneração de contrato assinado — mesma regra em todos os lugares, sem duplicar lógica divergente.
+- Conferido que criar um **novo** contrato (outro tipo de serviço, ou um aditivo separado) continua funcionando exatamente como antes — nada nesse fluxo foi tocado; o que ficou bloqueado é só excluir/substituir o PDF já assinado de um contrato existente.
+- Conferido que a consulta de `ultima_movimentacao` usa apenas `SELECT MAX(...)` sobre colunas já indexadas (`documentos_arquivos.empresa_id`, `empresa_historico.empresa_id`/`created_at`, `contratos_gerados.empresa_id`) — mesmo padrão de subconsultas correlacionadas que a rota já usava para `documentos_count`/`analise_iniciada`, sem mudança de característica de performance.
+
+### Escopo desta correção
+
+- `server/routes/documentacao.ts` — `GET /empresas/documentos-resumo` (novo campo `ultima_movimentacao`).
+- `client/src/pages/colaborador/Empresas.tsx` — `carregarDocumentosResumo`, ordenação de `empresasRecentes`, refetch no botão "Voltar".
+- `server/index.ts` — `DELETE /api/contratos/:id` (novo bloqueio 409 usando `contratoEstaAssinado`).
+- `client/src/components/contratos/ListaContratos.tsx` — novo helper `contratoEstaAssinado`, botão de excluir e seleção em lote passam a respeitar contrato assinado.
+
+Nenhuma coluna de schema foi criada ou alterada.

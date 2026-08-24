@@ -1791,26 +1791,37 @@ export default function Empresas() {
   // `empresas` já vem filtrada pelo servidor (busca/status/porte/origem, ver
   // carregarEmpresas). "Empresas recentes" mostra só quem já tem documento
   // anexado E alguma análise iniciada (ver /api/documentacao/empresas/documentos-resumo,
-  // que já devolve pré-filtrado) -- ordenadas pela mais recentemente atualizada,
-  // limitadas a 6 pra não precisar rolar a tela.
+  // que já devolve pré-filtrado) -- ordenadas pela última movimentação real
+  // (`ultima_movimentacao`, calculada no backend a partir de documentos,
+  // histórico e contratos -- não só do cadastro da empresa em si), limitadas
+  // a 6 pra não precisar rolar a tela.
   const LIMITE_EMPRESAS_RECENTES = 6;
-  const [documentosResumo, setDocumentosResumo] = useState<Record<string, { documentos_count: number; analise_iniciada: boolean }>>({});
-  useEffect(() => {
-    let ativo = true;
-    apiFetch(`/api/documentacao/empresas/documentos-resumo`)
-      .then((data) => {
-        if (!ativo || !Array.isArray(data)) return;
-        const mapa: Record<string, { documentos_count: number; analise_iniciada: boolean }> = {};
-        for (const r of data) mapa[r.empresa_id] = { documentos_count: r.documentos_count || 0, analise_iniciada: !!r.analise_iniciada };
-        setDocumentosResumo(mapa);
-      })
-      .catch(() => { /* silencioso -- widget só some se a chamada falhar, resto da página funciona normal */ });
-    return () => { ativo = false; };
+  const [documentosResumo, setDocumentosResumo] = useState<Record<string, { documentos_count: number; analise_iniciada: boolean; ultima_movimentacao?: string | null }>>({});
+  // Extraído em função própria (em vez de só um efeito inline) porque o
+  // fetch de uma vez só, no primeiro carregamento da página, deixava a lista
+  // "presa": trabalhar numa empresa (anexar documento, gerar/assinar
+  // contrato) não atualizava esse resumo, já que o usuário nunca sai desta
+  // página inteira (é a mesma tela que alterna entre lista e ficha da
+  // empresa via estado, sem recarregar). Por isso também é chamada de novo
+  // ao voltar da ficha da empresa para a lista (ver botão "Voltar").
+  const carregarDocumentosResumo = useCallback(async () => {
+    try {
+      const data = await apiFetch(`/api/documentacao/empresas/documentos-resumo`);
+      if (!Array.isArray(data)) return;
+      const mapa: Record<string, { documentos_count: number; analise_iniciada: boolean; ultima_movimentacao?: string | null }> = {};
+      for (const r of data) mapa[r.empresa_id] = { documentos_count: r.documentos_count || 0, analise_iniciada: !!r.analise_iniciada, ultima_movimentacao: r.ultima_movimentacao || null };
+      setDocumentosResumo(mapa);
+    } catch { /* silencioso -- widget só some se a chamada falhar, resto da página funciona normal */ }
   }, []);
+  useEffect(() => { carregarDocumentosResumo(); }, [carregarDocumentosResumo]);
   const empresasRecentes = useMemo(() => {
     return [...empresas]
       .filter((emp) => documentosResumo[emp.id])
-      .sort((a, b) => new Date(b.updated_at || b.created_at || 0).getTime() - new Date(a.updated_at || a.created_at || 0).getTime())
+      .sort((a, b) => {
+        const chaveA = documentosResumo[a.id]?.ultima_movimentacao || a.updated_at || a.created_at || 0;
+        const chaveB = documentosResumo[b.id]?.ultima_movimentacao || b.updated_at || b.created_at || 0;
+        return new Date(chaveB).getTime() - new Date(chaveA).getTime();
+      })
       .slice(0, LIMITE_EMPRESAS_RECENTES);
   }, [empresas, documentosResumo]);
 
@@ -2166,7 +2177,16 @@ export default function Empresas() {
                           tamanho de tela, pra sair da empresa sem precisar clicar em "Trocar
                           empresa" (que abre a busca) nem usar o botão voltar do navegador. */}
                       <button
-                        onClick={() => { setSelecionada(null); setShowDetail(false); setLocation("/colaborador/empresas"); }}
+                        onClick={() => {
+                          setSelecionada(null);
+                          setShowDetail(false);
+                          setLocation("/colaborador/empresas");
+                          // Atualiza "Empresas recentes" ao voltar -- sem isto, qualquer
+                          // documento/contrato anexado enquanto o usuário estava na ficha
+                          // da empresa só apareceria refletido depois de recarregar a
+                          // página inteira.
+                          carregarDocumentosResumo();
+                        }}
                         className="mt-0.5 flex shrink-0 items-center gap-1 rounded-lg px-1.5 py-1.5 text-muted-foreground hover:bg-muted hover:text-muted-foreground sm:px-2"
                         title="Voltar para a lista de empresas"
                       >

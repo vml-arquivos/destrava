@@ -13660,7 +13660,7 @@ async function registrarDocumentoContratoGerado(params: {
         return;
       }
       const { rows } = await pool.query(
-        'SELECT id, pdf_path FROM contratos_gerados WHERE id = $1',
+        'SELECT id, pdf_path, status, assinado_em, assinado_pdf_path FROM contratos_gerados WHERE id = $1',
         [req.params.id]
       );
       if (!rows.length) {
@@ -13668,6 +13668,14 @@ async function registrarDocumentoContratoGerado(params: {
         return;
       }
       const contrato = rows[0];
+      // Um contrato assinado é definitivo: não pode ser excluído (nem
+      // substituído -- ver POST /api/contratos/:id/anexo-assinado). Se for
+      // preciso desfazer um vínculo, o caminho é gerar um novo contrato,
+      // nunca apagar o assinado já existente.
+      if (contratoEstaAssinado(contrato)) {
+        res.status(409).json({ error: 'Este contrato já foi assinado e não pode ser excluído.' });
+        return;
+      }
       // Remover arquivo PDF do disco se existir
       if (contrato.pdf_path) {
         const filePath = path.resolve(contrato.pdf_path);
