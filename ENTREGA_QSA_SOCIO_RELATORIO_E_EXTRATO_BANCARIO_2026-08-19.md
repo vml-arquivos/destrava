@@ -1718,3 +1718,46 @@ Duas partes: (1) o card "Empresas recentes" na lista de Empresas estava sempre m
 - `client/src/components/contratos/ListaContratos.tsx` — novo helper `contratoEstaAssinado`, botão de excluir e seleção em lote passam a respeitar contrato assinado.
 
 Nenhuma coluna de schema foi criada ou alterada.
+
+## Extra 23 — "Empresas recentes" continuava travada: faltava considerar "visualizada" e o filtro por análise de IA escondia quase tudo (2026-08-24)
+
+### Pedido do usuário
+
+"olha o print. na pagina de clientes pj, quero as ultimas 6 que foram visualizadas ou atualizadas, as ultimas que tiveram qualquer modificação ou movimentação, esta travada nas mesmas e não e isso, resolva"
+
+Print mostrando o mesmo widget "Empresas recentes" (tela Clientes PJ / Empresas) preso nas duas mesmas empresas de antes, mesmo depois do Extra 22.
+
+### Causa
+
+O Extra 22 melhorou o *critério de ordenação* (`ultima_movimentacao`), mas duas outras causas continuavam prendendo a lista nas mesmas 1-2 empresas:
+
+1. **Filtro de elegibilidade escondia quase todas as empresas.** `GET /api/documentacao/empresas/documentos-resumo` só devolvia empresas com pelo menos 1 documento anexado **E** pelo menos 1 análise de IA já disparada (`documentacao_analises_ia`). Das 123 empresas cadastradas, só 2 satisfaziam as duas condições ao mesmo tempo — então, não importa quanta movimentação outras empresas tivessem (documentos, contratos, edições), elas nunca apareciam no widget porque nunca passavam desse filtro. A ordenação por `ultima_movimentacao` do Extra 22 só reordenaria dentro desse universo de 2 empresas — por isso pareceu que "nada mudou".
+2. **"Visualizada" não era rastreado.** O pedido do usuário pede explicitamente "visualizadas OU atualizadas". Não existia nenhum registro de quando uma empresa foi aberta/visualizada — só de edições de cadastro, documentos, contratos e histórico (Extra 22). Abrir a ficha de uma empresa sozinha, sem anexar nada, nunca a levava pro topo da lista.
+
+### Correção
+
+- **Nova coluna `empresas.visualizado_em`** (migration idempotente no boot, "Migration 085", com arquivo de referência `db/migrations/085_empresas_visualizado_em.sql`, mesmo padrão dos demais).
+- **Novo endpoint `POST /api/empresas/:id/visualizar`** (`server/index.ts`): grava `visualizado_em = NOW()` na empresa. Endpoint leve, "fogo e esquece" do lado do front — não bloqueia a abertura da ficha se falhar, e não mexe em `cadastro_status`/`cadastro_completo` nem em nenhuma outra regra de negócio.
+- **`client/src/pages/colaborador/Empresas.tsx`**: a função `selecionar(emp)` (usada sempre que uma empresa é aberta a partir da lista) e os dois caminhos de reabertura via URL/link (`?empresa=...`) agora chamam esse endpoint ao abrir a ficha.
+- **`server/routes/documentacao.ts`** (`GET /empresas/documentos-resumo`):
+  - Removido o filtro que exigia documento anexado **e** análise de IA iniciada — agora devolve o resumo de **todas** as empresas; a tela decide o que mostrar (as 6 mais recentes).
+  - `visualizado_em` entrou na conta de `ultima_movimentacao`, junto com o que já tinha sido adicionado no Extra 22 (documentos, histórico, contratos, cadastro).
+- **Ajustes visuais consequentes no widget** (blocos e lista): o selo "Análise iniciada" e o texto "N documentos anexados" agora só aparecem quando aquilo é verdade pra aquela empresa (antes apareciam sempre, porque só empresas com os dois já entravam na lista); a data mostrada em "Atualizado" passou a usar a mesma `ultima_movimentacao` usada pra ordenar, em vez de só `empresas.updated_at`; textos do subtítulo e do estado vazio atualizados para refletir o novo critério ("visualizadas ou atualizadas", não mais "com documentos e análise").
+
+### Verificação
+
+- `npx tsc --noEmit`: limpo.
+- `npx vitest run`: **540/540 testes passando**, mesma contagem de antes.
+- `npx vite build --mode production`: concluído sem erros.
+- Conferido que `POST /api/empresas/:id/visualizar` usa o mesmo `requireEmpresaAccess` da rota `GET /api/empresas/:id` já existente — mesma regra de permissão, sem abrir uma porta nova de acesso.
+- Conferido que nenhum outro componente do sistema usa `GET /api/documentacao/empresas/documentos-resumo` além deste widget (busca em todo `client/src`) — mudar o filtro dessa rota não tem efeito colateral em nenhuma outra tela.
+- Conferido que o cálculo de `ultima_movimentacao` continua baseado só em `SELECT MAX(...)`/`GREATEST(...)` sobre colunas indexadas (agora incluindo a nova `idx_empresas_visualizado_em`), mesmo padrão de subconsultas correlacionadas já usado antes — sem mudança de característica de performance, mesmo devolvendo todas as 123 empresas em vez de 2.
+
+### Escopo desta correção
+
+- `server/index.ts` — Migration 085 (`empresas.visualizado_em`) e novo endpoint `POST /api/empresas/:id/visualizar`.
+- `db/migrations/085_empresas_visualizado_em.sql` — arquivo de referência da migration.
+- `server/routes/documentacao.ts` — `GET /empresas/documentos-resumo` sem o filtro de elegibilidade, com `visualizado_em` na conta de `ultima_movimentacao`.
+- `client/src/pages/colaborador/Empresas.tsx` — chamada ao novo endpoint em `selecionar()` e na reabertura via URL; badges condicionais e data de "Atualizado" usando `ultima_movimentacao`; textos do widget atualizados.
+
+Não altera nenhum outro critério de elegibilidade/pendência de empresa (Extra 19), nem nada relacionado a contrato assinado (Extras 20-22).

@@ -2307,21 +2307,29 @@ router.get('/blocos', auth, async (_req: Request, res: Response) => {
 // Resumo leve (empresa_id, quantidade de documentos anexados, se já tem
 // alguma análise iniciada, e a última movimentação real) pra TODAS as
 // empresas de uma vez -- usado pela tela de Empresas pra montar o card
-// "Empresas recentes" sem precisar de uma chamada por empresa. Só entram no
-// resultado empresas que já têm pelo menos 1 documento anexado E pelo menos
-// 1 análise iniciada (é exatamente o filtro que a tela precisa); o limite de
-// quantas mostrar fica a cargo do front.
+// "Empresas recentes" sem precisar de uma chamada por empresa. O limite de
+// quantas mostrar, e a ordenação por `ultima_movimentacao`, ficam a cargo do
+// front.
 //
-// `ultima_movimentacao`: usar só `empresas.updated_at` deixava a lista
-// "Empresas recentes" praticamente congelada, porque esse campo só muda
-// quando o cadastro da empresa em si é editado -- anexar documento, gerar ou
-// assinar contrato e outros eventos do dia a dia não tocam nele. Por isso o
-// campo aqui é o maior timestamp entre: a própria empresa, os documentos
-// anexados (`documentos_arquivos`), o histórico de eventos da empresa
+// Antes esse endpoint só devolvia empresas com pelo menos 1 documento
+// anexado E análise iniciada -- isso deixava "Empresas recentes" travada
+// sempre nas mesmas 1-2 empresas (as únicas que já tinham análise de IA
+// disparada), mesmo com dezenas de outras sendo ativamente trabalhadas.
+// Agora devolve TODAS as empresas: o card mostra as mais recentes de
+// verdade, independente de já terem análise de IA ou não.
+//
+// `ultima_movimentacao`: usar só `empresas.updated_at` também deixava a
+// lista praticamente congelada, porque esse campo só muda quando o cadastro
+// da empresa em si é editado -- abrir a ficha, anexar documento, gerar ou
+// assinar contrato e outros eventos do dia a dia não tocavam nele. Por isso
+// o campo aqui é o maior timestamp entre: a própria empresa, a última vez
+// que a ficha foi aberta (`empresas.visualizado_em` -- ver
+// POST /api/empresas/:id/visualizar), os documentos anexados
+// (`documentos_arquivos`), o histórico de eventos da empresa
 // (`empresa_historico` -- cobre nota, simulação, sincronização, Nexus,
 // contrato editado/assinado) e os contratos gerados/atualizados
 // (`contratos_gerados`). É esse campo que o front usa para ordenar "mais
-// recentes primeiro", não mais `empresas.updated_at` sozinho.
+// recentes primeiro" -- reflete tanto "visualizada" quanto "atualizada".
 router.get('/empresas/documentos-resumo', auth, async (_req: Request, res: Response) => {
   try {
     const { rows } = await pool.query(`
@@ -2339,20 +2347,19 @@ router.get('/empresas/documentos-resumo', auth, async (_req: Request, res: Respo
         ) AS analise_iniciada,
         GREATEST(
           COALESCE(e.updated_at, e.created_at),
+          e.visualizado_em,
           (SELECT MAX(da.criado_em) FROM public.documentos_arquivos da WHERE da.empresa_id = e.id),
           (SELECT MAX(eh.created_at) FROM public.empresa_historico eh WHERE eh.empresa_id = e.id),
           (SELECT MAX(cg.updated_at) FROM public.contratos_gerados cg WHERE cg.empresa_id = e.id)
         ) AS ultima_movimentacao
       FROM public.empresas e
     `);
-    const resumo = rows
-      .map((r: any) => ({
-        empresa_id: r.empresa_id,
-        documentos_count: Number(r.documentos_count) || 0,
-        analise_iniciada: Boolean(r.analise_iniciada),
-        ultima_movimentacao: r.ultima_movimentacao || null,
-      }))
-      .filter((r: any) => r.documentos_count > 0 && r.analise_iniciada);
+    const resumo = rows.map((r: any) => ({
+      empresa_id: r.empresa_id,
+      documentos_count: Number(r.documentos_count) || 0,
+      analise_iniciada: Boolean(r.analise_iniciada),
+      ultima_movimentacao: r.ultima_movimentacao || null,
+    }));
     res.json(resumo);
   } catch (err: any) {
     console.error('[GET /api/documentacao/empresas/documentos-resumo]', err);

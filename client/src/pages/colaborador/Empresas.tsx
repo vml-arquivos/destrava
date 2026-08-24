@@ -1421,6 +1421,7 @@ export default function Empresas() {
       setSelecionada(encontrada);
       setShowDetail(true);
       if (isAbaEmpresa(abaParam)) setAbaAtiva(abaParam);
+      apiFetch(`/api/empresas/${empresaIdParam}/visualizar`, { method: "POST" }).catch(() => {});
       return;
     }
 
@@ -1431,6 +1432,7 @@ export default function Empresas() {
         setSelecionada(empresa);
         setShowDetail(true);
         if (isAbaEmpresa(abaParam)) setAbaAtiva(abaParam);
+        apiFetch(`/api/empresas/${empresaIdParam}/visualizar`, { method: "POST" }).catch(() => {});
       })
       .catch(() => {
         if (!cancelado) toast.error("Não foi possível reabrir a empresa selecionada.");
@@ -1498,6 +1500,10 @@ export default function Empresas() {
     setSelecionada(emp);
     setShowDetail(true);
     setLocation(`/colaborador/empresas?empresa=${emp.id}`);
+    // Fogo-e-esquece: registra que a ficha foi aberta agora, pra "Empresas
+    // recentes" também considerar "visualizada" (não só editada/anexada).
+    // Não bloqueia a abertura da ficha se falhar.
+    apiFetch(`/api/empresas/${emp.id}/visualizar`, { method: "POST" }).catch(() => {});
   }
 
   // ── Histórico ──────────────────────────────────────────────────────────────
@@ -2065,7 +2071,7 @@ export default function Empresas() {
                     <div>
                       <h2 className="text-sm font-bold text-foreground">Empresas recentes</h2>
                       <p className="text-[11px] text-muted-foreground">
-                        {loading ? "Carregando…" : "com documentos anexados e análise iniciada · mais recentes primeiro"}
+                        {loading ? "Carregando…" : "últimas visualizadas ou atualizadas primeiro"}
                       </p>
                     </div>
                     <div className="flex shrink-0 items-center gap-0.5 rounded-lg border border-border bg-muted p-0.5">
@@ -2091,8 +2097,8 @@ export default function Empresas() {
                     ) : empresasRecentes.length === 0 ? (
                       <EmptyState
                         preset="empresas"
-                        title="Nenhuma empresa com documentos e análise ainda"
-                        description="Assim que uma empresa tiver documento anexado e análise iniciada no Acervo Documental, ela aparece aqui."
+                        title="Nenhuma empresa recente ainda"
+                        description="Assim que você visualizar ou atualizar uma empresa, ela aparece aqui."
                         action={<button onClick={abrirNova} className="text-xs text-primary hover:underline">+ Cadastrar primeira empresa</button>}
                         className="py-10"
                       />
@@ -2116,16 +2122,22 @@ export default function Empresas() {
                               </div>
                               <StatusBadge status={emp.status} />
                             </div>
-                            <div className="mt-3 flex flex-wrap items-center gap-1.5">
-                              <span className="inline-flex items-center gap-1 rounded-full bg-primary/10 px-2 py-0.5 text-[10px] font-bold text-primary">
-                                Análise iniciada
-                              </span>
-                              <span className="text-[10px] font-semibold text-muted-foreground">
-                                {documentosResumo[emp.id]?.documentos_count || 0} documento{documentosResumo[emp.id]?.documentos_count === 1 ? "" : "s"} anexado{documentosResumo[emp.id]?.documentos_count === 1 ? "" : "s"}
-                              </span>
-                            </div>
+                            {(documentosResumo[emp.id]?.analise_iniciada || (documentosResumo[emp.id]?.documentos_count || 0) > 0) && (
+                              <div className="mt-3 flex flex-wrap items-center gap-1.5">
+                                {documentosResumo[emp.id]?.analise_iniciada && (
+                                  <span className="inline-flex items-center gap-1 rounded-full bg-primary/10 px-2 py-0.5 text-[10px] font-bold text-primary">
+                                    Análise iniciada
+                                  </span>
+                                )}
+                                {(documentosResumo[emp.id]?.documentos_count || 0) > 0 && (
+                                  <span className="text-[10px] font-semibold text-muted-foreground">
+                                    {documentosResumo[emp.id]?.documentos_count} documento{documentosResumo[emp.id]?.documentos_count === 1 ? "" : "s"} anexado{documentosResumo[emp.id]?.documentos_count === 1 ? "" : "s"}
+                                  </span>
+                                )}
+                              </div>
+                            )}
                             <div className="mt-3 flex w-full items-center justify-between border-t border-border pt-2">
-                              <span className="text-[10px] text-muted-foreground">Atualizado {fmtDate(emp.updated_at)}</span>
+                              <span className="text-[10px] text-muted-foreground">Atualizado {fmtDate(documentosResumo[emp.id]?.ultima_movimentacao || emp.updated_at)}</span>
                               <span className="text-[10px] font-bold text-primary">Abrir →</span>
                             </div>
                           </button>
@@ -2145,16 +2157,22 @@ export default function Empresas() {
                             </div>
                             <div className="min-w-0 flex-1">
                               <p className="truncate text-sm font-semibold text-foreground">{emp.razao_social}</p>
-                              <div className="mt-0.5 flex flex-wrap items-center gap-1.5">
-                                <span className="inline-flex items-center gap-1 rounded-full bg-primary/10 px-1.5 py-0.5 text-[10px] font-bold text-primary">
-                                  Análise iniciada
-                                </span>
-                                <span className="text-[10px] font-semibold text-muted-foreground">
-                                  {documentosResumo[emp.id]?.documentos_count || 0} documento{documentosResumo[emp.id]?.documentos_count === 1 ? "" : "s"} anexado{documentosResumo[emp.id]?.documentos_count === 1 ? "" : "s"}
-                                </span>
-                              </div>
+                              {(documentosResumo[emp.id]?.analise_iniciada || (documentosResumo[emp.id]?.documentos_count || 0) > 0) && (
+                                <div className="mt-0.5 flex flex-wrap items-center gap-1.5">
+                                  {documentosResumo[emp.id]?.analise_iniciada && (
+                                    <span className="inline-flex items-center gap-1 rounded-full bg-primary/10 px-1.5 py-0.5 text-[10px] font-bold text-primary">
+                                      Análise iniciada
+                                    </span>
+                                  )}
+                                  {(documentosResumo[emp.id]?.documentos_count || 0) > 0 && (
+                                    <span className="text-[10px] font-semibold text-muted-foreground">
+                                      {documentosResumo[emp.id]?.documentos_count} documento{documentosResumo[emp.id]?.documentos_count === 1 ? "" : "s"} anexado{documentosResumo[emp.id]?.documentos_count === 1 ? "" : "s"}
+                                    </span>
+                                  )}
+                                </div>
+                              )}
                             </div>
-                            <span className="shrink-0 text-[10px] text-muted-foreground">Atualizado {fmtDate(emp.updated_at)}</span>
+                            <span className="shrink-0 text-[10px] text-muted-foreground">Atualizado {fmtDate(documentosResumo[emp.id]?.ultima_movimentacao || emp.updated_at)}</span>
                             <StatusBadge status={emp.status} />
                           </button>
                         ))}

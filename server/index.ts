@@ -2413,6 +2413,16 @@ async function startServer() {
     console.log(`[startup] Migration 084 (recomputo cadastro sem capital social bloqueante): OK. ${recalculadas} empresa(s) atualizada(s).`);
   } catch (err: any) { console.warn('[startup] Migration 084:', err?.message); }
 
+  // ── Migration 085: última visualização da empresa (widget "Empresas recentes") ──
+  // Guarda quando a ficha da empresa foi aberta pela última vez, pra "Empresas
+  // recentes" poder ordenar por "visualizada ou atualizada recentemente" (não só
+  // por edição de cadastro) -- ver POST /api/empresas/:id/visualizar.
+  try {
+    await pool.query(`ALTER TABLE public.empresas ADD COLUMN IF NOT EXISTS visualizado_em TIMESTAMPTZ NULL`);
+    await pool.query(`CREATE INDEX IF NOT EXISTS idx_empresas_visualizado_em ON public.empresas(visualizado_em DESC)`);
+    console.log('[startup] Migration 085 (empresas.visualizado_em): OK.');
+  } catch (err: any) { console.warn('[startup] Migration 085:', err?.message); }
+
   // Marca de versão pra conferir rápido no log de deploy do Coolify se essa correção
   // específica (PDF de orçamento: último recurso + detalhe do erro na resposta) está
   // realmente no ar -- sem precisar comparar hash de commit.
@@ -6905,6 +6915,26 @@ async function startServer() {
     } catch (err) {
       console.error("[GET /api/empresas/:id]", err);
       res.status(500).json({ error: "Erro ao buscar empresa" });
+    }
+  });
+
+  // Marca a ficha da empresa como visualizada agora -- alimenta só o widget
+  // "Empresas recentes" (ver GET /api/documentacao/empresas/documentos-resumo),
+  // não afeta cadastro_status/cadastro_completo nem nenhuma outra regra de
+  // negócio. Endpoint leve, de fogo-e-esquece do lado do front (não bloqueia
+  // a abertura da ficha se falhar).
+  app.post("/api/empresas/:id/visualizar", auth, async (req: Request, res: Response) => {
+    try {
+      if (!(await requireEmpresaAccess(req, res, req.params.id))) return;
+      const { rowCount } = await pool.query(
+        "UPDATE empresas SET visualizado_em = NOW() WHERE id = $1",
+        [req.params.id]
+      );
+      if (!rowCount) { res.status(404).json({ error: "Empresa não encontrada" }); return; }
+      res.json({ success: true });
+    } catch (err) {
+      console.error("[POST /api/empresas/:id/visualizar]", err);
+      res.status(500).json({ error: "Erro ao registrar visualização" });
     }
   });
 
