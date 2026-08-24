@@ -19,7 +19,7 @@ import {
   Building, CreditCard, Hash, Calendar, Users, Briefcase,
   ArrowLeft, MoreVertical, ExternalLink, Copy, CheckCheck,
   BarChart3, Banknote, AlertCircle, Info, RotateCw, Zap, FileDown, Download,
-  LayoutGrid, List as ListIcon,
+  LayoutGrid, List as ListIcon, Printer,
 } from "lucide-react";
 import { EmptyState, LoadingState, ErrorState } from "@/components/ui/states";
 import { RiscoBadge, ScoreIndicator, StatusCadastroBadge } from "@/components/ui/risco-badge";
@@ -1002,6 +1002,9 @@ export default function Empresas() {
   const [modalAnexoAssinado, setModalAnexoAssinado] = useState<{ contrato: any; file: File } | null>(null);
   const [confirmouAssinaturas, setConfirmouAssinaturas] = useState(false);
   const [enviandoAnexoAssinado, setEnviandoAnexoAssinado] = useState(false);
+  // Modal de visualização do contrato (somente leitura -- ver handleVerContrato acima)
+  const [contratoPreviewUrl, setContratoPreviewUrl] = useState<string | null>(null);
+  const [contratoPreviewInfo, setContratoPreviewInfo] = useState<{ id: string; titulo: string; numero?: string } | null>(null);
   const [loadingDetalhe, setLoadingDetalhe] = useState(false);
   const [novaObs, setNovaObs] = useState("");
   const [novoFollowup, setNovoFollowup] = useState({ titulo: "", tipo: "ligacao", data_agendada: "", descricao: "" });
@@ -1229,17 +1232,54 @@ export default function Empresas() {
   const [filtroPorte, setFiltroPorte] = useState("todos");
 
   // ── Funções para abrir/baixar contratos com autenticação Bearer ──────────
-  async function handleVerContrato(contratoId: string) {
+  // Visualização acontece em modal interno (nunca em nova aba do navegador):
+  // window.open() depois de um await pode ser bloqueado pelo navegador e,
+  // dependendo do bloqueador de pop-up, abrir simultaneamente a aba do
+  // window.open() e a aba do <a target="_blank"> de fallback -- daí o efeito
+  // de "duas abas com o mesmo contrato". O modal elimina essa ambiguidade:
+  // o PDF é exibido embutido (somente leitura, sem qualquer edição possível)
+  // e as ações de baixar/imprimir ficam explícitas dentro do próprio modal.
+  async function handleVerContrato(contratoId: string, cont?: any) {
     try {
       const { blob, contentType } = await apiFetchBlob(`/api/contratos/${contratoId}/visualizar`);
       const url = URL.createObjectURL(new Blob([blob], { type: contentType || "application/pdf" }));
-      const w = window.open(url, "_blank", "noopener,noreferrer");
-      if (w) setTimeout(() => URL.revokeObjectURL(url), 30000);
-      else { const a = document.createElement("a"); a.href = url; a.target = "_blank"; document.body.appendChild(a); a.click(); a.remove(); }
+      setContratoPreviewUrl((old) => { if (old) URL.revokeObjectURL(old); return url; });
+      setContratoPreviewInfo({
+        id: contratoId,
+        titulo: cont?.numero_contrato || cont?.protocolo_contrato || `Contrato #${contratoId.slice(0, 8)}`,
+        numero: cont?.numero_contrato || cont?.protocolo_contrato,
+      });
     } catch (err: any) {
       toast.error(err?.message || "Erro ao visualizar contrato");
     }
   }
+
+  async function handleImprimirContrato(contratoId: string) {
+    try {
+      const { blob, contentType } = await apiFetchBlob(`/api/contratos/${contratoId}/visualizar`);
+      const url = URL.createObjectURL(new Blob([blob], { type: contentType || "application/pdf" }));
+      const w = window.open(url, "_blank", "noopener,noreferrer");
+      if (!w) { toast.warning("Permita pop-ups para imprimir o contrato."); return; }
+      setTimeout(() => { try { w.focus(); w.print(); } catch {} }, 1200);
+      setTimeout(() => URL.revokeObjectURL(url), 120000);
+    } catch (err: any) {
+      toast.error(err?.message || "Erro ao imprimir contrato");
+    }
+  }
+
+  function fecharPreviewContrato() {
+    setContratoPreviewUrl((old) => { if (old) URL.revokeObjectURL(old); return null; });
+    setContratoPreviewInfo(null);
+  }
+
+  // Fecha o modal de visualização do contrato com a tecla Esc (além do X e
+  // do clique fora, já cobertos no próprio JSX do modal).
+  useEffect(() => {
+    if (!contratoPreviewUrl) return;
+    const onKeyDown = (e: KeyboardEvent) => { if (e.key === "Escape") fecharPreviewContrato(); };
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [contratoPreviewUrl]);
 
   async function handleBaixarContrato(contratoId: string, numero?: string) {
     try {
@@ -2813,7 +2853,7 @@ export default function Empresas() {
                                 {(cont.pdf_path || cont.id) && (
                                   <div className="flex items-center gap-1 shrink-0">
                                     <button
-                                      onClick={() => handleVerContrato(cont.id)}
+                                      onClick={() => handleVerContrato(cont.id, cont)}
                                       className="p-1.5 text-muted-foreground hover:text-primary hover:bg-primary/10 rounded-lg transition-colors"
                                       title="Visualizar PDF"
                                     >
@@ -3390,6 +3430,55 @@ export default function Empresas() {
           </div>
         </div>
       )}
+      {/* ═══════════════════════════════════════════════════════════════════
+          MODAL DE VISUALIZAÇÃO DO CONTRATO (somente leitura)
+          Substitui o antigo comportamento de abrir o PDF em nova aba do
+          navegador (window.open), que causava o efeito de "duas abas com o
+          mesmo contrato" -- ver explicação em handleVerContrato acima.
+      ════════════════════════════════════════════════════════════════════ */}
+      {contratoPreviewUrl && contratoPreviewInfo && (
+        <div
+          className="fixed inset-0 z-[70] flex items-center justify-center p-4 bg-overlay backdrop-blur-sm"
+          onClick={(e) => { if (e.target === e.currentTarget) fecharPreviewContrato(); }}
+        >
+          <div className="bg-card rounded-2xl shadow-2xl w-full max-w-5xl h-[90vh] flex flex-col overflow-hidden animate-in zoom-in-95 duration-150">
+            <div className="h-14 px-4 border-b border-border flex items-center justify-between gap-3 shrink-0">
+              <div className="min-w-0">
+                <p className="text-sm font-bold text-foreground truncate">{contratoPreviewInfo.titulo}</p>
+                <p className="text-[11px] text-muted-foreground">Contrato firmado -- somente leitura</p>
+              </div>
+              <div className="flex items-center gap-2 shrink-0">
+                <button
+                  type="button"
+                  onClick={() => handleImprimirContrato(contratoPreviewInfo.id)}
+                  className="h-9 px-3 rounded-lg border border-border text-xs font-semibold text-muted-foreground hover:bg-muted inline-flex items-center gap-1.5"
+                  title="Imprimir contrato"
+                >
+                  <Printer className="w-3.5 h-3.5" /> Imprimir
+                </button>
+                <button
+                  type="button"
+                  onClick={() => handleBaixarContrato(contratoPreviewInfo.id, contratoPreviewInfo.numero)}
+                  className="h-9 px-3 rounded-lg border border-border text-xs font-semibold text-muted-foreground hover:bg-muted inline-flex items-center gap-1.5"
+                  title="Baixar / salvar contrato"
+                >
+                  <Download className="w-3.5 h-3.5" /> Baixar
+                </button>
+                <button
+                  type="button"
+                  onClick={fecharPreviewContrato}
+                  className="p-2 rounded-lg hover:bg-muted text-muted-foreground"
+                  title="Fechar (Esc)"
+                >
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
+            </div>
+            <iframe title="Visualização do contrato" src={contratoPreviewUrl} className="flex-1 w-full bg-muted" />
+          </div>
+        </div>
+      )}
+
       {tarefaNexusOpen && selecionada && (
         <CriarTarefaNexusModal
           entidade={{ tipo: 'empresa', id: selecionada.id, nome: selecionada.razao_social || selecionada.nome_fantasia || 'Empresa' }}

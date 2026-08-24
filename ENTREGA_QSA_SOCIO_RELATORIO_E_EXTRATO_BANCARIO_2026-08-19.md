@@ -1602,3 +1602,36 @@ O motor de pendências/plano de ação (`pendenciasEmpresaService.ts`) e os aler
 - `server/index.ts` — `pendenciasEmpresa()` (remoção da checagem de capital social) e Migration 084 (recomputo em lote das empresas já cadastradas).
 
 Nenhuma coluna de schema foi criada ou alterada — é só mudança de regra de negócio (o que conta como pendência) e um recomputo dos dados já existentes com essa regra nova.
+
+## Extra 20 — Visualização do contrato firmado em modal (fim das "duas abas") (2026-08-24)
+
+### Pedido do usuário
+
+"quero uma correção no contrato firmado, quando clica para visualizar, abre duas abas com mesmo contrato, e quero qua abra em um modal e não outra aba, abra modal com opção de salvar, baixar e imprimir, nunca poderá ser editado, e abra em um modal para visualizar e facil de fechar"
+
+### Causa
+
+O botão "Visualizar PDF" do contrato (na ficha da empresa, aba "Contratos Firmados", e também no gerador de contratos) buscava o PDF por `fetch` e só depois chamava `window.open(url, "_blank")` para abrir em nova aba. Como o `window.open` acontecia **depois** de um `await` (a resposta do `fetch`), alguns navegadores não reconhecem mais a chamada como resultado direto do clique do usuário e bloqueiam o pop-up — nesse caso o código tinha um fallback que criava um `<a target="_blank">` e simulava um clique nele. Dependendo do navegador/bloqueador de pop-up, as duas coisas podiam acontecer (uma aba pelo `window.open` que o navegador deixou passar parcialmente + a aba do link de fallback), resultando no efeito relatado de "abre duas abas com o mesmo contrato".
+
+### Correção
+
+- `client/src/pages/colaborador/Empresas.tsx`: `handleVerContrato` não usa mais `window.open`/nova aba. Agora ele guarda o PDF (blob) em estado (`contratoPreviewUrl`/`contratoPreviewInfo`) e abre um **modal** interno com um `<iframe>` somente leitura mostrando o PDF — o mesmo padrão já usado para os documentos anexados na ficha da empresa (`DocumentosEntidade.tsx`). Um `<iframe>` de PDF não permite edição alguma do conteúdo — só visualização.
+  - O modal tem três ações no cabeçalho: **Imprimir** (abre uma aba de impressão dedicada e já dispara `print()` — esse é o único caso em que uma aba nova é aberta, e é intencional: é a forma padrão do navegador de imprimir um PDF), **Baixar** (usa a rota de download já existente, que salva o arquivo no computador — cobre tanto "baixar" quanto "salvar"), e um **X** para fechar. O modal também fecha clicando fora dele ou apertando **Esc**, e a URL do blob é liberada da memória (`URL.revokeObjectURL`) ao fechar.
+  - Como bônus, o `<iframe>` com o PDF usa o visualizador nativo do navegador (ex.: Chrome), que já traz seus próprios ícones de salvar/baixar/imprimir/zoom na barra de ferramentas — reforçando as opções pedidas, sem risco de edição.
+- `client/src/components/contratos/ListaContratos.tsx` (usado na tela "Gerador de Contratos"): tinha exatamente o mesmo padrão de `window.open` para visualizar (`abrirPdf`) na mesma rota `/api/contratos/:id/visualizar`, sujeito ao mesmo problema. Recebeu a mesma correção: modal somente leitura com Imprimir/Baixar/Fechar, fecha com Esc ou clique fora.
+- Nenhuma rota de backend foi alterada — a correção é só na forma como o PDF já retornado pela API é exibido no navegador.
+
+### Verificação
+
+- `npx tsc --noEmit`: limpo.
+- `npx vitest run`: **540/540 testes passando**, mesma contagem de antes.
+- `npx vite build --mode production`: concluído sem erros.
+- Conferido por grep que não sobrou nenhum `window.open` no fluxo de "visualizar" contrato — o único `window.open` restante em cada arquivo é dentro da ação explícita "Imprimir" (comportamento esperado/pedido, não é mais disparado ao clicar em "Visualizar").
+- Baixar contrato (`handleBaixarContrato`/`handleDownload`), anexar contrato assinado, e as demais ações da lista de contratos (status, excluir, editar, regenerar) não foram tocadas.
+
+### Escopo desta correção
+
+- `client/src/pages/colaborador/Empresas.tsx` — `handleVerContrato`, novo `handleImprimirContrato`, novo `fecharPreviewContrato`, novo estado do modal, novo bloco de modal no JSX.
+- `client/src/components/contratos/ListaContratos.tsx` — `abrirPdf`, novo `imprimirPdf`, novo `fecharPreview`, novo estado do modal, novo bloco de modal no JSX.
+
+Não altera "Orçamentos" nem nenhuma outra tela de visualização de PDF fora do fluxo de contrato firmado, conforme o pedido.

@@ -1,5 +1,5 @@
-import { useState, useMemo } from 'react';
-import { Download, CheckCircle, XCircle, Trash2, Eye, RefreshCw, Upload, Pencil } from 'lucide-react';
+import { useState, useMemo, useEffect } from 'react';
+import { Download, CheckCircle, XCircle, Trash2, Eye, RefreshCw, Upload, Pencil, Printer, X } from 'lucide-react';
 import { apiFetch, getToken } from '../../lib/api';
 import { toast } from 'sonner';
 
@@ -159,7 +159,46 @@ export function ListaContratos({ contratos, onStatusChange, onDelete, userCargo,
     });
   };
 
-  const abrirPdf = (id: string) => {
+  // Visualização em modal interno (somente leitura), nunca em nova aba:
+  // window.open() após um fetch assíncrono pode ser bloqueado pelo navegador
+  // e, dependendo do bloqueador de pop-up, abrir a aba do window.open() e
+  // outra aba de fallback ao mesmo tempo -- efeito de "duas abas com o mesmo
+  // contrato". O modal evita essa ambiguidade por completo.
+  const [previewUrl, setPreviewUrl] = useState<string | null>(null);
+  const [previewContrato, setPreviewContrato] = useState<Contrato | null>(null);
+
+  useEffect(() => {
+    if (!previewUrl) return;
+    const onKeyDown = (e: KeyboardEvent) => { if (e.key === 'Escape') fecharPreview(); };
+    window.addEventListener('keydown', onKeyDown);
+    return () => window.removeEventListener('keydown', onKeyDown);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [previewUrl]);
+
+  useEffect(() => () => { if (previewUrl) URL.revokeObjectURL(previewUrl); }, [previewUrl]);
+
+  const fecharPreview = () => {
+    setPreviewUrl(old => { if (old) URL.revokeObjectURL(old); return null; });
+    setPreviewContrato(null);
+  };
+
+  const abrirPdf = (contrato: Contrato) => {
+    const token = getToken();
+    const url = `/api/contratos/${contrato.id}/visualizar`;
+    fetch(url, { headers: { Authorization: `Bearer ${token || ''}` } })
+      .then(res => {
+        if (!res.ok) return res.json().then((j: any) => { throw new Error(j?.error || 'PDF não encontrado'); });
+        return res.blob();
+      })
+      .then(blob => {
+        const blobUrl = URL.createObjectURL(blob);
+        setPreviewUrl(old => { if (old) URL.revokeObjectURL(old); return blobUrl; });
+        setPreviewContrato(contrato);
+      })
+      .catch((err: any) => toast.error(err?.message || 'Erro ao visualizar contrato'));
+  };
+
+  const imprimirPdf = (id: string) => {
     const token = getToken();
     const url = `/api/contratos/${id}/visualizar`;
     fetch(url, { headers: { Authorization: `Bearer ${token || ''}` } })
@@ -169,9 +208,12 @@ export function ListaContratos({ contratos, onStatusChange, onDelete, userCargo,
       })
       .then(blob => {
         const blobUrl = URL.createObjectURL(blob);
-        window.open(blobUrl, '_blank', 'noopener,noreferrer');
+        const w = window.open(blobUrl, '_blank', 'noopener,noreferrer');
+        if (!w) { toast.warning('Permita pop-ups para imprimir o contrato.'); return; }
+        setTimeout(() => { try { w.focus(); w.print(); } catch {} }, 1200);
+        setTimeout(() => URL.revokeObjectURL(blobUrl), 120000);
       })
-      .catch((err: any) => toast.error(err?.message || 'Erro ao visualizar contrato'));
+      .catch((err: any) => toast.error(err?.message || 'Erro ao imprimir contrato'));
   };
 
   const handleDownload = (contrato: Contrato) => {
@@ -414,7 +456,7 @@ export function ListaContratos({ contratos, onStatusChange, onDelete, userCargo,
                   <td className="py-2 px-2">
                     <div className="flex items-center justify-center gap-1 flex-wrap">
                       <button
-                        onClick={() => abrirPdf(c.id)}
+                        onClick={() => abrirPdf(c)}
                         className="inline-flex items-center justify-center w-7 h-7 rounded-md border border-border bg-card hover:bg-muted text-muted-foreground"
                         title="Visualizar PDF"
                       >
@@ -497,6 +539,53 @@ export function ListaContratos({ contratos, onStatusChange, onDelete, userCargo,
           </span>
         )}
       </div>
+
+      {/* Modal de visualização do contrato (somente leitura) -- substitui o
+          antigo window.open, que causava o efeito de "duas abas". */}
+      {previewUrl && previewContrato && (
+        <div
+          className="fixed inset-0 z-[70] flex items-center justify-center p-4 bg-overlay backdrop-blur-sm"
+          onClick={(e) => { if (e.target === e.currentTarget) fecharPreview(); }}
+        >
+          <div className="bg-card rounded-2xl shadow-2xl w-full max-w-5xl h-[90vh] flex flex-col overflow-hidden animate-in zoom-in-95 duration-150">
+            <div className="h-14 px-4 border-b border-border flex items-center justify-between gap-3 shrink-0">
+              <div className="min-w-0">
+                <p className="text-sm font-bold text-foreground truncate">
+                  {previewContrato.numero_contrato || previewContrato.protocolo_contrato || `Contrato #${previewContrato.id.slice(0, 8)}`}
+                </p>
+                <p className="text-[11px] text-muted-foreground">Contrato firmado -- somente leitura</p>
+              </div>
+              <div className="flex items-center gap-2 shrink-0">
+                <button
+                  type="button"
+                  onClick={() => imprimirPdf(previewContrato.id)}
+                  className="h-9 px-3 rounded-lg border border-border text-xs font-semibold text-muted-foreground hover:bg-muted inline-flex items-center gap-1.5"
+                  title="Imprimir contrato"
+                >
+                  <Printer className="w-3.5 h-3.5" /> Imprimir
+                </button>
+                <button
+                  type="button"
+                  onClick={() => handleDownload(previewContrato)}
+                  className="h-9 px-3 rounded-lg border border-border text-xs font-semibold text-muted-foreground hover:bg-muted inline-flex items-center gap-1.5"
+                  title="Baixar / salvar contrato"
+                >
+                  <Download className="w-3.5 h-3.5" /> Baixar
+                </button>
+                <button
+                  type="button"
+                  onClick={fecharPreview}
+                  className="p-2 rounded-lg hover:bg-muted text-muted-foreground"
+                  title="Fechar (Esc)"
+                >
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
+            </div>
+            <iframe title="Visualização do contrato" src={previewUrl} className="flex-1 w-full bg-muted" />
+          </div>
+        </div>
+      )}
     </div>
   );
 }
