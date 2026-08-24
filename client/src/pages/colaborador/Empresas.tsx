@@ -157,6 +157,7 @@ const ABAS_EMPRESA = [
   "documentos",
   "simulacoes",
   "contratos",
+  "orcamentos",
 ] as const;
 type AbaEmpresa = typeof ABAS_EMPRESA[number];
 
@@ -175,6 +176,7 @@ const ABA_EMPRESA_FEATURES: Partial<Record<AbaEmpresa, string>> = {
   documentos: "empresa-tab-acervo-documental",
   simulacoes: "empresa-tab-simulacoes",
   contratos: "empresa-tab-contratos",
+  orcamentos: "empresa-tab-orcamentos",
 };
 
 function featureDaAbaEmpresa(aba: AbaEmpresa): string | undefined {
@@ -991,6 +993,7 @@ export default function Empresas() {
   const [consultandoCpfSocioId, setConsultandoCpfSocioId] = useState<string | null>(null);
   const [simulacoesEmpresa, setSimulacoesEmpresa] = useState<any[]>([]);
   const [contratosEmpresa, setContratosEmpresa] = useState<any[]>([]);
+  const [orcamentosEmpresa, setOrcamentosEmpresa] = useState<any[]>([]);
   // Confirmação antes de anexar/substituir o contrato assinado: como uma
   // empresa pode ter mais de um tipo de contrato (assessoria, limpa nome,
   // rating...), o modal deixa explícito QUAL contrato (número + tipo) está
@@ -1253,6 +1256,32 @@ export default function Empresas() {
       toast.error(err?.message || "Erro ao baixar contrato");
     }
   }
+  async function handleVerOrcamento(orcamentoId: string) {
+    try {
+      const { blob, contentType } = await apiFetchBlob(`/api/orcamentos/${orcamentoId}/pdf`);
+      const url = URL.createObjectURL(new Blob([blob], { type: contentType || "application/pdf" }));
+      const w = window.open(url, "_blank", "noopener,noreferrer");
+      if (w) setTimeout(() => URL.revokeObjectURL(url), 30000);
+      else { const a = document.createElement("a"); a.href = url; a.target = "_blank"; document.body.appendChild(a); a.click(); a.remove(); }
+    } catch (err: any) {
+      toast.error(err?.message || "Erro ao visualizar orçamento");
+    }
+  }
+  async function handleBaixarOrcamento(orcamentoId: string, numero?: string) {
+    try {
+      const { blob, filename, contentType } = await apiFetchBlob(`/api/orcamentos/${orcamentoId}/download`);
+      const url = URL.createObjectURL(new Blob([blob], { type: contentType || "application/pdf" }));
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = filename || `${numero || `orcamento-${orcamentoId.slice(0, 8)}`}.pdf`;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      setTimeout(() => URL.revokeObjectURL(url), 5000);
+    } catch (err: any) {
+      toast.error(err?.message || "Erro ao baixar orçamento");
+    }
+  }
   async function handleAnexarContratoAssinado(contratoId: string, file: File) {
     setEnviandoAnexoAssinado(true);
     try {
@@ -1271,6 +1300,12 @@ export default function Empresas() {
       if (selecionada) {
         const atualizada = await apiFetch(`/api/empresas/${selecionada.id}`).catch(() => null);
         if (atualizada) setSelecionada((prev) => (prev ? { ...prev, ...atualizada } : prev));
+        // Sem isto, a lista de "Contratos Firmados" na ficha da empresa continua
+        // mostrando o status anterior (aguardando assinatura) até a empresa ser
+        // reselecionada/página recarregada, pois esse estado só é carregado uma
+        // vez por seleção de empresa (useEffect separado, não reage a este upload).
+        const contratosAtualizados = await apiFetch(`/api/empresas/${selecionada.id}/contratos`).catch(() => null);
+        if (Array.isArray(contratosAtualizados)) setContratosEmpresa(contratosAtualizados);
       }
       setModalAnexoAssinado(null);
       setConfirmouAssinaturas(false);
@@ -1393,7 +1428,7 @@ export default function Empresas() {
     const abaParam = new URLSearchParams(queryString).get("aba");
     setAbaAtiva(isAbaEmpresa(abaParam) ? abaParam : "visao_geral");
     setFollowups([]); setHistorico([]); setDocumentos([]); setContratosSociais([]); setSociosEmpresa([]);
-    setSimulacoesEmpresa([]); setContratosEmpresa([]);
+    setSimulacoesEmpresa([]); setContratosEmpresa([]); setOrcamentosEmpresa([]);
     setLoadingDetalhe(true);
     Promise.all([
       apiFetch(`/api/empresas/${selecionada.id}/followups`).catch(() => []),
@@ -1403,7 +1438,8 @@ export default function Empresas() {
       apiFetch(`/api/empresas/${selecionada.id}/socios`).catch(() => []),
       apiFetch(`/api/empresas/${selecionada.id}/simulacoes`).catch(() => []),
       apiFetch(`/api/empresas/${selecionada.id}/contratos`).catch(() => []),
-    ]).then(([f, h, d, cs, s, sim, cont]) => {
+      apiFetch(`/api/empresas/${selecionada.id}/orcamentos`).catch(() => []),
+    ]).then(([f, h, d, cs, s, sim, cont, orc]) => {
       setFollowups(Array.isArray(f) ? f : []);
       setHistorico(Array.isArray(h) ? h : []);
       setDocumentos(Array.isArray(d) ? d : []);
@@ -1411,6 +1447,7 @@ export default function Empresas() {
       setSociosEmpresa(Array.isArray(s) ? s : []);
       setSimulacoesEmpresa(Array.isArray(sim) ? sim : []);
       setContratosEmpresa(Array.isArray(cont) ? cont : []);
+      setOrcamentosEmpresa(Array.isArray(orc) ? orc : []);
     }).finally(() => setLoadingDetalhe(false));
   }, [selecionada?.id, location]);
 
@@ -2293,6 +2330,7 @@ export default function Empresas() {
                         { id: "followup", label: "Conversas", badge: followups.filter(f => !f.concluido).length || undefined },
                         { id: "simulacoes", label: "Simulações", badge: simulacoesEmpresa.length || undefined },
                         { id: "contratos", label: "Contratos Firmados", badge: contratosEmpresa.length || undefined },
+                        { id: "orcamentos", label: "Orçamentos", badge: orcamentosEmpresa.length || undefined },
                         { id: "historico", label: "Histórico", badge: historico.length || undefined },
                       ] as const).filter(aba => abaPermitida(aba.id)).map(aba => (
                         <button
@@ -2812,6 +2850,93 @@ export default function Empresas() {
                                   </div>
                                 )}
                               </div>
+                              );
+                            })}
+                          </div>
+                        )}
+                      </div>
+                    ) : (abaPermitida(abaAtiva) ? abaAtiva : primeiraAbaPermitida()) === "orcamentos" ? (
+                      <div className="p-4 space-y-3">
+                        <div className="flex items-center justify-between mb-2">
+                          <div>
+                            <h3 className="text-sm font-semibold text-muted-foreground">Orçamentos</h3>
+                            <p className="text-xs text-muted-foreground mt-0.5">Orçamentos timbrados (Destrava/PermuPay) gerados para esta empresa.</p>
+                          </div>
+                          <span className="text-xs text-muted-foreground">{orcamentosEmpresa.length} registro(s)</span>
+                        </div>
+                        {orcamentosEmpresa.length === 0 ? (
+                          <div className="flex flex-col items-center justify-center py-14 gap-3 rounded-xl border-2 border-dashed border-border">
+                            <span className="text-4xl">🧾</span>
+                            <p className="text-sm text-muted-foreground">Nenhum orçamento gerado para esta empresa</p>
+                          </div>
+                        ) : (
+                          <div className="space-y-2">
+                            {orcamentosEmpresa.map((orc: any) => {
+                              const statusLabel: Record<string, string> = {
+                                rascunho: "Rascunho",
+                                finalizado: "Finalizado",
+                                enviado: "Enviado",
+                                cancelado: "Cancelado",
+                              };
+                              const statusCls: Record<string, string> = {
+                                rascunho: "bg-muted text-muted-foreground",
+                                finalizado: "bg-success/20 text-success",
+                                enviado: "bg-primary/20 text-primary",
+                                cancelado: "bg-destructive/20 text-destructive",
+                              };
+                              return (
+                                <div key={orc.id} className="flex items-start gap-3 p-3 rounded-xl border border-border bg-card hover:bg-muted transition-colors">
+                                  <div className="w-8 h-8 rounded-lg flex items-center justify-center shrink-0 bg-primary/10">
+                                    <span className="text-base">🧾</span>
+                                  </div>
+                                  <div className="flex-1 min-w-0">
+                                    <div className="flex items-center gap-2 flex-wrap">
+                                      <p className="text-sm font-medium text-foreground">
+                                        {orc.titulo || orc.numero || `Orçamento #${orc.id?.slice(0, 8)}`}
+                                      </p>
+                                      <span className={`text-[10px] px-1.5 py-0.5 rounded-full font-semibold ${statusCls[orc.status] || "bg-muted text-muted-foreground"}`}>
+                                        {statusLabel[orc.status] || orc.status || "—"}
+                                      </span>
+                                    </div>
+                                    <div className="flex flex-wrap gap-x-3 gap-y-0.5 mt-1">
+                                      {orc.numero && (
+                                        <span className="text-xs text-muted-foreground">🔢 {orc.numero}</span>
+                                      )}
+                                      {typeof orc.valor_total !== "undefined" && orc.valor_total !== null && (
+                                        <span className="text-xs text-muted-foreground">
+                                          💰 {Number(orc.valor_total).toLocaleString("pt-BR", { style: "currency", currency: "BRL" })}
+                                        </span>
+                                      )}
+                                      {orc.marca && (
+                                        <span className="text-xs text-muted-foreground capitalize">🏷️ {orc.marca}</span>
+                                      )}
+                                    </div>
+                                    <div className="flex items-center gap-2 mt-1">
+                                      {orc.criado_por_nome && (
+                                        <span className="text-xs text-muted-foreground">👤 {orc.criado_por_nome}</span>
+                                      )}
+                                      <span className="text-xs text-muted-foreground">
+                                        Gerado em {orc.criado_em ? new Date(orc.criado_em).toLocaleDateString("pt-BR") : "—"}
+                                      </span>
+                                    </div>
+                                  </div>
+                                  <div className="flex items-center gap-1 shrink-0">
+                                    <button
+                                      onClick={() => handleVerOrcamento(orc.id)}
+                                      className="p-1.5 text-muted-foreground hover:text-primary hover:bg-primary/10 rounded-lg transition-colors"
+                                      title="Visualizar PDF"
+                                    >
+                                      <ExternalLink className="w-3.5 h-3.5" />
+                                    </button>
+                                    <button
+                                      onClick={() => handleBaixarOrcamento(orc.id, orc.numero)}
+                                      className="p-1.5 text-muted-foreground hover:text-success hover:bg-success/10 rounded-lg transition-colors"
+                                      title="Baixar PDF"
+                                    >
+                                      <Download className="w-3.5 h-3.5" />
+                                    </button>
+                                  </div>
+                                </div>
                               );
                             })}
                           </div>

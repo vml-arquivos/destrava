@@ -380,7 +380,18 @@ function pendenciasEmpresa(dados: Record<string, any>): string[] {
 
   if (!String(dados.cnae_principal || "").trim()) pendencias.push("CNAE principal não sincronizado");
   if (!String(dados.natureza_juridica || "").trim()) pendencias.push("Natureza jurídica não sincronizada");
-  if (dados.capital_social === null || dados.capital_social === undefined || Number(dados.capital_social) <= 0) pendencias.push("Capital social não sincronizado");
+  // Capital social NÃO entra mais como pendência que bloqueia o cadastro / manda pra
+  // "Cadastros Incompletos". Muita empresa/instituição real (associação, fundação,
+  // cooperativa, órgão público, entre outras) legitimamente não tem capital social --
+  // a Receita não retorna esse campo porque ele não se aplica, não porque falta
+  // sincronizar. Tratar isso como pendência escondia cadastro válido, vindo direto da
+  // Receita, atrás de "Cadastros Incompletos" e podia até bloquear operacionalmente
+  // a empresa (ver reprocessar em /api/cadastros-incompletos/:tipo/:id/reprocessar,
+  // que usa pendencias.length para bloqueado_operacional). O alerta de capital social
+  // ausente/divergente continua existindo -- só que como alerta informativo na consulta
+  // com documentação anexada (analiseDocumentalEspecializada.ts, QSA/Junta Comercial) e
+  // no motor de pendências/plano de ação (pendenciasEmpresaService.ts), nunca mais como
+  // bloqueio de cadastro.
   if (!String(dados.situacao_cadastral || "").trim()) pendencias.push("Situação cadastral não sincronizada");
   return pendencias;
 }
@@ -2344,6 +2355,63 @@ async function startServer() {
     }
     console.log(`[startup] Migration 077 (motivo_encerramento + backfill): OK -- ${categorizados} de ${semMotivo.rows.length} encerrado(s) categorizado(s) automaticamente pelo texto já existente.`);
   } catch (err: any) { console.warn('[startup] Migration 077:', err?.message); }
+
+  // ── Migration 083: Acompanhamento Bancário também para Pessoa Física ──────
+  // Até aqui o módulo só aceitava empresa cadastrada (empresa_id obrigatório
+  // na prática, via buscarEmpresaParaAcompanhamento). A coluna tipo_cliente já
+  // existia (default 'pj', sem CHECK que trave outros valores), então o único
+  // gap real de schema é o vínculo com clientes_pf -- adicionado abaixo do
+  // mesmo jeito que empresa_id/lead_id (nullable, ON DELETE SET NULL). Nenhuma
+  // coluna existente muda de tipo/obrigatoriedade: zero risco de regressão
+  // para os acompanhamentos de PJ já cadastrados.
+  try {
+    await pool.query(`
+      ALTER TABLE public.acompanhamentos_bancarios
+        ADD COLUMN IF NOT EXISTS pessoa_fisica_id UUID REFERENCES public.clientes_pf(id) ON DELETE SET NULL;
+    `);
+    await pool.query(`CREATE INDEX IF NOT EXISTS idx_acompanhamentos_bancarios_pessoa_fisica ON public.acompanhamentos_bancarios(pessoa_fisica_id)`);
+    console.log('[startup] Migration 083 (acompanhamento bancário PF): OK.');
+  } catch (err: any) { console.warn('[startup] Migration 083:', err?.message); }
+
+  // ── Migration 084: recomputa cadastro_completo/cadastro_status/cadastro_pendencias
+  //    de empresas com a nova regra de pendenciasEmpresa() -- capital social deixou
+  //    de ser pendência bloqueante (ver comentário em pendenciasEmpresa). Sem isso,
+  //    empresa que já tinha sido gravada como "incompleto" só por faltar capital
+  //    social (comum em associação, fundação, cooperativa, órgão público etc., que
+  //    legitimamente não têm esse dado na Receita) continuaria presa em "Cadastros
+  //    Incompletos" pra sempre, mesmo já vindo completa da Receita. Só recalcula quem
+  //    tem CNPJ válido e não está arquivada por duplicidade/removida -- não mexe em
+  //    cadastro genuinamente incompleto (sem CNAE/natureza jurídica/situação
+  //    cadastral) nem em empresa duplicada/removida. Idempotente: só faz UPDATE nas
+  //    linhas cujo resultado recalculado é diferente do que já está gravado; rodar de
+  //    novo em quem já foi corrigido não faz nada.
+  try {
+    const { rows: empresasParaRecalcular } = await pool.query(`
+      SELECT id, cnpj, razao_social, origem, ultima_sincronizacao_receita, cnae_principal,
+             natureza_juridica, capital_social, situacao_cadastral, cadastro_pendencias, cadastro_status, cadastro_completo
+        FROM empresas
+       WHERE COALESCE(arquivado_por_duplicidade, false) = false
+         AND COALESCE(cadastro_status, '') <> 'removido'
+    `);
+    let recalculadas = 0;
+    for (const emp of empresasParaRecalcular) {
+      const pendenciasNovas = pendenciasEmpresa(emp);
+      const pendenciasAtuais = Array.isArray(emp.cadastro_pendencias) ? emp.cadastro_pendencias : [];
+      const statusNovo = statusCadastroFromPendencias(pendenciasNovas);
+      const completoNovo = pendenciasNovas.length === 0;
+      const mudouPendencias = pendenciasNovas.length !== pendenciasAtuais.length
+        || pendenciasNovas.some((p, i) => p !== pendenciasAtuais[i]);
+      const mudouStatus = statusNovo !== emp.cadastro_status;
+      const mudouCompleto = completoNovo !== Boolean(emp.cadastro_completo);
+      if (!mudouPendencias && !mudouStatus && !mudouCompleto) continue;
+      await pool.query(
+        `UPDATE empresas SET cadastro_pendencias = $1, cadastro_status = $2, cadastro_completo = $3, updated_at = NOW() WHERE id = $4`,
+        [pendenciasNovas, statusNovo, completoNovo, emp.id]
+      );
+      recalculadas++;
+    }
+    console.log(`[startup] Migration 084 (recomputo cadastro sem capital social bloqueante): OK. ${recalculadas} empresa(s) atualizada(s).`);
+  } catch (err: any) { console.warn('[startup] Migration 084:', err?.message); }
 
   // Marca de versão pra conferir rápido no log de deploy do Coolify se essa correção
   // específica (PDF de orçamento: último recurso + detalhe do erro na resposta) está
@@ -7449,6 +7517,43 @@ async function startServer() {
     } catch (err) {
       console.error("[GET /api/empresas/:id/contratos]", err);
       res.status(500).json({ error: "Erro ao listar contratos da empresa" });
+    }
+  });
+
+  // ─── GET /api/empresas/:id/orcamentos ────────────────────────────────────
+  // Lista os orçamentos timbrados (Destrava/PermuPay) vinculados a esta
+  // empresa, para exibição na aba "Orçamentos" da ficha da empresa. Mesmo
+  // padrão de /api/empresas/:id/contratos e /api/empresas/:id/simulacoes.
+  app.get("/api/empresas/:id/orcamentos", auth, async (req: Request, res: Response) => {
+    try {
+      const { rows } = await pool.query(
+        `SELECT
+           o.id,
+           o.numero,
+           o.tipo_cliente,
+           o.marca,
+           o.titulo,
+           o.descricao,
+           o.valor_total,
+           o.validade_dias,
+           o.validade_ate,
+           o.status,
+           o.anexos_count,
+           o.pdf_path,
+           o.criado_em,
+           o.atualizado_em,
+           o.finalizado_em,
+           col.nome AS criado_por_nome
+         FROM orcamentos_timbrados o
+         LEFT JOIN colaboradores col ON col.id = o.criado_por
+         WHERE o.empresa_id = $1
+         ORDER BY o.criado_em DESC`,
+        [req.params.id]
+      );
+      res.json(rows);
+    } catch (err) {
+      console.error("[GET /api/empresas/:id/orcamentos]", err);
+      res.status(500).json({ error: "Erro ao listar orçamentos da empresa" });
     }
   });
 
@@ -12632,10 +12737,10 @@ async function registrarDocumentoContratoGerado(params: {
   app.get('/api/contratos/:id/download', auth, async (req: Request, res: Response) => {
     try {
       const { rows } = await pool.query(
-        'SELECT pdf_path, empresa_id, numero_contrato, protocolo_contrato FROM contratos_gerados WHERE id = $1',
+        'SELECT pdf_path, assinado_pdf_path, status, empresa_id, numero_contrato, protocolo_contrato FROM contratos_gerados WHERE id = $1',
         [req.params.id]
       );
-      if (!rows.length || !rows[0].pdf_path) {
+      if (!rows.length || (!rows[0].pdf_path && !rows[0].assinado_pdf_path)) {
         res.status(404).json({ error: 'Contrato não encontrado' });
         return;
       }
@@ -12643,7 +12748,13 @@ async function registrarDocumentoContratoGerado(params: {
       // não confia só no caminho gravado no banco, tenta reconstruir em vários
       // caminhos possíveis antes de desistir (evita 404 por drift de DATA_DIR
       // entre deploys).
-      const pdfPathBruto = String(rows[0].pdf_path);
+      // Contrato assinado: o PDF assinado (assinado_pdf_path) substitui o PDF
+      // gerado sem assinatura (pdf_path) na hora de baixar.
+      const pdfPathBruto = String(
+        (rows[0].status === 'assinado' && rows[0].assinado_pdf_path)
+          ? rows[0].assinado_pdf_path
+          : (rows[0].pdf_path || rows[0].assinado_pdf_path)
+      );
       const candidatos: string[] = [
         path.resolve(pdfPathBruto),
         path.join(getDataDir(), 'uploads', 'contratos', path.basename(pdfPathBruto)),
@@ -12682,15 +12793,23 @@ async function registrarDocumentoContratoGerado(params: {
       }
       const contrato = rows[0];
 
+      // Contrato assinado: o PDF assinado (assinado_pdf_path) substitui o PDF
+      // gerado sem assinatura (pdf_path) na visualização, para nunca exibir a
+      // versão "aguardando assinatura" depois que a assinada foi anexada.
+      const pdfPathPreferido =
+        (contrato.status === 'assinado' && contrato.assinado_pdf_path)
+          ? contrato.assinado_pdf_path
+          : (contrato.pdf_path || contrato.assinado_pdf_path);
+
       // Tenta localizar o arquivo PDF em múltiplos caminhos possíveis
       const candidatos: string[] = [];
-      if (contrato.pdf_path) {
-        candidatos.push(path.resolve(contrato.pdf_path));
-        candidatos.push(path.join('/app/uploads/contratos', path.basename(contrato.pdf_path)));
-        candidatos.push(path.join('/app/uploads', path.basename(contrato.pdf_path)));
-        candidatos.push(path.join('/var/data/destrava', path.basename(contrato.pdf_path)));
+      if (pdfPathPreferido) {
+        candidatos.push(path.resolve(pdfPathPreferido));
+        candidatos.push(path.join('/app/uploads/contratos', path.basename(pdfPathPreferido)));
+        candidatos.push(path.join('/app/uploads', path.basename(pdfPathPreferido)));
+        candidatos.push(path.join('/var/data/destrava', path.basename(pdfPathPreferido)));
         if (process.env.DATA_DIR) {
-          candidatos.push(path.join(process.env.DATA_DIR, path.basename(contrato.pdf_path)));
+          candidatos.push(path.join(process.env.DATA_DIR, path.basename(pdfPathPreferido)));
         }
       }
       candidatos.push(path.join(path.resolve('uploads', 'contratos'), `contrato-${req.params.id}.pdf`));
@@ -13896,6 +14015,60 @@ async function registrarDocumentoContratoGerado(params: {
     return null;
   }
 
+  // ── Pessoa Física: mesmo papel de buscarEmpresaParaAcompanhamento /
+  // montarDadosEmpresaParaAcompanhamento acima, mas resolvendo contra
+  // clientes_pf em vez de empresas. Mantido como funções separadas (em vez
+  // de sobrecarregar as de empresa) para não arriscar alterar o comportamento
+  // já validado do fluxo PJ.
+  function montarDadosClientePfParaAcompanhamento(pf: any): Record<string, any> {
+    return {
+      empresa_id: null,
+      pessoa_fisica_id: pf?.id || null,
+      nome_empresa: primeiroValorAcompanhamento(pf?.nome) || "",
+      cnpj: pf?.cpf || null,
+      telefone_cliente: primeiroValorAcompanhamento(pf?.telefone),
+      whatsapp_cliente: primeiroValorAcompanhamento(pf?.telefone),
+      email_cliente: primeiroValorAcompanhamento(pf?.email),
+      // clientes_pf não tem campo de faturamento/renda (só existe para PJ) --
+      // quem informa o valor de referência da pessoa física é o próprio
+      // colaborador no formulário (faturamento_anual do body), sem esta função
+      // supor um número que não existe no cadastro.
+      faturamento_anual: null,
+      media_mensal: null,
+      margem_seguranca_30: null,
+    };
+  }
+
+  async function buscarClientePfParaAcompanhamento(input: { pessoaFisicaId?: string | null; cpf?: string | null; nome?: string | null }) {
+    if (input.pessoaFisicaId) {
+      const { rows } = await pool.query("SELECT * FROM clientes_pf WHERE id = $1 LIMIT 1", [input.pessoaFisicaId]);
+      if (rows[0]) return rows[0];
+    }
+
+    const cpfDigits = somenteDigitosAcompanhamento(input.cpf);
+    if (cpfDigits.length === 11) {
+      const { rows } = await pool.query(
+        `SELECT *
+           FROM clientes_pf
+          WHERE regexp_replace(COALESCE(cpf, ''), '[^0-9]', '', 'g') = $1
+          LIMIT 1`,
+        [cpfDigits]
+      );
+      if (rows[0]) return rows[0];
+    }
+
+    const nome = String(input.nome || "").trim();
+    if (nome.length >= 3) {
+      const { rows } = await pool.query(
+        `SELECT * FROM clientes_pf WHERE nome ILIKE $1 LIMIT 1`,
+        [`%${nome}%`]
+      );
+      if (rows[0]) return rows[0];
+    }
+
+    return null;
+  }
+
   async function sincronizarDadosEmpresaNoAcompanhamento(acompanhamentoId: string) {
     const { rows: acompRows } = await pool.query(
       `SELECT * FROM acompanhamentos_bancarios WHERE id = $1 LIMIT 1`,
@@ -13903,6 +14076,56 @@ async function registrarDocumentoContratoGerado(params: {
     );
     const acompanhamento = acompRows[0];
     if (!acompanhamento) return { status: 404, payload: { error: "Acompanhamento não encontrado." } };
+
+    // Pessoa física: mesmo fluxo, resolvendo contra clientes_pf em vez de
+    // empresas. tipo_cliente='pf' ou pessoa_fisica_id já preenchido são os
+    // dois sinais de que este acompanhamento é de uma pessoa física.
+    const ehPessoaFisica = acompanhamento.tipo_cliente === "pf" || Boolean(acompanhamento.pessoa_fisica_id);
+
+    if (ehPessoaFisica) {
+      const pf = await buscarClientePfParaAcompanhamento({
+        pessoaFisicaId: acompanhamento.pessoa_fisica_id,
+        cpf: acompanhamento.cnpj,
+        nome: acompanhamento.nome_empresa,
+      });
+
+      if (!pf) {
+        return {
+          status: 404,
+          payload: { error: "Pessoa física vinculada não encontrada para sincronizar dados cadastrais." },
+        };
+      }
+
+      const dadosPf = montarDadosClientePfParaAcompanhamento(pf);
+      const updatesPf: Record<string, any> = {
+        pessoa_fisica_id: dadosPf.pessoa_fisica_id || acompanhamento.pessoa_fisica_id || null,
+        nome_empresa: dadosPf.nome_empresa || acompanhamento.nome_empresa,
+        cnpj: dadosPf.cnpj || acompanhamento.cnpj || null,
+        telefone_cliente: dadosPf.telefone_cliente || acompanhamento.telefone_cliente || null,
+        whatsapp_cliente: dadosPf.whatsapp_cliente || acompanhamento.whatsapp_cliente || dadosPf.telefone_cliente || null,
+        email_cliente: dadosPf.email_cliente || acompanhamento.email_cliente || null,
+        updated_at: new Date().toISOString(),
+      };
+
+      const keysPf = Object.keys(updatesPf);
+      const valuesPf = Object.values(updatesPf);
+      const setPf = keysPf.map((k, i) => `"${k}" = $${i + 1}`).join(", ");
+
+      const { rows: rowsPf } = await pool.query(
+        `UPDATE acompanhamentos_bancarios SET ${setPf} WHERE id = $${keysPf.length + 1} RETURNING *`,
+        [...valuesPf, acompanhamentoId]
+      );
+
+      return {
+        status: 200,
+        payload: {
+          success: true,
+          message: "Dados cadastrais sincronizados com o cadastro da pessoa física.",
+          pessoa_fisica: { id: pf.id, nome: dadosPf.nome_empresa, cpf: dadosPf.cnpj },
+          acompanhamento: rowsPf[0],
+        },
+      };
+    }
 
     const empresa = await buscarEmpresaParaAcompanhamento({
       empresaId: acompanhamento.empresa_id,
@@ -15770,6 +15993,8 @@ async function registrarDocumentoContratoGerado(params: {
       const {
         empresa_id,
         lead_id,
+        pessoa_fisica_id,
+        tipo_cliente,
         nome_empresa,
         cnpj,
         telefone_cliente,
@@ -15798,22 +16023,47 @@ async function registrarDocumentoContratoGerado(params: {
         observacoes_iniciais,
       } = req.body || {};
 
-      const empresa = await buscarEmpresaParaAcompanhamento({
-        empresaId: empresa_id || null,
-        cnpj: cnpj || null,
-        nome: nome_empresa || null,
-      });
-      if (!empresa) {
-        res.status(400).json({
-          error: "Selecione uma empresa já cadastrada (Clientes → Clientes PJ) para criar o acompanhamento. Não é permitido criar um acompanhamento com empresa não cadastrada.",
-        });
-        return;
-      }
-      const dadosEmpresa = montarDadosEmpresaParaAcompanhamento(empresa);
+      // Pessoa física: mesmo fluxo de exigir cadastro pré-existente (nunca cria
+      // "no ar"), só que resolvendo contra clientes_pf em vez de empresas.
+      // Sinalizado por tipo_cliente="pf" (explícito, vindo do seletor da tela)
+      // ou pela simples presença de pessoa_fisica_id.
+      const ehPessoaFisica = String(tipo_cliente || "").toLowerCase() === "pf" || Boolean(pessoa_fisica_id);
 
-      const nomeFinal = String(nome_empresa || dadosEmpresa.nome_empresa || "").trim();
+      let empresa: any = null;
+      let pessoaFisica: any = null;
+      let dadosBase: Record<string, any>;
+
+      if (ehPessoaFisica) {
+        pessoaFisica = await buscarClientePfParaAcompanhamento({
+          pessoaFisicaId: pessoa_fisica_id || null,
+          cpf: cnpj || null,
+          nome: nome_empresa || null,
+        });
+        if (!pessoaFisica) {
+          res.status(400).json({
+            error: "Selecione uma pessoa física já cadastrada (Clientes → Clientes PF) para criar o acompanhamento. Não é permitido criar um acompanhamento com pessoa física não cadastrada.",
+          });
+          return;
+        }
+        dadosBase = montarDadosClientePfParaAcompanhamento(pessoaFisica);
+      } else {
+        empresa = await buscarEmpresaParaAcompanhamento({
+          empresaId: empresa_id || null,
+          cnpj: cnpj || null,
+          nome: nome_empresa || null,
+        });
+        if (!empresa) {
+          res.status(400).json({
+            error: "Selecione uma empresa já cadastrada (Clientes → Clientes PJ) para criar o acompanhamento. Não é permitido criar um acompanhamento com empresa não cadastrada.",
+          });
+          return;
+        }
+        dadosBase = montarDadosEmpresaParaAcompanhamento(empresa);
+      }
+
+      const nomeFinal = String(nome_empresa || dadosBase.nome_empresa || "").trim();
       if (!nomeFinal) {
-        res.status(400).json({ error: "Informe a empresa do acompanhamento." });
+        res.status(400).json({ error: ehPessoaFisica ? "Informe a pessoa física do acompanhamento." : "Informe a empresa do acompanhamento." });
         return;
       }
 
@@ -15828,7 +16078,7 @@ async function registrarDocumentoContratoGerado(params: {
       const fimCalculado = new Date(dtInicio);
       fimCalculado.setDate(fimCalculado.getDate() + 30);
 
-      const faturamento = normalizarNumeroAcompanhamento(faturamento_anual ?? dadosEmpresa.faturamento_anual) || 0;
+      const faturamento = normalizarNumeroAcompanhamento(faturamento_anual ?? dadosBase.faturamento_anual) || 0;
       const mediaInformada = normalizarNumeroAcompanhamento(media_mensal);
       const media = mediaInformada ?? (faturamento ? faturamento / 12 : 0);
       const margemInformada = normalizarNumeroAcompanhamento(margem_seguranca_30);
@@ -15840,6 +16090,8 @@ async function registrarDocumentoContratoGerado(params: {
         `INSERT INTO acompanhamentos_bancarios (
           empresa_id,
           lead_id,
+          pessoa_fisica_id,
+          tipo_cliente,
           nome_empresa,
           cnpj,
           telefone_cliente,
@@ -15873,18 +16125,20 @@ async function registrarDocumentoContratoGerado(params: {
           gerente_id
         ) VALUES (
           $1,$2,$3,$4,$5,$6,$7,$8,$9,$10,
-          $11,$12,$13,$14,$15,$16,'em_acompanhamento','inicio',
-          $17,$18,$19,$20,$20,$21,$21,$22,$23,$24,$25,$26,$27,$28,$29
+          $11,$12,$13,$14,$15,$16,$17,$18,'em_acompanhamento','inicio',
+          $19,$20,$21,$22,$22,$23,$23,$24,$25,$26,$27,$28,$29,$30,$31
         )
         RETURNING *`,
         [
-          empresa_id || dadosEmpresa.empresa_id || null,
+          ehPessoaFisica ? null : (empresa_id || dadosBase.empresa_id || null),
           lead_id || null,
+          ehPessoaFisica ? (pessoa_fisica_id || dadosBase.pessoa_fisica_id || null) : null,
+          ehPessoaFisica ? "pf" : "pj",
           nomeFinal,
-          cnpj || dadosEmpresa.cnpj || null,
-          telefone_cliente || dadosEmpresa.telefone_cliente || null,
-          whatsapp_cliente || telefone_cliente || dadosEmpresa.whatsapp_cliente || dadosEmpresa.telefone_cliente || null,
-          email_cliente || dadosEmpresa.email_cliente || null,
+          cnpj || dadosBase.cnpj || null,
+          telefone_cliente || dadosBase.telefone_cliente || null,
+          whatsapp_cliente || telefone_cliente || dadosBase.whatsapp_cliente || dadosBase.telefone_cliente || null,
+          email_cliente || dadosBase.email_cliente || null,
           bancoFinal,
           agencia || null,
           conta || null,

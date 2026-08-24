@@ -1110,6 +1110,7 @@ export default function AcompanhamentoBancario() {
     setNovo((p) => ({
       ...p,
       empresa_id: empresa.id,
+      pessoa_fisica_id: undefined,
       nome_empresa: empresa.razao_social || empresa.nome_fantasia || "",
       cnpj: empresa.cnpj || "",
       telefone_cliente: p.telefone_cliente || empresa.telefone || "",
@@ -1119,6 +1120,60 @@ export default function AcompanhamentoBancario() {
     }));
     setComboEmpresaAberto(false);
     setBuscaEmpresaCombo("");
+  }
+
+  // ── Pessoa física: mesmo padrão do combo de empresa acima, só que buscando
+  // em /api/clientes-pf. Acompanhamento Bancário também disponível para PF,
+  // sem duplicar o formulário -- o mesmo modal alterna o tipo de cliente e
+  // troca só o seletor de cadastro (empresa ↔ pessoa física).
+  const [pfOpcoes, setPfOpcoes] = useState<any[]>([]);
+  const [buscaPfCombo, setBuscaPfCombo] = useState("");
+  const [comboPfAberto, setComboPfAberto] = useState(false);
+  const [carregandoPf, setCarregandoPf] = useState(false);
+  const comboPfRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    function onClickOutside(e: MouseEvent) {
+      if (comboPfRef.current && !comboPfRef.current.contains(e.target as Node)) setComboPfAberto(false);
+    }
+    document.addEventListener("mousedown", onClickOutside);
+    return () => document.removeEventListener("mousedown", onClickOutside);
+  }, []);
+
+  useEffect(() => {
+    if (!comboPfAberto) return;
+    const t = setTimeout(async () => {
+      setCarregandoPf(true);
+      try {
+        const q = new URLSearchParams();
+        if (buscaPfCombo.trim()) q.set("q", buscaPfCombo.trim());
+        const resp = await fetch(
+          buscaPfCombo.trim() ? `/api/clientes-pf/buscar?${q.toString()}` : `/api/clientes-pf`,
+          { headers: authHeaders() }
+        );
+        setPfOpcoes(resp.ok ? await resp.json() : []);
+      } catch {
+        setPfOpcoes([]);
+      } finally {
+        setCarregandoPf(false);
+      }
+    }, buscaPfCombo ? 300 : 0);
+    return () => clearTimeout(t);
+  }, [comboPfAberto, buscaPfCombo]);
+
+  function selecionarPfAcompanhamento(pf: any) {
+    setNovo((p) => ({
+      ...p,
+      empresa_id: undefined,
+      pessoa_fisica_id: pf.id,
+      nome_empresa: pf.nome || "",
+      cnpj: pf.cpf || "",
+      telefone_cliente: p.telefone_cliente || pf.telefone || "",
+      whatsapp_cliente: p.whatsapp_cliente || pf.telefone || "",
+      email_cliente: p.email_cliente || pf.email || "",
+    }));
+    setComboPfAberto(false);
+    setBuscaPfCombo("");
   }
 
   const [upd, setUpd] = useState<AtualizacaoForm>(updFormInicial());
@@ -1261,7 +1316,7 @@ export default function AcompanhamentoBancario() {
 
 
   const limparNovo = () => {
-    setNovo({ nome_empresa: "", banco_observado: "", data_inicio: hojeISO() });
+    setNovo({ nome_empresa: "", banco_observado: "", data_inicio: hojeISO(), tipo_cliente: "pj" });
     setEditandoId(null);
     setNovoOpen(false);
   };
@@ -1280,6 +1335,8 @@ export default function AcompanhamentoBancario() {
     setNovo({
       id: rowCompleto.id,
       empresa_id: rowCompleto.empresa_id || undefined,
+      pessoa_fisica_id: rowCompleto.pessoa_fisica_id || undefined,
+      tipo_cliente: rowCompleto.tipo_cliente || "pj",
       nome_empresa: rowCompleto.nome_empresa || "",
       cnpj: rowCompleto.cnpj || "",
       telefone_cliente: rowCompleto.telefone_cliente || "",
@@ -1393,7 +1450,13 @@ export default function AcompanhamentoBancario() {
 
   // ─── Salvar novo acompanhamento ───────────────────────────────────────────────
   const salvarNovo = async () => {
-    if (!novo.empresa_id) {
+    const ehPessoaFisicaNovo = String(novo.tipo_cliente || "").toLowerCase() === "pf";
+    if (ehPessoaFisicaNovo) {
+      if (!novo.pessoa_fisica_id) {
+        alert("Selecione uma pessoa física já cadastrada. Não é possível criar um acompanhamento sem vincular a um cadastro existente.");
+        return;
+      }
+    } else if (!novo.empresa_id) {
       alert("Selecione uma empresa já cadastrada. Não é possível criar um acompanhamento sem vincular a um cadastro existente.");
       return;
     }
@@ -2786,7 +2849,7 @@ export default function AcompanhamentoBancario() {
             className="inline-flex items-center gap-1.5 rounded-xl bg-primary px-3 py-2 text-xs font-bold text-primary-foreground hover:bg-primary/90 transition-colors shadow-sm shadow-blue-200 shrink-0"
             onClick={() => {
               setEditandoId(null);
-              setNovo({ nome_empresa: "", banco_observado: "", data_inicio: hojeISO() });
+              setNovo({ nome_empresa: "", banco_observado: "", data_inicio: hojeISO(), tipo_cliente: "pj" });
               setNovoOpen(true);
             }}
           >+ Novo Acompanhamento</button>
@@ -2959,60 +3022,150 @@ export default function AcompanhamentoBancario() {
                 <button className="rounded border px-3 py-1 text-sm" onClick={limparNovo}>Fechar</button>
               </div>
 
-              <h4 className="mb-2 text-sm font-semibold text-foreground">Empresa</h4>
-              <div className="mb-4">
-                <div ref={comboEmpresaRef} className="relative">
-                  <button
-                    type="button"
-                    onClick={() => setComboEmpresaAberto((v) => !v)}
-                    className="w-full flex items-center gap-2.5 h-11 px-3 border border-input rounded-lg bg-card hover:border-input focus:outline-none focus:ring-2 focus:ring-primary text-left"
-                  >
-                    {novo.empresa_id ? (
-                      <>
-                        <span className="flex-1 min-w-0 text-sm font-semibold text-foreground truncate">{novo.nome_empresa}</span>
-                        <span className="text-xs text-muted-foreground shrink-0">{novo.cnpj || ""}</span>
-                      </>
-                    ) : (
-                      <span className="flex-1 text-sm text-muted-foreground">Busque e selecione uma empresa já cadastrada...</span>
-                    )}
-                  </button>
-                  {comboEmpresaAberto && (
-                    <div className="absolute z-50 mt-1 w-full bg-card border border-border rounded-lg shadow-lg overflow-hidden">
-                      <div className="p-2 border-b border-border">
-                        <input
-                          autoFocus
-                          value={buscaEmpresaCombo}
-                          onChange={(e) => setBuscaEmpresaCombo(e.target.value)}
-                          placeholder="Buscar por nome ou CNPJ..."
-                          className="w-full h-9 rounded-md border border-border px-3 text-sm"
-                        />
-                      </div>
-                      <div className="max-h-64 overflow-y-auto p-1">
-                        {carregandoEmpresas ? (
-                          <div className="py-6 text-center text-xs text-muted-foreground">Carregando...</div>
-                        ) : empresasOpcoes.length === 0 ? (
-                          <div className="py-6 text-center text-xs text-muted-foreground">Nenhuma empresa encontrada no cadastro.</div>
-                        ) : (
-                          empresasOpcoes.map((emp) => (
-                            <button
-                              key={emp.id}
-                              type="button"
-                              onClick={() => selecionarEmpresaAcompanhamento(emp)}
-                              className="w-full text-left px-3 py-2 rounded-md hover:bg-muted text-sm"
-                            >
-                              <p className="font-semibold text-foreground truncate">{emp.razao_social || emp.nome_fantasia}</p>
-                              <p className="text-xs text-muted-foreground">{emp.cnpj}</p>
-                            </button>
-                          ))
-                        )}
-                      </div>
-                    </div>
-                  )}
-                </div>
-                <p className="mt-1.5 text-[11px] text-muted-foreground">
-                  Não cadastramos empresa nova por aqui — se ela ainda não existe, cadastre primeiro em Clientes → Clientes PJ.
-                </p>
+              {/* Tipo de cliente: acompanhamento bancário agora também disponível para
+                  Pessoa Física, além de Empresa (PJ). Trocar o tipo só muda qual cadastro
+                  é buscado abaixo -- o resto do formulário (banco, objetivo, rating etc.)
+                  é o mesmo pros dois. Trava em edição para não trocar o vínculo de um
+                  acompanhamento já existente. */}
+              <h4 className="mb-2 text-sm font-semibold text-foreground">Tipo de cliente</h4>
+              <div className="mb-4 flex gap-2">
+                <button
+                  type="button"
+                  disabled={!!editandoId}
+                  onClick={() => setNovo((p) => ({ ...p, tipo_cliente: "pj", pessoa_fisica_id: undefined }))}
+                  className={`h-9 px-4 rounded-lg text-xs font-bold border transition-colors disabled:opacity-60 disabled:cursor-not-allowed ${
+                    String(novo.tipo_cliente || "pj").toLowerCase() !== "pf"
+                      ? "border-primary/30 bg-primary text-primary-foreground"
+                      : "border-border text-muted-foreground bg-card hover:bg-muted"
+                  }`}
+                >Empresa (PJ)</button>
+                <button
+                  type="button"
+                  disabled={!!editandoId}
+                  onClick={() => setNovo((p) => ({ ...p, tipo_cliente: "pf", empresa_id: undefined }))}
+                  className={`h-9 px-4 rounded-lg text-xs font-bold border transition-colors disabled:opacity-60 disabled:cursor-not-allowed ${
+                    String(novo.tipo_cliente || "pj").toLowerCase() === "pf"
+                      ? "border-primary/30 bg-primary text-primary-foreground"
+                      : "border-border text-muted-foreground bg-card hover:bg-muted"
+                  }`}
+                >Pessoa Física (PF)</button>
               </div>
+
+              {String(novo.tipo_cliente || "pj").toLowerCase() === "pf" ? (
+                <>
+                  <h4 className="mb-2 text-sm font-semibold text-foreground">Pessoa Física</h4>
+                  <div className="mb-4">
+                    <div ref={comboPfRef} className="relative">
+                      <button
+                        type="button"
+                        onClick={() => setComboPfAberto((v) => !v)}
+                        className="w-full flex items-center gap-2.5 h-11 px-3 border border-input rounded-lg bg-card hover:border-input focus:outline-none focus:ring-2 focus:ring-primary text-left"
+                      >
+                        {novo.pessoa_fisica_id ? (
+                          <>
+                            <span className="flex-1 min-w-0 text-sm font-semibold text-foreground truncate">{novo.nome_empresa}</span>
+                            <span className="text-xs text-muted-foreground shrink-0">{novo.cnpj || ""}</span>
+                          </>
+                        ) : (
+                          <span className="flex-1 text-sm text-muted-foreground">Busque e selecione uma pessoa física já cadastrada...</span>
+                        )}
+                      </button>
+                      {comboPfAberto && (
+                        <div className="absolute z-50 mt-1 w-full bg-card border border-border rounded-lg shadow-lg overflow-hidden">
+                          <div className="p-2 border-b border-border">
+                            <input
+                              autoFocus
+                              value={buscaPfCombo}
+                              onChange={(e) => setBuscaPfCombo(e.target.value)}
+                              placeholder="Buscar por nome ou CPF..."
+                              className="w-full h-9 rounded-md border border-border px-3 text-sm"
+                            />
+                          </div>
+                          <div className="max-h-64 overflow-y-auto p-1">
+                            {carregandoPf ? (
+                              <div className="py-6 text-center text-xs text-muted-foreground">Carregando...</div>
+                            ) : pfOpcoes.length === 0 ? (
+                              <div className="py-6 text-center text-xs text-muted-foreground">Nenhuma pessoa física encontrada no cadastro.</div>
+                            ) : (
+                              pfOpcoes.map((pf) => (
+                                <button
+                                  key={pf.id}
+                                  type="button"
+                                  onClick={() => selecionarPfAcompanhamento(pf)}
+                                  className="w-full text-left px-3 py-2 rounded-md hover:bg-muted text-sm"
+                                >
+                                  <p className="font-semibold text-foreground truncate">{pf.nome}</p>
+                                  <p className="text-xs text-muted-foreground">{pf.cpf}</p>
+                                </button>
+                              ))
+                            )}
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                    <p className="mt-1.5 text-[11px] text-muted-foreground">
+                      Não cadastramos pessoa física nova por aqui — se ela ainda não existe, cadastre primeiro em Clientes → Clientes PF.
+                    </p>
+                  </div>
+                </>
+              ) : (
+                <>
+                  <h4 className="mb-2 text-sm font-semibold text-foreground">Empresa</h4>
+                  <div className="mb-4">
+                    <div ref={comboEmpresaRef} className="relative">
+                      <button
+                        type="button"
+                        onClick={() => setComboEmpresaAberto((v) => !v)}
+                        className="w-full flex items-center gap-2.5 h-11 px-3 border border-input rounded-lg bg-card hover:border-input focus:outline-none focus:ring-2 focus:ring-primary text-left"
+                      >
+                        {novo.empresa_id ? (
+                          <>
+                            <span className="flex-1 min-w-0 text-sm font-semibold text-foreground truncate">{novo.nome_empresa}</span>
+                            <span className="text-xs text-muted-foreground shrink-0">{novo.cnpj || ""}</span>
+                          </>
+                        ) : (
+                          <span className="flex-1 text-sm text-muted-foreground">Busque e selecione uma empresa já cadastrada...</span>
+                        )}
+                      </button>
+                      {comboEmpresaAberto && (
+                        <div className="absolute z-50 mt-1 w-full bg-card border border-border rounded-lg shadow-lg overflow-hidden">
+                          <div className="p-2 border-b border-border">
+                            <input
+                              autoFocus
+                              value={buscaEmpresaCombo}
+                              onChange={(e) => setBuscaEmpresaCombo(e.target.value)}
+                              placeholder="Buscar por nome ou CNPJ..."
+                              className="w-full h-9 rounded-md border border-border px-3 text-sm"
+                            />
+                          </div>
+                          <div className="max-h-64 overflow-y-auto p-1">
+                            {carregandoEmpresas ? (
+                              <div className="py-6 text-center text-xs text-muted-foreground">Carregando...</div>
+                            ) : empresasOpcoes.length === 0 ? (
+                              <div className="py-6 text-center text-xs text-muted-foreground">Nenhuma empresa encontrada no cadastro.</div>
+                            ) : (
+                              empresasOpcoes.map((emp) => (
+                                <button
+                                  key={emp.id}
+                                  type="button"
+                                  onClick={() => selecionarEmpresaAcompanhamento(emp)}
+                                  className="w-full text-left px-3 py-2 rounded-md hover:bg-muted text-sm"
+                                >
+                                  <p className="font-semibold text-foreground truncate">{emp.razao_social || emp.nome_fantasia}</p>
+                                  <p className="text-xs text-muted-foreground">{emp.cnpj}</p>
+                                </button>
+                              ))
+                            )}
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                    <p className="mt-1.5 text-[11px] text-muted-foreground">
+                      Não cadastramos empresa nova por aqui — se ela ainda não existe, cadastre primeiro em Clientes → Clientes PJ.
+                    </p>
+                  </div>
+                </>
+              )}
 
               <div className="mb-4 grid grid-cols-1 gap-3 md:grid-cols-3">
                 {NOVO_FIELDS.filter((f) => f.group === "empresa" && f.key !== "nome_empresa" && f.key !== "cnpj").map((field) => (

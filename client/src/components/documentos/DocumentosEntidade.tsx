@@ -1713,6 +1713,15 @@ export default function DocumentosEntidade({
                                   <div className="min-w-0">
                                     <div className="flex items-center gap-1 flex-wrap">
                                       <p className="text-[10px] font-semibold text-muted-foreground truncate">{doc.nome_customizado || doc.nome_original}</p>
+                                      {/* Separação visual pedida pelo usuário: documento gerado dentro da
+                                          própria Destrava (contrato, orçamento etc., origem="gerado_sistema")
+                                          fica com uma etiqueta própria, distinto do documento que a empresa
+                                          enviou (origem="upload_manual" ou legado sem origem registrada). */}
+                                      {doc.origem === "gerado_sistema" && (
+                                        <span title="Documento gerado automaticamente pelo sistema Destrava" className="shrink-0 rounded-full bg-primary/10 px-1.5 py-0.5 text-[8px] font-black uppercase tracking-wide text-primary">
+                                          Gerado pela Destrava
+                                        </span>
+                                      )}
                                       {validadoComEvidencia && <span title="Validado após leitura documental" className="text-success shrink-0"><CheckCircle className="w-2.5 h-2.5" /></span>}
                                       {doc.validado && !validadoComEvidencia && tipoTemAnaliseAutomatica && <span title="Ainda sem leitura documental conclusiva" className="text-warning shrink-0 text-[9px]">análise pendente</span>}
                                     </div>

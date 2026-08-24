@@ -35,6 +35,7 @@ export const FEATURE_CATALOG: FeatureCatalogItem[] = [
   { key: "empresa-tab-conversas", group: "clientes", label: "Aba Conversas", href: "/colaborador/empresas?aba=followup", description: "Exibe conversas e follow-ups dentro da empresa." },
   { key: "empresa-tab-simulacoes", group: "clientes", label: "Aba Simulações", href: "/colaborador/empresas?aba=simulacoes", description: "Exibe simulações vinculadas à empresa." },
   { key: "empresa-tab-contratos", group: "clientes", label: "Aba Contratos Firmados", href: "/colaborador/empresas?aba=contratos", description: "Exibe contratos firmados vinculados à empresa." },
+  { key: "empresa-tab-orcamentos", group: "clientes", label: "Aba Orçamentos", href: "/colaborador/empresas?aba=orcamentos", description: "Exibe orçamentos timbrados vinculados à empresa." },
   { key: "empresa-tab-historico", group: "clientes", label: "Aba Histórico", href: "/colaborador/empresas?aba=historico", description: "Exibe histórico e Histórico 360 da empresa." },
   { key: "empresa-action-atualizar-cadastro", group: "clientes", label: "Ação Atualizar Cadastro", href: "/colaborador/empresas#atualizar-cadastro", description: "Permite atualizar dados cadastrais pela Receita Federal dentro da empresa." },
   { key: "empresa-action-editar", group: "clientes", label: "Ação Editar Empresa", href: "/colaborador/empresas#editar", description: "Permite abrir edição cadastral da empresa." },

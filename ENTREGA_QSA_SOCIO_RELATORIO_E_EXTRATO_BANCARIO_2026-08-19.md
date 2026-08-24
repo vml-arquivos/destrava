@@ -1503,3 +1503,102 @@ Confirmado nesta etapa: as rotas registradas por `registerWeeklyMonitorRoutes` u
 - `client/src/pages/colaborador/AcompanhamentoBancario.tsx`, `client/src/pages/colaborador/CRM.tsx`, `client/src/pages/colaborador/PlanoAcaoMotor.tsx`, `client/src/pages/colaborador/RelatorioTecnico.tsx`, `client/src/pages/colaborador/PropostaBancaria.tsx`, `client/src/pages/colaborador/EsteiraCredito.tsx`, `client/src/pages/colaborador/NexusTarefasEmpresa.tsx`, `client/src/pages/colaborador/Empresas.tsx` — gradientes com cor fixa trocados por tokens.
 
 Nenhuma rota, cálculo ou dado foi alterado — só classes CSS.
+
+## Extra 18 — Contrato assinado visível/substituindo, Orçamentos na ficha da empresa, Acompanhamento Bancário para Pessoa Física e separação de documentos gerados (2026-08-24)
+
+### Pedido do usuário
+
+1. Acompanhamento Bancário também disponível para Pessoa Física (não só empresa).
+2. Orçamentos visíveis/acessíveis na ficha da empresa.
+3. Todos os documentos gerados dentro do Destrava (empresa ou PF) armazenados/visíveis na ficha da empresa.
+4. Contrato assinado não aparecia ao tentar visualizar na ficha da empresa (bug).
+5. Ao anexar o contrato assinado, ele deve substituir o "aguardando assinatura" (bug).
+6. Documentos gerados pelo próprio Destrava separados visualmente dos documentos que a empresa envia.
+
+### 4/5 — Contrato assinado: causa e correção
+
+**Causa:** as duas colunas (`pdf_path` = versão sem assinatura, `assinado_pdf_path` = versão assinada) sempre existiram na tabela `contratos_gerados` (desde a migration 020) e o upload do assinado sempre gravou corretamente na coluna certa (`UPDATE ... SET assinado_pdf_path=$1 ...`, mesma linha — nunca cria linha duplicada). O bug estava só na leitura: `GET /api/contratos/:id/visualizar` e `GET /api/contratos/:id/download` nunca liam `assinado_pdf_path` — só montavam os caminhos candidatos a partir de `pdf_path`, então depois de assinado o sistema continuava mostrando (ou tentando abrir) o PDF sem assinatura. Um segundo problema, no frontend: depois do upload do contrato assinado, a lista "Contratos Firmados" da ficha da empresa não era recarregada — só a empresa em si — então o card continuava marcado "Aguardando assinatura" até a página ser recarregada.
+
+**Correção:**
+- `server/index.ts` (`GET /api/contratos/:id/download`): passou a selecionar também `assinado_pdf_path` e `status`, e usa `assinado_pdf_path` como caminho preferencial quando `status='assinado'` (com fallback pro `pdf_path` se por algum motivo o assinado não estiver presente).
+- `server/index.ts` (`GET /api/contratos/:id/visualizar`): mesma lógica de preferência aplicada na montagem dos caminhos candidatos.
+- `client/src/pages/colaborador/Empresas.tsx` (`handleAnexarContratoAssinado`): depois do upload bem-sucedido, agora também busca `GET /api/empresas/:id/contratos` de novo e atualiza o estado `contratosEmpresa`, então o card já aparece "Assinado" na hora, sem precisar recarregar a página.
+
+Como o componente `ListaContratos.tsx` chama exatamente os mesmos dois endpoints (`/visualizar` e `/download`), o mesmo fix cobre qualquer outro lugar do sistema que exiba contratos, sem precisar duplicar a correção.
+
+### 2 — Orçamentos na ficha da empresa
+
+Sem nenhuma mudança de schema: `orcamentos_timbrados` já tinha `empresa_id` (migration 063) e índice próprio. Faltava só o endpoint de listagem por empresa e a aba na tela.
+
+- Novo endpoint `GET /api/empresas/:id/orcamentos` em `server/index.ts`, no mesmo padrão de `/contratos` e `/simulacoes` já existentes.
+- Nova aba "Orçamentos" em `client/src/pages/colaborador/Empresas.tsx` (registrada em `ABAS_EMPRESA`, com feature key própria `empresa-tab-orcamentos` também cadastrada em `featureCatalog.ts` — controlável por Configuração de Funções, do mesmo jeito que as demais abas), com listagem, visualizar e baixar PDF (reaproveitando os endpoints `GET /api/orcamentos/:id/pdf` e `/download` que já existiam no módulo de Orçamentos).
+
+### 1 — Acompanhamento Bancário para Pessoa Física
+
+A tabela `acompanhamentos_bancarios` (migration 022) já tinha uma coluna `tipo_cliente` (default `'pj'`, sem `CHECK` travando outros valores) que nunca era usada — só faltava o vínculo com `clientes_pf` e a lógica de criação/sincronização branching por tipo. Nenhuma coluna existente mudou de tipo ou obrigatoriedade.
+
+- Nova migration idempotente (roda no boot, registrada como "Migration 083" em `server/index.ts`, com o arquivo de referência `db/migrations/083_acompanhamento_bancario_pf.sql`): adiciona `pessoa_fisica_id UUID NULL REFERENCES clientes_pf(id) ON DELETE SET NULL` + índice.
+- `server/index.ts`: novas funções `buscarClientePfParaAcompanhamento` e `montarDadosClientePfParaAcompanhamento`, espelhando as equivalentes de empresa sem alterar o comportamento delas.
+- `POST /api/acompanhamentos-bancarios`: agora aceita `tipo_cliente` (`'pj'`/`'pf'`) e `pessoa_fisica_id`; quando é PF, exige uma pessoa física já cadastrada (mesma regra de "não cria com cadastro inexistente" que já valia para empresa) em vez de empresa. Quando é PJ, o comportamento é idêntico ao que já existia.
+- `POST /api/acompanhamentos-bancarios/:id/sincronizar-cadastro`: passou a detectar `tipo_cliente='pf'` e sincronizar contra `clientes_pf` em vez de `empresas`.
+- Os endpoints de listagem (`GET /api/acompanhamentos-bancarios`) e detalhe (`GET /api/acompanhamentos-bancarios/:id`) não precisaram de nenhuma mudança — não fazem JOIN com `empresas`, usam o campo de texto livre `nome_empresa` diretamente, então já funcionavam para qualquer tipo de cliente.
+- `client/src/pages/colaborador/AcompanhamentoBancario.tsx`: o modal "Novo Acompanhamento" ganhou um seletor "Empresa (PJ) / Pessoa Física (PF)" (travado durante edição, pra não trocar o vínculo de um acompanhamento já existente) que troca o buscador de cadastro (empresa ↔ pessoa física, reaproveitando `/api/clientes-pf` e `/api/clientes-pf/buscar`). O resto do formulário (banco, objetivo, rating, faturamento etc.) é o mesmo para os dois tipos.
+
+Como `clientes_pf` não tem campo de faturamento/renda (só existe pra PJ), o valor de referência da pessoa física continua sendo o que o colaborador já informava manualmente no formulário — nenhuma suposição nova foi introduzida.
+
+### 3/6 — Documentos gerados armazenados na ficha da empresa e separados dos documentos da empresa
+
+**O que já ficava resolvido pelos itens acima:** contratos gerados (`contratos_gerados`) e orçamentos (`orcamentos_timbrados`) já são persistidos com `empresa_id` e agora aparecem nas abas "Contratos Firmados" e "Orçamentos" da ficha da empresa — nenhuma mudança de schema necessária para esses dois tipos.
+
+**Separação visual (documento gerado × documento enviado pela empresa):** a coluna `documentos_arquivos.origem` já existe e já é gravada corretamente em cada INSERT (`upload_manual`, `gerado_sistema`, `importado_api`, `sincronizacao`, `migracao`) — só não era lida pela tela do Acervo Documental. Adicionada uma etiqueta "Gerado pela Destrava" nos cards de documento em `client/src/components/documentos/DocumentosEntidade.tsx` sempre que `origem === 'gerado_sistema'`, deixando visualmente claro o que veio do próprio sistema (ex.: contrato assinado que também é copiado pro Acervo Documental) versus o que a empresa enviou.
+
+**O que ficou fora desta entrega, deliberadamente:** dois tipos de documento gerado pelo Destrava (relatório documental / dossiê de crédito e proposta bancária) hoje são montados sob demanda e entregues direto na resposta HTTP (`res.send(pdf)`), sem nenhum `INSERT` — ou seja, não existe um arquivo persistido para eles aparecerem em lugar nenhum, muito menos na ficha da empresa. Resolver isso de verdade exige criar tabela(s) nova(s) (ex. `relatorios_gerados`, `propostas_bancarias_geradas`), decidir política de retenção/histórico (toda geração vira uma versão nova? substitui a anterior?) e alterar os dois serviços que hoje não persistem nada. Dado o padrão "sem regressão e sem quebra" desta entrega, essa parte foi propositalmente deixada de fora para não introduzir schema novo e política de retenção sem confirmação — fica mapeada e pronta para ser o próximo passo, se for esse o caminho desejado.
+
+### Verificação
+
+- `npx tsc --noEmit`: limpo.
+- `npx vitest run`: **540/540 testes passando**, mesma contagem de antes — nenhum teste existente quebrou.
+- `npx vite build --mode production`: concluído sem erros.
+- Conferido manualmente por leitura de código (não por execução de banco nesta sessão): mapeamento de placeholders `$1..$31` do novo `INSERT` de `acompanhamentos_bancarios` reconferido item a item contra a lista de colunas para garantir que nenhuma coluna ficou desalinhada com o parâmetro errado.
+
+### Escopo desta correção
+
+- `server/index.ts` — endpoints de contrato (`/visualizar`, `/download`), novo endpoint `/api/empresas/:id/orcamentos`, Migration 083 (`pessoa_fisica_id`), funções de PF para Acompanhamento Bancário, `POST /api/acompanhamentos-bancarios` e `POST .../sincronizar-cadastro`.
+- `db/migrations/083_acompanhamento_bancario_pf.sql` — novo (referência da migration já aplicada automaticamente no boot).
+- `client/src/pages/colaborador/Empresas.tsx` — nova aba "Orçamentos", re-fetch de contratos após anexar assinado.
+- `client/src/config/featureCatalog.ts` — nova feature key `empresa-tab-orcamentos`.
+- `client/src/pages/colaborador/AcompanhamentoBancario.tsx` — seletor PJ/PF e buscador de pessoa física no modal "Novo Acompanhamento".
+- `client/src/components/documentos/DocumentosEntidade.tsx` — etiqueta "Gerado pela Destrava" por `origem`.
+
+Nenhum campo, rota ou comportamento existente de PJ foi alterado — todas as mudanças em `acompanhamentos_bancarios` e no formulário são branches novos condicionados a `tipo_cliente='pf'`/`pessoa_fisica_id`, mantendo o fluxo de PJ bit-a-bit igual ao que já estava validado.
+
+## Extra 19 — Capital social deixa de bloquear/mandar empresa para Cadastros Incompletos (2026-08-24)
+
+### Pedido do usuário
+
+Empresa ou instituição que legitimamente não tem capital social (associação, fundação, cooperativa, órgão público, entre outras) não deve ser bloqueada nem mandada para "Cadastros Incompletos" só por isso. Ela deve ir direto para o cadastro normal de empresas com os dados que já vêm da Receita, e a ausência/divergência de capital social deve virar alerta só na consulta com documentação anexada — não motivo de bloqueio de cadastro.
+
+### Causa
+
+A função `pendenciasEmpresa()` (`server/index.ts`) tratava capital social ausente ou zerado como uma pendência bloqueante, no mesmo nível de CNPJ inválido ou razão social ausente. Isso alimenta diretamente `cadastro_completo`/`cadastro_status`, que é o campo que a tela "Cadastros Incompletos" usa pra listar registros (`GET /api/cadastros-incompletos`) — então toda empresa cujo único dado faltante era o capital social (comum em entidades que a própria Receita não retorna esse campo, por não se aplicar ao tipo societário) ficava presa nessa tela como "incompleta" para sempre, mesmo vindo 100% sincronizada da Receita em todo o resto.
+
+O motor de pendências/plano de ação (`pendenciasEmpresaService.ts`) e os alertas de divergência documental (`analiseDocumentalEspecializada.ts`, comparação QSA/Junta Comercial × Receita) já tratavam isso corretamente, como alerta informativo e não bloqueante — só a rota de cadastro (`pendenciasEmpresa()`) estava desalinhada com o resto do sistema.
+
+### Correção
+
+- `server/index.ts` (`pendenciasEmpresa`): removida a checagem de capital social da lista de pendências que definem `cadastro_completo`/`cadastro_status`. As demais checagens (CNPJ, razão social, CNAE, natureza jurídica, situação cadastral) continuam exatamente como estavam.
+- Nova migration idempotente no boot ("Migration 084"): recalcula `cadastro_pendencias`/`cadastro_status`/`cadastro_completo` de todas as empresas já cadastradas (exceto arquivadas por duplicidade ou removidas) com a regra nova, e só grava UPDATE nas linhas cujo resultado mudou — sem isso, as empresas que já estavam gravadas como "incompleto" antes desta correção continuariam presas em Cadastros Incompletos até alguém clicar "Reprocessar" uma por uma. Não mexe em empresa com pendência real (CNAE/natureza jurídica/situação cadastral realmente ausentes) nem em duplicada/removida.
+- Nenhuma mudança em `pendenciasEmpresaService.ts` (motor de pendências/plano de ação) nem em `analiseDocumentalEspecializada.ts` (alertas de divergência documental) — esses dois já tratavam capital social como alerta informativo, exatamente como pedido; continuam mostrando o alerta na consulta com documentação anexada.
+
+### Verificação
+
+- `npx tsc --noEmit`: limpo.
+- `npx vitest run`: **540/540 testes passando**, mesma contagem de antes.
+- `npx vite build --mode production`: concluído sem erros.
+- Conferido que nenhum teste e nenhum trecho de frontend faz correspondência pelo texto literal "Capital social não sincronizado" vindo de `pendenciasEmpresa` (a tela de Cadastros Incompletos renderiza a lista de pendências de forma genérica, sem depender de nenhum texto específico) — a remoção não quebra nada que dependesse dessa string.
+
+### Escopo desta correção
+
+- `server/index.ts` — `pendenciasEmpresa()` (remoção da checagem de capital social) e Migration 084 (recomputo em lote das empresas já cadastradas).
+
+Nenhuma coluna de schema foi criada ou alterada — é só mudança de regra de negócio (o que conta como pendência) e um recomputo dos dados já existentes com essa regra nova.
