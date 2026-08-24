@@ -13585,6 +13585,24 @@ async function registrarDocumentoContratoGerado(params: {
       // Documental (mesma raiz persistente, gravação atômica, checagem de integridade) --
       // antes usava um caminho relativo próprio (path.resolve('uploads', ...)), fora do
       // sistema central e sem as mesmas proteções.
+      // Um contrato assinado é um documento definitivo: uma vez anexado, fica
+      // travado e não pode mais ser substituído por este endpoint (nem por
+      // engano, nem propositalmente) -- se for necessário complementar o
+      // acordo, o caminho correto é gerar um novo contrato/aditivo, nunca
+      // sobrescrever o PDF assinado já existente. Só bloqueia quando já
+      // existe de fato um assinado (status='assinado' OU assinado_pdf_path
+      // preenchido); contratos "gerado"/"cancelado" continuam podendo
+      // receber o primeiro anexo normalmente.
+      const atual = await pool.query(
+        `SELECT id, status, assinado_em, assinado_pdf_path FROM contratos_gerados WHERE id=$1`,
+        [req.params.id]
+      );
+      if (!atual.rows.length) { res.status(404).json({ error: 'Contrato não encontrado' }); return; }
+      if (contratoEstaAssinado(atual.rows[0])) {
+        res.status(409).json({ error: 'Este contrato já foi assinado e não pode ser substituído. Se for preciso complementar o acordo, gere um novo contrato (aditivo) em vez de substituir o assinado.' });
+        return;
+      }
+
       const salvo = await saveDocumentBuffer({
         entidadeTipo: 'contrato',
         entidadeId: req.params.id,
@@ -13613,8 +13631,9 @@ async function registrarDocumentoContratoGerado(params: {
         ).catch((docErr) => console.warn('[documentos_arquivos] Falha ao registrar contrato assinado:', docErr?.message || docErr));
 
         // Registro histórico obrigatório: toda vez que um contrato assinado é anexado
-        // (ou substituído), fica registrado na aba Histórico da empresa com data, autor
-        // e nome do arquivo -- não só no banco de dados de forma invisível.
+        // pela primeira vez (nunca substituído -- ver bloqueio acima), fica registrado
+        // na aba Histórico da empresa com data, autor e nome do arquivo -- não só no
+        // banco de dados de forma invisível.
         const autorNome = (req as any).colaborador?.nome || (req as any).colaborador?.email || (req as any).user?.nome || (req as any).user?.email || null;
         await registrarHistoricoEmpresaSeguro(
           rows[0].empresa_id,

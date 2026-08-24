@@ -1,5 +1,5 @@
 import { useState, useMemo, useEffect } from 'react';
-import { Download, CheckCircle, XCircle, Trash2, Eye, RefreshCw, Upload, Pencil, Printer, X } from 'lucide-react';
+import { Download, CheckCircle, XCircle, Trash2, Eye, RefreshCw, Upload, Pencil, Printer, X, Lock } from 'lucide-react';
 import { apiFetch, getToken } from '../../lib/api';
 import { toast } from 'sonner';
 
@@ -487,13 +487,26 @@ export function ListaContratos({ contratos, onStatusChange, onDelete, userCargo,
                           <RefreshCw className="w-3.5 h-3.5" />
                         </button>
                       )}
-                      <button
-                        onClick={() => handleUploadAssinado(c.id)}
-                        className="inline-flex items-center justify-center w-7 h-7 rounded-md border border-primary/20 bg-card hover:bg-primary/10 text-primary"
-                        title="Anexar contrato assinado"
-                      >
-                        <Upload className="w-3.5 h-3.5" />
-                      </button>
+                      {contratoAssinado ? (
+                        // Contrato assinado é definitivo -- não pode ser substituído de forma
+                        // alguma. Para complementar o acordo, gerar um novo contrato/aditivo,
+                        // nunca sobrescrever este PDF (ver bloqueio equivalente no backend,
+                        // POST /api/contratos/:id/anexo-assinado).
+                        <span
+                          className="inline-flex items-center justify-center w-7 h-7 rounded-md border border-border bg-muted text-muted-foreground cursor-default"
+                          title="Contrato assinado: travado e não pode ser substituído. Para complementar, gere um novo contrato (aditivo)."
+                        >
+                          <Lock className="w-3.5 h-3.5" />
+                        </span>
+                      ) : (
+                        <button
+                          onClick={() => handleUploadAssinado(c.id)}
+                          className="inline-flex items-center justify-center w-7 h-7 rounded-md border border-primary/20 bg-card hover:bg-primary/10 text-primary"
+                          title="Anexar contrato assinado"
+                        >
+                          <Upload className="w-3.5 h-3.5" />
+                        </button>
+                      )}
                       {c.status === 'gerado' && (
                         <>
                           <button

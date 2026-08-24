@@ -19,7 +19,7 @@ import {
   Building, CreditCard, Hash, Calendar, Users, Briefcase,
   ArrowLeft, MoreVertical, ExternalLink, Copy, CheckCheck,
   BarChart3, Banknote, AlertCircle, Info, RotateCw, Zap, FileDown, Download,
-  LayoutGrid, List as ListIcon, Printer,
+  LayoutGrid, List as ListIcon, Printer, Lock,
 } from "lucide-react";
 import { EmptyState, LoadingState, ErrorState } from "@/components/ui/states";
 import { RiscoBadge, ScoreIndicator, StatusCadastroBadge } from "@/components/ui/risco-badge";
@@ -994,11 +994,13 @@ export default function Empresas() {
   const [simulacoesEmpresa, setSimulacoesEmpresa] = useState<any[]>([]);
   const [contratosEmpresa, setContratosEmpresa] = useState<any[]>([]);
   const [orcamentosEmpresa, setOrcamentosEmpresa] = useState<any[]>([]);
-  // Confirmação antes de anexar/substituir o contrato assinado: como uma
-  // empresa pode ter mais de um tipo de contrato (assessoria, limpa nome,
-  // rating...), o modal deixa explícito QUAL contrato (número + tipo) está
-  // prestes a ser substituído, e exige confirmação de que as assinaturas de
-  // todas as partes foram conferidas antes de trocar o status pra "assinado".
+  // Confirmação antes de anexar o contrato assinado: como uma empresa pode
+  // ter mais de um tipo de contrato (assessoria, limpa nome, rating...), o
+  // modal deixa explícito QUAL contrato (número + tipo) está prestes a
+  // receber o anexo, e exige confirmação de que as assinaturas de todas as
+  // partes foram conferidas antes de trocar o status pra "assinado". Uma
+  // vez assinado, o contrato fica travado -- nunca mais pode ser substituído
+  // (ver bloqueio no backend, POST /api/contratos/:id/anexo-assinado).
   const [modalAnexoAssinado, setModalAnexoAssinado] = useState<{ contrato: any; file: File } | null>(null);
   const [confirmouAssinaturas, setConfirmouAssinaturas] = useState(false);
   const [enviandoAnexoAssinado, setEnviandoAnexoAssinado] = useState(false);
@@ -1356,8 +1358,8 @@ export default function Empresas() {
     }
   }
   // Abre a confirmação em vez de anexar direto -- garante que o colaborador
-  // vê explicitamente qual contrato (número + tipo) está prestes a substituir
-  // antes de o upload de verdade acontecer.
+  // vê explicitamente qual contrato (número + tipo) vai receber o anexo
+  // assinado (definitivo, sem volta) antes de o upload de verdade acontecer.
   function abrirConfirmacaoAnexoAssinado(contrato: any, file: File) {
     setConfirmouAssinaturas(false);
     setModalAnexoAssinado({ contrato, file });
@@ -2866,27 +2868,38 @@ export default function Empresas() {
                                     >
                                       <Download className="w-3.5 h-3.5" />
                                     </button>
-                                    <label
-                                      className={
-                                        assinado
-                                          ? "inline-flex items-center gap-1.5 h-8 px-2.5 rounded-lg text-xs font-semibold cursor-pointer transition-colors text-muted-foreground border border-border hover:bg-muted"
-                                          : "inline-flex items-center gap-1.5 h-9 px-3 rounded-lg text-xs font-bold cursor-pointer transition-colors text-primary-foreground bg-warning hover:bg-warning/90 shadow-sm"
-                                      }
-                                      title={assinado ? "Substituir contrato assinado" : "Anexar contrato assinado -- ativa CENPROT semanal e CND mensal"}
-                                    >
-                                      <Upload className="w-3.5 h-3.5" />
-                                      {assinado ? "Substituir assinado" : "Anexar contrato assinado"}
-                                      <input
-                                        type="file"
-                                        accept=".pdf"
-                                        className="hidden"
-                                        onChange={(e) => {
-                                          const file = e.target.files?.[0];
-                                          if (file) abrirConfirmacaoAnexoAssinado(cont, file);
-                                          e.currentTarget.value = "";
-                                        }}
-                                      />
-                                    </label>
+                                    {assinado ? (
+                                      // Contrato assinado é definitivo -- não pode ser substituído de
+                                      // forma alguma (nem por engano). Para complementar o acordo, o
+                                      // caminho é gerar um novo contrato/aditivo, nunca sobrescrever
+                                      // este PDF. Ver bloqueio equivalente no backend
+                                      // (POST /api/contratos/:id/anexo-assinado).
+                                      <span
+                                        className="inline-flex items-center gap-1.5 h-8 px-2.5 rounded-lg text-xs font-semibold text-muted-foreground border border-border bg-muted cursor-default"
+                                        title="Contrato assinado: travado e não pode ser substituído. Para complementar, gere um novo contrato (aditivo)."
+                                      >
+                                        <Lock className="w-3.5 h-3.5" />
+                                        Assinado — travado
+                                      </span>
+                                    ) : (
+                                      <label
+                                        className="inline-flex items-center gap-1.5 h-9 px-3 rounded-lg text-xs font-bold cursor-pointer transition-colors text-primary-foreground bg-warning hover:bg-warning/90 shadow-sm"
+                                        title="Anexar contrato assinado -- ativa CENPROT semanal e CND mensal"
+                                      >
+                                        <Upload className="w-3.5 h-3.5" />
+                                        Anexar contrato assinado
+                                        <input
+                                          type="file"
+                                          accept=".pdf"
+                                          className="hidden"
+                                          onChange={(e) => {
+                                            const file = e.target.files?.[0];
+                                            if (file) abrirConfirmacaoAnexoAssinado(cont, file);
+                                            e.currentTarget.value = "";
+                                          }}
+                                        />
+                                      </label>
+                                    )}
                                   </div>
                                 )}
                               </div>
@@ -3364,12 +3377,15 @@ export default function Empresas() {
         </div>
       )}
 
-      {/* Confirmação antes de anexar/substituir o contrato assinado -- deixa
-          explícito qual contrato (número + tipo) está sendo trocado, já que
-          uma empresa pode ter mais de um tipo de contrato de prestação de
+      {/* Confirmação antes de anexar o contrato assinado -- deixa explícito
+          qual contrato (número + tipo) está recebendo o anexo, já que uma
+          empresa pode ter mais de um tipo de contrato de prestação de
           serviço firmado com a Destrava (assessoria, limpa nome, rating...).
           Só depois de marcar a confirmação de que as assinaturas de todas as
-          partes foram conferidas é que o upload de verdade acontece. */}
+          partes foram conferidas é que o upload de verdade acontece. Este
+          upload é definitivo: uma vez assinado, o contrato fica travado e
+          não pode mais ser substituído (nem por este modal, nem pelo
+          backend -- ver POST /api/contratos/:id/anexo-assinado). */}
       {modalAnexoAssinado && (
         <div className="fixed inset-0 z-[60] flex items-center justify-center bg-overlay p-4">
           <div className="w-full max-w-md rounded-2xl bg-card shadow-2xl overflow-hidden">
@@ -3379,12 +3395,12 @@ export default function Empresas() {
               </div>
               <div className="min-w-0">
                 <p className="text-sm font-bold text-foreground">Confirmar contrato assinado</p>
-                <p className="text-xs text-muted-foreground mt-0.5">Confira se este é o contrato certo antes de enviar.</p>
+                <p className="text-xs text-muted-foreground mt-0.5">Confira se este é o contrato certo antes de enviar -- depois de anexado, não será mais possível substituir este arquivo.</p>
               </div>
             </div>
             <div className="px-5 py-4 space-y-3">
               <div className="rounded-xl border border-border bg-muted p-3">
-                <p className="text-xs text-muted-foreground uppercase font-semibold tracking-wide">Contrato que será substituído</p>
+                <p className="text-xs text-muted-foreground uppercase font-semibold tracking-wide">Contrato que receberá o anexo</p>
                 <p className="text-sm font-bold text-foreground mt-1">
                   {modalAnexoAssinado.contrato.numero_contrato || modalAnexoAssinado.contrato.protocolo_contrato || `Contrato #${modalAnexoAssinado.contrato.id?.slice(0, 8)}`}
                 </p>

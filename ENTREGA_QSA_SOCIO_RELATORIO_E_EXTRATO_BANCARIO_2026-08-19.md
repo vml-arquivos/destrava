@@ -1635,3 +1635,40 @@ O botão "Visualizar PDF" do contrato (na ficha da empresa, aba "Contratos Firma
 - `client/src/components/contratos/ListaContratos.tsx` — `abrirPdf`, novo `imprimirPdf`, novo `fecharPreview`, novo estado do modal, novo bloco de modal no JSX.
 
 Não altera "Orçamentos" nem nenhuma outra tela de visualização de PDF fora do fluxo de contrato firmado, conforme o pedido.
+
+## Extra 21 — Contrato assinado nunca pode ser substituído (2026-08-24)
+
+### Pedido do usuário
+
+"Um contrato assinado não pode ser substituído de forma alguma. Ele pode ter outro contrato, fazer outro contrato, pra ter algum complemento ou alguma coisa a mais, mas o contrato que já foi assinado e anexado ele não pode ser substituído, pois já tem um... ele tem que ficar travado pois é um documento que de forma alguma pode ser substituído, pode ter aditivo, algo que possa ser anexado junto, menos substituir."
+
+Pedido feito em cima do print da aba "Contratos Firmados" da ficha da empresa, mostrando o botão "Substituir assinado" ao lado de um contrato já assinado.
+
+### Causa
+
+Depois que um contrato já estava assinado, a interface trocava o botão de "Anexar contrato assinado" para "Substituir assinado", e tanto esse botão (ficha da empresa) quanto o botão de upload equivalente na tela "Gerador de Contratos" (`ListaContratos.tsx`) continuavam habilitados independente do contrato já estar assinado. O endpoint de backend (`POST /api/contratos/:id/anexo-assinado`) também não tinha nenhuma trava: sempre fazia `UPDATE ... SET assinado_pdf_path=...` na mesma linha, aceitando sobrescrever um PDF assinado já existente. Ou seja: a possibilidade de substituir existia tanto na tela quanto na API.
+
+### Correção
+
+- **Backend** (`server/index.ts`, `POST /api/contratos/:id/anexo-assinado`): antes de processar o upload, o endpoint agora busca o contrato e usa a função já existente `contratoEstaAssinado()` (mesma usada para bloquear edição e regeneração de contrato assinado em outras rotas) para checar se ele já está assinado (`status='assinado'`, `assinado_em` preenchido, ou `assinado_pdf_path` já preenchido). Se estiver, a rota responde **409** com a mensagem "Este contrato já foi assinado e não pode ser substituído. Se for preciso complementar o acordo, gere um novo contrato (aditivo) em vez de substituir o assinado." e não grava nada. Esse é o bloqueio definitivo — mesmo que alguém burle a interface, a API recusa.
+- **Frontend — ficha da empresa** (`client/src/pages/colaborador/Empresas.tsx`, aba "Contratos Firmados"): o botão "Substituir assinado" foi removido. Quando o contrato já está assinado, aparece um indicador travado ("🔒 Assinado — travado", sem nenhuma ação de upload); o botão de anexar (com input de arquivo) só é renderizado enquanto o contrato ainda não foi assinado.
+- **Frontend — Gerador de Contratos** (`client/src/components/contratos/ListaContratos.tsx`): o ícone de "Anexar contrato assinado" na tabela de contratos também ficava disponível para contratos já assinados. Agora, quando `contratoEstaAssinado` (mesma checagem: `status==='assinado' || assinado_em || assinado_pdf_path`), o ícone de upload é substituído por um ícone de cadeado (🔒), sem ação — só é clicável enquanto o contrato ainda não tem assinatura anexada.
+- Textos do modal de confirmação de anexo ("Contrato que será substituído" etc.) ajustados para refletir que o anexo é definitivo, já que agora só é possível chegar até esse modal para o primeiro (e único) anexo de assinatura.
+- Nada foi alterado na forma de gerar um **novo contrato** (aditivo/complemento) para a mesma empresa — esse caminho continua exatamente como já funcionava, é a forma correta de registrar um complemento sem tocar no contrato já assinado.
+
+### Verificação
+
+- `npx tsc --noEmit`: limpo.
+- `npx vitest run`: **540/540 testes passando**, mesma contagem de antes.
+- `npx vite build --mode production`: concluído sem erros.
+- Conferido que o bloqueio no backend usa a mesma função (`contratoEstaAssinado`) já usada para impedir edição (`PATCH /api/contratos/:id`) e regeneração (`POST /api/contratos/:id/regenerar`) de contrato assinado — consistente com o padrão já existente no sistema, em vez de duplicar a regra com lógica própria.
+- Conferido que o bloqueio funciona mesmo se o status do contrato for alterado manualmente para outro valor depois de assinado (ex.: via `PATCH /api/contratos/:id/status`): a checagem também olha `assinado_pdf_path`, que nunca é limpo por nenhuma outra rota — então não existe um caminho indireto para reabrir a substituição.
+- Excluir contrato, gerar novo contrato, baixar, imprimir e visualizar (Extra 20) não foram afetados.
+
+### Escopo desta correção
+
+- `server/index.ts` — `POST /api/contratos/:id/anexo-assinado` (novo bloqueio 409 usando `contratoEstaAssinado`).
+- `client/src/pages/colaborador/Empresas.tsx` — botão "Substituir assinado" removido, substituído por indicador travado; textos do modal de confirmação ajustados.
+- `client/src/components/contratos/ListaContratos.tsx` — ícone de upload de assinatura trocado por indicador travado quando já assinado.
+
+Nenhuma coluna de schema foi criada ou alterada — é só regra de negócio (o que a API aceita) e o reflexo dela na interface.
