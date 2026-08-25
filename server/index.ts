@@ -13089,6 +13089,27 @@ async function registrarDocumentoContratoGerado(params: {
       || !!contrato?.assinado_pdf_path;
   }
 
+  // Perfis com permissão para forçar a exclusão de um contrato JÁ ASSINADO
+  // (bypass da trava de "contrato assinado é definitivo" -- ver DELETE
+  // /api/contratos/:id). Uso pretendido: corrigir vínculo errado entre um
+  // contrato e o arquivo físico (ex.: contrato de uma empresa apontando pro
+  // PDF de outra por colisão de nome de arquivo), quando gerar um contrato
+  // novo não resolve porque o registro errado precisa sair do caminho.
+  // Cargo (Administrador/Diretor) sozinho NÃO basta para essa exceção -- é
+  // preciso o perfil elevado, atribuído manualmente por quem já é admin.
+  const PERFIS_PODEM_FORCAR_EXCLUSAO_ASSINADO = new Set([
+    'super_admin', 'superadmin', 'super admin',
+    'developer', 'desenvolvedor',
+  ]);
+
+  function usuarioPodeForcarExclusaoContratoAssinado(req: Request): boolean {
+    const colaborador = (req as any).colaborador || (req as any).user || {};
+    return (
+      PERFIS_PODEM_FORCAR_EXCLUSAO_ASSINADO.has(normalizarCargoContrato(colaborador.perfil))
+      || PERFIS_PODEM_FORCAR_EXCLUSAO_ASSINADO.has(normalizarCargoContrato(colaborador.cargo))
+    );
+  }
+
   function objetoSimplesContrato(valor: unknown): valor is Record<string, any> {
     return !!valor && typeof valor === 'object' && !Array.isArray(valor);
   }
@@ -13679,7 +13700,8 @@ async function registrarDocumentoContratoGerado(params: {
     }
   });
 
-  // ─── EXCLUIR CONTRATO (apenas Administrador e Diretor) ─────────────────────────
+  // ─── EXCLUIR CONTRATO (apenas Administrador e Diretor; contrato assinado só
+  // com perfil super_admin/developer -- ver usuarioPodeForcarExclusaoContratoAssinado) ───
   app.delete('/api/contratos/:id', auth, async (req: Request, res: Response) => {
     try {
       const colaborador = (req as any).colaborador;
@@ -13690,7 +13712,7 @@ async function registrarDocumentoContratoGerado(params: {
         return;
       }
       const { rows } = await pool.query(
-        'SELECT id, pdf_path, status, assinado_em, assinado_pdf_path FROM contratos_gerados WHERE id = $1',
+        'SELECT id, empresa_id, pdf_path, status, assinado_em, assinado_pdf_path FROM contratos_gerados WHERE id = $1',
         [req.params.id]
       );
       if (!rows.length) {
@@ -13698,16 +13720,38 @@ async function registrarDocumentoContratoGerado(params: {
         return;
       }
       const contrato = rows[0];
+      const assinado = contratoEstaAssinado(contrato);
+      const forcarExclusaoAssinado = assinado && usuarioPodeForcarExclusaoContratoAssinado(req);
       // Um contrato assinado é definitivo: não pode ser excluído (nem
       // substituído -- ver POST /api/contratos/:id/anexo-assinado). Se for
       // preciso desfazer um vínculo, o caminho é gerar um novo contrato,
       // nunca apagar o assinado já existente.
-      if (contratoEstaAssinado(contrato)) {
+      //
+      // Exceção: perfil "super_admin"/"developer" (ver
+      // usuarioPodeForcarExclusaoContratoAssinado) pode forçar a exclusão
+      // mesmo assinado -- para corrigir vínculo errado entre contrato e
+      // arquivo físico.
+      if (assinado && !forcarExclusaoAssinado) {
         res.status(409).json({ error: 'Este contrato já foi assinado e não pode ser excluído.' });
         return;
       }
-      // Remover arquivo PDF do disco se existir
-      if (contrato.pdf_path) {
+      if (forcarExclusaoAssinado) {
+        console.warn('[DELETE contrato] Exclusão forçada de contrato ASSINADO por perfil privilegiado.', {
+          contratoId: contrato.id,
+          empresaId: contrato.empresa_id,
+          colaboradorId: colaborador?.id || null,
+          colaboradorEmail: colaborador?.email || null,
+          colaboradorPerfil: colaborador?.perfil || null,
+        });
+      }
+      // Remover arquivo PDF do disco se existir. Contratos ASSINADOS excluídos
+      // pela exceção acima NÃO têm o arquivo removido do disco automaticamente:
+      // o mesmo caminho físico pode estar (incorretamente) associado a outro
+      // contrato/empresa, e apagar aqui arriscaria apagar o PDF de outra
+      // empresa. Nesse caso só o vínculo no banco é removido -- a limpeza do
+      // arquivo físico, se necessária, deve ser feita manualmente depois de
+      // confirmar que ele não pertence a nenhum outro registro.
+      if (contrato.pdf_path && !assinado) {
         const filePath = path.resolve(contrato.pdf_path);
         if (fs.existsSync(filePath)) {
           try { fs.unlinkSync(filePath); } catch (e) { console.warn('[DELETE contrato] Não foi possível remover PDF:', e); }
