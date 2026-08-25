@@ -3,6 +3,7 @@ import Layout from "./Layout";
 import { apiFetch, apiFetchBlob } from "@/lib/api";
 import { toast } from "sonner";
 import { useLocation } from "wouter";
+import { useAuth } from "@/contexts/AuthContext";
 import { useFeatureAccess } from "@/hooks/useFeatureAccess";
 import { maskCurrencyInput, unmaskCurrencyInput, formatBRLCurrency } from "@/lib/currency";
 import { useCNPJLookup } from "../../hooks/useCNPJLookup";
@@ -970,6 +971,7 @@ function mapCnpjDataParaEmpresa(data: any, prev: Record<string, any> = {}): Reco
 
 export default function Empresas() {
   const [location, setLocation] = useLocation();
+  const { colaborador } = useAuth();
   const { isFeatureEnabled } = useFeatureAccess();
   const [empresas, setEmpresas] = useState<Empresa[]>([]);
   const [loading, setLoading] = useState(true);
@@ -1298,6 +1300,36 @@ export default function Empresas() {
       toast.error(err?.message || "Erro ao baixar contrato");
     }
   }
+
+  // Exclusão forçada de contrato ASSINADO: só visível para perfil
+  // super_admin/developer -- mesma checagem do backend, ver
+  // usuarioPodeForcarExclusaoContratoAssinado em server/index.ts (DELETE
+  // /api/contratos/:id). Uso pretendido: corrigir vínculo errado entre um
+  // contrato e o arquivo físico (ex.: PDF de outra empresa por colisão de
+  // nome). O backend não apaga o arquivo do disco nesse caso -- só o
+  // registro no banco -- justamente porque o arquivo físico pode estar
+  // (incorretamente) associado a outro contrato/empresa.
+  function podeForcarExclusaoContratoAssinado(): boolean {
+    const valor = String(colaborador?.perfil || colaborador?.cargo || "")
+      .normalize("NFD").replace(/[\u0300-\u036f]/g, "").trim().toLowerCase();
+    return ["super_admin", "superadmin", "super admin", "developer", "desenvolvedor"].includes(valor);
+  }
+
+  async function handleExcluirContratoForcado(contratoId: string, numero?: string) {
+    const confirmacao = window.prompt(
+      `ATENÇÃO: este contrato já está ASSINADO. Excluir aqui não apaga o arquivo PDF do disco (pode estar associado a outra empresa por engano) -- só remove o registro deste contrato do sistema.\n\n` +
+      `Isso não pode ser desfeito. Para confirmar, digite EXCLUIR:`
+    );
+    if (confirmacao !== "EXCLUIR") return;
+    try {
+      await apiFetch(`/api/contratos/${contratoId}`, { method: "DELETE" });
+      setContratosEmpresa((old) => old.filter((c) => c.id !== contratoId));
+      toast.success(`Contrato ${numero || contratoId.slice(0, 8)} excluído.`);
+    } catch (err: any) {
+      toast.error(err?.message || "Erro ao excluir contrato");
+    }
+  }
+
   async function handleVerOrcamento(orcamentoId: string) {
     try {
       const { blob, contentType } = await apiFetchBlob(`/api/orcamentos/${orcamentoId}/pdf`);
@@ -2919,7 +2951,22 @@ export default function Empresas() {
                                         <Lock className="w-3.5 h-3.5" />
                                         Assinado — travado
                                       </span>
-                                    ) : (
+                                    ) : null}
+                                    {assinado && podeForcarExclusaoContratoAssinado() && (
+                                      // Só aparece pra perfil super_admin/developer -- ver
+                                      // podeForcarExclusaoContratoAssinado acima. Existe pra corrigir
+                                      // vínculo errado entre contrato e arquivo físico (ex.: PDF de
+                                      // outra empresa). Não some a trava acima: é uma exceção
+                                      // deliberada, separada, com confirmação forte.
+                                      <button
+                                        onClick={() => handleExcluirContratoForcado(cont.id, cont.numero_contrato || cont.protocolo_contrato)}
+                                        className="p-1.5 text-destructive hover:bg-destructive/10 rounded-lg transition-colors"
+                                        title="[super_admin/developer] Forçar exclusão do contrato assinado -- não apaga o PDF do disco, só o registro."
+                                      >
+                                        <Trash2 className="w-3.5 h-3.5" />
+                                      </button>
+                                    )}
+                                    {!assinado && (
                                       <label
                                         className="inline-flex items-center gap-1.5 h-9 px-3 rounded-lg text-xs font-bold cursor-pointer transition-colors text-primary-foreground bg-warning hover:bg-warning/90 shadow-sm"
                                         title="Anexar contrato assinado -- ativa CENPROT semanal e CND mensal"

@@ -57,6 +57,7 @@ const AssessoriaIA = lazy(() => import("./pages/colaborador/AssessoriaIA"));
 const DiagnosticoCredito = lazy(() => import("./pages/colaborador/DiagnosticoCredito"));
 const PrevisaoFaturamento = lazy(() => import("./pages/colaborador/PrevisaoFaturamento"));
 const GeradorContratos = lazy(() => import("./pages/colaborador/GeradorContratos"));
+const SqlEditor = lazy(() => import("./pages/colaborador/SqlEditor"));
 const ColaboradorOrcamentos = lazy(() => import("./pages/colaborador/Orcamentos"));
 const ColaboradorCRM = lazy(() => import("./pages/colaborador/CRM"));
 const ColaboradorEmpresas = lazy(() => import("./pages/colaborador/Empresas"));
@@ -208,6 +209,19 @@ function Router() {
           <ProtectedRoute>
             <CargoRoute allowedCargos={["administrador"]}>
               <ConfiguracaoFuncoes />
+            </CargoRoute>
+          </ProtectedRoute>
+        )}
+      </Route>
+      {/* Editor SQL bruto -- mesma restrição do backend (POST /api/admin/sql,
+          authorize(["Administrador"])): só cargo Administrador acessa. Ferramenta
+          de emergência, sem confirmação extra na tela -- qualquer comando SQL
+          roda direto no banco, incluindo DELETE/UPDATE/DROP em qualquer tabela. */}
+      <Route path="/colaborador/sql-editor">
+        {() => (
+          <ProtectedRoute>
+            <CargoRoute allowedCargos={["administrador"]}>
+              <SqlEditor />
             </CargoRoute>
           </ProtectedRoute>
         )}
