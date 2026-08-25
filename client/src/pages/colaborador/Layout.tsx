@@ -41,6 +41,7 @@ import {
   Image as ImageIcon,
   Sun,
   Moon,
+  Terminal,
 } from "lucide-react";
 
 const CARGOS_GESTAO = ["administrador", "diretor", "gerente comercial"];
@@ -267,6 +268,16 @@ const NAV_MODULES: NavModule[] = [
         icon: SlidersHorizontal,
         allowedCargos: ["administrador"],
         featureKey: "configuracao-funcoes",
+      },
+      {
+        // Ferramenta de emergência: roda qualquer SQL direto no banco (mesma
+        // restrição do backend, POST /api/admin/sql -- só Administrador). Sem
+        // featureKey de propósito: não é uma função de negócio pra ligar/desligar
+        // na tela "Menu e Funções", é acesso técnico direto ao banco.
+        href: "/colaborador/sql-editor",
+        label: "Editor SQL",
+        icon: Terminal,
+        allowedCargos: ["administrador"],
       },
     ],
   },
