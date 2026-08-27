@@ -19,11 +19,11 @@ import { apiFetch } from "@/lib/api";
 type TipoEvento =
   | "cadastro" | "atualizacao_cadastral" | "documento" | "simulacao"
   | "contrato" | "orcamento" | "followup" | "nota"
-  | "acompanhamento_bancario" | "analise" | "tarefa_nexus" | "sistema";
+  | "acompanhamento_bancario" | "analise" | "triagem" | "tarefa_nexus" | "sistema";
 
 type ModuloEvento =
   | "cadastro_empresa" | "acervo_documental" | "simulacoes" | "contratos"
-  | "orcamentos" | "followup" | "inteligencia_360" | "acompanhamento_bancario" | "tarefas_nexus" | "sistema";
+  | "orcamentos" | "followup" | "inteligencia_360" | "triagem" | "acompanhamento_bancario" | "tarefas_nexus" | "sistema";
 
 interface EventoHistorico {
   id: string;
@@ -77,8 +77,9 @@ const CONFIG_TIPO: Record<TipoEvento, {
   followup:             { cor: "text-primary",    bg: "bg-primary/20",    borda: "border-primary/30",   icone: MessageSquare, label: "Follow-up" },
   nota:                 { cor: "text-foreground",  bg: "bg-muted",  borda: "border-input", icone: MessageSquare, label: "Nota" },
   acompanhamento_bancario:{ cor: "text-success", bg: "bg-success/20",  borda: "border-success/30",  icone: Banknote,      label: "Bancário" },
-  analise:              { cor: "text-primary", bg: "bg-primary/10", borda: "border-primary/30",icone: Info,          label: "Análise" },
-  tarefa_nexus:         { cor: "text-primary",   bg: "bg-primary/20",   borda: "border-primary/30",  icone: ClipboardList, label: "Tarefa Nexus" },
+  analise:               { cor: "text-primary", bg: "bg-primary/10", borda: "border-primary/30", icone: Info,          label: "Análise" },
+  triagem:               { cor: "text-primary", bg: "bg-primary/10", borda: "border-primary/30", icone: ClipboardList, label: "Triagem" },
+  tarefa_nexus:          { cor: "text-primary", bg: "bg-primary/20", borda: "border-primary/30", icone: ClipboardList, label: "Tarefa Nexus" },
   sistema:              { cor: "text-muted-foreground",  bg: "bg-muted",   borda: "border-border", icone: RefreshCw,     label: "Sistema" },
 };
 
@@ -90,6 +91,7 @@ const MODULO_LABEL: Record<ModuloEvento, string> = {
   orcamentos:              "Orçamentos",
   followup:                "Follow-up",
   inteligencia_360:        "Inteligência 360",
+  triagem:                  "Triagem de leads",
   acompanhamento_bancario: "Acompanhamento Bancário",
   tarefas_nexus:           "Tarefas Nexus",
   sistema:                 "Sistema",
@@ -304,7 +306,7 @@ export default function Historico360({ empresaId, onNavegar, modoCompacto = fals
           </button>
         </div>
         <p className="text-xs text-muted-foreground">
-          Consolida eventos de documentos, simulações, contratos, orçamentos, follow-ups, acompanhamentos bancários e atualizações cadastrais em uma linha do tempo unificada.
+          Consolida eventos de triagem, documentos, simulações, contratos, orçamentos, follow-ups, acompanhamentos bancários e atualizações cadastrais em uma linha do tempo unificada.
         </p>
       </div>
     );

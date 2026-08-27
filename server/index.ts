@@ -7161,14 +7161,23 @@ async function startServer() {
       try { const { rows } = await pool.query("SELECT id, numero_contrato, tipo_contrato, status, valor_contrato, data_assinatura, created_at FROM contratos_gerados WHERE empresa_id = $1 ORDER BY created_at DESC", [empresaId]); contratos = Array.isArray(rows) ? rows : []; } catch { contratos = []; }
 
       let orcamentos: any[] = [];
-      try { const { rows } = await pool.query("SELECT id, descricao, valor_total, status, created_at FROM orcamentos WHERE empresa_id = $1 ORDER BY created_at DESC LIMIT 20", [empresaId]); orcamentos = Array.isArray(rows) ? rows : []; } catch { orcamentos = []; }
+      try { const { rows } = await pool.query("SELECT id, descricao, valor_total, status, criado_por, created_at FROM public.orcamentos_timbrados WHERE empresa_id = $1 ORDER BY created_at DESC LIMIT 20", [empresaId]); orcamentos = Array.isArray(rows) ? rows : []; } catch { orcamentos = []; }
+
+      let triagem: any[] = [];
+      try {
+        const { rows } = await pool.query(
+          "SELECT id, status, classificacao, observacoes, score_ia, produto, lead_id, pagina_origem, created_at FROM public.triagem_leads WHERE empresa_id = $1 ORDER BY created_at DESC LIMIT 50",
+          [empresaId],
+        );
+        triagem = Array.isArray(rows) ? rows : [];
+      } catch { triagem = []; }
 
       let acompanhamentos: any[] = [];
       try { const { rows } = await pool.query("SELECT id, banco, produto, status, valor, responsavel, created_at FROM acompanhamentos_bancarios WHERE empresa_id = $1 ORDER BY created_at DESC LIMIT 30", [empresaId]); acompanhamentos = Array.isArray(rows) ? rows : []; } catch { acompanhamentos = []; }
 
       const resultado = consolidarHistorico360({
         empresa, historicoEmpresa, followupsEmpresa, followupsEstruturados,
-        documentos, simulacoes, contratos, orcamentos, acompanhamentos,
+        documentos, simulacoes, contratos, orcamentos, triagem, acompanhamentos,
       });
 
       res.json(resultado);

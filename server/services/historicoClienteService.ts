@@ -64,6 +64,7 @@ export type TipoEvento =
   | "nota"
   | "acompanhamento_bancario"
   | "analise"
+  | "triagem"
   | "tarefa_nexus"
   | "sistema";
 
@@ -75,6 +76,7 @@ export type ModuloEvento =
   | "orcamentos"
   | "followup"
   | "inteligencia_360"
+  | "triagem"
   | "acompanhamento_bancario"
   | "tarefas_nexus"
   | "sistema";
@@ -103,6 +105,7 @@ export interface HistoricoInput {
   contratos: any[];
   orcamentos: any[];
   acompanhamentos: any[];
+  triagem?: any[];
 }
 
 export interface HistoricoResult {
@@ -330,6 +333,38 @@ function mapearOrcamentos(rows: any[]): EventoHistorico[] {
   });
 }
 
+function mapearTriagem(rows: any[]): EventoHistorico[] {
+  return safeArr<any>(rows).map((t, i) => {
+    const status = safeStr(t?.status, "recebida");
+    const classificacao = safeStr(t?.classificacao, "não classificada");
+    const score = safeNum(t?.score_ia);
+    const origem = safeStr(t?.pagina_origem, "triagem_leads");
+    return {
+      id: `triagem_${safeStr(t?.id, String(i))}`,
+      data: isDataValida(t?.created_at) ? String(t.created_at) : null,
+      data_valida: isDataValida(t?.created_at),
+      tipo: "triagem" as TipoEvento,
+      titulo: `Triagem recebida: ${classificacao}`,
+      descricao: [
+        `Status: ${status}`,
+        score !== null ? `Score IA: ${score}` : null,
+        safeStr(t?.produto) ? `Produto: ${safeStr(t?.produto)}` : null,
+        safeStr(t?.observacoes) ? safeStr(t?.observacoes) : null,
+      ].filter(Boolean).join(" · "),
+      origem,
+      usuario: null,
+      modulo: "triagem" as ModuloEvento,
+      link_acao: null,
+      metadados: {
+        status,
+        classificacao,
+        score_ia: score ?? "",
+        lead_id: safeStr(t?.lead_id, "") || null,
+      },
+    };
+  });
+}
+
 function mapearAcompanhamentos(rows: any[]): EventoHistorico[] {
   return safeArr<any>(rows).map((a, i) => {
     const valor = safeNum(a?.valor);
@@ -461,6 +496,7 @@ export function consolidarHistorico360(input: HistoricoInput): HistoricoResult {
     ...mapearSimulacoes(input?.simulacoes),
     ...mapearContratos(input?.contratos),
     ...mapearOrcamentos(input?.orcamentos),
+    ...mapearTriagem(input?.triagem ?? []),
     ...mapearAcompanhamentos(input?.acompanhamentos),
   ];
 

@@ -389,7 +389,29 @@ describe("consolidarHistorico360", () => {
     expect(eventoReceita!.tipo).toBe("atualizacao_cadastral");
   });
 
-  it("deve gerar evento separado de assinatura quando data_assinatura estiver disponível no contrato", () => {
+  it("deve incluir triagem_leads como evento do histórico 360", () => {
+    const input = inputVazio();
+    input.triagem = [{
+      id: "tri-1",
+      status: "possivel_cliente",
+      classificacao: "quente",
+      observacoes: "Retorno solicitado",
+      score_ia: 82,
+      produto: "Capital de Giro",
+      lead_id: "lead-1",
+      pagina_origem: "simulador",
+      created_at: "2024-04-02T10:00:00Z",
+    }];
+    const res = consolidarHistorico360(input);
+    const evento = res.eventos_com_data.find(e => e.id === "triagem_tri-1");
+    expect(evento).toBeDefined();
+    expect(evento!.tipo).toBe("triagem");
+    expect(evento!.modulo).toBe("triagem");
+    expect(evento!.descricao).toContain("Score IA: 82");
+    expect(evento!.usuario).toBeNull();
+  });
+
+  it("deve gerar evento de assinatura quando data_assinatura estiver disponível no contrato", () => {
     const input = inputVazio();
     input.contratos = [
       {
@@ -450,7 +472,7 @@ describe("consolidarHistorico360", () => {
     const tiposValidos = [
       "cadastro", "atualizacao_cadastral", "documento", "simulacao",
       "contrato", "orcamento", "followup", "nota",
-      "acompanhamento_bancario", "analise", "sistema",
+      "acompanhamento_bancario", "analise", "triagem", "sistema",
     ];
     const res = consolidarHistorico360(inputCompleto());
     const todosEventos = [...res.eventos_com_data, ...res.eventos_sem_data];
