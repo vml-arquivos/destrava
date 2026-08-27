@@ -38,7 +38,14 @@ import createOrcamentosOperacoesRouter, {
   gerarPdfOrcamentoComFallback,
   salvarPdfOrcamento,
 } from './routes/orcamentos_operacoes';
-import { ETAPA_FUNIL_DEFAULT, ETAPAS_FUNIL_VALIDAS, normalizarEtapaFunil } from "../shared/funnel.ts";
+import {
+  ETAPA_FUNIL_DEFAULT,
+  etapaFunilEhValida,
+  etapaFunilParaPersistencia,
+  etapaFunilPersistidaParaUi,
+  normalizarEtapaFunil,
+} from "../shared/funnel.ts";
+import { calcularScoreBasico, calcularScoreEfetivo } from "../shared/leadScoring.ts";
 import { gerarHtmlTimbrado, getPuppeteerHeaderTemplate, getPuppeteerFooterTemplate, getDocumentStyles, CONTRATADA_DADOS, getHtmlHeaderEmbutido, getHtmlFooterEmbutido } from "./letterhead.ts";
 import { DESTRAVA_LOGO_B64, PERMUPAY_LOGO_B64 } from "./logo_constants.ts";
 import {
@@ -619,119 +626,15 @@ function validarEtapaFunil(value: string | null | undefined): string {
 }
 
 function etapaFunilPermitida(value: string | null | undefined): boolean {
-  return ETAPAS_FUNIL_VALIDAS.includes(validarEtapaFunil(value) as (typeof ETAPAS_FUNIL_VALIDAS)[number]);
+  return etapaFunilEhValida(value);
 }
-
-/**
- * Scoring básico automático (sem IA) — 0 a 100.
- * Critérios:
- *  - Valor solicitado: até 30 pts (escala log)
- *  - Prazo em meses: até 20 pts
- *  - Completude dos dados: até 30 pts (5 campos x 6 pts)
- *  - Temperatura: até 20 pts
- */
-function calcularScoreBasico(lead: {
-  valor_solicitado?: number | null;
-  prazo_meses?: number | null;
-  nome?: string | null;
-  telefone?: string | null;
-  email?: string | null;
-  empresa?: string | null;
-  cpf_cnpj?: string | null;
-  temperatura?: string | null;
-}): number {
-  let score = 0;
-  // Valor solicitado (0-30)
-  const valor = Number(lead.valor_solicitado) || 0;
-  if (valor > 0) {
-    const logScore = Math.min(30, Math.round((Math.log10(valor) / Math.log10(5_000_000)) * 30));
-    score += Math.max(0, logScore);
-  }
-  // Prazo (0-20)
-  const prazo = Number(lead.prazo_meses) || 0;
-  if (prazo >= 60) score += 20;
-  else if (prazo >= 36) score += 15;
-  else if (prazo >= 24) score += 10;
-  else if (prazo >= 12) score += 5;
-  else if (prazo > 0) score += 2;
-  // Completude (0-30)
-  const campos = [lead.nome, lead.telefone, lead.email, lead.empresa, lead.cpf_cnpj];
-  const preenchidos = campos.filter(c => c && String(c).trim().length > 0).length;
-  score += preenchidos * 6;
-  // Temperatura (0-20)
-  const tempMap: Record<string, number> = { frio: 0, morno: 8, quente: 15, urgente: 20 };
-  score += tempMap[lead.temperatura ?? 'frio'] ?? 0;
-  return Math.min(100, Math.max(0, score));
-}
-
-// O frontend usa o funil novo (novo_lead, tentando_contato, ...), mas a
-// base em produção pode estar em uma das duas taxonomias legadas:
-// 1) schema_crm antigo: novo, contato_feito, qualificado, documentacao...
-// 2) migration 009: enum etapa_funil_enum com entrada, contato, qualificacao...
-// A migration 009 é a mais provável em produção; por isso persistimos nela.
-// Isso evita o erro 500 em /api/crm/mover-funil por tentativa de gravar "novo"
-// ou "novo_lead" em coluna enum que aceita apenas "entrada", "contato" etc.
-const MAPA_ETAPA_UI_PARA_LEGADA: Record<string, string> = {
-  // Funil novo exibido no CRM
-  novo_lead: "entrada",
-  tentando_contato: "contato",
-  em_atendimento: "contato",
-  qualificado: "qualificacao",
-  proposta_enviada: "proposta",
-  documentos_pendentes: "documentos",
-  contrato_gerado: "analise",
-  aguardando_pagamento: "negociacao",
-  fechado: "ganho",
-  em_execucao: "carteira",
-  pos_venda: "carteira",
-  reativacao: "reativacao",
-  perdido: "perdido",
-
-  // Compatibilidade com rótulos/ids antigos ainda aceitos pelo backend
-  entrada: "entrada",
-  triagem: "entrada",
-  contato: "contato",
-  qualificacao: "qualificacao",
-  documentos: "documentos",
-  analise: "analise",
-  proposta: "proposta",
-  negociacao: "negociacao",
-  ganho: "ganho",
-  carteira: "carteira",
-};
-
-const MAPA_ETAPA_LEGADA_PARA_UI: Record<string, string> = {
-  // Valores da migration 009 / enum etapa_funil_enum
-  entrada: "novo_lead",
-  triagem: "novo_lead",
-  contato: "tentando_contato",
-  qualificacao: "qualificado",
-  documentos: "documentos_pendentes",
-  analise: "contrato_gerado",
-  proposta: "proposta_enviada",
-  negociacao: "aguardando_pagamento",
-  ganho: "fechado",
-  carteira: "em_execucao",
-  reativacao: "reativacao",
-  perdido: "perdido",
-
-  // Valores do schema CRM antigo
-  novo: "novo_lead",
-  contato_feito: "tentando_contato",
-  qualificado: "qualificado",
-  documentacao: "documentos_pendentes",
-  proposta_enviada: "proposta_enviada",
-  inativo: "reativacao",
-};
 
 function etapaUiParaLegada(value: string | null | undefined): string {
-  const etapaUi = validarEtapaFunil(value);
-  return MAPA_ETAPA_UI_PARA_LEGADA[etapaUi] || "entrada";
+  return etapaFunilParaPersistencia(value);
 }
 
 function etapaLegadaParaUi(value: string | null | undefined): string {
-  const etapa = String(value || "").trim().toLowerCase();
-  return MAPA_ETAPA_LEGADA_PARA_UI[etapa] || validarEtapaFunil(etapa);
+  return etapaFunilPersistidaParaUi(value);
 }
 
 function podecriarUsuarios(cargo: string): boolean {
@@ -778,6 +681,26 @@ async function registrarCrmLog({
     );
   } catch (err) {
     console.error("[CRM LOG ERROR]", err);
+  }
+}
+
+async function sincronizarProximoFollowupLegado(leadId: string) {
+  if (!leadId) return;
+  try {
+    await pool.query(
+      `UPDATE leads
+          SET proximo_followup = (
+            SELECT MIN(agendado_para)
+            FROM crm_followups
+            WHERE lead_id = $1 AND status = 'pendente'
+          )
+        WHERE id = $1`,
+      [leadId],
+    );
+  } catch (err) {
+    // A tabela pode ainda não existir durante uma implantação gradual; o
+    // endpoint operacional já devolve migration_pending nesse cenário.
+    if ((err as any)?.code !== "42P01") console.warn("[CRM FOLLOWUP SYNC]", err);
   }
 }
 
@@ -2498,6 +2421,13 @@ async function startServer() {
     legacyHeaders: false,
     message: { success: false, message: "Muitas requisições. Tente novamente em alguns minutos." },
   });
+  const pdfRequestRateLimiter = rateLimit({
+    windowMs: 15 * 60 * 1000,
+    limit: 10,
+    standardHeaders: true,
+    legacyHeaders: false,
+    message: { success: false, message: "Muitas solicitações de PDF. Tente novamente em alguns minutos." },
+  });
   // ─────────────────────────────────────────────────────────────────────────
 
   // ─── LOGIN ────────────────────────────────────────────────────────────────
@@ -2678,6 +2608,7 @@ async function startServer() {
         try {
           const triagemCols = await getTableColumns("triagem_leads");
           const attributionFields: Record<string, unknown> = {
+            score_basico,
             utm_term: b.utm_term,
             utm_content: b.utm_content,
             gclid: b.gclid,
@@ -2689,7 +2620,9 @@ async function startServer() {
             pagina_entrada: b.pagina_entrada,
             referrer: b.referrer,
           };
-          const entries = Object.entries(attributionFields).filter(([key, value]) => triagemCols.has(key) && value);
+          const entries = Object.entries(attributionFields).filter(([key, value]) => (
+            triagemCols.has(key) && value !== undefined && value !== null && value !== ""
+          ));
           if (entries.length) {
             await pool.query(
               `UPDATE triagem_leads SET ${entries.map(([key], index) => `"${key}"=$${index + 1}`).join(", ")} WHERE id=$${entries.length + 1}`,
@@ -2697,6 +2630,7 @@ async function startServer() {
             );
             Object.assign(triagem, Object.fromEntries(entries));
           }
+          triagem.score_basico = score_basico;
         } catch (error) {
           console.warn("[TRIAGEM ATTRIBUTION]", error instanceof Error ? error.message : error);
         }
@@ -2741,6 +2675,7 @@ async function startServer() {
         const leadCols = await getTableColumns("leads");
         const pendencias = pendenciasLeadCliente(lead);
         const upd: Record<string, unknown> = {};
+        if (leadCols.has("score_basico")) upd.score_basico = score_basico;
         if (leadCols.has("cadastro_status")) upd.cadastro_status = statusCadastroFromPendencias(pendencias);
         if (leadCols.has("cadastro_pendencias")) upd.cadastro_pendencias = pendencias;
         if (leadCols.has("cadastro_completo")) upd.cadastro_completo = pendencias.length === 0;
@@ -2769,6 +2704,8 @@ async function startServer() {
           await pool.query(`UPDATE leads SET ${ks.map((k,i)=>`"${k}"=$${i+1}`).join(', ')} WHERE id=$${ks.length+1}`, [...vals, lead.id]);
           Object.assign(lead, upd);
         }
+        lead.score_basico = score_basico;
+        lead.score_efetivo = calcularScoreEfetivo(lead);
       } catch (e) { console.warn('[lead cadastro status]', e instanceof Error ? e.message : e); }
       console.log(`[LEAD] Salvo: ${nome} — ${produto || origem}`);
 
@@ -2907,21 +2844,10 @@ async function startServer() {
          FROM leads ${where} ORDER BY created_at DESC ${limitClause}`,
         params
       );
-      // Enriquecer com score_efetivo = score_ia (IA) ou score_basico (calculado)
+      // Enriquecer com score efetivo sem depender da coluna gerada legada.
       const rows = rawRows.map((r: any) => ({
         ...r,
-        score_efetivo: r.score_ia && r.score_ia > 0
-          ? r.score_ia
-          : calcularScoreBasico({
-              valor_solicitado: r.valor_solicitado,
-              prazo_meses: r.prazo_meses,
-              nome: r.nome,
-              telefone: r.telefone,
-              email: r.email,
-              empresa: r.empresa,
-              cpf_cnpj: r.cpf_cnpj,
-              temperatura: r.temperatura,
-            }),
+        score_efetivo: calcularScoreEfetivo(r),
       }));
       res.json(rows);
     } catch (err) {
@@ -2954,9 +2880,16 @@ async function startServer() {
       const conditions = ["etapa_funil NOT IN ('ganho','perdido')"];
       aplicarFiltroVisibilidadeLead({ conditions, params, colaborador, scope, responsavelId });
 
+      const leadColumns = await getTableColumns("leads");
+      const scoreManualExpr = leadColumns.has("score_manual") ? "l.score_manual" : "NULL";
+      const scoreIaExpr = leadColumns.has("score_ia") ? "l.score_ia" : "NULL";
+      const scoreBasicoExpr = leadColumns.has("score_basico") ? "l.score_basico" : "NULL";
+      const scoreEfetivoExpr = `COALESCE(${scoreManualExpr}, NULLIF(${scoreIaExpr}, 0), ${scoreBasicoExpr}, 0)`;
+
       const { rows } = await pool.query(
         `SELECT
            l.*,
+           ${scoreEfetivoExpr} AS score_efetivo_operacional,
            COALESCE(
              l.chatwoot_conv_id,
              CASE
@@ -2977,7 +2910,7 @@ async function startServer() {
             LIMIT 1
          ) cc ON TRUE
         WHERE ${conditions.join(" AND ")}
-        ORDER BY l.score_ia DESC NULLS LAST,
+        ORDER BY ${scoreEfetivoExpr} DESC,
                  l.proximo_followup ASC NULLS LAST,
                  l.created_at ASC`,
         params
@@ -3109,6 +3042,17 @@ async function startServer() {
         [...values, req.params.id]
       );
       const leadAtualizado = rows[0];
+      try {
+        const leadCols = await getTableColumns("leads");
+        if (leadCols.has("score_basico") && leadAtualizado) {
+          const score_basico = calcularScoreBasico(leadAtualizado);
+          await pool.query("UPDATE leads SET score_basico = $1 WHERE id = $2", [score_basico, req.params.id]);
+          leadAtualizado.score_basico = score_basico;
+        }
+        if (leadAtualizado) leadAtualizado.score_efetivo = calcularScoreEfetivo(leadAtualizado);
+      } catch (scoreError) {
+        console.warn("[LEAD SCORE SYNC]", scoreError instanceof Error ? scoreError.message : scoreError);
+      }
 
       if (fields.etapa_funil !== undefined && leadAtualizado?.etapa_funil !== atual.etapa_funil) {
         await registrarCrmLog({
@@ -4158,6 +4102,311 @@ async function startServer() {
     }
   });
 
+  // ─── CRM OPERATIONAL: follow-ups ──────────────────────────────────────────
+  app.get("/api/crm/followups", auth, async (req: Request, res: Response) => {
+    try {
+      const leadId = String(req.query.lead_id || "").trim();
+      const colaborador = (req as Request & { colaborador: any }).colaborador;
+      if (!leadId) {
+        res.status(400).json({ error: "lead_id é obrigatório." });
+        return;
+      }
+      if (!(await leadPertenceAoColaborador(leadId, colaborador))) {
+        res.status(403).json({ error: "Sem permissão para visualizar este lead." });
+        return;
+      }
+      const { rows } = await pool.query(
+        `SELECT f.*, c.nome AS colaborador_nome
+           FROM crm_followups f
+           LEFT JOIN colaboradores c ON c.id = f.colaborador_id
+          WHERE f.lead_id = $1
+          ORDER BY f.agendado_para ASC, f.created_at DESC`,
+        [leadId],
+      );
+      res.json(rows);
+    } catch (err: any) {
+      if (err?.code === "42P01") {
+        res.status(503).json({ error: "A camada operacional do CRM ainda não foi migrada.", migration_pending: true });
+        return;
+      }
+      console.error("[GET /api/crm/followups]", err);
+      res.status(500).json({ error: "Erro ao listar follow-ups." });
+    }
+  });
+
+  app.post("/api/crm/followups", auth, async (req: Request, res: Response) => {
+    try {
+      const colaborador = (req as Request & { colaborador: any }).colaborador;
+      const { lead_id, agendado_para, tipo, descricao } = req.body;
+      if (!lead_id || !agendado_para) {
+        res.status(400).json({ error: "lead_id e agendado_para são obrigatórios." });
+        return;
+      }
+      if (!(await leadPertenceAoColaborador(String(lead_id), colaborador))) {
+        res.status(403).json({ error: "Sem permissão para alterar este lead." });
+        return;
+      }
+      const agendado = new Date(String(agendado_para));
+      if (Number.isNaN(agendado.getTime())) {
+        res.status(400).json({ error: "Data de follow-up inválida." });
+        return;
+      }
+      const tiposValidos = ["ligacao", "whatsapp", "email", "reuniao", "visita", "outro"];
+      const tipoFinal = tiposValidos.includes(String(tipo || "")) ? String(tipo) : "ligacao";
+      const { rows } = await pool.query(
+        `INSERT INTO crm_followups (lead_id, colaborador_id, agendado_para, tipo, descricao)
+         VALUES ($1, $2, $3, $4, $5)
+         RETURNING *`,
+        [String(lead_id), colaborador.id, agendado.toISOString(), tipoFinal, descricao ? String(descricao).trim() : null],
+      );
+      await sincronizarProximoFollowupLegado(String(lead_id));
+      await registrarCrmLog({ leadId: String(lead_id), usuarioId: colaborador.id, acao: `followup_criado:${rows[0].id}` });
+      res.status(201).json(rows[0]);
+    } catch (err: any) {
+      if (err?.code === "42P01") {
+        res.status(503).json({ error: "A camada operacional do CRM ainda não foi migrada.", migration_pending: true });
+        return;
+      }
+      console.error("[POST /api/crm/followups]", err);
+      res.status(500).json({ error: "Erro ao criar follow-up." });
+    }
+  });
+
+  app.patch("/api/crm/followups/:id", auth, async (req: Request, res: Response) => {
+    try {
+      const colaborador = (req as Request & { colaborador: any }).colaborador;
+      const { rows: atuais } = await pool.query("SELECT id, lead_id FROM crm_followups WHERE id = $1 LIMIT 1", [req.params.id]);
+      if (!atuais.length) {
+        res.status(404).json({ error: "Follow-up não encontrado." });
+        return;
+      }
+      if (!(await leadPertenceAoColaborador(atuais[0].lead_id, colaborador))) {
+        res.status(403).json({ error: "Sem permissão para alterar este follow-up." });
+        return;
+      }
+      const statusValidos = ["pendente", "realizado", "cancelado", "reagendado"];
+      const resultadoValido = ["positivo", "neutro", "negativo", "sem_resposta"];
+      const updates: Record<string, unknown> = {};
+      if (req.body.status !== undefined) {
+        if (!statusValidos.includes(String(req.body.status))) {
+          res.status(400).json({ error: "Status de follow-up inválido." });
+          return;
+        }
+        updates.status = String(req.body.status);
+      }
+      if (req.body.resultado !== undefined) {
+        if (req.body.resultado !== null && !resultadoValido.includes(String(req.body.resultado))) {
+          res.status(400).json({ error: "Resultado de follow-up inválido." });
+          return;
+        }
+        updates.resultado = req.body.resultado;
+      }
+      if (req.body.observacoes !== undefined) updates.observacoes = req.body.observacoes ? String(req.body.observacoes).trim() : null;
+      if (req.body.reagendado_para !== undefined) {
+        const data = req.body.reagendado_para ? new Date(String(req.body.reagendado_para)) : null;
+        if (data && Number.isNaN(data.getTime())) {
+          res.status(400).json({ error: "Data de reagendamento inválida." });
+          return;
+        }
+        updates.reagendado_para = data?.toISOString() || null;
+      }
+      if (!Object.keys(updates).length) {
+        res.status(400).json({ error: "Nenhum campo válido para atualizar." });
+        return;
+      }
+      const keys = Object.keys(updates);
+      const values = Object.values(updates);
+      const set = keys.map((key, index) => `"${key}" = $${index + 1}`).join(", ");
+      const { rows } = await pool.query(
+        `UPDATE crm_followups SET ${set}, updated_at = NOW() WHERE id = $${keys.length + 1} RETURNING *`,
+        [...values, req.params.id],
+      );
+      await sincronizarProximoFollowupLegado(atuais[0].lead_id);
+      await registrarCrmLog({ leadId: atuais[0].lead_id, usuarioId: colaborador.id, acao: `followup_atualizado:${req.params.id}` });
+      res.json(rows[0]);
+    } catch (err: any) {
+      if (err?.code === "42P01") {
+        res.status(503).json({ error: "A camada operacional do CRM ainda não foi migrada.", migration_pending: true });
+        return;
+      }
+      console.error("[PATCH /api/crm/followups/:id]", err);
+      res.status(500).json({ error: "Erro ao atualizar follow-up." });
+    }
+  });
+
+  // ─── CRM OPERATIONAL: notas internas ──────────────────────────────────────
+  app.get("/api/crm/notas-internas", auth, async (req: Request, res: Response) => {
+    try {
+      const leadId = String(req.query.lead_id || "").trim();
+      const colaborador = (req as Request & { colaborador: any }).colaborador;
+      if (!leadId) {
+        res.status(400).json({ error: "lead_id é obrigatório." });
+        return;
+      }
+      if (!(await leadPertenceAoColaborador(leadId, colaborador))) {
+        res.status(403).json({ error: "Sem permissão para visualizar este lead." });
+        return;
+      }
+      const { rows } = await pool.query(
+        `SELECT n.*, c.nome AS autor_nome
+           FROM crm_notas_internas n
+           LEFT JOIN colaboradores c ON c.id = n.autor_id
+          WHERE n.lead_id = $1
+            AND (
+              n.privada = false
+              OR n.autor_id = $2
+              OR EXISTS (SELECT 1 FROM leads l WHERE l.id = n.lead_id AND l.responsavel_id = $2)
+              OR $3::boolean = true
+            )
+          ORDER BY n.fixada DESC, n.created_at DESC`,
+        [leadId, colaborador.id, colaboradorPodeVerTudo(colaborador)],
+      );
+      res.json(rows);
+    } catch (err: any) {
+      if (err?.code === "42P01") {
+        res.status(503).json({ error: "A camada operacional do CRM ainda não foi migrada.", migration_pending: true });
+        return;
+      }
+      console.error("[GET /api/crm/notas-internas]", err);
+      res.status(500).json({ error: "Erro ao listar notas internas." });
+    }
+  });
+
+  app.post("/api/crm/notas-internas", auth, async (req: Request, res: Response) => {
+    try {
+      const colaborador = (req as Request & { colaborador: any }).colaborador;
+      const leadId = String(req.body.lead_id || "").trim();
+      const conteudo = String(req.body.conteudo || "").trim();
+      if (!leadId || !conteudo) {
+        res.status(400).json({ error: "lead_id e conteúdo são obrigatórios." });
+        return;
+      }
+      if (!(await leadPertenceAoColaborador(leadId, colaborador))) {
+        res.status(403).json({ error: "Sem permissão para alterar este lead." });
+        return;
+      }
+      const { rows } = await pool.query(
+        `INSERT INTO crm_notas_internas (lead_id, autor_id, conteudo, privada, fixada)
+         VALUES ($1, $2, $3, $4, $5)
+         RETURNING *`,
+        [leadId, colaborador.id, conteudo, req.body.privada !== false, req.body.fixada === true],
+      );
+      await registrarCrmLog({ leadId, usuarioId: colaborador.id, acao: `nota_interna_criada:${rows[0].id}` });
+      res.status(201).json(rows[0]);
+    } catch (err: any) {
+      if (err?.code === "42P01") {
+        res.status(503).json({ error: "A camada operacional do CRM ainda não foi migrada.", migration_pending: true });
+        return;
+      }
+      console.error("[POST /api/crm/notas-internas]", err);
+      res.status(500).json({ error: "Erro ao criar nota interna." });
+    }
+  });
+
+  // ─── CRM OPERATIONAL: delegações ──────────────────────────────────────────
+  app.get("/api/crm/delegacoes", auth, async (req: Request, res: Response) => {
+    try {
+      const leadId = String(req.query.lead_id || "").trim();
+      const colaborador = (req as Request & { colaborador: any }).colaborador;
+      if (!leadId) {
+        res.status(400).json({ error: "lead_id é obrigatório." });
+        return;
+      }
+      if (!(await leadPertenceAoColaborador(leadId, colaborador))) {
+        res.status(403).json({ error: "Sem permissão para visualizar este lead." });
+        return;
+      }
+      const { rows } = await pool.query(
+        `SELECT d.*, por.nome AS delegado_por_nome, para.nome AS delegado_para_nome
+           FROM crm_delegacoes d
+           LEFT JOIN colaboradores por ON por.id = d.delegado_por
+           LEFT JOIN colaboradores para ON para.id = d.delegado_para
+          WHERE d.lead_id = $1
+          ORDER BY d.created_at DESC`,
+        [leadId],
+      );
+      res.json(rows);
+    } catch (err: any) {
+      if (err?.code === "42P01") {
+        res.status(503).json({ error: "A camada operacional do CRM ainda não foi migrada.", migration_pending: true });
+        return;
+      }
+      console.error("[GET /api/crm/delegacoes]", err);
+      res.status(500).json({ error: "Erro ao listar delegações." });
+    }
+  });
+
+  app.post("/api/crm/delegacoes", auth, async (req: Request, res: Response) => {
+    const colaborador = (req as Request & { colaborador: any }).colaborador;
+    const leadId = String(req.body.lead_id || "").trim();
+    const delegadoPara = String(req.body.delegado_para || "").trim();
+    if (!leadId || !delegadoPara) {
+      res.status(400).json({ error: "lead_id e delegado_para são obrigatórios." });
+      return;
+    }
+    if (!colaboradorPodeGerenciarCarteira(colaborador)) {
+      res.status(403).json({ error: "Somente perfis de gestão podem delegar leads." });
+      return;
+    }
+    if (!(await leadPertenceAoColaborador(leadId, colaborador))) {
+      res.status(403).json({ error: "Sem permissão para alterar este lead." });
+      return;
+    }
+
+    const client = await pool.connect();
+    try {
+      await client.query("BEGIN");
+      const { rows: leadRows } = await client.query(
+        "SELECT id, responsavel_id FROM leads WHERE id = $1 FOR UPDATE",
+        [leadId],
+      );
+      if (!leadRows.length) {
+        await client.query("ROLLBACK");
+        res.status(404).json({ error: "Lead não encontrado." });
+        return;
+      }
+      const { rows: colaboradorRows } = await client.query(
+        "SELECT id, nome FROM colaboradores WHERE id = $1 AND ativo = true LIMIT 1",
+        [delegadoPara],
+      );
+      if (!colaboradorRows.length) {
+        await client.query("ROLLBACK");
+        res.status(400).json({ error: "Colaborador de destino inválido ou inativo." });
+        return;
+      }
+      if (String(leadRows[0].responsavel_id || "") === delegadoPara) {
+        await client.query("ROLLBACK");
+        res.status(409).json({ error: "O lead já está atribuído a este colaborador." });
+        return;
+      }
+      const { rows: delegacaoRows } = await client.query(
+        `INSERT INTO crm_delegacoes (lead_id, delegado_por, delegado_para, motivo)
+         VALUES ($1, $2, $3, $4)
+         RETURNING *`,
+        [leadId, colaborador.id, delegadoPara, req.body.motivo ? String(req.body.motivo).trim() : null],
+      );
+      await client.query(
+        `UPDATE leads
+            SET responsavel_id = $1, delegado_de = $2, delegado_em = NOW(), updated_at = NOW()
+          WHERE id = $3`,
+        [delegadoPara, leadRows[0].responsavel_id || null, leadId],
+      );
+      await client.query("COMMIT");
+      await registrarCrmLog({ leadId, usuarioId: colaborador.id, acao: `lead_delegado:${leadRows[0].responsavel_id || 'sem_responsavel'}->${delegadoPara}` });
+      res.status(201).json({ ...delegacaoRows[0], responsavel_id: delegadoPara, responsavel_nome: colaboradorRows[0].nome });
+    } catch (err: any) {
+      try { await client.query("ROLLBACK"); } catch { /* transação já encerrada */ }
+      if (err?.code === "42P01" || err?.code === "42703") {
+        res.status(503).json({ error: "A camada operacional do CRM ainda não foi migrada.", migration_pending: true });
+        return;
+      }
+      console.error("[POST /api/crm/delegacoes]", err);
+      res.status(500).json({ error: "Erro ao delegar lead." });
+    } finally {
+      client.release();
+    }
+  });
+
   // ─── POST /api/crm/documentos ─────────────────────────────────────────────
   app.post("/api/crm/documentos", auth, async (req: Request, res: Response) => {
     try {
@@ -4402,6 +4651,7 @@ async function startServer() {
       const rowsCompat = result.rows.map((row: any) => ({
         ...row,
         etapa_funil: etapaLegadaParaUi(row.etapa_funil),
+        score_efetivo: calcularScoreEfetivo(row),
       }));
       res.json(rowsCompat);
     } catch (err) {
@@ -4538,10 +4788,16 @@ async function startServer() {
   });
 
   // ─── POST /api/leads/:id/solicitar-pdf ───────────────────────────────────
-  app.post("/api/leads/:id/solicitar-pdf", async (req: Request, res: Response) => {
+  app.post("/api/leads/:id/solicitar-pdf", pdfRequestRateLimiter, async (req: Request, res: Response) => {
     try {
       const { id } = req.params;
       const { email, nome, produto, valor, prazo, parcela, taxa } = req.body;
+      // Campo invisível para formulários legítimos; bots que o preenchem não
+      // recebem confirmação nem disparam o webhook externo.
+      if (req.body?.website || req.body?.company_website || req.body?.honeypot) {
+        res.status(204).end();
+        return;
+      }
       if (!email) {
         res.status(400).json({ error: "E-mail é obrigatório para envio do PDF" });
         return;
@@ -4600,6 +4856,28 @@ async function startServer() {
       if (rows.length === 0) {
         res.status(404).json({ error: "Lead não encontrado" });
         return;
+      }
+
+      if (score_ia !== undefined || temperatura !== undefined) {
+        try {
+          const leadCols = await getTableColumns("leads");
+          if (leadCols.has("score_basico")) {
+            const { rows: leadRows } = await pool.query(
+              `SELECT id, valor_solicitado, prazo_meses, nome, telefone, email, empresa, cpf_cnpj, temperatura, score_ia, score_manual, score_basico
+                 FROM leads WHERE id = $1 LIMIT 1`,
+              [id],
+            );
+            const leadAtual = leadRows[0];
+            if (leadAtual) {
+              const score_basico = calcularScoreBasico(leadAtual);
+              await pool.query("UPDATE leads SET score_basico = $1 WHERE id = $2", [score_basico, id]);
+              rows[0].score_basico = score_basico;
+              rows[0].score_efetivo = calcularScoreEfetivo({ ...leadAtual, score_ia: score_ia ?? leadAtual.score_ia, temperatura: temperatura ?? leadAtual.temperatura, score_basico });
+            }
+          }
+        } catch (scoreError) {
+          console.warn("[IA SCORE SYNC]", scoreError instanceof Error ? scoreError.message : scoreError);
+        }
       }
 
       console.log(`[IA] Lead ${id} atualizado com dados de IA`);
@@ -7291,6 +7569,26 @@ async function startServer() {
          t.valor, t.prazo, t.cidade, t.estado, now]
       );
       const lead = lRows[0];
+      try {
+        const leadCols = await getTableColumns("leads");
+        if (leadCols.has("score_basico")) {
+          const score_basico = calcularScoreBasico({
+            valor_solicitado: t.valor,
+            prazo_meses: t.prazo,
+            nome: t.nome,
+            telefone: t.telefone,
+            email: t.email,
+            empresa: t.empresa,
+            cpf_cnpj: t.cpf_cnpj,
+            temperatura: "morno",
+          });
+          await pool.query("UPDATE leads SET score_basico = $1 WHERE id = $2", [score_basico, lead.id]);
+          lead.score_basico = score_basico;
+          lead.score_efetivo = calcularScoreEfetivo(lead);
+        }
+      } catch (scoreError) {
+        console.warn("[TRIAGEM SCORE SYNC]", scoreError instanceof Error ? scoreError.message : scoreError);
+      }
       await pool.query(
         `UPDATE triagem_leads SET status='convertido', lead_id=$1, convertido_em=NOW(), updated_at=NOW() WHERE id=$2`,
         [lead.id, t.id]

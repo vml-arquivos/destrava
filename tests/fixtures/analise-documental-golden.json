@@ -1,0 +1,76 @@
+[
+  {
+    "id": "transformacao-ei-ltda-transferencia-integral",
+    "contrato": {
+      "tipo_ato": "Transformação de Empresário Individual em Sociedade Limitada",
+      "data_registro": "2025-06-06",
+      "numero_arquivamento": "20251505987",
+      "alteracoes_societarias": [
+        {
+          "tipo_alteracao": "transformacao_transferencia_integral",
+          "cedente": { "nome": "Marcos Henrique Soares Pio", "quotas": 65000 },
+          "cessionario": { "nome": "Jonnathas Rodrigues Pires", "quotas": 65000 },
+          "quotas_transferidas": 65000,
+          "evidencia": "O empresário individual transforma-se em sociedade limitada e transfere integralmente as quotas para Jonnathas Rodrigues Pires."
+        }
+      ],
+      "quadro_societario_final": [
+        { "nome": "Jonnathas Rodrigues Pires", "quotas": 65000, "percentual": 100, "administrador": true }
+      ],
+      "confianca": 0.96
+    },
+    "atos": {
+      "nire": "52206183723",
+      "historico_arquivamentos": [
+        { "numero": "20251505987", "data": "2025-06-06", "tipo_ato": "TRANSFORMAÇÃO" }
+      ],
+      "confianca": 0.96
+    },
+    "empresa": { "cnpj": "52.008.360/0001-33" },
+    "socios_qsa": [{ "nome": "Jonnathas Rodrigues Pires", "administrador": true }],
+    "expected": {
+      "status_documento": "atual",
+      "confronto_qsa": "confirmado",
+      "estado_atual_fonte": "contrato",
+      "qsa_adicional_necessario": false,
+      "revisao_obrigatoria": false,
+      "ato_praticado_contains": "transferência"
+    }
+  },
+  {
+    "id": "contrato-anterior-a-transformacao-nao-invalida-qsa",
+    "contrato": {
+      "tipo_ato": "Alteração Contratual anterior à transformação",
+      "data_registro": "2025-03-27",
+      "numero_arquivamento": "20244323909",
+      "alteracoes_societarias": [
+        {
+          "tipo_alteracao": "saida_transferencia",
+          "cedente": { "nome": "Irene Correia dos Reis Silva", "quotas": 32500 },
+          "cessionario": { "nome": "Marcos Henrique Soares Pio", "quotas": 32500 },
+          "quotas_transferidas": 32500
+        }
+      ],
+      "quadro_societario_final": [
+        { "nome": "Marcos Henrique Soares Pio", "quotas": 65000, "percentual": 100 }
+      ],
+      "confianca": 0.94
+    },
+    "atos": {
+      "historico_arquivamentos": [
+        { "numero": "20244323909", "data": "2025-03-27", "tipo_ato": "ALTERAÇÃO" },
+        { "numero": "20251505987", "data": "2025-06-06", "tipo_ato": "TRANSFORMAÇÃO" }
+      ],
+      "confianca": 0.95
+    },
+    "empresa": { "cnpj": "52.008.360/0001-33" },
+    "socios_qsa": [{ "nome": "Jonnathas Rodrigues Pires", "administrador": true }],
+    "expected": {
+      "status_documento": "historico",
+      "confronto_qsa": "historico",
+      "estado_atual_fonte": "qsa",
+      "qsa_adicional_necessario": false,
+      "revisao_obrigatoria": false
+    }
+  }
+]
