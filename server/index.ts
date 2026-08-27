@@ -11822,7 +11822,8 @@ ${(temTest1 || temTest2) ? `
       browser = await launchChromium();
       const page = await browser.newPage();
       await page.setContent(html, { waitUntil: 'networkidle0' });
-      return await page.pdf({ format: 'A4', printBackground: true, margin: { top: '10mm', bottom: '10mm', left: '8mm', right: '8mm' } });
+      const pdfBytes = await page.pdf({ format: 'A4', printBackground: true, margin: { top: '10mm', bottom: '10mm', left: '8mm', right: '8mm' } });
+      return Buffer.from(pdfBytes);
     } finally {
       if (browser) await closeChromium(browser);
     }
@@ -11845,6 +11846,30 @@ ${(temTest1 || temTest2) ? `
     res.setHeader('X-Robots-Tag', 'noindex, nofollow, noarchive');
     res.send(pdf);
   }
+
+  app.get('/api/colaboradores/:id/ficha/preview', auth, async (req: Request, res: Response) => {
+    try {
+      const solicitante = (req as Request & { colaborador: any }).colaborador;
+      const { rows } = await pool.query(
+        `SELECT id, nome, cargo, email, telefone, cpf, rg, data_nascimento, estado_civil,
+                profissao, endereco, numero, complemento, bairro, cidade, uf, cep,
+                ativo, perfil, created_at, foto_url
+           FROM colaboradores WHERE id = $1`,
+        [req.params.id],
+      );
+      const colaborador = rows[0];
+      if (!colaborador) { res.status(404).json({ error: 'Colaborador não encontrado.' }); return; }
+      if (String(solicitante?.id) !== String(colaborador.id) && !podeGerenciarCargo(solicitante?.cargo || '', colaborador.cargo || '')) {
+        res.status(403).json({ error: 'Você não tem permissão para visualizar esta ficha.' });
+        return;
+      }
+      const fotoDataUri = await carregarFotoColaboradorDataUri(colaborador);
+      res.json({ title: `Ficha Cadastral — ${colaborador.nome}`, html: gerarHtmlFichaEquipe('colaborador', colaborador, fotoDataUri) });
+    } catch (err: any) {
+      console.error('[GET /api/colaboradores/:id/ficha/preview]', err);
+      res.status(500).json({ error: 'Erro ao preparar visualização da ficha.', detail: err?.message });
+    }
+  });
 
   app.get('/api/colaboradores/:id/ficha/pdf', auth, async (req: Request, res: Response) => {
     try {
@@ -11872,6 +11897,23 @@ ${(temTest1 || temTest2) ? `
     }
   });
 
+  app.get('/api/contadores/:id/ficha/preview', auth, async (req: Request, res: Response) => {
+    try {
+      const { rows } = await pool.query(
+        `SELECT id, nome, cpf, crc, email, telefone, nome_escritorio, cnpj_escritorio,
+                endereco_escritorio, cidade_escritorio, uf_escritorio, ativo, created_at
+           FROM contadores WHERE id = $1`,
+        [req.params.id],
+      );
+      const contador = rows[0];
+      if (!contador) { res.status(404).json({ error: 'Contador não encontrado.' }); return; }
+      res.json({ title: `Ficha Cadastral — ${contador.nome}`, html: gerarHtmlFichaEquipe('contador', contador) });
+    } catch (err: any) {
+      console.error('[GET /api/contadores/:id/ficha/preview]', err);
+      res.status(500).json({ error: 'Erro ao preparar visualização da ficha.', detail: err?.message });
+    }
+  });
+
   app.get('/api/contadores/:id/ficha/pdf', auth, async (req: Request, res: Response) => {
     try {
       const { rows } = await pool.query(
@@ -11887,6 +11929,25 @@ ${(temTest1 || temTest2) ? `
     } catch (err: any) {
       console.error('[GET /api/contadores/:id/ficha/pdf]', err);
       res.status(500).json({ error: 'Erro ao gerar ficha do contador.', detail: err?.message });
+    }
+  });
+
+  app.get('/api/parceiros/:id/ficha/preview', auth, async (req: Request, res: Response) => {
+    try {
+      const { rows } = await pool.query(
+        `SELECT id, nome, cpf, email, telefone, rg, data_nascimento, estado_civil,
+                profissao, endereco, numero, complemento, bairro, cidade, uf, cep,
+                percentual_comissao, observacoes, ativo, logo_url, cabecalho_html,
+                rodape_html, cor_primaria, cor_secundaria, created_at
+           FROM parceiros_comerciais WHERE id = $1`,
+        [req.params.id],
+      );
+      const parceiro = rows[0];
+      if (!parceiro) { res.status(404).json({ error: 'Parceiro não encontrado.' }); return; }
+      res.json({ title: `Ficha Cadastral — ${parceiro.nome}`, html: gerarHtmlFichaEquipe('parceiro', parceiro) });
+    } catch (err: any) {
+      console.error('[GET /api/parceiros/:id/ficha/preview]', err);
+      res.status(500).json({ error: 'Erro ao preparar visualização da ficha.', detail: err?.message });
     }
   });
 

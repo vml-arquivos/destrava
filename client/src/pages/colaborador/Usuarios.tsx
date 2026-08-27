@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import Layout from "./Layout";
+import FichaPreviewModal from "@/components/FichaPreviewModal";
 import { apiFetch, apiFetchBlob } from "@/lib/api";
 import { useAuth } from "@/contexts/AuthContext";
 import { toast } from "sonner";
@@ -168,6 +169,11 @@ export default function UsuariosPage() {
   const [editFoto, setEditFoto] = useState<File | null>(null);
   const [editFotoPreview, setEditFotoPreview] = useState<string | null>(null);
   const [gerandoFichaId, setGerandoFichaId] = useState<string | null>(null);
+  const [fichaPreviewId, setFichaPreviewId] = useState<string | null>(null);
+  const [fichaPreviewTitle, setFichaPreviewTitle] = useState("");
+  const [fichaPreviewHtml, setFichaPreviewHtml] = useState<string | null>(null);
+  const [fichaPreviewOpen, setFichaPreviewOpen] = useState(false);
+  const [baixandoFicha, setBaixandoFicha] = useState(false);
 
   useEffect(() => {
     if (!cargo) return;
@@ -290,23 +296,54 @@ export default function UsuariosPage() {
     await apiFetch(`/api/colaboradores/${id}/foto`, { method: "POST", body });
   }
 
-  async function baixarFichaColaborador(col: Colaborador) {
+  async function visualizarFichaColaborador(col: Colaborador) {
     setGerandoFichaId(col.id);
+    setFichaPreviewId(col.id);
+    setFichaPreviewTitle(`Ficha Cadastral — ${col.nome}`);
+    setFichaPreviewHtml(null);
+    setFichaPreviewOpen(true);
     try {
-      const { blob, filename } = await apiFetchBlob(`/api/colaboradores/${col.id}/ficha/pdf`);
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement("a");
-      a.href = url;
-      a.download = filename || `ficha-colaborador-${col.nome.replace(/[^a-zA-Z0-9]/g, "-").toLowerCase()}.pdf`;
-      a.click();
-      URL.revokeObjectURL(url);
-      toast.success("Ficha cadastral gerada com sucesso.");
+      const preview = await apiFetch(`/api/colaboradores/${col.id}/ficha/preview`);
+      if (!preview?.html) throw new Error("A visualização da ficha não foi disponibilizada.");
+      setFichaPreviewTitle(preview.title || `Ficha Cadastral — ${col.nome}`);
+      setFichaPreviewHtml(preview.html);
     } catch (err: unknown) {
-      const msg = err instanceof Error ? err.message : "Erro ao gerar ficha cadastral.";
+      setFichaPreviewOpen(false);
+      setFichaPreviewId(null);
+      setFichaPreviewHtml(null);
+      const msg = err instanceof Error ? err.message : "Erro ao preparar visualização da ficha cadastral.";
       toast.error(msg);
     } finally {
       setGerandoFichaId(null);
     }
+  }
+
+  async function baixarFichaColaborador() {
+    if (!fichaPreviewId) return;
+    setBaixandoFicha(true);
+    try {
+      const { blob, filename, contentType } = await apiFetchBlob(`/api/colaboradores/${fichaPreviewId}/ficha/pdf`);
+      if (!contentType?.toLowerCase().includes("application/pdf")) throw new Error("O servidor não retornou um PDF válido.");
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = filename || `ficha-colaborador-${fichaPreviewTitle.replace(/[^a-zA-Z0-9]/g, "-").toLowerCase()}.pdf`;
+      a.click();
+      URL.revokeObjectURL(url);
+      toast.success("Ficha cadastral baixada com sucesso.");
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : "Erro ao gerar ficha cadastral.";
+      toast.error(msg);
+    } finally {
+      setBaixandoFicha(false);
+    }
+  }
+
+  function fecharFichaPreview() {
+    setFichaPreviewOpen(false);
+    setFichaPreviewId(null);
+    setFichaPreviewTitle("");
+    setFichaPreviewHtml(null);
   }
 
   function abrirEdicao(col: Colaborador) {
@@ -771,8 +808,8 @@ export default function UsuariosPage() {
                               </div>
                             </div>
                             <div className="flex flex-wrap items-center gap-2 mt-2 sm:mt-0">
-                              <Button size="sm" variant="outline" onClick={() => baixarFichaColaborador(col)} disabled={gerandoFichaId === col.id}>
-                                {gerandoFichaId === col.id ? <RefreshCw className="h-3.5 w-3.5 mr-1 animate-spin" /> : <Download className="h-3.5 w-3.5 mr-1" />} Ficha PDF
+                              <Button size="sm" variant="outline" onClick={() => visualizarFichaColaborador(col)} disabled={gerandoFichaId === col.id}>
+                                {gerandoFichaId === col.id ? <RefreshCw className="h-3.5 w-3.5 mr-1 animate-spin" /> : <Eye className="h-3.5 w-3.5 mr-1" />} Visualizar ficha
                               </Button>
                               {podeGerenciar && (
                                 <Button size="sm" variant="outline" onClick={() => abrirEdicao(col)}>
@@ -837,6 +874,14 @@ export default function UsuariosPage() {
           </CardContent>
         </Card>
       </div>
+      <FichaPreviewModal
+        open={fichaPreviewOpen}
+        title={fichaPreviewTitle}
+        html={fichaPreviewHtml}
+        downloading={baixandoFicha}
+        onClose={fecharFichaPreview}
+        onDownload={baixarFichaColaborador}
+      />
     </Layout>
   );
 }

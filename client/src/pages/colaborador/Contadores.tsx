@@ -1,8 +1,9 @@
 import { useState, useEffect } from 'react';
-import { Plus, Pencil, Trash2, Loader2, BookUser, CheckCircle, XCircle, Download, RefreshCw } from 'lucide-react';
+import { Plus, Pencil, Trash2, Loader2, BookUser, CheckCircle, XCircle, Eye, RefreshCw } from 'lucide-react';
 import { toast } from 'sonner';
 import { apiFetch, apiFetchBlob } from '../../lib/api';
 import Layout from './Layout';
+import FichaPreviewModal from '../../components/FichaPreviewModal';
 
 interface Contador {
   id: string;
@@ -56,6 +57,11 @@ export default function Contadores() {
   const [excluindo, setExcluindo] = useState<string | null>(null);
   const [busca, setBusca] = useState('');
   const [gerandoFichaId, setGerandoFichaId] = useState<string | null>(null);
+  const [fichaPreviewId, setFichaPreviewId] = useState<string | null>(null);
+  const [fichaPreviewTitle, setFichaPreviewTitle] = useState('');
+  const [fichaPreviewHtml, setFichaPreviewHtml] = useState<string | null>(null);
+  const [fichaPreviewOpen, setFichaPreviewOpen] = useState(false);
+  const [baixandoFicha, setBaixandoFicha] = useState(false);
 
   const carregar = async () => {
     setLoading(true);
@@ -134,22 +140,52 @@ export default function Contadores() {
     }
   };
 
-  const baixarFicha = async (contador: Contador) => {
+  const visualizarFicha = async (contador: Contador) => {
     setGerandoFichaId(contador.id);
+    setFichaPreviewId(contador.id);
+    setFichaPreviewTitle(`Ficha Cadastral — ${contador.nome}`);
+    setFichaPreviewHtml(null);
+    setFichaPreviewOpen(true);
     try {
-      const { blob, filename } = await apiFetchBlob(`/api/contadores/${contador.id}/ficha/pdf`);
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = filename || `ficha-contador-${contador.nome.replace(/[^a-zA-Z0-9]/g, '-').toLowerCase()}.pdf`;
-      a.click();
-      URL.revokeObjectURL(url);
-      toast.success('Ficha cadastral gerada com sucesso');
+      const preview = await apiFetch(`/api/contadores/${contador.id}/ficha/preview`);
+      if (!preview?.html) throw new Error('A visualização da ficha não foi disponibilizada.');
+      setFichaPreviewTitle(preview.title || `Ficha Cadastral — ${contador.nome}`);
+      setFichaPreviewHtml(preview.html);
     } catch (err: any) {
-      toast.error(err?.message || 'Erro ao gerar ficha cadastral');
+      setFichaPreviewOpen(false);
+      setFichaPreviewId(null);
+      setFichaPreviewHtml(null);
+      toast.error(err?.message || 'Erro ao preparar visualização da ficha cadastral');
     } finally {
       setGerandoFichaId(null);
     }
+  };
+
+  const baixarFicha = async () => {
+    if (!fichaPreviewId) return;
+    setBaixandoFicha(true);
+    try {
+      const { blob, filename, contentType } = await apiFetchBlob(`/api/contadores/${fichaPreviewId}/ficha/pdf`);
+      if (!contentType?.toLowerCase().includes('application/pdf')) throw new Error('O servidor não retornou um PDF válido.');
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = filename || `ficha-contador-${fichaPreviewTitle.replace(/[^a-zA-Z0-9]/g, '-').toLowerCase()}.pdf`;
+      a.click();
+      URL.revokeObjectURL(url);
+      toast.success('Ficha cadastral baixada com sucesso');
+    } catch (err: any) {
+      toast.error(err?.message || 'Erro ao gerar ficha cadastral');
+    } finally {
+      setBaixandoFicha(false);
+    }
+  };
+
+  const fecharFichaPreview = () => {
+    setFichaPreviewOpen(false);
+    setFichaPreviewId(null);
+    setFichaPreviewTitle('');
+    setFichaPreviewHtml(null);
   };
 
   const handleExcluir = async (id: string) => {
@@ -268,12 +304,12 @@ export default function Contadores() {
                       <td className="px-4 py-3 text-right">
                         <div className="flex items-center justify-end gap-2">
                           <button
-                            onClick={() => baixarFicha(c)}
+                            onClick={() => visualizarFicha(c)}
                             disabled={gerandoFichaId === c.id}
                             className="p-1.5 text-muted-foreground hover:text-primary hover:bg-primary/10 rounded transition-colors disabled:opacity-50"
-                            title="Imprimir ficha PDF"
+                            title="Visualizar ficha"
                           >
-                            {gerandoFichaId === c.id ? <RefreshCw className="w-4 h-4 animate-spin" /> : <Download className="w-4 h-4" />}
+                            {gerandoFichaId === c.id ? <RefreshCw className="w-4 h-4 animate-spin" /> : <Eye className="w-4 h-4" />}
                           </button>
                           <button
                             onClick={() => abrirEditar(c)}
@@ -466,6 +502,14 @@ export default function Contadores() {
           </div>
         </div>
       )}
+      <FichaPreviewModal
+        open={fichaPreviewOpen}
+        title={fichaPreviewTitle}
+        html={fichaPreviewHtml}
+        downloading={baixandoFicha}
+        onClose={fecharFichaPreview}
+        onDownload={baixarFicha}
+      />
     </Layout>
   );
 }
