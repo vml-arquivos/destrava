@@ -3641,36 +3641,41 @@ async function startServer() {
         return;
       }
       const cargoAlvo = alvoResult.rows[0].cargo;
+      const mesmoColaborador = String(solicitante?.id) === String(req.params.id);
 
-      // Bloqueia edição de cargos iguais ou superiores (exceto admin-key)
-      if (!podeGerenciarCargo(cargoSolicitante, cargoAlvo)) {
+      // Autoedição é permitida somente para dados de perfil. A hierarquia continua
+      // obrigatória quando alguém tenta editar outro colaborador.
+      if (!mesmoColaborador && !podeGerenciarCargo(cargoSolicitante, cargoAlvo)) {
         res.status(403).json({ error: "Você não tem permissão para editar este colaborador." });
         return;
       }
 
       const { nome, email, cargo, ativo, senha, telefone, perfil, pode_atender_leads, pode_ver_todos_leads, chatwoot_agente_id } = req.body;
 
-      // Se está tentando alterar o cargo, verifica se o novo cargo também é inferior
-      if (cargo && !podeGerenciarCargo(cargoSolicitante, cargo)) {
+      // Somente gestores podem atribuir cargo/perfil/permissões/status a terceiros.
+      if (!mesmoColaborador && cargo && !podeGerenciarCargo(cargoSolicitante, cargo)) {
         res.status(403).json({ error: `Você não pode atribuir o cargo "${cargo}" a este colaborador.` });
         return;
       }
 
       const updates: Record<string, unknown> = { updated_at: new Date().toISOString() };
-      const cargoFinal = cargo || cargoAlvo;
       if (nome) updates.nome = nome.trim();
       if (email) updates.email = email.trim().toLowerCase();
-      if (cargo) updates.cargo = cargo;
-      if (ativo !== undefined) updates.ativo = ativo;
       if (senha) updates.senha_hash = await bcrypt.hash(senha, 12);
       if (telefone !== undefined) updates.telefone = telefone ? telefone.replace(/\D/g, '') : null;
-      if (chatwoot_agente_id !== undefined) updates.chatwoot_agente_id = chatwoot_agente_id !== null && String(chatwoot_agente_id).trim() !== '' ? Number(chatwoot_agente_id) : null;
-      if (perfil !== undefined) updates.perfil = perfil || perfilOperacionalPorCargo(cargoFinal);
-      else if (cargo !== undefined) updates.perfil = perfilOperacionalPorCargo(cargoFinal);
-      if (pode_atender_leads !== undefined) updates.pode_atender_leads = pode_atender_leads;
-      else if (cargo !== undefined) updates.pode_atender_leads = podeAtenderLeadsPorCargo(cargoFinal);
-      if (pode_ver_todos_leads !== undefined) updates.pode_ver_todos_leads = pode_ver_todos_leads;
-      else if (cargo !== undefined || perfil !== undefined) updates.pode_ver_todos_leads = podeVerTodosLeadsPorPerfilOuCargo(String(updates.perfil || perfil || ''), cargoFinal);
+
+      if (!mesmoColaborador) {
+        const cargoFinal = cargo || cargoAlvo;
+        if (cargo) updates.cargo = cargo;
+        if (ativo !== undefined) updates.ativo = ativo;
+        if (chatwoot_agente_id !== undefined) updates.chatwoot_agente_id = chatwoot_agente_id !== null && String(chatwoot_agente_id).trim() !== '' ? Number(chatwoot_agente_id) : null;
+        if (perfil !== undefined) updates.perfil = perfil || perfilOperacionalPorCargo(cargoFinal);
+        else if (cargo !== undefined) updates.perfil = perfilOperacionalPorCargo(cargoFinal);
+        if (pode_atender_leads !== undefined) updates.pode_atender_leads = pode_atender_leads;
+        else if (cargo !== undefined) updates.pode_atender_leads = podeAtenderLeadsPorCargo(cargoFinal);
+        if (pode_ver_todos_leads !== undefined) updates.pode_ver_todos_leads = pode_ver_todos_leads;
+        else if (cargo !== undefined || perfil !== undefined) updates.pode_ver_todos_leads = podeVerTodosLeadsPorPerfilOuCargo(String(updates.perfil || perfil || ''), cargoFinal);
+      }
       const keys = Object.keys(updates);
       const values = Object.values(updates);
       const set = keys.map((k, i) => `"${k}" = $${i + 1}`).join(", ");

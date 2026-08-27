@@ -370,30 +370,36 @@ export default function UsuariosPage() {
   }
 
   async function salvarEdicao(id: string) {
-    if (!editNome.trim() || !editCargo) {
-      setMensagemEdit({ tipo: "erro", texto: "Nome e cargo são obrigatórios." });
+    const autoedicao = String(eu?.id) === String(id);
+    if (!editNome.trim() || (!autoedicao && !editCargo)) {
+      setMensagemEdit({ tipo: "erro", texto: autoedicao ? "Informe seu nome." : "Nome e cargo são obrigatórios." });
       return;
     }
-    if (CARGOS_TELEFONE_OBRIGATORIO.includes(editCargo.toLowerCase()) && !editTelefone.trim()) {
+    if (!autoedicao && CARGOS_TELEFONE_OBRIGATORIO.includes(editCargo.toLowerCase()) && !editTelefone.trim()) {
       setMensagemEdit({ tipo: "erro", texto: "Captadores Externos precisam de telefone." });
       return;
     }
 
     setSalvandoEdit(true);
     try {
-      await apiFetch(`/api/colaboradores/${id}`, {
-        method: "PATCH",
-        body: JSON.stringify({
-          nome: editNome.trim(),
-          email: editEmail.trim() || undefined,
+      const dadosEdicao: Record<string, unknown> = {
+        nome: editNome.trim(),
+        email: editEmail.trim() || undefined,
+        telefone: editTelefone.trim() || null,
+        ...(editSenha.trim() ? { senha: editSenha.trim() } : {}),
+      };
+      if (!autoedicao) {
+        Object.assign(dadosEdicao, {
           cargo: editCargo,
-          telefone: editTelefone.trim() || null,
           perfil: editPerfil,
           pode_atender_leads: editPodeAtenderLeads,
           pode_ver_todos_leads: editPodeVerTodosLeads,
           chatwoot_agente_id: editChatwootAgenteId.trim() ? Number(editChatwootAgenteId) : null,
-          ...(editSenha.trim() ? { senha: editSenha.trim() } : {}),
-        }),
+        });
+      }
+      await apiFetch(`/api/colaboradores/${id}`, {
+        method: "PATCH",
+        body: JSON.stringify(dadosEdicao),
       });
       let avisoFoto = "";
       if (editFoto) {
@@ -692,7 +698,7 @@ export default function UsuariosPage() {
                             </div>
                             <div className="space-y-1">
                               <Label className="text-xs">Cargo</Label>
-                              <Select value={editCargo} onValueChange={(value) => {
+                              <Select value={editCargo} disabled={String(eu?.id) === String(col.id)} onValueChange={(value) => {
                                 setEditCargo(value);
                                 const perfilBase = perfilOperacionalPadrao(value);
                                 setEditPerfil(perfilBase);
@@ -706,6 +712,7 @@ export default function UsuariosPage() {
                                   {cargosPermitidos.map((item) => (
                                     <SelectItem key={item} value={item}>{item}</SelectItem>
                                   ))}
+                                  {String(eu?.id) === String(col.id) && !cargosPermitidos.includes(editCargo) && <SelectItem value={editCargo} disabled>{editCargo} (atual)</SelectItem>}
                                 </SelectContent>
                               </Select>
                             </div>
@@ -726,7 +733,7 @@ export default function UsuariosPage() {
                             </div>
                             <div className="space-y-1">
                               <Label className="text-xs">Perfil</Label>
-                              <Select value={editPerfil} onValueChange={(value) => setEditPerfil(value as PerfilOperacional)}>
+                              <Select value={editPerfil} disabled={String(eu?.id) === String(col.id)} onValueChange={(value) => setEditPerfil(value as PerfilOperacional)}>
                                 <SelectTrigger className="h-9 text-sm"><SelectValue /></SelectTrigger>
                                 <SelectContent>
                                   {PERFIS_OPERACIONAIS.map((item) => (
@@ -737,7 +744,7 @@ export default function UsuariosPage() {
                             </div>
                             <div className="space-y-1">
                               <Label className="text-xs">Chatwoot agente ID</Label>
-                              <Input value={editChatwootAgenteId} onChange={(e) => setEditChatwootAgenteId(e.target.value.replace(/\D/g, ""))} className="h-9 text-sm" />
+                              <Input value={editChatwootAgenteId} disabled={String(eu?.id) === String(col.id)} onChange={(e) => setEditChatwootAgenteId(e.target.value.replace(/\D/g, ""))} className="h-9 text-sm" />
                             </div>
                           </div>
 
@@ -756,11 +763,11 @@ export default function UsuariosPage() {
 
                           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 rounded-xl border bg-card p-3">
                             <label className="flex items-center gap-3 text-sm">
-                              <input type="checkbox" checked={editPodeAtenderLeads} onChange={(e) => setEditPodeAtenderLeads(e.target.checked)} />
+                              <input type="checkbox" disabled={String(eu?.id) === String(col.id)} checked={editPodeAtenderLeads} onChange={(e) => setEditPodeAtenderLeads(e.target.checked)} />
                               <span>Pode atender leads</span>
                             </label>
                             <label className="flex items-center gap-3 text-sm">
-                              <input type="checkbox" checked={editPodeVerTodosLeads} onChange={(e) => setEditPodeVerTodosLeads(e.target.checked)} />
+                              <input type="checkbox" disabled={String(eu?.id) === String(col.id)} checked={editPodeVerTodosLeads} onChange={(e) => setEditPodeVerTodosLeads(e.target.checked)} />
                               <span>Pode ver todos os leads</span>
                             </label>
                           </div>
@@ -811,9 +818,9 @@ export default function UsuariosPage() {
                               <Button size="sm" variant="outline" onClick={() => visualizarFichaColaborador(col)} disabled={gerandoFichaId === col.id}>
                                 {gerandoFichaId === col.id ? <RefreshCw className="h-3.5 w-3.5 mr-1 animate-spin" /> : <Eye className="h-3.5 w-3.5 mr-1" />} Visualizar ficha
                               </Button>
-                              {podeGerenciar && (
+                              {(podeGerenciar || String(eu?.id) === String(col.id)) && (
                                 <Button size="sm" variant="outline" onClick={() => abrirEdicao(col)}>
-                                  <Pencil className="h-3.5 w-3.5 mr-1" /> Editar
+                                  <Pencil className="h-3.5 w-3.5 mr-1" /> {String(eu?.id) === String(col.id) ? "Editar meu cadastro" : "Editar"}
                                 </Button>
                               )}
                               {podeGerenciar && (
