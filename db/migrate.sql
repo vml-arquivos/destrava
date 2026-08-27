@@ -610,3 +610,11 @@ CREATE UNIQUE INDEX IF NOT EXISTS idx_parceiros_colaborador_id
 CREATE INDEX IF NOT EXISTS idx_colaboradores_convite_cadastro
   ON public.colaboradores (convite_cadastro_id)
   WHERE convite_cadastro_id IS NOT NULL;
+
+-- ─── MIGRAÇÃO 091: unicidade operacional de metas comerciais ───────────────
+BEGIN;
+CREATE UNIQUE INDEX IF NOT EXISTS idx_crm_metas_colaborador_periodo
+  ON public.crm_metas (colaborador_id, periodo);
+CREATE INDEX IF NOT EXISTS idx_crm_metas_periodo
+  ON public.crm_metas (periodo);
+COMMIT;

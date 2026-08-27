@@ -72,6 +72,7 @@ import { calcularEsteiraCredito } from "./services/esteiraCreditoService";
 import { consolidarHistorico360 } from "./services/historicoClienteService";
 import { normalizeNexusTaskEvent } from "./services/nexusTaskHistoryService";
 import { calcularInteligenciaAcompanhamentoBancario } from "./services/inteligenciaAcompanhamentoBancarioService";
+import { normalizarPeriodoMensal, normalizarMetas, percentualAtingimento, arredondarMoeda } from "./services/crmSalesMetrics";
 import {
   enviarPendenciaNexus,
   verificarConfiguracaoNexus,
@@ -4634,6 +4635,165 @@ async function startServer() {
     } catch (err) {
       console.error("[DELETE /api/leads/:id]", err);
       res.status(500).json({ error: "Erro ao deletar lead" });
+    }
+  });
+
+  // ─── CRM SALES: metas comerciais e realizado ─────────────────────────────
+  async function recalcularMetaReal(colaboradorId: string, periodo: ReturnType<typeof normalizarPeriodoMensal>) {
+    const leadsResult = await pool.query(
+      `SELECT
+         COUNT(*)::integer AS real_leads,
+         COUNT(*) FILTER (
+           WHERE LOWER(COALESCE(status, '')) IN ('convertido', 'ganho')
+              OR LOWER(COALESCE(etapa_funil, '')) = 'ganho'
+         )::integer AS real_convertidos
+       FROM public.leads
+       WHERE responsavel_id = $1
+         AND created_at >= $2::timestamptz
+         AND created_at < $3::timestamptz`,
+      [colaboradorId, periodo.inicio, periodo.fim],
+    );
+
+    const contratosResult = await pool.query(
+      `SELECT COALESCE(SUM(COALESCE(c.valor_contrato, c.valor_referencia, 0)), 0) AS real_valor
+         FROM public.contratos_gerados c
+         LEFT JOIN public.leads l ON l.id = c.lead_id
+        WHERE (
+          c.responsavel_interno_id = $1
+          OR c.criado_por = $1
+          OR l.responsavel_id = $1
+        )
+          AND (
+            LOWER(COALESCE(c.status, '')) IN ('assinado', 'ativo', 'finalizado', 'concluido', 'concluído')
+            OR c.data_assinatura IS NOT NULL
+          )
+          AND c.data_assinatura >= $2::date
+          AND c.data_assinatura < $3::date`,
+      [colaboradorId, periodo.chave, periodo.fim.slice(0, 10)],
+    );
+
+    const realLeads = Number(leadsResult.rows[0]?.real_leads || 0);
+    const realConvertidos = Number(leadsResult.rows[0]?.real_convertidos || 0);
+    const realValor = arredondarMoeda(contratosResult.rows[0]?.real_valor || 0);
+    const atualizado = await pool.query(
+      `UPDATE public.crm_metas
+          SET real_leads = $1,
+              real_convertidos = $2,
+              real_valor = $3
+        WHERE colaborador_id = $4
+          AND periodo = $5::date
+        RETURNING *`,
+      [realLeads, realConvertidos, realValor, colaboradorId, periodo.chave],
+    );
+    return atualizado.rows[0] || null;
+  }
+
+  app.get("/api/crm/metas", auth, async (req: Request, res: Response) => {
+    try {
+      const colaborador = (req as Request & { colaborador: any }).colaborador;
+      const periodo = normalizarPeriodoMensal(req.query.periodo);
+      const gestor = isGestorCargo(colaborador?.cargo || "");
+      const colaboradorId = gestor
+        ? (req.query.colaborador_id ? String(req.query.colaborador_id).trim() : null)
+        : String(colaborador?.id || "");
+      const filtroResponsavel = colaboradorId ? "AND m.colaborador_id = $2" : "";
+      const params = colaboradorId ? [periodo.chave, colaboradorId] : [periodo.chave];
+      const { rows } = await pool.query(
+        `SELECT m.*, c.nome AS colaborador_nome, c.cargo AS colaborador_cargo
+           FROM public.crm_metas m
+           LEFT JOIN public.colaboradores c ON c.id = m.colaborador_id
+          WHERE m.periodo = $1::date
+            ${filtroResponsavel}
+          ORDER BY c.nome ASC NULLS LAST`,
+        params,
+      );
+
+      const atualizadas = [];
+      for (const row of rows) {
+        const atualizado = await recalcularMetaReal(String(row.colaborador_id), periodo);
+        atualizadas.push({
+          ...(atualizado || row),
+          colaborador_nome: row.colaborador_nome,
+          colaborador_cargo: row.colaborador_cargo,
+          atingimento: {
+            leads: percentualAtingimento(atualizado?.real_leads ?? row.real_leads, row.meta_leads),
+            convertidos: percentualAtingimento(atualizado?.real_convertidos ?? row.real_convertidos, row.meta_convertidos),
+            valor: percentualAtingimento(atualizado?.real_valor ?? row.real_valor, row.meta_valor),
+          },
+        });
+      }
+      res.json({ periodo: periodo.chave, metas: atualizadas });
+    } catch (err: any) {
+      if (err?.code === "42P01" || err?.code === "42703") {
+        res.status(503).json({ error: "A estrutura de metas comerciais ainda não foi migrada.", migration_pending: true });
+        return;
+      }
+      if (err?.message?.includes("período")) {
+        res.status(400).json({ error: err.message });
+        return;
+      }
+      console.error("[GET /api/crm/metas]", err);
+      res.status(500).json({ error: "Erro ao carregar metas comerciais." });
+    }
+  });
+
+  app.post("/api/crm/metas", auth, async (req: Request, res: Response) => {
+    try {
+      const colaborador = (req as Request & { colaborador: any }).colaborador;
+      if (!isGestorCargo(colaborador?.cargo || "")) {
+        res.status(403).json({ error: "Somente cargos de gestão podem definir metas comerciais." });
+        return;
+      }
+      const colaboradorId = String(req.body?.colaborador_id || "").trim();
+      if (!colaboradorId) {
+        res.status(400).json({ error: "colaborador_id é obrigatório." });
+        return;
+      }
+      const periodo = normalizarPeriodoMensal(req.body?.periodo);
+      const metas = normalizarMetas(req.body || {});
+      const alvo = await pool.query(
+        `SELECT id, nome, cargo FROM public.colaboradores WHERE id = $1 LIMIT 1`,
+        [colaboradorId],
+      );
+      if (!alvo.rows.length) {
+        res.status(404).json({ error: "Colaborador não encontrado." });
+        return;
+      }
+
+      await pool.query(
+        `INSERT INTO public.crm_metas
+           (colaborador_id, periodo, meta_leads, meta_convertidos, meta_valor)
+         VALUES ($1, $2::date, $3, $4, $5)
+         ON CONFLICT (colaborador_id, periodo)
+         DO UPDATE SET
+           meta_leads = EXCLUDED.meta_leads,
+           meta_convertidos = EXCLUDED.meta_convertidos,
+           meta_valor = EXCLUDED.meta_valor
+         RETURNING *`,
+        [colaboradorId, periodo.chave, metas.meta_leads, metas.meta_convertidos, metas.meta_valor],
+      );
+      const realizado = await recalcularMetaReal(colaboradorId, periodo);
+      res.status(201).json({
+        ...(realizado || metas),
+        periodo: periodo.chave,
+        colaborador_nome: alvo.rows[0].nome,
+        colaborador_cargo: alvo.rows[0].cargo,
+      });
+    } catch (err: any) {
+      if (err?.code === "42P01" || err?.code === "42703") {
+        res.status(503).json({ error: "A estrutura de metas comerciais ainda não foi migrada.", migration_pending: true });
+        return;
+      }
+      if (err?.code === "42P10") {
+        res.status(503).json({ error: "A unicidade de metas ainda não foi migrada.", migration_pending: true });
+        return;
+      }
+      if (err?.message?.includes("período") || err?.message?.includes("meta_")) {
+        res.status(400).json({ error: err.message });
+        return;
+      }
+      console.error("[POST /api/crm/metas]", err);
+      res.status(500).json({ error: "Erro ao salvar meta comercial." });
     }
   });
 
