@@ -72,7 +72,7 @@ import { calcularEsteiraCredito } from "./services/esteiraCreditoService";
 import { consolidarHistorico360 } from "./services/historicoClienteService";
 import { normalizeNexusTaskEvent } from "./services/nexusTaskHistoryService";
 import { calcularInteligenciaAcompanhamentoBancario } from "./services/inteligenciaAcompanhamentoBancarioService";
-import { normalizarPeriodoMensal, normalizarMetas, percentualAtingimento, arredondarMoeda } from "./services/crmSalesMetrics";
+import { normalizarPeriodoMensal, normalizarMetas, percentualAtingimento, arredondarMoeda, agruparForecast } from "./services/crmSalesMetrics";
 import {
   enviarPendenciaNexus,
   verificarConfiguracaoNexus,
@@ -4794,6 +4794,80 @@ async function startServer() {
       }
       console.error("[POST /api/crm/metas]", err);
       res.status(500).json({ error: "Erro ao salvar meta comercial." });
+    }
+  });
+
+  app.get("/api/crm/forecast", auth, async (req: Request, res: Response) => {
+    try {
+      const colaborador = (req as Request & { colaborador: any }).colaborador;
+      const periodo = normalizarPeriodoMensal(req.query.periodo);
+      const leadColumns = await getTableColumns("leads");
+      const camposObrigatorios = ["valor_solicitado", "probabilidade_conversao", "probabilidade_aprovacao", "etapa_funil", "responsavel_id", "created_at"];
+      const faltantes = camposObrigatorios.filter((campo) => !leadColumns.has(campo));
+      if (faltantes.length) {
+        res.status(503).json({
+          error: "Os campos necessários para o forecast ainda não foram migrados.",
+          migration_pending: true,
+          campos_faltantes: faltantes,
+        });
+        return;
+      }
+
+      const gestor = isGestorCargo(colaborador?.cargo || "");
+      const conditions = [
+        "l.created_at >= $1::timestamptz",
+        "l.created_at < $2::timestamptz",
+        "COALESCE(l.etapa_funil, 'novo') NOT IN ('ganho', 'perdido', 'inativo', 'carteira')",
+        "COALESCE(l.status, 'novo') NOT IN ('convertido', 'perdido')",
+      ];
+      const params: unknown[] = [periodo.inicio, periodo.fim];
+      const filtroResponsavel = String(req.query.responsavel_id || "").trim();
+      if (gestor && filtroResponsavel) {
+        params.push(filtroResponsavel);
+        conditions.push(`l.responsavel_id = $${params.length}`);
+      } else if (!gestor) {
+        params.push(colaborador?.id || null);
+        conditions.push(`l.responsavel_id = $${params.length}`);
+      }
+
+      const { rows } = await pool.query(
+        `SELECT COALESCE(l.etapa_funil, 'novo') AS etapa_funil,
+                l.responsavel_id,
+                c.nome AS responsavel_nome,
+                COUNT(*)::integer AS total_leads,
+                COALESCE(SUM(COALESCE(l.valor_solicitado, 0)), 0) AS pipeline_bruto,
+                COALESCE(SUM(
+                  COALESCE(l.valor_solicitado, 0)
+                  * COALESCE(l.probabilidade_conversao, l.probabilidade_aprovacao, 0)::numeric
+                  / 100
+                ), 0) AS forecast_ponderado
+           FROM public.leads l
+           LEFT JOIN public.colaboradores c ON c.id = l.responsavel_id
+          WHERE ${conditions.join(" AND ")}
+          GROUP BY COALESCE(l.etapa_funil, 'novo'), l.responsavel_id, c.nome
+          ORDER BY forecast_ponderado DESC NULLS LAST, pipeline_bruto DESC NULLS LAST`,
+        params,
+      );
+
+      const agregado = agruparForecast(rows);
+      res.json({
+        periodo: periodo.chave,
+        inicio: periodo.inicio,
+        fim: periodo.fim,
+        regra: "valor_solicitado × COALESCE(probabilidade_conversao, probabilidade_aprovacao, 0) / 100",
+        ...agregado,
+      });
+    } catch (err: any) {
+      if (err?.code === "42P01" || err?.code === "42703") {
+        res.status(503).json({ error: "Os dados necessários para o forecast ainda não foram migrados.", migration_pending: true });
+        return;
+      }
+      if (err?.message?.includes("período")) {
+        res.status(400).json({ error: err.message });
+        return;
+      }
+      console.error("[GET /api/crm/forecast]", err);
+      res.status(500).json({ error: "Erro ao calcular forecast de vendas." });
     }
   });
 

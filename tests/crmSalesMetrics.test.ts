@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   arredondarMoeda,
+  agruparForecast,
   normalizarMetas,
   normalizarPeriodoMensal,
   percentualAtingimento,
@@ -28,5 +29,20 @@ describe("crmSalesMetrics", () => {
     expect(percentualAtingimento(5, 10)).toBe(50);
     expect(percentualAtingimento(5, 0)).toBeNull();
     expect(arredondarMoeda("1234.567")).toBe(1234.57);
+  });
+
+  it("agrega pipeline bruto e forecast ponderado sem misturar responsáveis", () => {
+    const result = agruparForecast([
+      { etapa_funil: "novo", responsavel_id: "a", responsavel_nome: "Ana", total_leads: 2, pipeline_bruto: "1000", forecast_ponderado: "250" },
+      { etapa_funil: "negociacao", responsavel_id: "a", responsavel_nome: "Ana", total_leads: 1, pipeline_bruto: 2000, forecast_ponderado: 1000 },
+      { etapa_funil: "novo", responsavel_id: null, responsavel_nome: null, total_leads: 1, pipeline_bruto: 500, forecast_ponderado: 0 },
+    ]);
+
+    expect(result.totais).toEqual({ total_leads: 4, pipeline_bruto: 3500, forecast_ponderado: 1250 });
+    expect(result.por_etapa[0]).toMatchObject({ etapa_funil: "negociacao", total_leads: 1, forecast_ponderado: 1000 });
+    expect(result.por_responsavel).toEqual([
+      { responsavel_id: "a", responsavel_nome: "Ana", total_leads: 3, pipeline_bruto: 3000, forecast_ponderado: 1250 },
+      { responsavel_id: null, responsavel_nome: null, total_leads: 1, pipeline_bruto: 500, forecast_ponderado: 0 },
+    ]);
   });
 });
