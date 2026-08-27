@@ -101,6 +101,24 @@ O Coolify confirmou o checkout do SHA completo `21901bf7d8fb08e7bc6608d509b48814
 
 Os smoke checks públicos responderam conforme esperado. `GET /api/health` retornou `status: ok` e `db: connected`; a landing pública respondeu HTTP 200; e um token de convite inválido retornou HTTP 404 com mensagem genérica. A rota autenticada de Usuários carregou 14 colaboradores e exibiu **Editar meu cadastro**, o campo de foto opcional e o bloco de geração de links. A autoedição do Administrador foi aberta sem a falha de autorização anterior. Um link real de parceiro foi gerado e sua página pública apresentou o formulário de cadastro correto.
 
+## Onda 2 — Máquina de Vendas
+
+A Onda 2 foi implementada na branch isolada `onda-2-maquina-de-vendas` até o commit `1863314`. A entrega inclui metas comerciais e realizado por colaborador/mês, forecast ponderado exclusivamente pelas probabilidades já fornecidas pela IA, métricas de vendas sem comissão interna, vínculo nullable orçamento→lead, extensão da timeline 360 com triagem e auditoria central de mudanças de etapa/responsável na ficha do lead.
+
+| Item | Implementação | Evidência |
+| --- | --- | --- |
+| Metas e realizado | `GET/POST /api/crm/metas`, autorização de gestão, upsert por colaborador+mês e cálculo por fontes reais | `3ec7e85`; testes puros aprovados |
+| Forecast | `GET /api/crm/forecast`, fórmula `valor_solicitado × probabilidade / 100`, sem backfill/recalculo | `0ba3288`; retorno `migration_pending` antes do schema |
+| Métricas e orçamento→lead | `GET /api/crm/metricas-vendas` e `lead_id` nullable em `orcamentos_timbrados` | `b41c3a3`; sem vínculo histórico adivinhado |
+| Timeline 360 | Triagem real e tabela real `public.orcamentos_timbrados`, com fallback failure-tolerant | `b574e82`; 40 testes de histórico |
+| Auditoria do funil | Endpoint protegido, helper não bloqueante, cobertura de etapa/responsável em mover-funil e PATCH, e seção visual na FichaLead | `1863314`; 4 testes focais do item 6 |
+
+As migrations `091`, `092`, `093` e `094` foram aplicadas em produção em 27/08/2026 pelo Editor SQL autenticado, após confirmação operacional. A confirmação pós-migration registrou os índices de metas, campos IA, `orcamentos_timbrados.lead_id`, índice parcial e função `crm_mover_funil`; `crm_metas_rows` e `orcamentos_vinculados_rows` permaneceram em zero durante o rollout. A aplicação foi feita por statements isolados após uma tentativa multi-statement que falhou e foi revertida explicitamente com `ROLLBACK`; não houve alteração de dados de negócio.
+
+A fonte atual do ciclo comercial é `leads.created_at` até `contratos_gerados.data_assinatura`; contratos sem lead não entram no denominador do ciclo. O endpoint declara essa limitação e deverá usar histórico do funil em evolução posterior. Não foi inventada comissão: o comissionamento interno permanece **aguardando definição do cliente**.
+
+A publicação do código da Onda 2 na `main` e o deployment Coolify estão pendentes desta etapa de relatório; a produção continua servindo o commit Onda 1 `21901bf` até a integração autorizada.
+
 ## Itens ainda bloqueados por dependência externa ou decisão de negócio
 
 Não foram inventados IDs de Meta Pixel, Google Ads, LinkedIn ou credenciais de WhatsApp Business API. Esses itens continuam aguardando os identificadores, provedor, token, número e regras de consentimento fornecidos pelo cliente. O roteamento automático e SLA continuam aguardando a aprovação do critério de distribuição, janela e responsável; nenhum algoritmo arbitrário foi introduzido.
