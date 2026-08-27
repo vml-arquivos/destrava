@@ -38,7 +38,15 @@ import createOrcamentosOperacoesRouter, {
   gerarPdfOrcamentoComFallback,
   salvarPdfOrcamento,
 } from './routes/orcamentos_operacoes';
-import { ETAPA_FUNIL_DEFAULT, ETAPAS_FUNIL_VALIDAS, normalizarEtapaFunil } from "../shared/funnel.ts";
+import {
+  ETAPA_FUNIL_DEFAULT,
+  ETAPAS_FUNIL_VALIDAS,
+  etapaFunilEhValida,
+  etapaFunilParaPersistencia,
+  etapaFunilPersistidaParaUi,
+  normalizarEtapaFunil,
+} from "../shared/funnel.ts";
+import { calcularScoreBasico, calcularScoreEfetivo } from "../shared/leadScoring.ts";
 import { gerarHtmlTimbrado, getPuppeteerHeaderTemplate, getPuppeteerFooterTemplate, getDocumentStyles, CONTRATADA_DADOS, getHtmlHeaderEmbutido, getHtmlFooterEmbutido } from "./letterhead.ts";
 import { DESTRAVA_LOGO_B64, PERMUPAY_LOGO_B64 } from "./logo_constants.ts";
 import {
@@ -619,119 +627,15 @@ function validarEtapaFunil(value: string | null | undefined): string {
 }
 
 function etapaFunilPermitida(value: string | null | undefined): boolean {
-  return ETAPAS_FUNIL_VALIDAS.includes(validarEtapaFunil(value) as (typeof ETAPAS_FUNIL_VALIDAS)[number]);
+  return etapaFunilEhValida(value);
 }
-
-/**
- * Scoring básico automático (sem IA) — 0 a 100.
- * Critérios:
- *  - Valor solicitado: até 30 pts (escala log)
- *  - Prazo em meses: até 20 pts
- *  - Completude dos dados: até 30 pts (5 campos x 6 pts)
- *  - Temperatura: até 20 pts
- */
-function calcularScoreBasico(lead: {
-  valor_solicitado?: number | null;
-  prazo_meses?: number | null;
-  nome?: string | null;
-  telefone?: string | null;
-  email?: string | null;
-  empresa?: string | null;
-  cpf_cnpj?: string | null;
-  temperatura?: string | null;
-}): number {
-  let score = 0;
-  // Valor solicitado (0-30)
-  const valor = Number(lead.valor_solicitado) || 0;
-  if (valor > 0) {
-    const logScore = Math.min(30, Math.round((Math.log10(valor) / Math.log10(5_000_000)) * 30));
-    score += Math.max(0, logScore);
-  }
-  // Prazo (0-20)
-  const prazo = Number(lead.prazo_meses) || 0;
-  if (prazo >= 60) score += 20;
-  else if (prazo >= 36) score += 15;
-  else if (prazo >= 24) score += 10;
-  else if (prazo >= 12) score += 5;
-  else if (prazo > 0) score += 2;
-  // Completude (0-30)
-  const campos = [lead.nome, lead.telefone, lead.email, lead.empresa, lead.cpf_cnpj];
-  const preenchidos = campos.filter(c => c && String(c).trim().length > 0).length;
-  score += preenchidos * 6;
-  // Temperatura (0-20)
-  const tempMap: Record<string, number> = { frio: 0, morno: 8, quente: 15, urgente: 20 };
-  score += tempMap[lead.temperatura ?? 'frio'] ?? 0;
-  return Math.min(100, Math.max(0, score));
-}
-
-// O frontend usa o funil novo (novo_lead, tentando_contato, ...), mas a
-// base em produção pode estar em uma das duas taxonomias legadas:
-// 1) schema_crm antigo: novo, contato_feito, qualificado, documentacao...
-// 2) migration 009: enum etapa_funil_enum com entrada, contato, qualificacao...
-// A migration 009 é a mais provável em produção; por isso persistimos nela.
-// Isso evita o erro 500 em /api/crm/mover-funil por tentativa de gravar "novo"
-// ou "novo_lead" em coluna enum que aceita apenas "entrada", "contato" etc.
-const MAPA_ETAPA_UI_PARA_LEGADA: Record<string, string> = {
-  // Funil novo exibido no CRM
-  novo_lead: "entrada",
-  tentando_contato: "contato",
-  em_atendimento: "contato",
-  qualificado: "qualificacao",
-  proposta_enviada: "proposta",
-  documentos_pendentes: "documentos",
-  contrato_gerado: "analise",
-  aguardando_pagamento: "negociacao",
-  fechado: "ganho",
-  em_execucao: "carteira",
-  pos_venda: "carteira",
-  reativacao: "reativacao",
-  perdido: "perdido",
-
-  // Compatibilidade com rótulos/ids antigos ainda aceitos pelo backend
-  entrada: "entrada",
-  triagem: "entrada",
-  contato: "contato",
-  qualificacao: "qualificacao",
-  documentos: "documentos",
-  analise: "analise",
-  proposta: "proposta",
-  negociacao: "negociacao",
-  ganho: "ganho",
-  carteira: "carteira",
-};
-
-const MAPA_ETAPA_LEGADA_PARA_UI: Record<string, string> = {
-  // Valores da migration 009 / enum etapa_funil_enum
-  entrada: "novo_lead",
-  triagem: "novo_lead",
-  contato: "tentando_contato",
-  qualificacao: "qualificado",
-  documentos: "documentos_pendentes",
-  analise: "contrato_gerado",
-  proposta: "proposta_enviada",
-  negociacao: "aguardando_pagamento",
-  ganho: "fechado",
-  carteira: "em_execucao",
-  reativacao: "reativacao",
-  perdido: "perdido",
-
-  // Valores do schema CRM antigo
-  novo: "novo_lead",
-  contato_feito: "tentando_contato",
-  qualificado: "qualificado",
-  documentacao: "documentos_pendentes",
-  proposta_enviada: "proposta_enviada",
-  inativo: "reativacao",
-};
 
 function etapaUiParaLegada(value: string | null | undefined): string {
-  const etapaUi = validarEtapaFunil(value);
-  return MAPA_ETAPA_UI_PARA_LEGADA[etapaUi] || "entrada";
+  return etapaFunilParaPersistencia(value);
 }
 
 function etapaLegadaParaUi(value: string | null | undefined): string {
-  const etapa = String(value || "").trim().toLowerCase();
-  return MAPA_ETAPA_LEGADA_PARA_UI[etapa] || validarEtapaFunil(etapa);
+  return etapaFunilPersistidaParaUi(value);
 }
 
 function podecriarUsuarios(cargo: string): boolean {
