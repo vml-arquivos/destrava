@@ -1,94 +1,131 @@
-# Relatório de implementação — lembrete de reavaliação aos 12 meses
+# Relatório de implementação — Destrava Crédito
 
 **Projeto:** Destrava Crédito
-
-**Branch:** `feat/lembrete-12-meses`
-
-**Base de produção:** `6ffc04b`
-
+**Branch publicada:** `main`
+**Commit publicado:** `21901bf` — `feat: adiciona convites seguros para parceiros e captadores`
+**Deployment Coolify:** `fkk1pleycovjpc0snq3akync`
+**Ambiente:** `production`
 **Autor:** Manus AI
+**Data do registro:** 27/08/2026
 
-**Status:** implementação local em validação; deploy ainda não iniciado
+## Status executivo
 
-## Objetivo
+As atualizações de autoedição, foto opcional, enriquecimento CNPJ, indicação rastreável e convites de cadastro foram incorporadas à `main`, enviadas ao GitHub e publicadas em produção. O deployment terminou com **Success**, o healthcheck do novo container retornou **healthy** e a aplicação permaneceu **Running**.
 
-Implementar o acompanhamento ativo de empresas que ainda não completaram 12 meses de abertura. O recurso não bloqueia anexos, não transforma idade em divergência documental e não altera a aptidão documental já corrigida na B1. Quando existe `data_abertura` e a empresa ainda é recente, o sistema mantém um único follow-up automático para a data de maturidade de 12 meses, visível no fluxo de follow-ups da empresa e concluível pelo mecanismo já existente.
+A regra de segurança adotada para novos cadastros é deliberadamente conservadora: o link não libera acesso imediatamente. O interessado define sua própria senha, o usuário é criado como inativo e o Administrador aprova o cadastro pela tela de Usuários. Somente depois da aprovação o acesso ao sistema é liberado.
 
-## O que foi confirmado antes da implementação
+> Nenhuma senha, hash, token de reset ou segredo de colaborador é exibido em ficha, resposta administrativa ou relatório. O token do convite é persistido apenas como hash SHA-256 e o link bruto não é versionado neste relatório.
 
-A tabela existente `empresa_followups` é a estrutura adequada para este caso de uso. Ela já possui vínculo obrigatório por `empresa_id`, título, tipo, `data_agendada`, descrição, controle de conclusão (`concluido`/`concluido_em`) e timestamps. A tabela é criada pela migration `035_empresa_cadastro_credito_robusto.sql` e possui índices por empresa e data agendada. A tabela lead-centric `crm_followups` não é adequada para o lembrete porque trabalha com `lead_id`, `colaborador_id` e vocabulário próprio de status.
+## Correção de autoedição e foto do Administrador
 
-| Evidência                    | Estado confirmado                                                                                                                                                                                           |
-| ---------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| API de follow-ups da empresa | `GET /api/empresas/:id/followups`, `POST /api/empresas/:id/followups` e `PATCH /api/empresas/:id/followups/:fid/concluir` já existem em `server/index.ts`.                                                  |
-| Tela existente               | `Empresas.tsx` já carrega, lista e conclui `empresa_followups` na aba de conversas/follow-ups. Não foi criada tela ou canal novo.                                                                           |
-| Notificação global           | `NotificacoesFollowup.tsx` e `/api/leads/atrasados`/`/api/leads/hoje` são lead-centric; não foram ampliados para não misturar os dois fluxos nem alterar notificações existentes.                           |
-| Cálculo de idade             | `documentacao.ts` e `inteligencia360Service.ts` já calculam e expõem `idade_meses`/`empresa_apta_12_meses`. Esses arquivos B1 não foram alterados.                                                          |
-| Banco da sessão              | A inspeção somente leitura não foi executada contra o banco porque `DATABASE_URL` não está disponível no sandbox. O estado factual do banco deve ser confirmado no ambiente de produção antes da migration. |
+O guard do `PATCH` de colaboradores passou a distinguir **autoedição** de **gestão de terceiros**. O próprio usuário pode editar seu cadastro, incluindo nome, e-mail, telefone, senha e foto opcional. Na autoedição, cargo, perfil operacional, permissões de atendimento, visibilidade ampla e identificador Chatwoot permanecem protegidos contra alteração indevida. Para terceiros, a hierarquia estrita continua sendo aplicada.
 
-## Desenho final
+A tela de Usuários agora oferece a ação explícita **Editar meu cadastro** para o usuário autenticado. O campo de foto opcional permanece disponível no formulário e utiliza o endpoint protegido e o armazenamento persistente já existentes, com limite de 2 MB e MIME permitido para JPG, PNG e WebP.
 
-Foi criada a migration aditiva `087_empresa_followup_maturidade_12_meses.sql`, que adiciona `empresa_followups.origem` com valor padrão `manual` e cria o índice único parcial `idx_empresa_followups_maturidade_unica` para garantir no máximo um registro com `origem = 'maturidade_12_meses'` por empresa. O mesmo bloco foi incluído no agregado `db/migrate.sql`, preservando o processo de deployment existente. Nenhuma coluna ou tabela existente foi removida ou alterada destrutivamente.
+| Controle | Resultado comprovado |
+| --- | --- |
+| Autoedição de Administrador | Disponível no formulário de produção; a tela abriu sem a mensagem anterior de falta de permissão. |
+| Alteração administrativa de terceiros | Continua sujeita à hierarquia de cargos. |
+| Autoalteração de cargo/permissões | Bloqueada no backend e protegida no frontend. |
+| Foto opcional | Campo disponível na criação e na autoedição; endpoint autenticado e armazenamento persistente preservados. |
+| Upload real em registro de produção | Não executado para não alterar a foto real do Administrador sem autorização específica; coberto por typecheck e testes focais. |
 
-A lógica de domínio está isolada em `server/services/empresaMaturidadeFollowup.ts`. A data de maturidade é calculada como doze meses de calendário após `data_abertura`, usando UTC e limitando o dia ao último dia do mês de destino para casos como 29 de fevereiro. A descrição informa a data em que a empresa completa 12 meses. O helper trata a ausência da migration como no-op compatível, evitando que instalações antigas deixem de carregar o CRM.
+## Links seguros de cadastro para parceiros e captadores
 
-A reconciliação é chamada nos seguintes pontos já existentes: abertura do dossiê de documentação, carregamento da Inteligência 360, criação de empresa, atualização de empresa e carregamento da lista de follow-ups da empresa. A execução é failure-tolerant: uma falha no lembrete é registrada no log e não impede a abertura da ficha, o carregamento documental, o CRM ou a Inteligência 360.
+Foi criada a rota pública `/cadastro-convite?token=...` e a área administrativa **Links de cadastro** dentro de Usuários. Gestores autorizados podem gerar links individuais de parceiro ou captador, copiar o endereço e acompanhar os convites recentes.
 
-Além da migration versionada, o bootstrap do servidor contém uma proteção idempotente equivalente. Ela tenta adicionar a coluna e o índice antes de servir requisições e apenas registra aviso se o banco ainda não estiver disponível. Essa redundância é deliberada para instalações Coolify que fazem deploy da aplicação sem executar manualmente todos os arquivos SQL.
+O fluxo implementado é o seguinte. O gestor escolhe **Gerar link de parceiro** ou **Gerar link de captador**. O sistema gera token aleatório, grava somente seu hash, define expiração de sete dias e permite uso único. O interessado acessa o link, preenche os dados e define sua própria senha. Para parceiro, CPF é obrigatório e, após o envio, é criado o registro correspondente em `parceiros_comerciais`; para ambos os tipos, o usuário de acesso é criado com cargo seguro `Captador Externo`, perfil de agente e permissões amplas desativadas. O cadastro fica inativo até aprovação.
 
-A implementação não altera `server/routes/documentacao.ts` nem `server/services/inteligencia360Service.ts`; apenas usa os pontos de entrada já existentes no backend para disparar a reconciliação sem duplicar a fórmula de idade da B1.
+Na própria tela administrativa, o gestor visualiza os estados **Disponível**, **Aguardando aprovação**, **Aprovado**, **Expirado** e **Revogado**. O botão **Aprovar** ativa o colaborador e, quando aplicável, também ativa o cadastro comercial do parceiro. O botão **Revogar** invalida um link ainda não utilizado. O login existente é reutilizado; não há sessão automática nem senha temporária exposta.
 
-## Idempotência e atualização
+| Proteção | Implementação |
+| --- | --- |
+| Token | `crypto.randomBytes` no link; somente hash SHA-256 no banco. |
+| Expiração | Sete dias por convite. |
+| Uso único | Coluna `usado_em` com bloqueio transacional `FOR UPDATE`. |
+| Revogação | Coluna `revogado_em` e endpoint administrativo. |
+| Abuso | Limitador específico de cinco tentativas por 15 minutos no fluxo público. |
+| Aprovação | Novo usuário nasce com `ativo = false`; somente gestor autorizado aprova. |
+| Credenciais | Senha definida pelo interessado e armazenada com bcrypt; nenhum segredo retorna na resposta. |
+| Permissão administrativa | Geração, consulta, aprovação e revogação exigem `podecriarUsuarios`. |
 
-O helper procura o registro automático pelo par `empresa_id` e `origem`. Se não houver registro e a empresa ainda for recente, cria um follow-up com tipo existente `ligacao`, data agendada futura ou de maturidade e status implícito de pendente, conforme o schema de `empresa_followups`. Se o registro já existir, não cria duplicata. Se `data_abertura` for corrigida, atualiza data, título e descrição do mesmo registro. Se um lembrete anteriormente concluído voltar a representar uma empresa ainda recente após correção da data, ele é reaberto para acompanhamento. Se a empresa já tiver maturado, o registro histórico não é apagado nem duplicado.
+O teste manual em produção gerou um link real de parceiro, exibiu o endereço no painel, registrou o convite como **Disponível** e abriu a página pública com os campos corretos de parceiro, sem expor dados administrativos. Nenhum cadastro real foi enviado durante o teste. O link gerado pode ser copiado do painel de Usuários e enviado ao parceiro autorizado.
 
-## Decisões para os casos de borda
+## Indicação rastreável
 
-### Empresa removida, arquivada ou duplicada
+A indicação mínima foi incorporada sem criar portal. O helper de atribuição mantém UTMs e consentimento de analytics e passou a preservar o parâmetro funcional `ref` mesmo sem consentimento de cookies de marketing. A tela de Parceiros pode gerar e copiar links rastreáveis. A referência é resolvida de forma opcional na captação, sem bloquear o lead quando o código é inexistente ou o schema ainda não estiver disponível.
 
-A remoção física da empresa já usa uma foreign key com `ON DELETE CASCADE`, portanto o follow-up não permanece como pendência fantasma. Para empresas arquivadas, inativas ou marcadas como duplicadas, a reconciliação fecha um lembrete automático pendente com `concluido = true` e preserva o histórico. A rotina não cria novo lembrete para esses registros. A correção ou alteração do CNPJ, por si só, não muda o `empresa_id`; o acompanhamento continua vinculado à mesma empresa, enquanto a nova `data_abertura` é reconciliada.
+A migration aditiva `089_indicacao_rastreavel.sql` adiciona o armazenamento da referência e mantém os fluxos existentes. Não foram alterados contratos, comissões nem a entidade de parceiro comercial. A regra de não criar portal de afiliados nesta onda foi preservada.
 
-### Correção posterior da data de abertura
+## Enriquecimento CNPJ best-effort
 
-O registro automático é atualizado com a nova data de maturidade, título e descrição. Quando a nova data ainda indica empresa recente, o lembrete permanece ou volta a ficar pendente. Quando a nova data já indica maturidade, o histórico permanece sem criar outro registro. Assim, uma correção de fonte não deixa a equipe com uma data antiga invisível.
+A consulta composta existente de CNPJ foi extraída para uma função reutilizável em `server/routes/cnpj.ts`, preservando BrasilAPI, CNPJá e OpenCNPJ, normalização e comportamento de falha. O fluxo de criação de empresa do simulador reaproveita essa consulta depois da criação ou localização da empresa.
 
-### Conclusão após a reavaliação
+O enriquecimento é opcional e não bloqueante. Somente campos retornados e não vazios são aplicados às colunas existentes; dados preenchidos não são substituídos por vazios. Falha de provedor, CNPJ ausente ou inválido e coluna aditiva ainda não disponível não impedem a criação do lead/empresa. Os testes cobrem CNPJ inválido, sucesso composto e construção de atualização sem dados fiscais falsos.
 
-A equipe usa o fluxo já existente `PATCH /api/empresas/:id/followups/:fid/concluir`, que grava `concluido = true` e `concluido_em = NOW()`. Não foi criado um novo status nem uma nova tela de conclusão.
+## Acompanhamento de empresas recentes
 
-## Arquivos alterados
+O acompanhamento estrutural continua usando `empresa_followups`, que aceita `empresa_id`; a tabela lead-centric `crm_followups` não foi forçada a receber vínculo de empresa. A reconciliação de maturidade de 12 meses permanece idempotente, atualiza a data quando a data de abertura é corrigida, reabre o acompanhamento quando necessário e não bloqueia documentos, simulador, CRM ou Inteligência 360.
 
-| Arquivo                                                      | Motivo                                                                                   |
-| ------------------------------------------------------------ | ---------------------------------------------------------------------------------------- |
-| `server/services/empresaMaturidadeFollowup.ts`               | Cálculo de data, classificação de cadastro inativo e reconciliação idempotente.          |
-| `server/index.ts`                                            | Pontos de entrada failure-tolerant para criação, atualização e visualização do lembrete. |
-| `db/migrations/087_empresa_followup_maturidade_12_meses.sql` | Coluna de origem e unicidade parcial, em migration aditiva.                              |
-| `db/migrate.sql`                                             | Espelho da migration para o agregado de produção.                                        |
-| `tests/empresaMaturidadeFollowup.test.ts`                    | Regressão de datas, ano bissexto e estados arquivado/duplicado.                          |
-| `RELATORIO_IMPLEMENTACAO.md`                                 | Este relatório.                                                                          |
+A correção B1 e o tratamento do enquadramento tributário opcional não foram alterados nesta atualização. Empresas recentes continuam no sistema com alertas e acompanhamento, mas não são marcadas como aptas apenas por terem avançado ou anexado documentos.
 
-Os arquivos B1 `server/routes/documentacao.ts` e `server/services/inteligencia360Service.ts` permanecem sem alteração.
+## Fichas cadastrais e PDFs
 
-## Validação
+As fichas de colaboradores/captadores, contadores e parceiros usam visualização prévia antes da ação de impressão ou download. A resposta de PDF converte explicitamente o `Uint8Array` do Chromium para `Buffer`, impedindo que o navegador salve JSON de índices com extensão `.pdf`. O PDF de parceiro já foi validado em produção como PDF 1.4 válido, A4, com duas páginas e conteúdo cadastral extraível.
 
-A validação focalizada executada até este ponto foi aprovada:
+As rotas de preview e PDF permanecem protegidas. O modal compartilhado separa **Visualizar**, **Imprimir** e **Baixar PDF**. A foto opcional de colaborador é servida por rota autenticada e pode aparecer no cadastro, na ficha e no PDF quando houver imagem persistida.
 
-```text
-pnpm check
-pnpm test
-pnpm build
-pnpm exec tsx scripts/check-bundle-budget.mjs
-pnpm exec vitest run tests/empresaMaturidadeFollowup.test.ts
+## Banco de dados e compatibilidade
 
-typecheck: aprovado
-testes focados: 11 aprovados
-teste completo: 52 arquivos / 558 testes aprovados
-build de produção: aprovado
-pré-renderização e limites de bundle: aprovados
-```
+As mudanças de banco são aditivas. A migration `090_convites_cadastro.sql` cria a tabela de convites com token hash, tipo, cargo, expiração, uso, revogação e auditoria; adiciona `colaboradores.convite_cadastro_id` e o vínculo opcional `parceiros_comerciais.colaborador_id`. O mesmo conteúdo foi incluído em `db/migrate.sql` e no bootstrap idempotente do servidor.
 
-A migration no banco real, a validação de uma empresa de teste em produção e o deploy serão registrados nesta seção antes da publicação final.
+Nenhuma tabela existente foi removida e nenhuma informação de contrato, comissão, CRM ou documentação foi migrada destrutivamente. O bootstrap registra aviso e degrada de forma segura quando uma instalação antiga ainda não possui a estrutura aditiva.
 
-## Rollback e deploy
+## Validação local
 
-O rollback funcional conhecido é o commit de produção anterior `6ffc04b`. A branch de trabalho é isolada e a `main` não foi modificada nesta etapa. O deploy somente deve ser iniciado depois de confirmar a migration no banco de produção e executar a validação completa local. Após o deploy, devem ser conferidos o carregamento da fila/CRM, a abertura de uma empresa com menos de 12 meses, a ausência de erro na ficha de uma empresa madura e a existência de exatamente um follow-up automático na empresa de teste.
+| Verificação | Resultado |
+| --- | --- |
+| Testes focais de autoedição, ficha e convites | 9 testes aprovados. |
+| Suíte completa | 58 arquivos / 571 testes aprovados. |
+| `pnpm check` | Aprovado. |
+| `pnpm build` | Aprovado. |
+| Pré-renderização e budgets | Aprovados. |
+| `git diff --check` | Aprovado. |
+| Escopo Git | `main` limpo no commit `21901bf`. |
+
+Os avisos de conexão recusada e fallback de Inteligência 360 observados na suíte são cenários deliberados de testes já existentes; não causaram falha.
+
+## Validação em produção
+
+O Coolify confirmou o checkout do SHA completo `21901bf7d8fb08e7bc6608d509b48814c9b380cc`. O deployment `fkk1pleycovjpc0snq3akync` terminou com **Success** em aproximadamente 3m21s. O novo container foi considerado **healthy**, a aplicação ficou **Running** e os containers antigos foram removidos durante a troca.
+
+Os smoke checks públicos responderam conforme esperado. `GET /api/health` retornou `status: ok` e `db: connected`; a landing pública respondeu HTTP 200; e um token de convite inválido retornou HTTP 404 com mensagem genérica. A rota autenticada de Usuários carregou 14 colaboradores e exibiu **Editar meu cadastro**, o campo de foto opcional e o bloco de geração de links. A autoedição do Administrador foi aberta sem a falha de autorização anterior. Um link real de parceiro foi gerado e sua página pública apresentou o formulário de cadastro correto.
+
+## Itens ainda bloqueados por dependência externa ou decisão de negócio
+
+Não foram inventados IDs de Meta Pixel, Google Ads, LinkedIn ou credenciais de WhatsApp Business API. Esses itens continuam aguardando os identificadores, provedor, token, número e regras de consentimento fornecidos pelo cliente. O roteamento automático e SLA continuam aguardando a aprovação do critério de distribuição, janela e responsável; nenhum algoritmo arbitrário foi introduzido.
+
+A validação real de upload da foto do Administrador e a submissão de um cadastro de parceiro/captador não foram executadas para evitar alterar registros reais. Para o teste ponta a ponta desses dois passos, deve ser fornecido um colaborador/registro de teste ou autorização explícita para usar um cadastro controlado.
+
+## Rollback
+
+O rollback do conjunto publicado pode retornar a `081c5d7`, que contém a correção de autorização das fichas antes dos commits de CNPJ, autoedição e convites. O último deployment anterior ao conjunto foi `52c843c`, com o fluxo de preview/PDF já validado. Como as migrations são aditivas, o rollback de aplicação não remove as colunas/tabelas criadas; eventual limpeza de dados de teste deve ser deliberada e manual, nunca destrutiva por padrão.
+
+## Arquivos principais
+
+| Arquivo | Finalidade |
+| --- | --- |
+| `server/index.ts` | Guards de autoedição, endpoints de convite, bootstrap aditivo, integração CNPJ e indicação. |
+| `client/src/pages/CadastroConvite.tsx` | Formulário público seguro de cadastro por convite. |
+| `client/src/pages/colaborador/Usuarios.tsx` | Autoedição, foto opcional, geração, acompanhamento e aprovação de convites. |
+| `client/src/pages/colaborador/Parceiros.tsx` | Geração/cópia de indicação rastreável no cadastro de parceiros. |
+| `client/src/lib/analytics.ts` | Preservação de `ref`, UTMs e consentimento. |
+| `server/routes/cnpj.ts` | Consulta CNPJ reutilizável com provedores existentes. |
+| `server/services/empresaCnpjEnrichment.ts` | UPDATE puro e failure-tolerant do enriquecimento. |
+| `server/services/referralService.ts` | Normalização e geração de códigos de indicação. |
+| `db/migrations/089_indicacao_rastreavel.sql` | Estrutura aditiva de indicação. |
+| `db/migrations/090_convites_cadastro.sql` | Estrutura aditiva de convites e vínculos. |
+| `tests/cadastroConviteAuthorization.test.ts` | Regressão de token, aprovação e ausência de sessão automática. |
+| `tests/referralService.test.ts` | Regressão de normalização e formato de links. |
+| `tests/usuarioSelfEditAuthorization.test.ts` | Regressão da autoedição e hierarquia de terceiros. |
+| `RELATORIO_IMPLEMENTACAO.md` | Este registro de implementação e evidências. |
