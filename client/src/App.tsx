@@ -24,6 +24,7 @@ const TermosUso = lazy(() => import("./pages/TermosUso"));
 const Sucesso = lazy(() => import("./pages/Sucesso"));
 const CapturaLead = lazy(() => import("./pages/CapturaLead"));
 const SimuladorPublico = lazy(() => import("./pages/SimuladorPublico"));
+const CadastroConvite = lazy(() => import("./pages/CadastroConvite"));
 const RatingBancoBrasil = lazy(() => import("./pages/RatingBancoBrasil"));
 const RatingBancoCentral = lazy(() => import("./pages/RatingBancoCentral"));
 const Pronampe = lazy(() => import("./pages/Pronampe"));
@@ -161,6 +162,7 @@ function Router() {
 
       {/* Captura de Lead */}
       <Route path="/captura" component={CapturaLead} />
+      <Route path="/cadastro-convite" component={CadastroConvite} />
 
       {/* Legais */}
       <Route path="/politica-privacidade" component={PoliticaPrivacidade} />

@@ -29,6 +29,8 @@ import {
   Copy,
   Eye,
   EyeOff,
+  Link2,
+  Loader2,
   Lock,
   Mail,
   Pencil,
@@ -47,6 +49,20 @@ import {
 
   X,
 } from "lucide-react";
+
+interface ConviteCadastro {
+  id: string;
+  tipo: "parceiro" | "captador";
+  cargo: string;
+  criado_em: string;
+  expira_em: string;
+  usado_em?: string | null;
+  revogado_em?: string | null;
+  colaborador_id?: string | null;
+  colaborador_nome?: string | null;
+  colaborador_email?: string | null;
+  colaborador_ativo?: boolean | null;
+}
 
 interface Colaborador {
   id: string;
@@ -174,6 +190,10 @@ export default function UsuariosPage() {
   const [fichaPreviewHtml, setFichaPreviewHtml] = useState<string | null>(null);
   const [fichaPreviewOpen, setFichaPreviewOpen] = useState(false);
   const [baixandoFicha, setBaixandoFicha] = useState(false);
+  const [convites, setConvites] = useState<ConviteCadastro[]>([]);
+  const [carregandoConvites, setCarregandoConvites] = useState(false);
+  const [gerandoConvite, setGerandoConvite] = useState<"parceiro" | "captador" | null>(null);
+  const [linkConvite, setLinkConvite] = useState("");
 
   useEffect(() => {
     if (!cargo) return;
@@ -211,6 +231,65 @@ export default function UsuariosPage() {
   useEffect(() => {
     carregarColaboradores();
   }, []);
+
+  async function carregarConvites() {
+    if (!podeGerenciar) return;
+    setCarregandoConvites(true);
+    try {
+      const data = await apiFetch("/api/convites-cadastro");
+      setConvites(Array.isArray(data) ? data : data?.convites ?? []);
+    } catch (err) {
+      console.error("[carregarConvites]", err);
+    } finally {
+      setCarregandoConvites(false);
+    }
+  }
+
+  useEffect(() => {
+    carregarConvites();
+  }, [podeGerenciar]);
+
+  async function gerarLinkCadastro(tipo: "parceiro" | "captador") {
+    setGerandoConvite(tipo);
+    try {
+      const data = await apiFetch("/api/convites-cadastro", {
+        method: "POST",
+        body: JSON.stringify({ tipo }),
+      });
+      const link = String(data?.link || "");
+      if (!link) throw new Error("O servidor não retornou o link de cadastro.");
+      setLinkConvite(link);
+      await navigator.clipboard?.writeText(link);
+      toast.success(`Link de ${tipo} gerado e copiado.`);
+      await carregarConvites();
+    } catch (err: any) {
+      toast.error(err?.message || "Erro ao gerar link de cadastro.");
+    } finally {
+      setGerandoConvite(null);
+    }
+  }
+
+  async function aprovarCadastro(convite: ConviteCadastro) {
+    try {
+      await apiFetch(`/api/convites-cadastro/${convite.id}/aprovar`, { method: "POST" });
+      toast.success("Cadastro aprovado. O usuário já pode entrar com a senha criada.");
+      await carregarConvites();
+      await carregarColaboradores();
+    } catch (err: any) {
+      toast.error(err?.message || "Erro ao aprovar cadastro.");
+    }
+  }
+
+  async function revogarConvite(convite: ConviteCadastro) {
+    if (!confirm("Revogar este link de cadastro? Ele não poderá mais ser utilizado.")) return;
+    try {
+      await apiFetch(`/api/convites-cadastro/${convite.id}/revogar`, { method: "POST" });
+      toast.success("Link revogado.");
+      await carregarConvites();
+    } catch (err: any) {
+      toast.error(err?.message || "Erro ao revogar link.");
+    }
+  }
 
   async function handleCriar(e: React.FormEvent) {
     e.preventDefault();
@@ -504,6 +583,30 @@ export default function UsuariosPage() {
                     Seu cargo ({eu?.cargo}) não tem permissão para criar ou alterar usuários. Apenas perfis de gestão podem administrar colaboradores.
                   </p>
                 </div>
+              </div>
+            </CardContent>
+          </Card>
+        )}
+
+        {podeGerenciar && (
+          <Card className="border-primary/20 bg-primary/5">
+            <CardHeader className="border-b pb-4">
+              <CardTitle className="text-base flex items-center gap-2"><Link2 className="h-5 w-5 text-primary" /> Links de cadastro</CardTitle>
+              <CardDescription>Gere um link individual para parceiro ou captador. O link expira em 7 dias, o cadastro fica inativo e só entra após sua aprovação.</CardDescription>
+            </CardHeader>
+            <CardContent className="pt-5 space-y-4">
+              <div className="flex flex-wrap gap-2">
+                <Button type="button" variant="outline" onClick={() => gerarLinkCadastro("parceiro")} disabled={gerandoConvite !== null}>{gerandoConvite === "parceiro" ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Link2 className="mr-2 h-4 w-4" />} Gerar link de parceiro</Button>
+                <Button type="button" variant="outline" onClick={() => gerarLinkCadastro("captador")} disabled={gerandoConvite !== null}>{gerandoConvite === "captador" ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Link2 className="mr-2 h-4 w-4" />} Gerar link de captador</Button>
+              </div>
+              {linkConvite && <div className="flex flex-col sm:flex-row gap-2"><Input readOnly value={linkConvite} aria-label="Link de cadastro gerado" /><Button type="button" variant="secondary" onClick={() => navigator.clipboard?.writeText(linkConvite)}><Copy className="mr-2 h-4 w-4" /> Copiar</Button></div>}
+              <div className="space-y-2">
+                <p className="text-sm font-medium">Cadastros recentes</p>
+                {carregandoConvites ? <p className="text-xs text-muted-foreground">Carregando...</p> : convites.length === 0 ? <p className="text-xs text-muted-foreground">Nenhum link gerado ainda.</p> : <div className="space-y-2 max-h-64 overflow-y-auto">{convites.map((convite) => {
+                  const expirado = new Date(convite.expira_em).getTime() <= Date.now();
+                  const status = convite.revogado_em ? "Revogado" : convite.usado_em ? (convite.colaborador_ativo ? "Aprovado" : "Aguardando aprovação") : expirado ? "Expirado" : "Disponível";
+                  return <div key={convite.id} className="flex flex-wrap items-center justify-between gap-2 rounded-lg border bg-card px-3 py-2 text-xs"><div><span className="font-medium">{convite.tipo === "parceiro" ? "Parceiro" : "Captador"}</span>{convite.colaborador_nome ? <span className="text-muted-foreground"> — {convite.colaborador_nome} ({convite.colaborador_email})</span> : <span className="text-muted-foreground"> — link não utilizado</span>}<div className="text-muted-foreground mt-0.5">Expira em {new Date(convite.expira_em).toLocaleDateString("pt-BR")}</div></div><div className="flex items-center gap-2"><Badge variant={status === "Aprovado" ? "default" : status === "Aguardando aprovação" ? "outline" : "secondary"}>{status}</Badge>{status === "Aguardando aprovação" && <Button type="button" size="sm" className="h-7" onClick={() => aprovarCadastro(convite)}>Aprovar</Button>}{status === "Disponível" && <Button type="button" size="sm" variant="ghost" className="h-7" onClick={() => revogarConvite(convite)}>Revogar</Button>}</div></div>;
+                })}</div>}
               </div>
             </CardContent>
           </Card>

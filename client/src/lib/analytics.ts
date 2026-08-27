@@ -12,6 +12,7 @@ export const ATTRIBUTION_KEYS = [
   "wbraid",
   "fbclid",
   "msclkid",
+  "ref",
 ] as const;
 
 type AttributionKey = (typeof ATTRIBUTION_KEYS)[number];
@@ -33,6 +34,7 @@ declare global {
 }
 
 const STORAGE_KEY = "destrava_marketing_attribution";
+const REFERRAL_STORAGE_KEY = "destrava_referral_code_v1";
 const CONSENT_STORAGE_KEY = "destrava_cookie_consent_v1";
 
 function readStoredAttribution(): MarketingAttribution {
@@ -46,16 +48,24 @@ function readStoredAttribution(): MarketingAttribution {
 export function getMarketingAttribution(): MarketingAttribution {
   if (typeof window === "undefined") return {};
 
+  const params = new URLSearchParams(window.location.search);
+  const refAtual = params.get("ref")?.trim().slice(0, 64) || undefined;
+  let ref = refAtual;
+  if (!ref) {
+    try { ref = sessionStorage.getItem(REFERRAL_STORAGE_KEY)?.trim().slice(0, 64) || undefined; } catch { /* storage indisponível */ }
+  } else {
+    try { sessionStorage.setItem(REFERRAL_STORAGE_KEY, ref); } catch { /* storage indisponível */ }
+  }
   const hasAnalyticsConsent = localStorage.getItem(CONSENT_STORAGE_KEY) === "accepted";
   if (!hasAnalyticsConsent) {
     return {
+      ...(ref ? { ref } : {}),
       pagina: `${window.location.pathname}${window.location.search}`,
       pagina_entrada: `${window.location.pathname}${window.location.search}`,
     };
   }
 
   const stored = readStoredAttribution();
-  const params = new URLSearchParams(window.location.search);
   const current: MarketingAttribution = {};
 
   for (const key of ATTRIBUTION_KEYS) {

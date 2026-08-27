@@ -11,8 +11,10 @@ import { toast } from "sonner";
 import {
   BadgeDollarSign,
   CheckCircle2,
+  Copy,
   Eye,
   Handshake,
+  Link2,
   Loader2,
   Pencil,
   Plus,
@@ -47,6 +49,7 @@ interface Parceiro {
   rodape_html?: string | null;
   cor_primaria?: string | null;
   cor_secundaria?: string | null;
+  codigo_indicacao?: string | null;
   created_at?: string | null;
 }
 
@@ -110,6 +113,7 @@ export default function ParceirosPage() {
   const [carregando, setCarregando] = useState(true);
   const [salvando, setSalvando] = useState(false);
   const [excluindoId, setExcluindoId] = useState<string | null>(null);
+  const [gerandoIndicacaoId, setGerandoIndicacaoId] = useState<string | null>(null);
   const [gerandoFichaId, setGerandoFichaId] = useState<string | null>(null);
   const [fichaPreviewId, setFichaPreviewId] = useState<string | null>(null);
   const [fichaPreviewTitle, setFichaPreviewTitle] = useState("");
@@ -242,6 +246,35 @@ export default function ParceirosPage() {
       toast.error(err?.message || "Erro ao excluir parceiro.");
     } finally {
       setExcluindoId(null);
+    }
+  }
+
+  function linkIndicacao(codigo: string) {
+    return `${window.location.origin}/simular?ref=${encodeURIComponent(codigo)}`;
+  }
+
+  async function copiarLinkIndicacao(codigo: string) {
+    const link = linkIndicacao(codigo);
+    try {
+      await navigator.clipboard.writeText(link);
+      toast.success("Link de indicação copiado.");
+    } catch {
+      toast.info(`Link de indicação: ${link}`);
+    }
+  }
+
+  async function gerarLinkIndicacao(parceiro: Parceiro) {
+    setGerandoIndicacaoId(parceiro.id);
+    try {
+      const resultado = await apiFetch(`/api/parceiros/${parceiro.id}/indicacao`, { method: "POST" });
+      const codigo = resultado?.codigo_indicacao;
+      if (!codigo) throw new Error("O servidor não retornou um código de indicação.");
+      setParceiros((atuais) => atuais.map((item) => item.id === parceiro.id ? { ...item, codigo_indicacao: codigo } : item));
+      await copiarLinkIndicacao(codigo);
+    } catch (err: any) {
+      toast.error(err?.message || "Erro ao gerar link de indicação.");
+    } finally {
+      setGerandoIndicacaoId(null);
     }
   }
 
@@ -378,7 +411,7 @@ export default function ParceirosPage() {
             <div className="p-5 border-b flex items-center justify-between gap-3"><div><h2 className="font-semibold flex items-center gap-2"><Handshake className="h-4 w-4 text-primary" /> Parceiros cadastrados</h2><p className="text-sm text-muted-foreground mt-1">Edite dados, acompanhe o status ou imprima a ficha completa.</p></div><Button variant="ghost" size="icon" onClick={carregar} disabled={carregando}><RefreshCw className={`h-4 w-4 ${carregando ? "animate-spin" : ""}`} /></Button></div>
             <div className="p-4 border-b"><Input value={busca} onChange={(e) => setBusca(e.target.value)} placeholder="Buscar por nome, CPF, e-mail, telefone ou cidade..." /></div>
             <div className="p-4">
-              {carregando ? <div className="py-12 flex justify-center text-muted-foreground"><Loader2 className="h-5 w-5 animate-spin" /></div> : filtrados.length === 0 ? <div className="py-12 text-center text-muted-foreground"><Handshake className="h-10 w-10 mx-auto mb-3 opacity-20" /><p>{busca ? "Nenhum parceiro encontrado." : "Nenhum parceiro cadastrado."}</p></div> : <div className="space-y-3 max-h-[1050px] overflow-y-auto pr-1">{filtrados.map((parceiro) => <div key={parceiro.id} className="rounded-xl border bg-muted/20">{editandoId === parceiro.id ? <div className="p-4">{renderCampos(editForm, setEditForm, `edit-${parceiro.id}`)}<div className="flex gap-2 mt-5"><Button className="flex-1" onClick={salvarEdicao} disabled={salvando}>{salvando ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <Save className="h-4 w-4 mr-2" />}Salvar alterações</Button><Button variant="outline" onClick={() => setEditandoId(null)}><X className="h-4 w-4" /></Button></div></div> : <div className="p-4"><div className="flex items-start justify-between gap-3"><div className="min-w-0"><div className="flex items-center gap-2 flex-wrap"><p className="font-semibold text-sm">{parceiro.nome}</p><Badge variant={parceiro.ativo === false ? "secondary" : "default"} className={parceiro.ativo === false ? "" : "bg-success hover:bg-success"}>{parceiro.ativo === false ? "Inativo" : "Ativo"}</Badge>{parceiro.percentual_comissao !== null && parceiro.percentual_comissao !== undefined && <Badge variant="outline"><BadgeDollarSign className="h-3 w-3 mr-1" /> {parceiro.percentual_comissao}%</Badge>}</div><p className="text-xs text-muted-foreground mt-1">CPF: {parceiro.cpf || "—"}{parceiro.email ? ` · ${parceiro.email}` : ""}</p><p className="text-xs text-muted-foreground mt-1">{parceiro.telefone || "Sem telefone"}{parceiro.cidade ? ` · ${parceiro.cidade}${parceiro.uf ? `/${parceiro.uf}` : ""}` : ""}</p><div className="flex items-center gap-2 mt-2">{parceiro.logo_url || parceiro.cabecalho_html || parceiro.rodape_html ? <span className="text-xs text-primary">Identidade contratual configurada</span> : <span className="text-xs text-muted-foreground">Identidade contratual não configurada</span>}</div></div><div className="flex items-center gap-1 shrink-0"><Button size="sm" variant="outline" onClick={() => visualizarFicha(parceiro)} disabled={gerandoFichaId === parceiro.id}>{gerandoFichaId === parceiro.id ? <RefreshCw className="h-3.5 w-3.5 animate-spin" /> : <Eye className="h-3.5 w-3.5" />}<span className="hidden sm:inline ml-1">Visualizar ficha</span></Button><Button size="sm" variant="ghost" onClick={() => iniciarEdicao(parceiro)} title="Editar"><Pencil className="h-3.5 w-3.5" /></Button><Button size="sm" variant="ghost" onClick={() => excluir(parceiro.id)} disabled={excluindoId === parceiro.id} title="Excluir">{excluindoId === parceiro.id ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Trash2 className="h-3.5 w-3.5" />}</Button></div></div></div>}</div>)}</div>}
+              {carregando ? <div className="py-12 flex justify-center text-muted-foreground"><Loader2 className="h-5 w-5 animate-spin" /></div> : filtrados.length === 0 ? <div className="py-12 text-center text-muted-foreground"><Handshake className="h-10 w-10 mx-auto mb-3 opacity-20" /><p>{busca ? "Nenhum parceiro encontrado." : "Nenhum parceiro cadastrado."}</p></div> : <div className="space-y-3 max-h-[1050px] overflow-y-auto pr-1">{filtrados.map((parceiro) => <div key={parceiro.id} className="rounded-xl border bg-muted/20">{editandoId === parceiro.id ? <div className="p-4">{renderCampos(editForm, setEditForm, `edit-${parceiro.id}`)}<div className="flex gap-2 mt-5"><Button className="flex-1" onClick={salvarEdicao} disabled={salvando}>{salvando ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <Save className="h-4 w-4 mr-2" />}Salvar alterações</Button><Button variant="outline" onClick={() => setEditandoId(null)}><X className="h-4 w-4" /></Button></div></div> : <div className="p-4"><div className="flex items-start justify-between gap-3"><div className="min-w-0"><div className="flex items-center gap-2 flex-wrap"><p className="font-semibold text-sm">{parceiro.nome}</p><Badge variant={parceiro.ativo === false ? "secondary" : "default"} className={parceiro.ativo === false ? "" : "bg-success hover:bg-success"}>{parceiro.ativo === false ? "Inativo" : "Ativo"}</Badge>{parceiro.percentual_comissao !== null && parceiro.percentual_comissao !== undefined && <Badge variant="outline"><BadgeDollarSign className="h-3 w-3 mr-1" /> {parceiro.percentual_comissao}%</Badge>}</div><p className="text-xs text-muted-foreground mt-1">CPF: {parceiro.cpf || "—"}{parceiro.email ? ` · ${parceiro.email}` : ""}</p><p className="text-xs text-muted-foreground mt-1">{parceiro.telefone || "Sem telefone"}{parceiro.cidade ? ` · ${parceiro.cidade}${parceiro.uf ? `/${parceiro.uf}` : ""}` : ""}</p><div className="flex items-center gap-2 mt-2">{parceiro.logo_url || parceiro.cabecalho_html || parceiro.rodape_html ? <span className="text-xs text-primary">Identidade contratual configurada</span> : <span className="text-xs text-muted-foreground">Identidade contratual não configurada</span>}</div><div className="flex items-center gap-2 mt-2 flex-wrap">{parceiro.codigo_indicacao ? <><span className="text-xs text-primary inline-flex items-center gap-1"><Link2 className="h-3 w-3" /> Indicação ativa</span><Button type="button" size="sm" variant="ghost" className="h-7 px-2 text-xs" onClick={() => copiarLinkIndicacao(parceiro.codigo_indicacao!)}><Copy className="h-3 w-3 mr-1" /> Copiar link</Button></> : <Button type="button" size="sm" variant="ghost" className="h-7 px-2 text-xs" onClick={() => gerarLinkIndicacao(parceiro)} disabled={gerandoIndicacaoId === parceiro.id}>{gerandoIndicacaoId === parceiro.id ? <RefreshCw className="h-3 w-3 mr-1 animate-spin" /> : <Link2 className="h-3 w-3 mr-1" />} Gerar link de indicação</Button>}</div></div><div className="flex items-center gap-1 shrink-0"><Button size="sm" variant="outline" onClick={() => visualizarFicha(parceiro)} disabled={gerandoFichaId === parceiro.id}>{gerandoFichaId === parceiro.id ? <RefreshCw className="h-3.5 w-3.5 animate-spin" /> : <Eye className="h-3.5 w-3.5" />}<span className="hidden sm:inline ml-1">Visualizar ficha</span></Button><Button size="sm" variant="ghost" onClick={() => iniciarEdicao(parceiro)} title="Editar"><Pencil className="h-3.5 w-3.5" /></Button><Button size="sm" variant="ghost" onClick={() => excluir(parceiro.id)} disabled={excluindoId === parceiro.id} title="Excluir">{excluindoId === parceiro.id ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Trash2 className="h-3.5 w-3.5" />}</Button></div></div></div>}</div>)}</div>}
             </div>
           </section>
         </div>

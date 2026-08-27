@@ -91,6 +91,7 @@ import { enviarDocumento, resolverTokenPublico } from "./services/documentDelive
 import { analiseDocumentalService } from './services/analiseDocumentalEspecializada';
 import { isUuid } from './utils/validators';
 import { buildEmpresaCnpjUpdate } from './services/empresaCnpjEnrichment';
+import { gerarCodigoIndicacao, montarLinkIndicacao, normalizarCodigoIndicacao } from './services/referralService';
 
 const { Pool } = pkg;
 
@@ -524,6 +525,69 @@ async function getTableColumns(tableName: string): Promise<Set<string>> {
     [tableName]
   );
   return new Set(rows.map((r: { column_name: string }) => r.column_name));
+}
+
+async function resolverParceiroPorCodigo(codigo: string | null): Promise<{ id: string; codigo_indicacao: string } | null> {
+  if (!codigo) return null;
+  try {
+    const { rows } = await pool.query(
+      `SELECT id, codigo_indicacao
+         FROM parceiros_comerciais
+        WHERE ativo = true AND UPPER(codigo_indicacao) = $1
+        LIMIT 1`,
+      [codigo],
+    );
+    return rows[0] || null;
+  } catch (err: any) {
+    if (['42P01', '42703'].includes(String(err?.code || ''))) return null;
+    console.warn('[INDICACAO] Falha ao resolver código:', err instanceof Error ? err.message : err);
+    return null;
+  }
+}
+
+async function garantirCodigoIndicacaoParceiro(parceiroId: string): Promise<string | null> {
+  for (let tentativa = 0; tentativa < 5; tentativa += 1) {
+    try {
+      const { rows } = await pool.query(
+        `UPDATE parceiros_comerciais
+            SET codigo_indicacao = COALESCE(NULLIF(codigo_indicacao, ''), $1),
+                updated_at = COALESCE(updated_at, NOW())
+          WHERE id = $2
+          RETURNING codigo_indicacao`,
+        [gerarCodigoIndicacao(), parceiroId],
+      );
+      return normalizarCodigoIndicacao(rows[0]?.codigo_indicacao);
+    } catch (err: any) {
+      if (['42P01', '42703'].includes(String(err?.code || ''))) return null;
+      // Colisão de código é improvável, mas a tentativa seguinte mantém a geração segura.
+      if (String(err?.code || '') === '23505') continue;
+      console.warn('[INDICACAO] Falha ao gerar código:', err instanceof Error ? err.message : err);
+      return null;
+    }
+  }
+  return null;
+}
+
+function hashTokenCadastro(token: string): string {
+  return crypto.createHash('sha256').update(token).digest('hex');
+}
+
+function montarLinkCadastro(token: string): string {
+  const base = (process.env.PUBLIC_SITE_URL || 'https://destravacredito.com').replace(/\/$/, '');
+  return `${base}/cadastro-convite?token=${encodeURIComponent(token)}`;
+}
+
+function normalizarTipoConvite(value: unknown): 'parceiro' | 'captador' | null {
+  const tipo = String(value || '').trim().toLowerCase();
+  return tipo === 'parceiro' || tipo === 'captador' ? tipo : null;
+}
+
+function normalizarEmailCadastro(value: unknown): string {
+  return String(value || '').trim().toLowerCase().slice(0, 254);
+}
+
+function normalizarDocumentoCadastro(value: unknown): string {
+  return String(value || '').replace(/\D/g, '').slice(0, 14);
 }
 
 async function empresaExiste(empresaId: string): Promise<boolean> {
@@ -1963,6 +2027,70 @@ async function startServer() {
     `ALTER TABLE parceiros_comerciais ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ DEFAULT NOW()`,
   ];
   for (const sql of alteracoesParceiros016) { try { await pool.query(sql); } catch { /* compat */ } }
+  try {
+    await pool.query(`
+      ALTER TABLE IF EXISTS public.parceiros_comerciais
+        ADD COLUMN IF NOT EXISTS codigo_indicacao TEXT;
+      ALTER TABLE IF EXISTS public.leads
+        ADD COLUMN IF NOT EXISTS codigo_indicacao TEXT,
+        ADD COLUMN IF NOT EXISTS parceiro_indicador_id UUID;
+      ALTER TABLE IF EXISTS public.triagem_leads
+        ADD COLUMN IF NOT EXISTS codigo_indicacao TEXT,
+        ADD COLUMN IF NOT EXISTS parceiro_indicador_id UUID;
+      CREATE UNIQUE INDEX IF NOT EXISTS idx_parceiros_codigo_indicacao
+        ON public.parceiros_comerciais (codigo_indicacao)
+        WHERE codigo_indicacao IS NOT NULL;
+      CREATE INDEX IF NOT EXISTS idx_leads_parceiro_indicador
+        ON public.leads (parceiro_indicador_id)
+        WHERE parceiro_indicador_id IS NOT NULL;
+      CREATE INDEX IF NOT EXISTS idx_triagem_leads_parceiro_indicador
+        ON public.triagem_leads (parceiro_indicador_id)
+        WHERE parceiro_indicador_id IS NOT NULL;
+      CREATE INDEX IF NOT EXISTS idx_leads_codigo_indicacao
+        ON public.leads (codigo_indicacao)
+        WHERE codigo_indicacao IS NOT NULL;
+      CREATE INDEX IF NOT EXISTS idx_triagem_leads_codigo_indicacao
+        ON public.triagem_leads (codigo_indicacao)
+        WHERE codigo_indicacao IS NOT NULL;
+    `);
+    console.log('[startup] Migration 089 (indicação rastreável): OK.');
+  } catch (err: any) {
+    console.warn('[startup] Migration 089 (indicação rastreável):', err?.message);
+  }
+  try {
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS public.convites_cadastro (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        token_hash TEXT NOT NULL UNIQUE,
+        tipo TEXT NOT NULL CHECK (tipo IN ('parceiro', 'captador')),
+        cargo TEXT NOT NULL DEFAULT 'Captador Externo',
+        criado_por UUID REFERENCES public.colaboradores(id) ON DELETE SET NULL,
+        criado_em TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+        expira_em TIMESTAMPTZ NOT NULL,
+        usado_em TIMESTAMPTZ,
+        usado_por UUID REFERENCES public.colaboradores(id) ON DELETE SET NULL,
+        revogado_em TIMESTAMPTZ
+      );
+      CREATE INDEX IF NOT EXISTS idx_convites_cadastro_expira
+        ON public.convites_cadastro (expira_em);
+      CREATE INDEX IF NOT EXISTS idx_convites_cadastro_usado_por
+        ON public.convites_cadastro (usado_por)
+        WHERE usado_por IS NOT NULL;
+      ALTER TABLE IF EXISTS public.colaboradores
+        ADD COLUMN IF NOT EXISTS convite_cadastro_id UUID;
+      ALTER TABLE IF EXISTS public.parceiros_comerciais
+        ADD COLUMN IF NOT EXISTS colaborador_id UUID;
+      CREATE UNIQUE INDEX IF NOT EXISTS idx_parceiros_colaborador_id
+        ON public.parceiros_comerciais (colaborador_id)
+        WHERE colaborador_id IS NOT NULL;
+      CREATE INDEX IF NOT EXISTS idx_colaboradores_convite_cadastro
+        ON public.colaboradores (convite_cadastro_id)
+        WHERE convite_cadastro_id IS NOT NULL;
+    `);
+    console.log('[startup] Migration 090 (convites de cadastro): OK.');
+  } catch (err: any) {
+    console.warn('[startup] Migration 090 (convites de cadastro):', err?.message);
+  }
   console.log('[startup] Patches de banco (contratos_gerados) aplicados/verificados.');
 
   // ── Migration 066: coluna itens em orcamentos_timbrados ───────────────────
@@ -2508,6 +2636,13 @@ async function startServer() {
     legacyHeaders: false,
     message: { success: false, message: "Muitas solicitações de PDF. Tente novamente em alguns minutos." },
   });
+  const cadastroConviteRateLimiter = rateLimit({
+    windowMs: 15 * 60 * 1000,
+    limit: 5,
+    standardHeaders: true,
+    legacyHeaders: false,
+    message: { success: false, message: "Muitas tentativas de cadastro. Tente novamente em alguns minutos." },
+  });
   // ─────────────────────────────────────────────────────────────────────────
 
   // ─── LOGIN ────────────────────────────────────────────────────────────────
@@ -2655,6 +2790,8 @@ async function startServer() {
       const utm_medium   = b.utm_medium   || null;
       const utm_campaign = b.utm_campaign || null;
       const pagina_origem = b.pagina || b.pagina_origem || null;
+      const codigo_indicacao = normalizarCodigoIndicacao(b.ref || b.codigo_indicacao);
+      const parceiroIndicador = await resolverParceiroPorCodigo(codigo_indicacao);
       let empresa_id = null;
       if (empresa) {
         empresa_id = await processarEmpresaDaSimulacao(pool, {
@@ -2714,6 +2851,25 @@ async function startServer() {
         } catch (error) {
           console.warn("[TRIAGEM ATTRIBUTION]", error instanceof Error ? error.message : error);
         }
+        try {
+          const triagemCols = await getTableColumns("triagem_leads");
+          const referralFields: Record<string, unknown> = {
+            codigo_indicacao,
+            parceiro_indicador_id: parceiroIndicador?.id || null,
+          };
+          const entries = Object.entries(referralFields).filter(([key, value]) => (
+            triagemCols.has(key) && value !== undefined && value !== null && value !== ""
+          ));
+          if (entries.length) {
+            await pool.query(
+              `UPDATE triagem_leads SET ${entries.map(([key], index) => `"${key}"=$${index + 1}`).join(", ")} WHERE id=$${entries.length + 1}`,
+              [...entries.map(([, value]) => value), triagem.id],
+            );
+            Object.assign(triagem, Object.fromEntries(entries));
+          }
+        } catch (error) {
+          console.warn("[TRIAGEM REFERRAL]", error instanceof Error ? error.message : error);
+        }
         console.log(`[TRIAGEM] Lead do simulador salvo na fila: ${nome} — ${produto || origem}`);
 
         if (empresa_id) {
@@ -2728,7 +2884,7 @@ async function startServer() {
           event: "triagem_novo_lead",
           source: origem,
           triagem: { id: triagem.id, nome, telefone, email, empresa, produto, valor, prazo },
-          context: { pagina: b.pagina || "/simular", utm_source, utm_medium, utm_campaign },
+          context: { pagina: b.pagina || "/simular", utm_source, utm_medium, utm_campaign, codigo_indicacao },
         });
 
         return res.status(201).json({ ...triagem, _triagem: true });
@@ -2774,6 +2930,8 @@ async function startServer() {
           pagina_origem,
           pagina_entrada: b.pagina_entrada || null,
           referrer: b.referrer || null,
+          codigo_indicacao,
+          parceiro_indicador_id: parceiroIndicador?.id || null,
         };
         for (const [key, value] of Object.entries(attributionFields)) {
           if (leadCols.has(key) && value) upd[key] = value;
@@ -3180,6 +3338,8 @@ async function startServer() {
   app.post("/api/contato", leadsRateLimiter, validateBody(contactInputSchema, "message", { success: false }), async (req: Request, res: Response) => {
     try {
       const now = new Date().toISOString();
+      const codigoIndicacaoContato = normalizarCodigoIndicacao(req.body.ref || req.body.codigo_indicacao);
+      const parceiroIndicadorContato = await resolverParceiroPorCodigo(codigoIndicacaoContato);
       const { rows } = await pool.query(
         `INSERT INTO leads
           (nome, email, telefone, finalidade, origem, status, etapa_funil,
@@ -3211,6 +3371,8 @@ async function startServer() {
           pagina_origem: req.body.pagina,
           pagina_entrada: req.body.pagina_entrada,
           referrer: req.body.referrer,
+          codigo_indicacao: codigoIndicacaoContato,
+          parceiro_indicador_id: parceiroIndicadorContato?.id || null,
         };
         const entries = Object.entries(attributionFields).filter(([key, value]) => leadCols.has(key) && value);
         if (entries.length) {
@@ -3368,6 +3530,217 @@ async function startServer() {
     } catch (err) {
       console.error("[STATS ERROR]", err);
       res.status(500).json({ error: "Erro ao buscar estatísticas." });
+    }
+  });
+
+  // ─── CONVITES DE CADASTRO ───────────────────────────────────────────────────
+  app.post("/api/convites-cadastro", auth, async (req: Request, res: Response) => {
+    try {
+      const solicitante = (req as Request & { colaborador: any }).colaborador;
+      if (!podecriarUsuarios(solicitante?.cargo || '')) {
+        res.status(403).json({ error: "Apenas gestores autorizados podem gerar links de cadastro." });
+        return;
+      }
+      const tipo = normalizarTipoConvite(req.body?.tipo);
+      if (!tipo) {
+        res.status(400).json({ error: "Informe um tipo de cadastro válido: parceiro ou captador." });
+        return;
+      }
+      const token = crypto.randomBytes(32).toString('base64url');
+      const expiraEm = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000);
+      const { rows } = await pool.query(
+        `INSERT INTO convites_cadastro (token_hash, tipo, cargo, criado_por, expira_em)
+         VALUES ($1, $2, 'Captador Externo', $3, $4)
+         RETURNING id, tipo, cargo, criado_em, expira_em`,
+        [hashTokenCadastro(token), tipo, solicitante?.id || null, expiraEm],
+      );
+      res.status(201).json({ ...rows[0], link: montarLinkCadastro(token) });
+    } catch (err: any) {
+      console.error('[POST /api/convites-cadastro]', err);
+      if (['42P01', '42703'].includes(String(err?.code || ''))) {
+        res.status(503).json({ error: 'A estrutura de convites ainda não foi migrada.', migration_pending: true });
+        return;
+      }
+      res.status(500).json({ error: 'Erro ao gerar link de cadastro.' });
+    }
+  });
+
+  app.get("/api/convites-cadastro", auth, async (req: Request, res: Response) => {
+    try {
+      const solicitante = (req as Request & { colaborador: any }).colaborador;
+      if (!podecriarUsuarios(solicitante?.cargo || '')) {
+        res.status(403).json({ error: "Sem permissão para visualizar convites." });
+        return;
+      }
+      const { rows } = await pool.query(
+        `SELECT c.id, c.tipo, c.cargo, c.criado_em, c.expira_em, c.usado_em, c.revogado_em,
+                u.id AS colaborador_id, u.nome AS colaborador_nome, u.email AS colaborador_email,
+                u.ativo AS colaborador_ativo
+           FROM convites_cadastro c
+           LEFT JOIN colaboradores u ON u.convite_cadastro_id = c.id
+          ORDER BY c.criado_em DESC
+          LIMIT 100`,
+      );
+      res.json({ convites: rows });
+    } catch (err: any) {
+      console.error('[GET /api/convites-cadastro]', err);
+      if (['42P01', '42703'].includes(String(err?.code || ''))) {
+        res.status(503).json({ error: 'A estrutura de convites ainda não foi migrada.', migration_pending: true });
+        return;
+      }
+      res.status(500).json({ error: 'Erro ao carregar convites.' });
+    }
+  });
+
+  app.get("/api/convites-cadastro/:token", cadastroConviteRateLimiter, async (req: Request, res: Response) => {
+    try {
+      const token = String(req.params.token || '').trim();
+      if (!token || token.length < 32 || token.length > 128) {
+        res.status(404).json({ error: 'Link de cadastro inválido ou expirado.' });
+        return;
+      }
+      const { rows } = await pool.query(
+        `SELECT tipo, cargo, expira_em
+           FROM convites_cadastro
+          WHERE token_hash = $1 AND expira_em > NOW() AND usado_em IS NULL AND revogado_em IS NULL
+          LIMIT 1`,
+        [hashTokenCadastro(token)],
+      );
+      if (!rows.length) { res.status(410).json({ error: 'Link de cadastro inválido, expirado ou já utilizado.' }); return; }
+      res.json({ tipo: rows[0].tipo, cargo: rows[0].cargo, expira_em: rows[0].expira_em });
+    } catch (err: any) {
+      console.error('[GET /api/convites-cadastro/:token]', err);
+      res.status(500).json({ error: 'Erro ao validar link de cadastro.' });
+    }
+  });
+
+  app.post("/api/convites-cadastro/:token/cadastrar", cadastroConviteRateLimiter, async (req: Request, res: Response) => {
+    const client = await pool.connect();
+    try {
+      const token = String(req.params.token || '').trim();
+      const nome = String(req.body?.nome || '').trim().slice(0, 160);
+      const email = normalizarEmailCadastro(req.body?.email);
+      const telefone = String(req.body?.telefone || '').replace(/\D/g, '').slice(0, 20) || null;
+      const cpf = normalizarDocumentoCadastro(req.body?.cpf);
+      const senha = String(req.body?.senha || '');
+      if (!token || token.length < 32 || token.length > 128) {
+        res.status(404).json({ error: 'Link de cadastro inválido ou expirado.' });
+        return;
+      }
+      if (nome.length < 2 || !/^\S+@\S+\.\S+$/.test(email) || senha.length < 8) {
+        res.status(400).json({ error: 'Informe nome, e-mail válido e senha com pelo menos 8 caracteres.' });
+        return;
+      }
+
+      await client.query('BEGIN');
+      const conviteResult = await client.query(
+        `SELECT id, tipo, cargo
+           FROM convites_cadastro
+          WHERE token_hash = $1 AND expira_em > NOW() AND usado_em IS NULL AND revogado_em IS NULL
+          FOR UPDATE`,
+        [hashTokenCadastro(token)],
+      );
+      const convite = conviteResult.rows[0];
+      if (!convite) {
+        await client.query('ROLLBACK');
+        res.status(410).json({ error: 'Link de cadastro inválido, expirado ou já utilizado.' });
+        return;
+      }
+      if (convite.tipo === 'parceiro' && cpf.length !== 11) {
+        await client.query('ROLLBACK');
+        res.status(400).json({ error: 'CPF válido é obrigatório para cadastro de parceiro.' });
+        return;
+      }
+
+      const senhaHash = await bcrypt.hash(senha, 12);
+      const { rows: colaboradorRows } = await client.query(
+        `INSERT INTO colaboradores
+           (nome, email, cargo, senha_hash, ativo, telefone, perfil,
+            pode_atender_leads, pode_ver_todos_leads, convite_cadastro_id)
+         VALUES ($1, $2, $3, $4, false, $5, 'agente', false, false, $6)
+         RETURNING id, nome, email, cargo`,
+        [nome, email, convite.cargo || 'Captador Externo', senhaHash, telefone, convite.id],
+      );
+      const colaborador = colaboradorRows[0];
+      if (convite.tipo === 'parceiro') {
+        await client.query(
+          `INSERT INTO parceiros_comerciais (nome, cpf, email, telefone, ativo, colaborador_id)
+           VALUES ($1, $2, $3, $4, false, $5)`,
+          [nome, cpf, email, telefone, colaborador.id],
+        );
+      }
+      await client.query(
+        `UPDATE convites_cadastro SET usado_em = NOW(), usado_por = $1 WHERE id = $2`,
+        [colaborador.id, convite.id],
+      );
+      await client.query('COMMIT');
+      res.status(201).json({
+        success: true,
+        pending_approval: true,
+        message: 'Cadastro recebido. O acesso será liberado após aprovação do administrador.',
+      });
+    } catch (err: any) {
+      try { await client.query('ROLLBACK'); } catch { /* transação já encerrada */ }
+      console.error('[POST /api/convites-cadastro/:token/cadastrar]', err);
+      if (String(err?.code || '') === '23505') {
+        res.status(409).json({ error: 'E-mail ou CPF já cadastrado.' });
+        return;
+      }
+      if (['42P01', '42703'].includes(String(err?.code || ''))) {
+        res.status(503).json({ error: 'A estrutura de convites ainda não foi migrada.', migration_pending: true });
+        return;
+      }
+      res.status(500).json({ error: 'Não foi possível concluir o cadastro.' });
+    } finally {
+      client.release();
+    }
+  });
+
+  app.post("/api/convites-cadastro/:id/aprovar", auth, async (req: Request, res: Response) => {
+    try {
+      const solicitante = (req as Request & { colaborador: any }).colaborador;
+      if (!podecriarUsuarios(solicitante?.cargo || '')) {
+        res.status(403).json({ error: "Sem permissão para aprovar cadastros." });
+        return;
+      }
+      const { rows } = await pool.query(
+        `UPDATE colaboradores u
+            SET ativo = true, updated_at = NOW()
+          WHERE u.convite_cadastro_id = $1
+            AND EXISTS (
+              SELECT 1 FROM convites_cadastro c
+               WHERE c.id = $1 AND c.usado_em IS NOT NULL AND c.revogado_em IS NULL
+            )
+          RETURNING u.id, u.nome, u.email, u.cargo, u.ativo`,
+        [req.params.id],
+      );
+      if (!rows.length) { res.status(404).json({ error: 'Cadastro pendente não encontrado.' }); return; }
+      await pool.query('UPDATE parceiros_comerciais SET ativo = true WHERE colaborador_id = $1', [rows[0].id]);
+      res.json({ success: true, colaborador: rows[0] });
+    } catch (err: any) {
+      console.error('[POST /api/convites-cadastro/:id/aprovar]', err);
+      res.status(500).json({ error: 'Erro ao aprovar cadastro.' });
+    }
+  });
+
+  app.post("/api/convites-cadastro/:id/revogar", auth, async (req: Request, res: Response) => {
+    try {
+      const solicitante = (req as Request & { colaborador: any }).colaborador;
+      if (!podecriarUsuarios(solicitante?.cargo || '')) {
+        res.status(403).json({ error: "Sem permissão para revogar convites." });
+        return;
+      }
+      const { rows } = await pool.query(
+        `UPDATE convites_cadastro SET revogado_em = NOW()
+          WHERE id = $1 AND usado_em IS NULL AND revogado_em IS NULL
+          RETURNING id`,
+        [req.params.id],
+      );
+      if (!rows.length) { res.status(409).json({ error: 'Convite inexistente, já utilizado ou já revogado.' }); return; }
+      res.json({ success: true });
+    } catch (err) {
+      console.error('[POST /api/convites-cadastro/:id/revogar]', err);
+      res.status(500).json({ error: 'Erro ao revogar convite.' });
     }
   });
 
@@ -12283,6 +12656,26 @@ ${(temTest1 || temTest2) ? `
     }
   });
 
+  app.post('/api/parceiros/:id/indicacao', auth, async (req: Request, res: Response) => {
+    try {
+      const { rows } = await pool.query(
+        'SELECT id, nome, ativo FROM parceiros_comerciais WHERE id = $1 LIMIT 1',
+        [req.params.id],
+      );
+      if (!rows.length) { res.status(404).json({ error: 'Parceiro não encontrado' }); return; }
+      if (rows[0].ativo === false) { res.status(409).json({ error: 'Parceiro inativo não pode receber novas indicações' }); return; }
+      const codigo = await garantirCodigoIndicacaoParceiro(req.params.id);
+      if (!codigo) {
+        res.status(503).json({ error: 'A estrutura de indicação ainda não foi migrada.', migration_pending: true });
+        return;
+      }
+      res.json({ id: rows[0].id, nome: rows[0].nome, codigo_indicacao: codigo, link: montarLinkIndicacao(codigo) });
+    } catch (err) {
+      console.error('[POST /api/parceiros/:id/indicacao]', err);
+      res.status(500).json({ error: 'Erro ao gerar link de indicação' });
+    }
+  });
+
 
   app.post('/api/parceiros', auth, async (req: Request, res: Response) => {
     try {
@@ -12320,7 +12713,8 @@ ${(temTest1 || temTest2) ? `
           ativo !== false,
         ]
       );
-      res.status(201).json(rows[0]);
+      const codigoIndicacao = await garantirCodigoIndicacaoParceiro(rows[0].id);
+      res.status(201).json({ ...rows[0], ...(codigoIndicacao ? { codigo_indicacao: codigoIndicacao } : {}) });
     } catch (err: any) {
       console.error('[POST /api/parceiros]', err);
       res.status(500).json({ error: err?.detail || 'Erro ao criar parceiro' });
