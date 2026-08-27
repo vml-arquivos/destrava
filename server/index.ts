@@ -1178,6 +1178,27 @@ async function startServer() {
     console.error('[AUTO-CREATE Company Hub]', err);
   }
 
+  // ─── AUTO-CREATE: origem dos follow-ups de maturidade ───────────────────────
+  // Compatível com instalações que já possuem empresa_followups: a migration
+  // oficial continua versionada em db/migrations/087 e este bloco é apenas uma
+  // proteção para que o primeiro deploy não dependa de uma etapa manual.
+  try {
+    await pool.query(`
+      ALTER TABLE IF EXISTS public.empresa_followups
+        ADD COLUMN IF NOT EXISTS origem TEXT NOT NULL DEFAULT 'manual';
+      DO $$
+      BEGIN
+        IF to_regclass('public.empresa_followups') IS NOT NULL THEN
+          CREATE UNIQUE INDEX IF NOT EXISTS idx_empresa_followups_maturidade_unica
+            ON public.empresa_followups(empresa_id)
+            WHERE origem = 'maturidade_12_meses';
+        END IF;
+      END $$;
+    `);
+  } catch (err) {
+    console.warn('[AUTO-CREATE Follow-up maturidade] migration pendente:', err);
+  }
+
   // ─── AUTO-CREATE: Módulos de Faturamento e Contratos ─────────────────────────
   // Garante que as tabelas existam mesmo sem executar a migration manual.
   // Idempotente: usa CREATE TABLE IF NOT EXISTS e ADD COLUMN IF NOT EXISTS.

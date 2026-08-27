@@ -34,6 +34,8 @@ A lógica de domínio está isolada em `server/services/empresaMaturidadeFollowu
 
 A reconciliação é chamada nos seguintes pontos já existentes: abertura do dossiê de documentação, carregamento da Inteligência 360, criação de empresa, atualização de empresa e carregamento da lista de follow-ups da empresa. A execução é failure-tolerant: uma falha no lembrete é registrada no log e não impede a abertura da ficha, o carregamento documental, o CRM ou a Inteligência 360.
 
+Além da migration versionada, o bootstrap do servidor contém uma proteção idempotente equivalente. Ela tenta adicionar a coluna e o índice antes de servir requisições e apenas registra aviso se o banco ainda não estiver disponível. Essa redundância é deliberada para instalações Coolify que fazem deploy da aplicação sem executar manualmente todos os arquivos SQL.
+
 A implementação não altera `server/routes/documentacao.ts` nem `server/services/inteligencia360Service.ts`; apenas usa os pontos de entrada já existentes no backend para disparar a reconciliação sem duplicar a fórmula de idade da B1.
 
 ## Idempotência e atualização
