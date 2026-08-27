@@ -551,3 +551,8 @@ BEGIN
       WHERE origem = 'maturidade_12_meses';
   END IF;
 END $$;
+
+
+-- ─── MIGRAÇÃO 088: foto opcional do colaborador para ficha cadastral/PDF ───
+ALTER TABLE IF EXISTS public.colaboradores
+  ADD COLUMN IF NOT EXISTS foto_url TEXT;

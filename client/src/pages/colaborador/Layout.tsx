@@ -24,6 +24,7 @@ import {
   ShieldAlert,
   TrendingUp,
   BookUser,
+  Handshake,
   Activity,
   BarChart2,
   DatabaseZap,
@@ -235,6 +236,13 @@ const NAV_MODULES: NavModule[] = [
         icon: BookUser,
         allowedCargos: ["administrador", "diretor"],
         featureKey: "contadores",
+      },
+      {
+        href: "/colaborador/parceiros",
+        label: "Parceiros",
+        icon: Handshake,
+        allowedCargos: ["administrador", "diretor"],
+        featureKey: "parceiros",
       },
       {
         href: "/colaborador/integracoes",

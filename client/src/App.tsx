@@ -67,6 +67,7 @@ const ColaboradorTriagem = lazy(() => import("./pages/colaborador/Triagem"));
 const ColaboradorFila = lazy(() => import("./pages/colaborador/Fila"));
 const ColaboradorMeuCRM = lazy(() => import("./pages/colaborador/MeuCRM"));
 const Contadores = lazy(() => import("./pages/colaborador/Contadores"));
+const Parceiros = lazy(() => import("./pages/colaborador/Parceiros"));
 const AcompanhamentoBancario = lazy(() => import("./pages/colaborador/AcompanhamentoBancario"));
 const AcompanhamentoFinanceiro = lazy(() => import("./pages/colaborador/AcompanhamentoFinanceiro"));
 const WeeklyMonitorPage = lazy(() => import("./pages/colaborador/WeeklyMonitorPage"));
@@ -430,6 +431,17 @@ function Router() {
             <CargoRoute allowedCargos={["administrador", "diretor"]}>
               <FeatureGate featureKey="contadores">
                 <Contadores />
+              </FeatureGate>
+            </CargoRoute>
+          </ProtectedRoute>
+        )}
+      </Route>
+      <Route path="/colaborador/parceiros">
+        {() => (
+          <ProtectedRoute>
+            <CargoRoute allowedCargos={["administrador", "diretor"]}>
+              <FeatureGate featureKey="parceiros">
+                <Parceiros />
               </FeatureGate>
             </CargoRoute>
           </ProtectedRoute>

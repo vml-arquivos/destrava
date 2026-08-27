@@ -1899,6 +1899,7 @@ async function startServer() {
     `ALTER TABLE colaboradores ADD COLUMN IF NOT EXISTS uf TEXT`,
     `ALTER TABLE colaboradores ADD COLUMN IF NOT EXISTS cep TEXT`,
     `ALTER TABLE colaboradores ADD COLUMN IF NOT EXISTS assinatura_url TEXT`,
+    `ALTER TABLE colaboradores ADD COLUMN IF NOT EXISTS foto_url TEXT`,
     `ALTER TABLE colaboradores ADD COLUMN IF NOT EXISTS precisa_redefinir_senha BOOLEAN NOT NULL DEFAULT false`,
     `ALTER TABLE colaboradores ADD COLUMN IF NOT EXISTS ultimo_reset_senha_em TIMESTAMPTZ`,
     `ALTER TABLE colaboradores ADD COLUMN IF NOT EXISTS reset_senha_solicitado_em TIMESTAMPTZ`,
@@ -3392,6 +3393,121 @@ async function startServer() {
     }
   });
 
+  async function mapearFotoColaboradorNaLista(rows: any[]): Promise<any[]> {
+    const base = rows.map((row) => ({ ...row, foto_url: null }));
+    if (!rows.length) return base;
+    try {
+      const ids = rows.map((row) => String(row.id));
+      const { rows: fotos } = await pool.query(
+        `SELECT id FROM colaboradores WHERE id = ANY($1::uuid[]) AND NULLIF(BTRIM(foto_url), '') IS NOT NULL`,
+        [ids],
+      );
+      const idsComFoto = new Set(fotos.map((foto: any) => String(foto.id)));
+      return base.map((row) => ({
+        ...row,
+        foto_url: idsComFoto.has(String(row.id)) ? `/api/colaboradores/${row.id}/foto` : null,
+      }));
+    } catch (error: any) {
+      // A foto é aditiva: em instalações legadas sem a coluna, a listagem atual
+      // continua funcionando e apenas não mostra o indicador de foto.
+      console.warn('[COLAB FOTO] não foi possível carregar indicador de foto:', error?.message || error);
+      return base;
+    }
+  }
+
+  const uploadFotoColaborador = multer({
+    storage: multer.memoryStorage(),
+    limits: { fileSize: 2 * 1024 * 1024 },
+  });
+
+  app.post('/api/colaboradores/:id/foto', auth, uploadFotoColaborador.single('foto'), async (req: Request, res: Response) => {
+    try {
+      const solicitante = (req as Request & { colaborador: any }).colaborador;
+      const { rows: alvoRows } = await pool.query(
+        'SELECT id, cargo FROM colaboradores WHERE id = $1',
+        [req.params.id],
+      );
+      const alvo = alvoRows[0];
+      if (!alvo) { res.status(404).json({ error: 'Colaborador não encontrado.' }); return; }
+      if (String(solicitante?.id) !== String(alvo.id) && !podeGerenciarCargo(solicitante?.cargo || '', alvo.cargo || '')) {
+        res.status(403).json({ error: 'Você não tem permissão para alterar a foto deste colaborador.' });
+        return;
+      }
+
+      const file = req.file;
+      if (!file) { res.status(400).json({ error: 'Envie uma foto no campo foto.' }); return; }
+      const extensoes: Record<string, string> = {
+        'image/jpeg': '.jpg',
+        'image/png': '.png',
+        'image/webp': '.webp',
+      };
+      const extensao = extensoes[file.mimetype];
+      if (!extensao) {
+        res.status(415).json({ error: 'Formato não permitido. Use uma imagem JPG, PNG ou WebP de até 2 MB.' });
+        return;
+      }
+
+      const salvo = await saveDocumentBuffer({
+        entidadeTipo: 'colaborador-foto',
+        entidadeId: String(alvo.id),
+        filename: `foto-${Date.now()}${extensao}`,
+        buffer: file.buffer,
+      });
+      await pool.query(
+        'UPDATE colaboradores SET foto_url = $1, updated_at = NOW() WHERE id = $2',
+        [salvo.relativePath, alvo.id],
+      );
+      res.status(201).json({
+        ok: true,
+        foto_url: `/api/colaboradores/${alvo.id}/foto`,
+      });
+    } catch (err: any) {
+      console.error('[POST /api/colaboradores/:id/foto]', err);
+      const status = err?.code === 'LIMIT_FILE_SIZE' ? 413 : 500;
+      res.status(status).json({ error: status === 413 ? 'A foto deve ter no máximo 2 MB.' : 'Erro ao salvar foto do colaborador.' });
+    }
+  });
+
+  app.get('/api/colaboradores/:id/foto', auth, async (req: Request, res: Response) => {
+    try {
+      const solicitante = (req as Request & { colaborador: any }).colaborador;
+      const { rows } = await pool.query(
+        'SELECT id, cargo, foto_url FROM colaboradores WHERE id = $1',
+        [req.params.id],
+      );
+      const alvo = rows[0];
+      if (!alvo) { res.status(404).json({ error: 'Colaborador não encontrado.' }); return; }
+      if (String(solicitante?.id) !== String(alvo.id) && !podeGerenciarCargo(solicitante?.cargo || '', alvo.cargo || '')) {
+        res.status(403).json({ error: 'Você não tem permissão para visualizar esta foto.' });
+        return;
+      }
+      const stored = String(alvo.foto_url || '').trim();
+      if (!stored) { res.status(404).json({ error: 'Foto não cadastrada.' }); return; }
+      const resolved = resolveDocumentPath({
+        caminho_arquivo: stored,
+        nome_arquivo: path.basename(stored),
+        entidade_tipo: 'colaborador-foto',
+        entidade_id: String(alvo.id),
+      });
+      if (!resolved.absolutePath) { res.status(404).json({ error: 'Arquivo da foto não encontrado.' }); return; }
+      const mimeByExtension: Record<string, string> = {
+        '.jpg': 'image/jpeg',
+        '.jpeg': 'image/jpeg',
+        '.png': 'image/png',
+        '.webp': 'image/webp',
+      };
+      const mime = mimeByExtension[path.extname(stored).toLowerCase()] || 'application/octet-stream';
+      res.setHeader('Content-Type', mime);
+      res.setHeader('Cache-Control', 'private, no-store');
+      res.setHeader('X-Robots-Tag', 'noindex, nofollow, noarchive');
+      res.setHeader('X-Content-Type-Options', 'nosniff');
+      fs.createReadStream(resolved.absolutePath).pipe(res);
+    } catch (err) {
+      console.error('[GET /api/colaboradores/:id/foto]', err);
+      res.status(500).json({ error: 'Erro ao carregar foto do colaborador.' });
+    }
+  });
+
   app.get("/api/colaboradores", auth, async (req: Request, res: Response) => {
     try {
       const solicitante = (req as Request & { colaborador: any }).colaborador;
@@ -3421,7 +3537,7 @@ async function startServer() {
         ? rows
         : rows.filter(r => nivelCargo(r.cargo) > nivelSolicitante);
 
-      res.json(filtrados);
+      res.json(await mapearFotoColaboradorNaLista(filtrados));
     } catch (err) {
       console.error("[COLAB GET ERROR]", err);
       // Fallback: tenta sem o campo de timestamp para não quebrar a listagem
@@ -3447,7 +3563,7 @@ async function startServer() {
         const filtrados = nivelSolicitante === 0
           ? rows
           : rows.filter(r => nivelCargo(r.cargo) > nivelSolicitante);
-        res.json(filtrados.map(r => ({ ...r, created_at: null })));
+        res.json(await mapearFotoColaboradorNaLista(filtrados.map(r => ({ ...r, created_at: null }))));
       } catch (err2) {
         console.error("[COLAB GET FALLBACK ERROR]", err2);
         res.status(500).json({ error: "Erro ao buscar colaboradores." });
@@ -11567,6 +11683,232 @@ ${(temTest1 || temTest2) ? `
       </div>
     `, `Ficha — ${cliente.nome || "Cliente"}`);
   }
+
+  function escapeHtmlFicha(value: unknown): string {
+    return String(value ?? '')
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;')
+      .replace(/'/g, '&#039;');
+  }
+
+  function formatarDataFicha(value: unknown): string {
+    if (!value) return 'Não informado';
+    const texto = String(value).slice(0, 10);
+    const partes = texto.split('-');
+    if (partes.length === 3 && partes[0].length === 4) return `${partes[2]}/${partes[1]}/${partes[0]}`;
+    try { return new Date(String(value)).toLocaleDateString('pt-BR'); } catch { return 'Não informado'; }
+  }
+
+  function valorFicha(value: unknown): string {
+    const texto = String(value ?? '').trim();
+    return texto ? escapeHtmlFicha(texto) : 'Não informado';
+  }
+
+  async function carregarFotoColaboradorDataUri(colaborador: any): Promise<string | null> {
+    const stored = String(colaborador?.foto_url || '').trim();
+    if (!stored) return null;
+    const resolved = resolveDocumentPath({
+      caminho_arquivo: stored,
+      nome_arquivo: path.basename(stored),
+      entidade_tipo: 'colaborador-foto',
+      entidade_id: String(colaborador.id),
+    });
+    if (!resolved.absolutePath) return null;
+    const mimeByExtension: Record<string, string> = {
+      '.jpg': 'image/jpeg',
+      '.jpeg': 'image/jpeg',
+      '.png': 'image/png',
+      '.webp': 'image/webp',
+    };
+    const mime = mimeByExtension[path.extname(stored).toLowerCase()];
+    if (!mime) return null;
+    try {
+      const buffer = await fs.promises.readFile(resolved.absolutePath);
+      return `data:${mime};base64,${buffer.toString('base64')}`;
+    } catch (error: any) {
+      console.warn('[FICHA COLABORADOR] foto não localizada:', error?.message || error);
+      return null;
+    }
+  }
+
+  function gerarHtmlFichaEquipe(tipo: 'colaborador' | 'contador' | 'parceiro', pessoa: any, fotoDataUri?: string | null): string {
+    const isColaborador = tipo === 'colaborador';
+    const isContador = tipo === 'contador';
+    const tituloTipo = isColaborador ? 'COLABORADOR / USUÁRIO' : isContador ? 'CONTADOR' : 'PARCEIRO COMERCIAL';
+    const titulo = isColaborador ? 'Ficha Cadastral do Colaborador' : isContador ? 'Ficha Cadastral do Contador' : 'Ficha Cadastral do Parceiro';
+    const documentoLabel = isColaborador || !isContador ? 'CPF' : 'CPF';
+    const foto = isColaborador && fotoDataUri
+      ? `<img src="${fotoDataUri}" alt="Foto de ${valorFicha(pessoa.nome)}" style="width:34mm;height:42mm;object-fit:cover;border-radius:7px;border:2px solid #ffffff;box-shadow:0 1px 5px rgba(15,23,42,.2);" />`
+      : `<div style="width:34mm;height:42mm;border-radius:7px;border:1px dashed #cbd5e1;display:flex;align-items:center;justify-content:center;color:#94a3b8;font-size:10px;text-align:center;">Foto não<br/>informada</div>`;
+    const cargoOuRegistro = isColaborador
+      ? `<tr><th>Cargo</th><td>${valorFicha(pessoa.cargo)}</td><th>Perfil</th><td>${valorFicha(pessoa.perfil)}</td></tr>`
+      : isContador
+        ? `<tr><th>CRC</th><td>${valorFicha(pessoa.crc)}</td><th>Status</th><td>${pessoa.ativo === false ? 'Inativo' : 'Ativo'}</td></tr>`
+        : `<tr><th>Percentual de comissão</th><td>${pessoa.percentual_comissao === null || pessoa.percentual_comissao === undefined || pessoa.percentual_comissao === '' ? 'Não informado' : `${valorFicha(pessoa.percentual_comissao)}%`}</td><th>Status</th><td>${pessoa.ativo === false ? 'Inativo' : 'Ativo'}</td></tr>`;
+    const status = pessoa.ativo === false ? 'Inativo' : 'Ativo';
+    const endereco = [pessoa.endereco, pessoa.numero, pessoa.complemento].filter(Boolean).join(', ');
+    const cidadeUf = [pessoa.cidade, pessoa.uf].filter(Boolean).join(' / ');
+    const escritorio = isContador ? `
+      <div class="rt-section">
+        <h2>Escritório de Contabilidade</h2>
+        <table class="rt-table">
+          <tr><th>Nome</th><td>${valorFicha(pessoa.nome_escritorio)}</td><th>CNPJ</th><td>${valorFicha(pessoa.cnpj_escritorio)}</td></tr>
+          <tr><th>Endereço</th><td colspan="3">${valorFicha(pessoa.endereco_escritorio)}</td></tr>
+          <tr><th>Cidade/UF</th><td>${valorFicha([pessoa.cidade_escritorio, pessoa.uf_escritorio].filter(Boolean).join(' / '))}</td><th>CEP</th><td>Não informado</td></tr>
+        </table>
+      </div>` : '';
+    const parceiroIdentidade = !isColaborador && !isContador ? `
+      <div class="rt-section">
+        <h2>Dados complementares</h2>
+        <table class="rt-table">
+          <tr><th>RG</th><td>${valorFicha(pessoa.rg)}</td><th>Data de nascimento</th><td>${formatarDataFicha(pessoa.data_nascimento)}</td></tr>
+          <tr><th>Profissão</th><td>${valorFicha(pessoa.profissao)}</td><th>Estado civil</th><td>${valorFicha(pessoa.estado_civil)}</td></tr>
+          <tr><th>Logo configurado</th><td>${pessoa.logo_url ? 'Sim' : 'Não'}</td><th>Identidade de contrato</th><td>${pessoa.cabecalho_html || pessoa.rodape_html ? 'Configurada' : 'Não configurada'}</td></tr>
+        </table>
+      </div>` : '';
+    const observacoes = !isColaborador && !isContador && pessoa.observacoes
+      ? `<div class="rt-section"><h2>Observações</h2><p style="font-size:12px;color:#334155;line-height:1.7;">${valorFicha(pessoa.observacoes)}</p></div>`
+      : '';
+    return gerarHtmlTimbrado(`
+      <style>
+        .rt-section { margin-bottom: 20px; }
+        .rt-section h2 { font-size: 13px; font-weight: 800; color: #1e40af; border-bottom: 2px solid #dbeafe; padding-bottom: 4px; margin-bottom: 10px; }
+        .rt-table { width: 100%; border-collapse: collapse; font-size: 11px; }
+        .rt-table th { background: #f8fafc; padding: 6px 10px; text-align: left; font-weight: 700; color: #475569; border-bottom: 1px solid #e2e8f0; width: 18%; }
+        .rt-table td { padding: 5px 10px; border-bottom: 1px solid #f1f5f9; color: #334155; width: 32%; }
+        .rt-table tr:last-child td, .rt-table tr:last-child th { border-bottom: none; }
+      </style>
+      <div style="display:flex;justify-content:space-between;gap:18px;align-items:stretch;background:linear-gradient(135deg,#1e40af 0%,#3b82f6 100%);color:#fff;padding:24px 26px;border-radius:12px;margin-bottom:24px;">
+        <div style="display:flex;flex-direction:column;justify-content:center;min-width:0;">
+          <p style="margin:0;font-size:11px;opacity:.75;letter-spacing:1px;">${tituloTipo}</p>
+          <h1 style="margin:8px 0 5px;font-size:22px;font-weight:900;">${valorFicha(pessoa.nome)}</h1>
+          <p style="margin:0;font-size:13px;opacity:.9;">${documentoLabel}: ${valorFicha(pessoa.cpf)}</p>
+          <p style="margin:7px 0 0;font-size:11px;opacity:.85;">Situação: <strong>${status}</strong></p>
+        </div>
+        ${foto}
+      </div>
+      <div class="rt-section">
+        <h2>Dados cadastrais</h2>
+        <table class="rt-table">
+          <tr><th>Nome completo</th><td>${valorFicha(pessoa.nome)}</td><th>${documentoLabel}</th><td>${valorFicha(pessoa.cpf)}</td></tr>
+          ${cargoOuRegistro}
+          <tr><th>Data de nascimento</th><td>${formatarDataFicha(pessoa.data_nascimento)}</td><th>Estado civil</th><td>${valorFicha(pessoa.estado_civil)}</td></tr>
+          <tr><th>Profissão</th><td>${valorFicha(pessoa.profissao)}</td><th>Cadastro criado em</th><td>${formatarDataFicha(pessoa.created_at)}</td></tr>
+        </table>
+      </div>
+      <div class="rt-section">
+        <h2>Contato e endereço</h2>
+        <table class="rt-table">
+          <tr><th>E-mail</th><td>${valorFicha(pessoa.email)}</td><th>Telefone</th><td>${valorFicha(pessoa.telefone)}</td></tr>
+          <tr><th>Endereço</th><td colspan="3">${valorFicha(endereco)}</td></tr>
+          <tr><th>Cidade/UF</th><td>${valorFicha(cidadeUf)}</td><th>CEP</th><td>${valorFicha(pessoa.cep)}</td></tr>
+        </table>
+      </div>
+      ${escritorio}
+      ${parceiroIdentidade}
+      ${observacoes}
+      <div style="margin-top:24px;padding:12px 16px;background:#f8fafc;border:1px solid #e2e8f0;border-radius:8px;font-size:10px;color:#64748b;line-height:1.6;">
+        <strong>Uso interno:</strong> ficha gerada a partir dos dados cadastrados no Destrava Crédito. A ficha não contém senhas, hashes, tokens ou outros dados de autenticação.
+      </div>
+      <div style="margin-top:12px;font-size:10px;color:#94a3b8;text-align:center;">Gerado em ${new Date().toLocaleString('pt-BR')} — Destrava Crédito</div>
+    `, titulo);
+  }
+
+  async function gerarPdfFichaEquipe(html: string): Promise<Buffer> {
+    let browser: any;
+    try {
+      browser = await launchChromium();
+      const page = await browser.newPage();
+      await page.setContent(html, { waitUntil: 'networkidle0' });
+      return await page.pdf({ format: 'A4', printBackground: true, margin: { top: '10mm', bottom: '10mm', left: '8mm', right: '8mm' } });
+    } finally {
+      if (browser) await closeChromium(browser);
+    }
+  }
+
+  function slugFichaEquipe(value: unknown, fallback: string): string {
+    return String(value || fallback)
+      .normalize('NFD')
+      .replace(/[\u0300-\u036f]/g, '')
+      .replace(/[^a-zA-Z0-9]+/g, '-')
+      .replace(/^-+|-+$/g, '')
+      .toLowerCase() || fallback;
+  }
+
+  function enviarPdfFichaEquipe(res: Response, pdf: Buffer, prefixo: string, nome: unknown): void {
+    const filename = `${prefixo}-${slugFichaEquipe(nome, 'cadastro')}.pdf`;
+    res.setHeader('Content-Type', 'application/pdf');
+    res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
+    res.setHeader('Cache-Control', 'private, no-store');
+    res.setHeader('X-Robots-Tag', 'noindex, nofollow, noarchive');
+    res.send(pdf);
+  }
+
+  app.get('/api/colaboradores/:id/ficha/pdf', auth, async (req: Request, res: Response) => {
+    try {
+      const solicitante = (req as Request & { colaborador: any }).colaborador;
+      const { rows } = await pool.query(
+        `SELECT id, nome, cargo, email, telefone, cpf, rg, data_nascimento, estado_civil,
+                profissao, endereco, numero, complemento, bairro, cidade, uf, cep,
+                ativo, perfil, created_at, foto_url
+           FROM colaboradores WHERE id = $1`,
+        [req.params.id],
+      );
+      const colaborador = rows[0];
+      if (!colaborador) { res.status(404).json({ error: 'Colaborador não encontrado.' }); return; }
+      if (String(solicitante?.id) !== String(colaborador.id) && !podeGerenciarCargo(solicitante?.cargo || '', colaborador.cargo || '')) {
+        res.status(403).json({ error: 'Você não tem permissão para visualizar esta ficha.' });
+        return;
+      }
+      const fotoDataUri = await carregarFotoColaboradorDataUri(colaborador);
+      const html = gerarHtmlFichaEquipe('colaborador', colaborador, fotoDataUri);
+      const pdf = await gerarPdfFichaEquipe(html);
+      enviarPdfFichaEquipe(res, pdf, 'ficha-colaborador', colaborador.nome);
+    } catch (err: any) {
+      console.error('[GET /api/colaboradores/:id/ficha/pdf]', err);
+      res.status(500).json({ error: 'Erro ao gerar ficha do colaborador.', detail: err?.message });
+    }
+  });
+
+  app.get('/api/contadores/:id/ficha/pdf', auth, async (req: Request, res: Response) => {
+    try {
+      const { rows } = await pool.query(
+        `SELECT id, nome, cpf, crc, email, telefone, nome_escritorio, cnpj_escritorio,
+                endereco_escritorio, cidade_escritorio, uf_escritorio, ativo, created_at
+           FROM contadores WHERE id = $1`,
+        [req.params.id],
+      );
+      const contador = rows[0];
+      if (!contador) { res.status(404).json({ error: 'Contador não encontrado.' }); return; }
+      const pdf = await gerarPdfFichaEquipe(gerarHtmlFichaEquipe('contador', contador));
+      enviarPdfFichaEquipe(res, pdf, 'ficha-contador', contador.nome);
+    } catch (err: any) {
+      console.error('[GET /api/contadores/:id/ficha/pdf]', err);
+      res.status(500).json({ error: 'Erro ao gerar ficha do contador.', detail: err?.message });
+    }
+  });
+
+  app.get('/api/parceiros/:id/ficha/pdf', auth, async (req: Request, res: Response) => {
+    try {
+      const { rows } = await pool.query(
+        `SELECT id, nome, cpf, email, telefone, rg, data_nascimento, estado_civil,
+                profissao, endereco, numero, complemento, bairro, cidade, uf, cep,
+                percentual_comissao, observacoes, ativo, logo_url, cabecalho_html,
+                rodape_html, cor_primaria, cor_secundaria, created_at
+           FROM parceiros_comerciais WHERE id = $1`,
+        [req.params.id],
+      );
+      const parceiro = rows[0];
+      if (!parceiro) { res.status(404).json({ error: 'Parceiro não encontrado.' }); return; }
+      const pdf = await gerarPdfFichaEquipe(gerarHtmlFichaEquipe('parceiro', parceiro));
+      enviarPdfFichaEquipe(res, pdf, 'ficha-parceiro', parceiro.nome);
+    } catch (err: any) {
+      console.error('[GET /api/parceiros/:id/ficha/pdf]', err);
+      res.status(500).json({ error: 'Erro ao gerar ficha do parceiro.', detail: err?.message });
+    }
+  });
 
   // ─── GET /api/clientes-pf/:id/ficha/pdf ────────────────────────────────────
   // Ficha completa do cliente PF (dados cadastrais + lista de documentos).

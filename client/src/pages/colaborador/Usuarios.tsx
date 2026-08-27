@@ -1,7 +1,8 @@
 import { useEffect, useMemo, useState } from "react";
 import Layout from "./Layout";
-import { apiFetch } from "@/lib/api";
+import { apiFetch, apiFetchBlob } from "@/lib/api";
 import { useAuth } from "@/contexts/AuthContext";
+import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -40,6 +41,9 @@ import {
   UserPlus,
   Users,
   Workflow,
+  Camera,
+  Download,
+
   X,
 } from "lucide-react";
 
@@ -55,6 +59,7 @@ interface Colaborador {
   pode_ver_todos_leads?: boolean;
   chatwoot_agente_id?: number | null;
   created_at?: string | null;
+  foto_url?: string | null;
 }
 
 const TODOS_CARGOS = [
@@ -141,6 +146,8 @@ export default function UsuariosPage() {
   const [criando, setCriando] = useState(false);
   const [mensagem, setMensagem] = useState<{ tipo: "sucesso" | "erro"; texto: string } | null>(null);
   const [senhaCopiada, setSenhaCopiada] = useState(false);
+  const [fotoNova, setFotoNova] = useState<File | null>(null);
+  const [fotoNovaPreview, setFotoNovaPreview] = useState<string | null>(null);
 
   const [colaboradores, setColaboradores] = useState<Colaborador[]>([]);
   const [carregando, setCarregando] = useState(true);
@@ -158,6 +165,9 @@ export default function UsuariosPage() {
   const [editChatwootAgenteId, setEditChatwootAgenteId] = useState("");
   const [salvandoEdit, setSalvandoEdit] = useState(false);
   const [mensagemEdit, setMensagemEdit] = useState<{ tipo: "sucesso" | "erro"; texto: string } | null>(null);
+  const [editFoto, setEditFoto] = useState<File | null>(null);
+  const [editFotoPreview, setEditFotoPreview] = useState<string | null>(null);
+  const [gerandoFichaId, setGerandoFichaId] = useState<string | null>(null);
 
   useEffect(() => {
     if (!cargo) return;
@@ -211,7 +221,7 @@ export default function UsuariosPage() {
     setMensagem(null);
 
     try {
-      await apiFetch("/api/colaboradores", {
+      const criado = await apiFetch("/api/colaboradores", {
         method: "POST",
         body: JSON.stringify({
           nome: nome.trim(),
@@ -226,9 +236,17 @@ export default function UsuariosPage() {
         }),
       });
 
+      let avisoFoto = "";
+      if (fotoNova && criado?.id) {
+        try {
+          await enviarFotoColaborador(String(criado.id), fotoNova);
+        } catch (err: any) {
+          avisoFoto = ` A foto não foi salva: ${err?.message || "erro no upload"}`;
+        }
+      }
       setMensagem({
-        tipo: "sucesso",
-        texto: `Colaborador "${nome}" criado com sucesso.`,
+        tipo: avisoFoto ? "erro" : "sucesso",
+        texto: `Colaborador "${nome}" criado com sucesso.${avisoFoto}`,
       });
 
       setNome("");
@@ -240,6 +258,8 @@ export default function UsuariosPage() {
       setPodeAtenderLeads(true);
       setPodeVerTodosLeads(false);
       setChatwootAgenteId("");
+      setFotoNova(null);
+      setFotoNovaPreview(null);
       carregarColaboradores();
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : "Erro ao criar colaborador.";
@@ -247,6 +267,46 @@ export default function UsuariosPage() {
     }
 
     setCriando(false);
+  }
+
+  function prepararFoto(file: File | undefined, setter: (file: File | null) => void, previewSetter: (url: string | null) => void, mensagemSetter: (value: { tipo: "sucesso" | "erro"; texto: string } | null) => void) {
+    if (!file) return;
+    if (!['image/jpeg', 'image/png', 'image/webp'].includes(file.type)) {
+      mensagemSetter({ tipo: "erro", texto: "A foto deve estar em JPG, PNG ou WebP." });
+      return;
+    }
+    if (file.size > 2 * 1024 * 1024) {
+      mensagemSetter({ tipo: "erro", texto: "A foto deve ter no máximo 2 MB." });
+      return;
+    }
+    setter(file);
+    previewSetter(URL.createObjectURL(file));
+    mensagemSetter(null);
+  }
+
+  async function enviarFotoColaborador(id: string, file: File) {
+    const body = new FormData();
+    body.append("foto", file);
+    await apiFetch(`/api/colaboradores/${id}/foto`, { method: "POST", body });
+  }
+
+  async function baixarFichaColaborador(col: Colaborador) {
+    setGerandoFichaId(col.id);
+    try {
+      const { blob, filename } = await apiFetchBlob(`/api/colaboradores/${col.id}/ficha/pdf`);
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = filename || `ficha-colaborador-${col.nome.replace(/[^a-zA-Z0-9]/g, "-").toLowerCase()}.pdf`;
+      a.click();
+      URL.revokeObjectURL(url);
+      toast.success("Ficha cadastral gerada com sucesso.");
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : "Erro ao gerar ficha cadastral.";
+      toast.error(msg);
+    } finally {
+      setGerandoFichaId(null);
+    }
   }
 
   function abrirEdicao(col: Colaborador) {
@@ -260,11 +320,15 @@ export default function UsuariosPage() {
     setEditPodeAtenderLeads(col.pode_atender_leads ?? podeAtenderPadrao(col.cargo));
     setEditPodeVerTodosLeads(col.pode_ver_todos_leads ?? podeVerTudoPadrao(col.perfil || perfilOperacionalPadrao(col.cargo), col.cargo));
     setEditChatwootAgenteId(col.chatwoot_agente_id ? String(col.chatwoot_agente_id) : "");
+    setEditFoto(null);
+    setEditFotoPreview(col.foto_url || null);
     setMensagemEdit(null);
   }
 
   function cancelarEdicao() {
     setEditandoId(null);
+    setEditFoto(null);
+    setEditFotoPreview(null);
     setMensagemEdit(null);
   }
 
@@ -294,7 +358,15 @@ export default function UsuariosPage() {
           ...(editSenha.trim() ? { senha: editSenha.trim() } : {}),
         }),
       });
-      setMensagemEdit({ tipo: "sucesso", texto: "Colaborador atualizado com sucesso." });
+      let avisoFoto = "";
+      if (editFoto) {
+        try {
+          await enviarFotoColaborador(id, editFoto);
+        } catch (err: any) {
+          avisoFoto = ` A foto não foi salva: ${err?.message || "erro no upload"}`;
+        }
+      }
+      setMensagemEdit({ tipo: avisoFoto ? "erro" : "sucesso", texto: `Colaborador atualizado com sucesso.${avisoFoto}` });
       setTimeout(() => {
         setEditandoId(null);
         setMensagemEdit(null);
@@ -478,6 +550,19 @@ export default function UsuariosPage() {
                   </label>
                 </div>
 
+                <div className="flex items-center gap-3 rounded-xl border bg-muted/20 p-3">
+                  {fotoNovaPreview ? (
+                    <img src={fotoNovaPreview} alt="Pré-visualização da foto" className="h-16 w-16 rounded-xl object-cover border" />
+                  ) : (
+                    <div className="h-16 w-16 rounded-xl border border-dashed flex items-center justify-center text-muted-foreground"><Camera className="h-5 w-5" /></div>
+                  )}
+                  <div className="min-w-0 flex-1 space-y-1.5">
+                    <Label htmlFor="foto-user">Foto do colaborador <span className="text-muted-foreground font-normal">(opcional)</span></Label>
+                    <Input id="foto-user" type="file" accept="image/jpeg,image/png,image/webp" onChange={(e) => prepararFoto(e.target.files?.[0], setFotoNova, setFotoNovaPreview, setMensagem)} className="text-xs" />
+                    <p className="text-xs text-muted-foreground">JPG, PNG ou WebP, até 2 MB. Aparecerá na ficha e no PDF.</p>
+                  </div>
+                </div>
+
                 <div className="space-y-1.5">
                   <Label htmlFor="senha-user">Senha <span className="text-destructive">*</span></Label>
                   <div className="relative flex gap-2">
@@ -619,6 +704,19 @@ export default function UsuariosPage() {
                             </div>
                           </div>
 
+                          <div className="flex items-center gap-3 rounded-xl border bg-card p-3">
+                            {editFotoPreview ? (
+                              <img src={editFotoPreview} alt="Foto atual do colaborador" className="h-16 w-16 rounded-xl object-cover border" />
+                            ) : (
+                              <div className="h-16 w-16 rounded-xl border border-dashed flex items-center justify-center text-muted-foreground"><Camera className="h-5 w-5" /></div>
+                            )}
+                            <div className="min-w-0 flex-1 space-y-1.5">
+                              <Label htmlFor={`foto-edit-${col.id}`}>Foto do colaborador <span className="text-muted-foreground font-normal">(opcional)</span></Label>
+                              <Input id={`foto-edit-${col.id}`} type="file" accept="image/jpeg,image/png,image/webp" onChange={(e) => prepararFoto(e.target.files?.[0], setEditFoto, setEditFotoPreview, setMensagemEdit)} className="text-xs" />
+                              <p className="text-xs text-muted-foreground">JPG, PNG ou WebP, até 2 MB.</p>
+                            </div>
+                          </div>
+
                           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 rounded-xl border bg-card p-3">
                             <label className="flex items-center gap-3 text-sm">
                               <input type="checkbox" checked={editPodeAtenderLeads} onChange={(e) => setEditPodeAtenderLeads(e.target.checked)} />
@@ -648,7 +746,13 @@ export default function UsuariosPage() {
                       ) : (
                         <div className="p-4 space-y-3">
                           <div className="flex items-start justify-between gap-3 flex-wrap">
-                            <div className="min-w-0">
+                            <div className="flex items-start gap-3 min-w-0">
+                              {col.foto_url ? (
+                                <img src={col.foto_url} alt={`Foto de ${col.nome}`} className="h-12 w-12 rounded-xl object-cover border flex-shrink-0" />
+                              ) : (
+                                <div className="h-12 w-12 rounded-xl border border-dashed flex items-center justify-center text-muted-foreground flex-shrink-0"><User className="h-5 w-5" /></div>
+                              )}
+                              <div className="min-w-0">
                               <div className="flex items-center gap-2 flex-wrap">
                                 <p className="font-semibold text-sm truncate">{col.nome}</p>
                                 <span className={`text-xs px-1.5 py-0.5 rounded border font-medium ${badgeCargo(col.cargo)}`}>{col.cargo}</span>
@@ -664,8 +768,12 @@ export default function UsuariosPage() {
                                 <span>Visão ampla: {col.pode_ver_todos_leads ? "Sim" : "Não"}</span>
                                 <span>Chatwoot agente: {col.chatwoot_agente_id ?? "—"}</span>
                               </p>
+                              </div>
                             </div>
                             <div className="flex flex-wrap items-center gap-2 mt-2 sm:mt-0">
+                              <Button size="sm" variant="outline" onClick={() => baixarFichaColaborador(col)} disabled={gerandoFichaId === col.id}>
+                                {gerandoFichaId === col.id ? <RefreshCw className="h-3.5 w-3.5 mr-1 animate-spin" /> : <Download className="h-3.5 w-3.5 mr-1" />} Ficha PDF
+                              </Button>
                               {podeGerenciar && (
                                 <Button size="sm" variant="outline" onClick={() => abrirEdicao(col)}>
                                   <Pencil className="h-3.5 w-3.5 mr-1" /> Editar

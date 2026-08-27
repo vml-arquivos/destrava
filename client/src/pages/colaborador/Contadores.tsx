@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
-import { Plus, Pencil, Trash2, Loader2, BookUser, CheckCircle, XCircle } from 'lucide-react';
+import { Plus, Pencil, Trash2, Loader2, BookUser, CheckCircle, XCircle, Download, RefreshCw } from 'lucide-react';
 import { toast } from 'sonner';
-import { apiFetch } from '../../lib/api';
+import { apiFetch, apiFetchBlob } from '../../lib/api';
 import Layout from './Layout';
 
 interface Contador {
@@ -55,6 +55,7 @@ export default function Contadores() {
   const [salvando, setSalvando] = useState(false);
   const [excluindo, setExcluindo] = useState<string | null>(null);
   const [busca, setBusca] = useState('');
+  const [gerandoFichaId, setGerandoFichaId] = useState<string | null>(null);
 
   const carregar = async () => {
     setLoading(true);
@@ -130,6 +131,24 @@ export default function Contadores() {
       toast.error(err?.message || 'Erro ao salvar contador');
     } finally {
       setSalvando(false);
+    }
+  };
+
+  const baixarFicha = async (contador: Contador) => {
+    setGerandoFichaId(contador.id);
+    try {
+      const { blob, filename } = await apiFetchBlob(`/api/contadores/${contador.id}/ficha/pdf`);
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = filename || `ficha-contador-${contador.nome.replace(/[^a-zA-Z0-9]/g, '-').toLowerCase()}.pdf`;
+      a.click();
+      URL.revokeObjectURL(url);
+      toast.success('Ficha cadastral gerada com sucesso');
+    } catch (err: any) {
+      toast.error(err?.message || 'Erro ao gerar ficha cadastral');
+    } finally {
+      setGerandoFichaId(null);
     }
   };
 
@@ -248,6 +267,14 @@ export default function Contadores() {
                       </td>
                       <td className="px-4 py-3 text-right">
                         <div className="flex items-center justify-end gap-2">
+                          <button
+                            onClick={() => baixarFicha(c)}
+                            disabled={gerandoFichaId === c.id}
+                            className="p-1.5 text-muted-foreground hover:text-primary hover:bg-primary/10 rounded transition-colors disabled:opacity-50"
+                            title="Imprimir ficha PDF"
+                          >
+                            {gerandoFichaId === c.id ? <RefreshCw className="w-4 h-4 animate-spin" /> : <Download className="w-4 h-4" />}
+                          </button>
                           <button
                             onClick={() => abrirEditar(c)}
                             className="p-1.5 text-muted-foreground hover:text-primary hover:bg-primary/10 rounded transition-colors"
