@@ -64,6 +64,7 @@ import { generateFollowupMessage, generateLeadRecommendations, generateLeadSumma
 import { getDataDir, resolveDocumentPath, saveDocumentBuffer, getDocumentStorageHealth, PersistentStorageError } from "./services/documentStorage";
 import { validateProductionConfig } from "./productionConfig";
 import { buscarAnalisesDocumentaisAvancadas, calcularInteligencia360 } from "./services/inteligencia360Service";
+import { reconciliarFollowupMaturidade12Meses } from "./services/empresaMaturidadeFollowup";
 import { calcularPropostaBancaria } from "./services/propostaBancariaService";
 import { gerarRelatorioTecnico } from "./services/relatorioTecnicoEmpresaService";
 import { calcularPendencias } from "./services/pendenciasEmpresaService";
@@ -131,6 +132,20 @@ pool.on("error", (err) => {
   console.error("[DB] Erro inesperado no pool:", err.message);
 });
 setAuditoriaPool(pool);
+
+async function reconciliarFollowupMaturidadeEmpresa(
+  empresaId: string,
+  empresaApta12Meses?: boolean | null,
+) {
+  try {
+    return await reconciliarFollowupMaturidade12Meses(pool, empresaId, { empresaApta12Meses });
+  } catch (error: any) {
+    // O lembrete é aditivo: indisponibilidade da migration ou do follow-up nunca
+    // pode impedir a abertura da ficha, do dossiê ou da Inteligência 360.
+    console.warn("[Follow-up maturidade 12 meses] reconciliação ignorada:", error?.message || error);
+    return { followup: null, alterado: false };
+  }
+}
 
 // Testa a conexão ao iniciar
 pool.query("SELECT 1").then(() => {
@@ -1107,6 +1122,18 @@ async function startServer() {
   // Rota para consulta de CNPJ (proxy para BrasilAPI)
   app.use('/api/cnpj', cnpjRouter);
   app.use('/api/empresas', sociosDocumentosRouter);
+  app.use('/api/documentacao/empresa/:empresaId', auth, async (req: Request, _res: Response, next: NextFunction) => {
+    const empresaId = String(req.params.empresaId || '').trim();
+    try {
+      const colaborador = (req as Request & { colaborador: any }).colaborador;
+      if (empresaId && await canAccessEmpresa(colaborador, empresaId)) {
+        await reconciliarFollowupMaturidadeEmpresa(empresaId);
+      }
+    } catch (error: any) {
+      console.warn('[Documentação] lembrete de maturidade ignorado:', error?.message || error);
+    }
+    next();
+  });
   app.use('/api/documentacao', documentacaoRouter);
   
   // Rotas de blog, banners e sitemap
@@ -5721,6 +5748,7 @@ async function startServer() {
         return;
       }
       const empresa = empresaRows[0];
+      await reconciliarFollowupMaturidadeEmpresa(empresaId);
 
       // Buscar sócios
       let socios: any[] = [];
@@ -7325,6 +7353,7 @@ async function startServer() {
         `Empresa cadastrada${payload.origem ? ` via ${payload.origem}` : ""}. Dados principais salvos no cadastro.`,
         colaborador?.nome || "Sistema"
       );
+      await reconciliarFollowupMaturidadeEmpresa(empresa.id);
 
       res.status(201).json(empresa);
     } catch (err: any) {
@@ -7449,6 +7478,7 @@ async function startServer() {
       } else {
         await registrarHistoricoEmpresaSeguro(id, "empresa_atualizada", "Dados da empresa atualizados.", (req as any).colaborador?.nome || "Sistema");
       }
+      await reconciliarFollowupMaturidadeEmpresa(id);
 
       // Ponte pro QSA real: o campo "Sócio/Responsável" do formulário de empresa grava em
       // empresas.responsavel_* -- sem isso, essa edição nunca chegava em socios_empresa, e o
@@ -7620,6 +7650,7 @@ async function startServer() {
   app.get("/api/empresas/:id/followups", auth, async (req: Request, res: Response) => {
     try {
       if (!(await requireEmpresaAccess(req, res, req.params.id))) return;
+      await reconciliarFollowupMaturidadeEmpresa(req.params.id);
       const r = await pool.query(
         "SELECT * FROM empresa_followups WHERE empresa_id=$1 ORDER BY data_agendada ASC NULLS LAST, created_at DESC",
         [req.params.id]

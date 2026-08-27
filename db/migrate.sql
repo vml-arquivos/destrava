@@ -539,3 +539,15 @@ BEGIN
     ALTER TABLE public.triagem_leads VALIDATE CONSTRAINT triagem_leads_score_basico_check;
   END IF;
 END $$;
+
+-- ─── MIGRAÇÃO 087: origem e idempotência do lembrete de maturidade empresarial ───
+ALTER TABLE IF EXISTS public.empresa_followups
+  ADD COLUMN IF NOT EXISTS origem TEXT NOT NULL DEFAULT 'manual';
+DO $$
+BEGIN
+  IF to_regclass('public.empresa_followups') IS NOT NULL THEN
+    CREATE UNIQUE INDEX IF NOT EXISTS idx_empresa_followups_maturidade_unica
+      ON public.empresa_followups(empresa_id)
+      WHERE origem = 'maturidade_12_meses';
+  END IF;
+END $$;
