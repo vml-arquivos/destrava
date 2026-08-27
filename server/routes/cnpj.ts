@@ -422,16 +422,22 @@ function mergeNormalized(rawCnpj: string, brasil: AnyRecord, cnpja: AnyRecord, o
 }
 
 /**
- * GET /api/cnpj/:cnpj
- *
- * Consulta CNPJ mantendo compatibilidade com BrasilAPI e enriquecendo com CNPJá
- * Open/OpenCNPJ. Retorna o mesmo formato esperado pelo frontend atual + campos
- * extras: fontes_consulta, provedor_principal e dados_fontes.
+ * Resultado interno da consulta de CNPJ. A função é compartilhada pela rota HTTP
+ * e pelo enriquecimento automático de empresas criadas no simulador.
  */
-router.get('/:cnpj', async (req: Request, res: Response) => {
-  const raw = onlyDigits(req.params.cnpj);
+export type CnpjConsultaResult =
+  | { ok: true; data: AnyRecord }
+  | { ok: false; status: 400 | 404 | 502; error: string; fontes_consulta?: AnyRecord[] };
+
+/**
+ * Consulta CNPJ mantendo compatibilidade com BrasilAPI e enriquecendo com CNPJá
+ * Open/OpenCNPJ. A consulta é best-effort para consumidores internos: nenhum
+ * consumidor deve fabricar dados quando todos os provedores falharem.
+ */
+export async function consultarCnpj(cnpj: string): Promise<CnpjConsultaResult> {
+  const raw = onlyDigits(cnpj);
   if (raw.length !== 14) {
-    return res.status(400).json({ error: 'CNPJ deve ter 14 dígitos.' });
+    return { ok: false, status: 400, error: 'CNPJ deve ter 14 dígitos.' };
   }
 
   const results: ProviderResult[] = [];
@@ -456,13 +462,16 @@ router.get('/:cnpj', async (req: Request, res: Response) => {
   }
 
   const success = results.filter((r) => r.ok && r.data);
+  const fontesConsulta = results.map(({ name, ok, status, error }) => ({ name, ok, status, error }));
 
   if (success.length === 0) {
     const has404 = results.some((r) => r.status === 404);
-    return res.status(has404 ? 404 : 502).json({
+    return {
+      ok: false,
+      status: has404 ? 404 : 502,
       error: has404 ? 'CNPJ não encontrado na Receita Federal.' : 'Erro ao consultar CNPJ nas fontes configuradas.',
-      fontes_consulta: results.map(({ name, ok, status, error }) => ({ name, ok, status, error })),
-    });
+      fontes_consulta: fontesConsulta,
+    };
   }
 
   const brasilRaw = results.find((r) => r.name === 'brasilapi')?.data || null;
@@ -473,25 +482,38 @@ router.get('/:cnpj', async (req: Request, res: Response) => {
   const cnpja = normalizeCnpja(cnpjaRaw);
   const opencnpj = normalizeOpenCnpj(opencnpjRaw);
   const merged = mergeNormalized(raw, brasil, cnpja, opencnpj);
-
   const dataSincronizacao = new Date().toISOString();
-  const fontesConsulta = results.map(({ name, ok, status, error }) => ({ name, ok, status, error }));
 
-  return res.json({
-    ...merged,
-    provedor_principal: success[0].name,
-    provedor: success[0].name,
-    data_sincronizacao: dataSincronizacao,
-    ultima_sincronizacao_receita: dataSincronizacao,
-    fontes_consulta: fontesConsulta,
-    dados_extra: { fontes_consulta: fontesConsulta, qsa_count: merged.qsa?.length || 0 },
-    qsa_count: merged.qsa?.length || 0,
-    qsa_mensagem: (merged.qsa || []).length > 0 ? null : 'Nenhum sócio retornado pelas fontes gratuitas para este CNPJ',
-    dados_fontes: {
-      brasilapi: brasilRaw,
-      opencnpj: opencnpjRaw,
+  return {
+    ok: true,
+    data: {
+      ...merged,
+      provedor_principal: success[0].name,
+      provedor: success[0].name,
+      data_sincronizacao: dataSincronizacao,
+      ultima_sincronizacao_receita: dataSincronizacao,
+      fontes_consulta: fontesConsulta,
+      dados_extra: { fontes_consulta: fontesConsulta, qsa_count: merged.qsa?.length || 0 },
+      qsa_count: merged.qsa?.length || 0,
+      qsa_mensagem: (merged.qsa || []).length > 0 ? null : 'Nenhum sócio retornado pelas fontes gratuitas para este CNPJ',
+      dados_fontes: {
+        brasilapi: brasilRaw,
+        opencnpj: opencnpjRaw,
+      },
     },
-  });
+  };
+}
+
+/** GET /api/cnpj/:cnpj */
+router.get('/:cnpj', async (req: Request, res: Response) => {
+  const consulta = await consultarCnpj(req.params.cnpj);
+  if (!consulta.ok) {
+    return res.status(consulta.status).json({
+      error: consulta.error,
+      ...(consulta.fontes_consulta ? { fontes_consulta: consulta.fontes_consulta } : {}),
+    });
+  }
+  return res.json(consulta.data);
 });
 
 export default router;

@@ -18,7 +18,7 @@ import { auth, clearSessionCookie, setSessionCookie } from "./middleware/auth.ts
 import { authorize, requirePermissao } from "./middleware/authorize.ts";
 import { setAuditoriaPool, registrarAuditoria, rotaAuditLogs } from "./middleware/auditoria.ts";
 import { getPermissoes, temPermissao, LISTA_CARGOS_VALIDOS, nivelHierarquico, podeGerenciar as _podeGerenciar, cargosGerenciaveis as _cargosGerenciaveis } from "../shared/cargos.ts";
-import cnpjRouter from './routes/cnpj';
+import cnpjRouter, { consultarCnpj } from './routes/cnpj';
 import sociosDocumentosRouter, { upsertSocioEmpresa } from './routes/socios_documentos';
 import documentosRouter, { createZip as createZipServer } from './routes/documentos';
 import documentacaoRouter from './routes/documentacao';
@@ -90,6 +90,7 @@ import {
 import { enviarDocumento, resolverTokenPublico } from "./services/documentDeliveryService";
 import { analiseDocumentalService } from './services/analiseDocumentalEspecializada';
 import { isUuid } from './utils/validators';
+import { buildEmpresaCnpjUpdate } from './services/empresaCnpjEnrichment';
 
 const { Pool } = pkg;
 
@@ -188,6 +189,25 @@ async function dispararN8n(evento: string, payload: Record<string, unknown>): Pr
 }
 
 
+async function enriquecerEmpresaComCnpjBestEffort(empresaId: string, cnpj: string): Promise<void> {
+  try {
+    const consulta = await consultarCnpj(cnpj);
+    if (!consulta.ok) {
+      console.warn(`[CNPJ ENRICHMENT] Empresa ${empresaId}: ${consulta.error}`);
+      return;
+    }
+
+    const { assignments, values } = buildEmpresaCnpjUpdate(await getTableColumns("empresas"), consulta.data);
+    if (assignments.length === 0) return;
+    values.push(empresaId);
+    await pool.query(`UPDATE empresas SET ${assignments.join(', ')} WHERE id = $${values.length}`, values);
+    console.log(`[CNPJ ENRICHMENT] Empresa ${empresaId} enriquecida com sucesso.`);
+  } catch (err) {
+    // O enriquecimento nunca pode impedir a criação do lead/empresa.
+    console.warn('[CNPJ ENRICHMENT] Falha best-effort:', err instanceof Error ? err.message : err);
+  }
+}
+
 async function processarEmpresaDaSimulacao(
   client: any,
   dados: {
@@ -210,7 +230,10 @@ async function processarEmpresaDaSimulacao(
       `SELECT id FROM empresas WHERE regexp_replace(cnpj, '[^0-9]', '', 'g') = $1 LIMIT 1`,
       [cleanCnpj]
     );
-    if (res.rows.length > 0) return res.rows[0].id;
+    if (res.rows.length > 0) {
+      void enriquecerEmpresaComCnpjBestEffort(res.rows[0].id, cleanCnpj);
+      return res.rows[0].id;
+    }
   }
 
   if (cleanPhone) {
@@ -220,7 +243,10 @@ async function processarEmpresaDaSimulacao(
        AND regexp_replace(telefone, '[^0-9]', '', 'g') = $2 LIMIT 1`,
       [cleanNome, cleanPhone]
     );
-    if (res.rows.length > 0) return res.rows[0].id;
+    if (res.rows.length > 0) {
+      void enriquecerEmpresaComCnpjBestEffort(res.rows[0].id, cleanCnpj);
+      return res.rows[0].id;
+    }
   }
 
   if (dados.email && dados.email.trim()) {
@@ -230,7 +256,10 @@ async function processarEmpresaDaSimulacao(
        AND lower(trim(email)) = lower($2) LIMIT 1`,
       [cleanNome, dados.email.trim()]
     );
-    if (res.rows.length > 0) return res.rows[0].id;
+    if (res.rows.length > 0) {
+      void enriquecerEmpresaComCnpjBestEffort(res.rows[0].id, cleanCnpj);
+      return res.rows[0].id;
+    }
   }
 
   const res = await client.query(
@@ -239,7 +268,9 @@ async function processarEmpresaDaSimulacao(
      RETURNING id`,
     [cleanNome, dados.cnpj || null, dados.telefone || null, dados.email || null, dados.colaborador_id || null]
   );
-  return res.rows[0].id;
+  const empresaId = res.rows[0].id;
+  void enriquecerEmpresaComCnpjBestEffort(empresaId, cleanCnpj);
+  return empresaId;
 }
 
 // ─── Cargos e hierarquia de permissões ──────────────────────────────────────
