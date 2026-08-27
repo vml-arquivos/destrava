@@ -122,6 +122,43 @@ interface Colaborador {
   ativo?: boolean;
 }
 
+interface FollowupOperacional {
+  id: string;
+  lead_id: string;
+  colaborador_id: string;
+  colaborador_nome?: string;
+  agendado_para: string;
+  tipo: string;
+  descricao?: string | null;
+  status: "pendente" | "realizado" | "cancelado" | "reagendado";
+  resultado?: string | null;
+  observacoes?: string | null;
+  reagendado_para?: string | null;
+  created_at: string;
+}
+
+interface NotaInterna {
+  id: string;
+  lead_id: string;
+  autor_id: string;
+  autor_nome?: string;
+  conteudo: string;
+  privada: boolean;
+  fixada: boolean;
+  created_at: string;
+}
+
+interface DelegacaoOperacional {
+  id: string;
+  lead_id: string;
+  delegado_por: string;
+  delegado_para: string;
+  delegado_por_nome?: string;
+  delegado_para_nome?: string;
+  motivo?: string | null;
+  created_at: string;
+}
+
 // ─── Configurações ────────────────────────────────────────────
 const ETAPA_FUNIL_STYLE: Record<string, { color: string; text: string; dot: string }> = {
   entrada:      { color: "bg-muted border-input",    text: "text-foreground",   dot: "bg-muted" },
@@ -337,6 +374,205 @@ function KanbanColuna({
   );
 }
 
+function fmtDataOperacional(value?: string | null) {
+  return value ? new Date(value).toLocaleString("pt-BR", { dateStyle: "short", timeStyle: "short" }) : "Sem data";
+}
+
+function PainelOperacionalCRM({
+  leadId,
+  colaboradores,
+  podeGerenciarCarteira,
+  onUpdated,
+}: {
+  leadId: string;
+  colaboradores: Colaborador[];
+  podeGerenciarCarteira: boolean;
+  onUpdated: () => void;
+}) {
+  const [followups, setFollowups] = useState<FollowupOperacional[]>([]);
+  const [notas, setNotas] = useState<NotaInterna[]>([]);
+  const [delegacoes, setDelegacoes] = useState<DelegacaoOperacional[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [salvando, setSalvando] = useState(false);
+  const [novoFollowup, setNovoFollowup] = useState({ agendado_para: "", tipo: "ligacao", descricao: "" });
+  const [novaNota, setNovaNota] = useState("");
+  const [delegadoPara, setDelegadoPara] = useState("");
+  const [motivoDelegacao, setMotivoDelegacao] = useState("");
+
+  const carregarOperacao = async () => {
+    setLoading(true);
+    const [followupsResult, notasResult, delegacoesResult] = await Promise.all([
+      apiFetch(`/api/crm/followups?lead_id=${encodeURIComponent(leadId)}`).catch(() => []),
+      apiFetch(`/api/crm/notas-internas?lead_id=${encodeURIComponent(leadId)}`).catch(() => []),
+      apiFetch(`/api/crm/delegacoes?lead_id=${encodeURIComponent(leadId)}`).catch(() => []),
+    ]);
+    setFollowups(Array.isArray(followupsResult) ? followupsResult : []);
+    setNotas(Array.isArray(notasResult) ? notasResult : []);
+    setDelegacoes(Array.isArray(delegacoesResult) ? delegacoesResult : []);
+    setLoading(false);
+  };
+
+  useEffect(() => {
+    carregarOperacao();
+  }, [leadId]);
+
+  async function criarFollowup() {
+    if (!novoFollowup.agendado_para) {
+      toast.error("Informe a data do follow-up.");
+      return;
+    }
+    setSalvando(true);
+    try {
+      await apiFetch("/api/crm/followups", {
+        method: "POST",
+        body: JSON.stringify({ lead_id: leadId, ...novoFollowup }),
+      });
+      toast.success("Follow-up agendado.");
+      setNovoFollowup({ agendado_para: "", tipo: "ligacao", descricao: "" });
+      await carregarOperacao();
+      onUpdated();
+    } catch (err: any) {
+      toast.error(err?.message || "Não foi possível agendar o follow-up.");
+    } finally {
+      setSalvando(false);
+    }
+  }
+
+  async function atualizarFollowup(id: string, status: FollowupOperacional["status"]) {
+    try {
+      await apiFetch(`/api/crm/followups/${id}`, {
+        method: "PATCH",
+        body: JSON.stringify({ status, resultado: status === "realizado" ? "neutro" : undefined }),
+      });
+      await carregarOperacao();
+      onUpdated();
+    } catch (err: any) {
+      toast.error(err?.message || "Não foi possível atualizar o follow-up.");
+    }
+  }
+
+  async function criarNota() {
+    if (!novaNota.trim()) {
+      toast.error("Escreva uma nota antes de salvar.");
+      return;
+    }
+    setSalvando(true);
+    try {
+      await apiFetch("/api/crm/notas-internas", {
+        method: "POST",
+        body: JSON.stringify({ lead_id: leadId, conteudo: novaNota.trim(), privada: true }),
+      });
+      toast.success("Nota interna salva.");
+      setNovaNota("");
+      await carregarOperacao();
+    } catch (err: any) {
+      toast.error(err?.message || "Não foi possível salvar a nota interna.");
+    } finally {
+      setSalvando(false);
+    }
+  }
+
+  async function delegarLead() {
+    if (!delegadoPara) {
+      toast.error("Selecione o colaborador de destino.");
+      return;
+    }
+    setSalvando(true);
+    try {
+      await apiFetch("/api/crm/delegacoes", {
+        method: "POST",
+        body: JSON.stringify({ lead_id: leadId, delegado_para: delegadoPara, motivo: motivoDelegacao.trim() || null }),
+      });
+      toast.success("Lead delegado com sucesso.");
+      setMotivoDelegacao("");
+      await carregarOperacao();
+      onUpdated();
+    } catch (err: any) {
+      toast.error(err?.message || "Não foi possível delegar o lead.");
+    } finally {
+      setSalvando(false);
+    }
+  }
+
+  return (
+    <TabsContent value="operacao" className="mt-4 space-y-4">
+      <div className="rounded-xl border border-primary/20 bg-primary/5 p-4 space-y-3">
+        <div className="flex items-center gap-2">
+          <Clock className="h-4 w-4 text-primary" />
+          <div>
+            <h3 className="text-sm font-semibold text-foreground">Follow-up operacional</h3>
+            <p className="text-xs text-muted-foreground">O próximo item também mantém o campo legado proximo_followup sincronizado.</p>
+          </div>
+        </div>
+        <div className="grid grid-cols-1 md:grid-cols-[1fr_160px] gap-2">
+          <Input type="datetime-local" value={novoFollowup.agendado_para} onChange={(e) => setNovoFollowup((p) => ({ ...p, agendado_para: e.target.value }))} />
+          <Select value={novoFollowup.tipo} onValueChange={(value) => setNovoFollowup((p) => ({ ...p, tipo: value }))}>
+            <SelectTrigger><SelectValue /></SelectTrigger>
+            <SelectContent>
+              <SelectItem value="ligacao">Ligação</SelectItem>
+              <SelectItem value="whatsapp">WhatsApp</SelectItem>
+              <SelectItem value="email">E-mail</SelectItem>
+              <SelectItem value="reuniao">Reunião</SelectItem>
+              <SelectItem value="visita">Visita</SelectItem>
+              <SelectItem value="outro">Outro</SelectItem>
+            </SelectContent>
+          </Select>
+        </div>
+        <Textarea rows={2} placeholder="Contexto ou objetivo do follow-up" value={novoFollowup.descricao} onChange={(e) => setNovoFollowup((p) => ({ ...p, descricao: e.target.value }))} />
+        <Button size="sm" onClick={criarFollowup} disabled={salvando}><PlusCircle className="h-4 w-4 mr-1" /> Agendar follow-up</Button>
+        {!loading && followups.length > 0 && (
+          <div className="space-y-2 pt-2 border-t border-primary/15">
+            {followups.map((item) => (
+              <div key={item.id} className="flex items-start justify-between gap-3 rounded-lg border border-border bg-card p-3">
+                <div className="min-w-0">
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <span className="text-sm font-medium text-foreground">{fmtDataOperacional(item.agendado_para)}</span>
+                    <Badge variant={item.status === "pendente" ? "secondary" : item.status === "realizado" ? "default" : "outline"}>{item.status}</Badge>
+                    <span className="text-xs text-muted-foreground">{item.tipo}</span>
+                  </div>
+                  {item.descricao && <p className="text-xs text-muted-foreground mt-1">{item.descricao}</p>}
+                </div>
+                {item.status === "pendente" && (
+                  <Button size="sm" variant="outline" onClick={() => atualizarFollowup(item.id, "realizado")}><CheckCircle className="h-3.5 w-3.5 mr-1" /> Concluir</Button>
+                )}
+              </div>
+            ))}
+          </div>
+        )}
+        {!loading && followups.length === 0 && <p className="text-xs text-muted-foreground">Nenhum follow-up operacional encontrado.</p>}
+      </div>
+
+      <div className="rounded-xl border border-border bg-card p-4 space-y-3">
+        <div className="flex items-center gap-2"><MessageSquare className="h-4 w-4 text-primary" /><div><h3 className="text-sm font-semibold text-foreground">Notas internas</h3><p className="text-xs text-muted-foreground">Visíveis ao autor, responsável atual e gestores.</p></div></div>
+        <Textarea rows={3} placeholder="Registrar contexto interno, objeções ou próximos passos" value={novaNota} onChange={(e) => setNovaNota(e.target.value)} />
+        <Button size="sm" variant="outline" onClick={criarNota} disabled={salvando}><Save className="h-4 w-4 mr-1" /> Salvar nota privada</Button>
+        {notas.map((nota) => (
+          <div key={nota.id} className="rounded-lg border border-border bg-muted/40 p-3">
+            <p className="text-sm text-foreground whitespace-pre-wrap">{nota.conteudo}</p>
+            <p className="text-[11px] text-muted-foreground mt-2">{nota.autor_nome || "Colaborador"} · {fmtDataOperacional(nota.created_at)}</p>
+          </div>
+        ))}
+        {!loading && notas.length === 0 && <p className="text-xs text-muted-foreground">Nenhuma nota interna encontrada.</p>}
+      </div>
+
+      {podeGerenciarCarteira && (
+        <div className="rounded-xl border border-warning/20 bg-warning/5 p-4 space-y-3">
+          <div className="flex items-center gap-2"><UserCheck className="h-4 w-4 text-warning" /><div><h3 className="text-sm font-semibold text-foreground">Delegar lead</h3><p className="text-xs text-muted-foreground">A delegação é auditada e atualiza o responsável atual.</p></div></div>
+          <div className="grid grid-cols-1 md:grid-cols-[1fr_1fr] gap-2">
+            <Select value={delegadoPara} onValueChange={setDelegadoPara}>
+              <SelectTrigger><SelectValue placeholder="Colaborador de destino" /></SelectTrigger>
+              <SelectContent>{colaboradores.filter((item) => item.ativo !== false).map((item) => <SelectItem key={item.id} value={item.id}>{item.nome}</SelectItem>)}</SelectContent>
+            </Select>
+            <Input placeholder="Motivo (opcional)" value={motivoDelegacao} onChange={(e) => setMotivoDelegacao(e.target.value)} />
+          </div>
+          <Button size="sm" variant="outline" onClick={delegarLead} disabled={salvando}><ArrowRight className="h-4 w-4 mr-1" /> Delegar</Button>
+          {delegacoes.map((item) => <p key={item.id} className="text-xs text-muted-foreground">{item.delegado_por_nome || "Gestão"} → {item.delegado_para_nome || "colaborador"} · {fmtDataOperacional(item.created_at)}{item.motivo ? ` · ${item.motivo}` : ""}</p>)}
+        </div>
+      )}
+    </TabsContent>
+  );
+}
+
 // ─── Modal: Ficha do Lead ─────────────────────────────────────
 function FichaLead({
   lead,
@@ -447,15 +683,20 @@ function FichaLead({
 
   async function carregarDados() {
     setLoading(true);
-    const [ativs, docs, quals] = await Promise.all([
-      apiFetch(`/api/crm/atividades?lead_id=${lead.id}`),
-      apiFetch(`/api/crm/documentos?lead_id=${lead.id}`),
-      apiFetch(`/api/crm/qualificacoes?lead_id=${lead.id}`),
-    ]);
-    setAtividades(ativs ?? []);
-    setDocumentos(docs ?? []);
-    setQualificacoes(quals ?? []);
-    setLoading(false);
+    try {
+      // As rotas da camada operacional podem responder migration_pending durante
+      // uma implantação gradual; isso não pode esconder as abas legadas.
+      const [ativs, docs, quals] = await Promise.all([
+        apiFetch(`/api/crm/atividades?lead_id=${lead.id}`),
+        apiFetch(`/api/crm/documentos?lead_id=${lead.id}`),
+        apiFetch(`/api/crm/qualificacoes?lead_id=${lead.id}`),
+      ]);
+      setAtividades(ativs ?? []);
+      setDocumentos(docs ?? []);
+      setQualificacoes(quals ?? []);
+    } finally {
+      setLoading(false);
+    }
   }
 
   async function salvarAtividade() {
@@ -679,6 +920,9 @@ function FichaLead({
                 {atividades.length > 0 && (
                   <span className="ml-1 text-xs bg-primary/20 text-primary px-1.5 rounded-full">{atividades.length}</span>
                 )}
+              </TabsTrigger>
+              <TabsTrigger value="operacao">
+                Operação
               </TabsTrigger>
               <TabsTrigger value="documentos">
                 Documentos
@@ -1157,6 +1401,13 @@ function FichaLead({
                   </div>
                 )}
               </TabsContent>
+
+              <PainelOperacionalCRM
+                leadId={lead.id}
+                colaboradores={colaboradores}
+                podeGerenciarCarteira={podeGerenciarCarteira}
+                onUpdated={onUpdate}
+              />
 
               {/* ── Documentos ── */}
               <TabsContent value="documentos" className="mt-4 space-y-4">

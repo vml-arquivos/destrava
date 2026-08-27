@@ -5,7 +5,10 @@ import {
   etapaFunilPersistidaParaUi,
   normalizarEtapaFunil,
 } from "../shared/funnel";
-import { calcularScoreBasico, calcularScoreEfetivo } from "../shared/leadScoring";
+import {
+  calcularScoreBasico,
+  calcularScoreEfetivo,
+} from "../shared/leadScoring";
 
 describe("taxonomia única do funil", () => {
   it("normaliza etapas canônicas e legadas para o mesmo ID de UI", () => {
@@ -43,12 +46,27 @@ describe("score básico operacional", () => {
     });
 
     expect(score).toBe(82);
-    expect(calcularScoreBasico({ valor_solicitado: -1, prazo_meses: -1 })).toBe(0);
-    expect(calcularScoreBasico({ valor_solicitado: 5_000_000, prazo_meses: 60, nome: "A", telefone: "1", email: "a@a", empresa: "A", cpf_cnpj: "1", temperatura: "urgente" })).toBe(100);
+    expect(calcularScoreBasico({ valor_solicitado: -1, prazo_meses: -1 })).toBe(
+      0
+    );
+    expect(
+      calcularScoreBasico({
+        valor_solicitado: 5_000_000,
+        prazo_meses: 60,
+        nome: "A",
+        telefone: "1",
+        email: "a@a",
+        empresa: "A",
+        cpf_cnpj: "1",
+        temperatura: "urgente",
+      })
+    ).toBe(100);
   });
 
   it("prioriza score manual, depois IA, depois score básico persistido", () => {
-    expect(calcularScoreEfetivo({ score_manual: 42, score_ia: 90, score_basico: 80 })).toBe(42);
+    expect(
+      calcularScoreEfetivo({ score_manual: 42, score_ia: 90, score_basico: 80 })
+    ).toBe(42);
     expect(calcularScoreEfetivo({ score_ia: 90, score_basico: 80 })).toBe(90);
     expect(calcularScoreEfetivo({ score_ia: 0, score_basico: 80 })).toBe(80);
   });

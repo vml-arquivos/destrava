@@ -129,7 +129,7 @@ export default function NotificacoesFollowup() {
                   </span>
                 </div>
                 {atrasados.slice(0, 5).map((lead) => (
-                  <Link key={lead.id} href={`/colaborador/crm?lead=${lead.id}`}
+                  <Link key={lead.id} href={`/colaborador/crm?leadId=${lead.id}`}
                       className="flex items-start gap-3 px-4 py-3 hover:bg-destructive/10 border-b border-border cursor-pointer transition-colors"
                       onClick={() => setAberto(false)}
                     >
@@ -164,7 +164,7 @@ export default function NotificacoesFollowup() {
                   </span>
                 </div>
                 {hoje.slice(0, 5).map((lead) => (
-                  <Link key={lead.id} href={`/colaborador/crm?lead=${lead.id}`}
+                  <Link key={lead.id} href={`/colaborador/crm?leadId=${lead.id}`}
                       className="flex items-start gap-3 px-4 py-3 hover:bg-warning/10 border-b border-border cursor-pointer transition-colors"
                       onClick={() => setAberto(false)}
                     >

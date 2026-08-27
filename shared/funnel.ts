@@ -93,7 +93,9 @@ export const ETAPA_FUNIL_PERSISTENCIA: Record<EtapaFunil, string> = {
   perdido: "perdido",
 };
 
-export function normalizarEtapaFunil(value: string | null | undefined): EtapaFunil {
+export function normalizarEtapaFunil(
+  value: string | null | undefined
+): EtapaFunil {
   const normalized = (value || "")
     .normalize("NFD")
     .replace(/[\u0300-\u036f]/g, "")
@@ -103,19 +105,28 @@ export function normalizarEtapaFunil(value: string | null | undefined): EtapaFun
   return MAPEAMENTO_ETAPAS_LEGADAS[normalized] || ETAPA_FUNIL_DEFAULT;
 }
 
-export function etapaFunilEhValida(value: string | null | undefined): value is EtapaFunil {
+export function etapaFunilEhValida(
+  value: string | null | undefined
+): value is EtapaFunil {
   const normalized = (value || "")
     .normalize("NFD")
     .replace(/[\u0300-\u036f]/g, "")
     .trim()
     .toLowerCase();
-  return Object.prototype.hasOwnProperty.call(MAPEAMENTO_ETAPAS_LEGADAS, normalized);
+  return Object.prototype.hasOwnProperty.call(
+    MAPEAMENTO_ETAPAS_LEGADAS,
+    normalized
+  );
 }
 
-export function etapaFunilParaPersistencia(value: string | null | undefined): string {
+export function etapaFunilParaPersistencia(
+  value: string | null | undefined
+): string {
   return ETAPA_FUNIL_PERSISTENCIA[normalizarEtapaFunil(value)];
 }
 
-export function etapaFunilPersistidaParaUi(value: string | null | undefined): EtapaFunil {
+export function etapaFunilPersistidaParaUi(
+  value: string | null | undefined
+): EtapaFunil {
   return normalizarEtapaFunil(value);
 }

@@ -20,6 +20,9 @@ interface LeadFila {
   etapa_funil: string;
   temperatura?: string;
   score_ia?: number;
+  score_basico?: number | null;
+  score_efetivo?: number | null;
+  score_efetivo_operacional?: number | null;
   proximo_followup?: string;
   responsavel_id?: string | null;
   responsavel_nome?: string;
@@ -124,12 +127,21 @@ export default function Fila() {
 
   const leadsOrdenados = useMemo(() => {
     return [...leads].sort((a, b) => {
+      const scoreA = Number(a.score_efetivo_operacional ?? a.score_efetivo ?? a.score_ia ?? a.score_basico ?? 0);
+      const scoreB = Number(b.score_efetivo_operacional ?? b.score_efetivo ?? b.score_ia ?? b.score_basico ?? 0);
+      if (scoreB !== scoreA) return scoreB - scoreA;
+
+      const atrasadoA = Boolean(a.proximo_followup && new Date(a.proximo_followup) < new Date());
+      const atrasadoB = Boolean(b.proximo_followup && new Date(b.proximo_followup) < new Date());
+      if (atrasadoA !== atrasadoB) return atrasadoA ? -1 : 1;
+
       const wA = TEMPERATURA_WEIGHT[a.temperatura || ""] || 0;
       const wB = TEMPERATURA_WEIGHT[b.temperatura || ""] || 0;
       if (wB !== wA) return wB - wA;
       const fA = a.proximo_followup ? new Date(a.proximo_followup).getTime() : Number.MAX_SAFE_INTEGER;
       const fB = b.proximo_followup ? new Date(b.proximo_followup).getTime() : Number.MAX_SAFE_INTEGER;
-      return fA - fB;
+      if (fA !== fB) return fA - fB;
+      return new Date(a.created_at).getTime() - new Date(b.created_at).getTime();
     });
   }, [leads]);
 
@@ -234,8 +246,8 @@ export default function Fila() {
                       </p>
                     </div>
                     <div className="text-right min-w-[220px]">
-                      <p className="text-xs text-muted-foreground">Score IA</p>
-                      <p className="text-lg font-bold text-foreground">{lead.score_ia ?? 0}</p>
+                      <p className="text-xs text-muted-foreground">Score efetivo</p>
+                      <p className="text-lg font-bold text-foreground">{lead.score_efetivo_operacional ?? lead.score_efetivo ?? lead.score_ia ?? lead.score_basico ?? 0}</p>
                     </div>
                   </div>
 
