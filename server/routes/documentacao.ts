@@ -1717,7 +1717,16 @@ async function avaliarProntidaoIdentidadeCnpj(params: {
     ...(Array.isArray(resultadoCnpj?.alertas) ? resultadoCnpj.alertas : []),
     ...(Array.isArray(resultadoCnpj?.divergencias) ? resultadoCnpj.divergencias : []),
   ];
-  const cnpjTemDivergenciaGrave = alertasCnpj.some((item: any) => ['alta', 'critica'].includes(String(item?.severidade || '').toLowerCase()) || item?.divergente === true);
+  // Alguns códigos de alerta são sinais de risco de negócio (ex.: empresa recém-aberta),
+  // não uma divergência entre o Cartão CNPJ anexado e os dados da Receita Federal. Eles já
+  // são exibidos corretamente em "avisos estratégicos" (ver empresaApta12Meses acima) e não
+  // devem fazer o Cartão CNPJ ser rotulado como "divergente da Receita", que é uma mensagem
+  // sobre o documento em si, não sobre o risco cadastral da empresa.
+  const CODIGOS_ALERTA_RISCO_NAO_DIVERGENCIA_CARTAO = new Set(['empresa_menos_12_meses']);
+  const cnpjTemDivergenciaGrave = alertasCnpj.some((item: any) => (
+    !CODIGOS_ALERTA_RISCO_NAO_DIVERGENCIA_CARTAO.has(String(item?.codigo || ''))
+    && (['alta', 'critica'].includes(String(item?.severidade || '').toLowerCase()) || item?.divergente === true)
+  ));
   const cartaoAnexado = params.docsCartao.length > 0 || analiseCnpj?.cartao_anexado === true;
   const cartaoAnalisado = !!analiseCnpj && analiseCnpj?.cartao_anexado === true && analiseCnpj?.cartao_pendente_ocr !== true;
   const cartaoConsistente = cartaoAnexado && cartaoAnalisado && !cnpjTemDivergenciaGrave;

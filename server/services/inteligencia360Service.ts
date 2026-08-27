@@ -985,6 +985,12 @@ function alertasGravesResultado(resultadoInput: unknown): AlertaDocumental360[] 
     .filter((alerta) => alerta.severidade === "critica" || alerta.severidade === "alta");
 }
 
+// Mesmo tratamento aplicado em server/routes/documentacao.ts: alguns códigos de alerta
+// vindos da análise Receita + Cartão CNPJ são sinais de risco de negócio (ex.: empresa
+// recém-aberta), não uma divergência entre o documento anexado e os dados da Receita
+// Federal. Eles não devem contar como "bloqueio" do Cartão CNPJ nesta etapa.
+const CODIGOS_ALERTA_RISCO_NAO_DIVERGENCIA_CARTAO = new Set(['empresa_menos_12_meses']);
+
 export function consolidarEtapaIdentidadeDocumental(params: {
   empresa: any;
   documentos: any[];
@@ -1011,7 +1017,10 @@ export function consolidarEtapaIdentidadeDocumental(params: {
   const cartaoBloqueios = [
     ...safeArray<any>(analiseCnpj?.alertas),
     ...safeArray<any>(analiseCnpj?.divergencias),
-  ].filter((a) => ["critica", "alta"].includes(normalizarSeveridade360(a?.severidade)));
+  ].filter((a) => (
+    !CODIGOS_ALERTA_RISCO_NAO_DIVERGENCIA_CARTAO.has(String(a?.codigo || ''))
+    && ["critica", "alta"].includes(normalizarSeveridade360(a?.severidade))
+  ));
   const cartaoConsistente = cartaoAnexado && cartaoAnalisado && cartaoBloqueios.length === 0 && String(analiseCnpj?.status) === "concluida";
 
   function statusEspecializado(prompt: string, anexado: boolean) {
@@ -1073,13 +1082,17 @@ export function consolidarEtapaIdentidadeDocumental(params: {
     if (!bloqueios.includes(mensagem)) bloqueios.push(mensagem);
   }
   if (!situacaoAtiva) bloqueios.push("A situação cadastral da empresa na Receita Federal não está ativa.");
-  if (empresaApta12Meses === false) bloqueios.push("A empresa ainda não possui 12 meses completos de abertura.");
-  if (empresaApta12Meses === null) bloqueios.push("Não foi possível confirmar o tempo de abertura da empresa.");
   if (empresaMei) bloqueios.push("Empresa enquadrada como MEI: o fluxo empresarial padrão exige estratégia de crédito específica.");
 
   const documentosOk = documentos.filter((doc) => doc.consistente).length;
-  const apto = documentosOk === 3 && situacaoAtiva && empresaApta12Meses === true && !empresaMei && bloqueios.length === 0;
+  // A idade da empresa (menos de 12 meses, ou tempo de abertura não confirmado) é um
+  // dado de maturidade/risco de crédito, não uma inconsistência dos três documentos de
+  // identidade do CNPJ. Por isso não entra em "bloqueios" (que travariam o avanço da
+  // Etapa 1) e sim em "avisos", para acompanhamento até a empresa completar 12 meses.
+  const apto = documentosOk === 3 && situacaoAtiva && !empresaMei && bloqueios.length === 0;
   const avisos: string[] = [];
+  if (empresaApta12Meses === false) avisos.push("A empresa ainda não possui 12 meses completos de abertura. Acompanhar até completar o tempo mínimo para operar com crédito.");
+  if (empresaApta12Meses === null) avisos.push("Não foi possível confirmar o tempo de abertura da empresa.");
   if (empresaMei) avisos.push("O MEI não é descartado; deve seguir para uma estratégia de linhas compatíveis com esse enquadramento.");
 
   return {
