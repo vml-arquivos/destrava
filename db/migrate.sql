@@ -640,3 +640,13 @@ CREATE INDEX IF NOT EXISTS idx_leads_ia_ativa
   ON public.leads (ia_ativa)
   WHERE ia_ativa = TRUE;
 COMMIT;
+
+-- ─── MIGRAÇÃO 093: vínculo opcional de orçamento ao lead de origem ─────────
+BEGIN;
+ALTER TABLE IF EXISTS public.orcamentos_timbrados
+  ADD COLUMN IF NOT EXISTS lead_id UUID
+    REFERENCES public.leads(id) ON DELETE SET NULL;
+CREATE INDEX IF NOT EXISTS idx_orcamentos_timbrados_lead_id
+  ON public.orcamentos_timbrados (lead_id)
+  WHERE lead_id IS NOT NULL;
+COMMIT;

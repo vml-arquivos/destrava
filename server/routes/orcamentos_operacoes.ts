@@ -247,6 +247,7 @@ function buildPayload(body: any) {
       cliente_documento: body.cliente_documento || null,
       cliente_email: body.cliente_email || null,
       cliente_telefone: body.cliente_telefone || null,
+      lead_id: body.lead_id === undefined ? undefined : (body.lead_id || null),
       marca: normalizeMarca(body.marca),
       titulo: body.titulo || "Orçamento de Serviços",
       descricao: body.descricao || null,
@@ -263,6 +264,7 @@ function buildPayload(body: any) {
         ...(payloadAnterior && typeof payloadAnterior === "object" ? payloadAnterior : {}),
         origem_painel_orcamentos: true,
         ocultar_conteudo: ocultarConteudo,
+        ...(body.lead_id !== undefined ? { lead_id: body.lead_id || null } : {}),
       }),
     } as Record<string, unknown>,
   };
@@ -1127,8 +1129,14 @@ export default function createOrcamentosOperacoesRouter(pool: Pool) {
       if (columns.has("itens")) payload.itens = JSON.stringify(servicos);
       const colaboradorId = (req as any)?.colaborador?.id || null;
       if (columns.has("criado_por")) payload.criado_por = colaboradorId;
+      if (columns.has("lead_id") && req.body?.lead_id !== undefined && req.body?.lead_id !== null && String(req.body.lead_id).trim()) {
+        const leadId = String(req.body.lead_id).trim();
+        const leadExists = await pool.query("SELECT id FROM public.leads WHERE id = $1 LIMIT 1", [leadId]);
+        if (!leadExists.rows.length) return res.status(400).json({ error: "lead_id de origem não encontrado" });
+        payload.lead_id = leadId;
+      }
 
-      const entries = Object.entries(payload).filter(([key]) => columns.has(key));
+      const entries = Object.entries(payload).filter(([key, value]) => columns.has(key) && value !== undefined);
       const keys = entries.map(([key]) => key);
       const values = entries.map(([, value]) => value);
       const placeholders = values.map((_, idx) => `$${idx + 1}`).join(", ");
@@ -1188,6 +1196,12 @@ export default function createOrcamentosOperacoesRouter(pool: Pool) {
 
       const { servicos, payload } = buildPayload(req.body || {});
       if (columns.has("itens")) payload.itens = JSON.stringify(servicos);
+      if (columns.has("lead_id") && req.body?.lead_id !== undefined && req.body?.lead_id !== null && String(req.body.lead_id).trim()) {
+        const leadId = String(req.body.lead_id).trim();
+        const leadExists = await pool.query("SELECT id FROM public.leads WHERE id = $1 LIMIT 1", [leadId]);
+        if (!leadExists.rows.length) return res.status(400).json({ error: "lead_id de origem não encontrado" });
+        payload.lead_id = leadId;
+      }
       if (columns.has("pdf_path")) payload.pdf_path = null;
 
       // Ao editar um orçamento finalizado, volta para rascunho para gerar novo PDF atualizado.
@@ -1196,7 +1210,7 @@ export default function createOrcamentosOperacoesRouter(pool: Pool) {
         if (columns.has("finalizado_em")) payload.finalizado_em = null;
       }
 
-      const entries = Object.entries(payload).filter(([key]) => columns.has(key));
+      const entries = Object.entries(payload).filter(([key, value]) => columns.has(key) && value !== undefined);
       if (!entries.length) return res.status(400).json({ error: "Nenhum campo válido para atualizar" });
 
       const sets = entries.map(([key], idx) => `${key} = $${idx + 1}`);

@@ -72,7 +72,7 @@ import { calcularEsteiraCredito } from "./services/esteiraCreditoService";
 import { consolidarHistorico360 } from "./services/historicoClienteService";
 import { normalizeNexusTaskEvent } from "./services/nexusTaskHistoryService";
 import { calcularInteligenciaAcompanhamentoBancario } from "./services/inteligenciaAcompanhamentoBancarioService";
-import { normalizarPeriodoMensal, normalizarMetas, percentualAtingimento, arredondarMoeda, agruparForecast } from "./services/crmSalesMetrics";
+import { normalizarPeriodoMensal, normalizarMetas, percentualAtingimento, arredondarMoeda, agruparForecast, agruparMetricasVendas } from "./services/crmSalesMetrics";
 import {
   enviarPendenciaNexus,
   verificarConfiguracaoNexus,
@@ -4868,6 +4868,87 @@ async function startServer() {
       }
       console.error("[GET /api/crm/forecast]", err);
       res.status(500).json({ error: "Erro ao calcular forecast de vendas." });
+    }
+  });
+
+  app.get("/api/crm/metricas-vendas", auth, async (req: Request, res: Response) => {
+    try {
+      const colaborador = (req as Request & { colaborador: any }).colaborador;
+      const periodo = normalizarPeriodoMensal(req.query.periodo);
+      const [leadColumns, contratoColumns] = await Promise.all([
+        getTableColumns("leads"),
+        getTableColumns("contratos_gerados"),
+      ]);
+      const faltantes = [
+        ["leads", "responsavel_id"],
+        ["leads", "created_at"],
+        ["contratos_gerados", "lead_id"],
+        ["contratos_gerados", "valor_contrato"],
+        ["contratos_gerados", "data_assinatura"],
+        ["contratos_gerados", "status"],
+        ["contratos_gerados", "responsavel_interno_id"],
+      ].filter(([tabela, campo]) => !(tabela === "leads" ? leadColumns : contratoColumns).has(campo));
+      if (faltantes.length) {
+        res.status(503).json({
+          error: "Os campos necessários para as métricas de vendas ainda não foram migrados.",
+          migration_pending: true,
+          campos_faltantes: faltantes.map(([tabela, campo]) => `${tabela}.${campo}`),
+        });
+        return;
+      }
+
+      const gestor = isGestorCargo(colaborador?.cargo || "");
+      const conditions = [
+        "c.data_assinatura IS NOT NULL",
+        "c.data_assinatura >= $1::date",
+        "c.data_assinatura < $2::date",
+        "LOWER(COALESCE(c.status, '')) NOT IN ('cancelado', 'cancelada', 'rascunho', 'rejeitado', 'rejeitada')",
+      ];
+      const params: unknown[] = [periodo.chave, periodo.fim.slice(0, 10)];
+      const filtroResponsavel = String(req.query.responsavel_id || "").trim();
+      if (gestor && filtroResponsavel) {
+        params.push(filtroResponsavel);
+        conditions.push(`COALESCE(c.responsavel_interno_id, l.responsavel_id) = $${params.length}`);
+      } else if (!gestor) {
+        params.push(colaborador?.id || null);
+        conditions.push(`COALESCE(c.responsavel_interno_id, l.responsavel_id) = $${params.length}`);
+      }
+
+      const { rows } = await pool.query(
+        `SELECT COALESCE(c.responsavel_interno_id, l.responsavel_id) AS responsavel_id,
+                col.nome AS responsavel_nome,
+                COUNT(*)::integer AS contratos_fechados,
+                COALESCE(SUM(COALESCE(c.valor_contrato, 0)), 0) AS receita_fechada,
+                COALESCE(AVG(COALESCE(c.valor_contrato, 0)), 0) AS ticket_medio,
+                AVG(EXTRACT(EPOCH FROM (c.data_assinatura - l.created_at)) / 86400)
+                  FILTER (WHERE l.created_at IS NOT NULL) AS tempo_ciclo_dias,
+                COUNT(*) FILTER (WHERE l.created_at IS NULL)::integer AS contratos_sem_lead
+           FROM public.contratos_gerados c
+           LEFT JOIN public.leads l ON l.id = c.lead_id
+           LEFT JOIN public.colaboradores col ON col.id = COALESCE(c.responsavel_interno_id, l.responsavel_id)
+          WHERE ${conditions.join(" AND ")}
+          GROUP BY COALESCE(c.responsavel_interno_id, l.responsavel_id), col.nome
+          ORDER BY receita_fechada DESC NULLS LAST, ticket_medio DESC NULLS LAST`,
+        params,
+      );
+
+      const agregado = agruparMetricasVendas(rows);
+      res.json({
+        periodo: periodo.chave,
+        fonte_tempo_ciclo: "leads.created_at até contratos_gerados.data_assinatura; crm_historico_funil será usado quando estiver integrado",
+        ...agregado,
+      });
+    } catch (err: any) {
+      if (err?.code === "42P01" || err?.code === "42703") {
+        res.status(503).json({ error: "Os dados necessários para as métricas de vendas ainda não foram migrados.", migration_pending: true });
+        return;
+      }
+      if (err?.message?.includes("período")) {
+        res.status(400).json({ error: err.message });
+        return;
+      }
+      console.error("[GET /api/crm/metricas-vendas]", err);
+      res.status(500).json({ error: "Erro ao calcular métricas de vendas." });
     }
   });
 

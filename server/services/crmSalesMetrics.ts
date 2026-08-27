@@ -184,3 +184,56 @@ export function agruparForecast(rows: readonly ForecastBucketRow[]): ForecastAgr
     detalhamento,
   };
 }
+
+export interface SalesMetricRow {
+  responsavel_id?: unknown;
+  responsavel_nome?: unknown;
+  contratos_fechados?: unknown;
+  receita_fechada?: unknown;
+  ticket_medio?: unknown;
+  tempo_ciclo_dias?: unknown;
+  contratos_sem_lead?: unknown;
+}
+
+export function agruparMetricasVendas(rows: readonly SalesMetricRow[]) {
+  const porVendedor = rows.map((row) => ({
+    responsavel_id: row.responsavel_id ? String(row.responsavel_id) : null,
+    responsavel_nome: row.responsavel_nome ? String(row.responsavel_nome) : null,
+    contratos_fechados: Number(row.contratos_fechados || 0),
+    receita_fechada: arredondarMoeda(row.receita_fechada),
+    ticket_medio: arredondarMoeda(row.ticket_medio),
+    tempo_ciclo_dias: row.tempo_ciclo_dias === null || row.tempo_ciclo_dias === undefined
+      ? null
+      : Math.round(Number(row.tempo_ciclo_dias) * 100) / 100,
+    contratos_sem_lead: Number(row.contratos_sem_lead || 0),
+  }));
+  const acumulado = porVendedor.reduce(
+    (acc, row) => {
+      const amostrasComLead = Math.max(0, row.contratos_fechados - row.contratos_sem_lead);
+      return {
+        contratos_fechados: acc.contratos_fechados + row.contratos_fechados,
+        receita_fechada: arredondarMoeda(acc.receita_fechada + row.receita_fechada),
+        tempo_ciclo_dias_soma: row.tempo_ciclo_dias === null
+          ? acc.tempo_ciclo_dias_soma
+          : acc.tempo_ciclo_dias_soma + row.tempo_ciclo_dias * amostrasComLead,
+        tempo_ciclo_amostras: acc.tempo_ciclo_amostras + (row.tempo_ciclo_dias === null ? 0 : amostrasComLead),
+        contratos_sem_lead: acc.contratos_sem_lead + row.contratos_sem_lead,
+      };
+    },
+    { contratos_fechados: 0, receita_fechada: 0, tempo_ciclo_dias_soma: 0, tempo_ciclo_amostras: 0, contratos_sem_lead: 0 },
+  );
+  return {
+    totais: {
+      contratos_fechados: acumulado.contratos_fechados,
+      receita_fechada: acumulado.receita_fechada,
+      ticket_medio: acumulado.contratos_fechados > 0
+        ? arredondarMoeda(acumulado.receita_fechada / acumulado.contratos_fechados)
+        : 0,
+      tempo_ciclo_dias: acumulado.tempo_ciclo_amostras > 0
+        ? Math.round((acumulado.tempo_ciclo_dias_soma / acumulado.tempo_ciclo_amostras) * 100) / 100
+        : null,
+      contratos_sem_lead: acumulado.contratos_sem_lead,
+    },
+    por_vendedor: porVendedor,
+  };
+}
