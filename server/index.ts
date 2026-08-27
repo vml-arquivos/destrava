@@ -528,6 +528,39 @@ async function getTableColumns(tableName: string): Promise<Set<string>> {
   return new Set(rows.map((r: { column_name: string }) => r.column_name));
 }
 
+async function registrarHistoricoFunilSeguro(input: {
+  leadId: string;
+  etapaDe: string | null;
+  etapaPara: string;
+  motivo?: string | null;
+  colaboradorId?: string | null;
+  origemIa?: boolean;
+}): Promise<boolean> {
+  try {
+    await pool.query(
+      `INSERT INTO public.crm_historico_funil
+         (lead_id, etapa_de, etapa_para, motivo, colaborador_id, origem_ia)
+       VALUES ($1, $2, $3, $4, $5, $6)`,
+      [
+        input.leadId,
+        input.etapaDe || null,
+        input.etapaPara,
+        input.motivo ? String(input.motivo).trim().slice(0, 500) : null,
+        input.colaboradorId || null,
+        input.origemIa === true,
+      ],
+    );
+    return true;
+  } catch (err: any) {
+    if (err?.code === "42P01" || err?.code === "42703") {
+      console.warn("[CRM FUNIL] histórico indisponível durante implantação:", err?.message || err);
+      return false;
+    }
+    console.error("[CRM FUNIL] falha ao registrar histórico sem bloquear lead:", err);
+    return false;
+  }
+}
+
 async function resolverParceiroPorCodigo(codigo: string | null): Promise<{ id: string; codigo_indicacao: string } | null> {
   if (!codigo) return null;
   try {
@@ -3309,6 +3342,21 @@ async function startServer() {
         });
       }
 
+      const etapaAnteriorUiPatch = etapaLegadaParaUi(atual?.etapa_funil) || ETAPA_FUNIL_DEFAULT;
+      const etapaAtualUiPatch = etapaLegadaParaUi(leadAtualizado?.etapa_funil) || ETAPA_FUNIL_DEFAULT;
+      const etapaMudouPatch = etapaAtualUiPatch !== etapaAnteriorUiPatch;
+      const responsavelMudouPatch = (leadAtualizado?.responsavel_id || null) !== (atual?.responsavel_id || null);
+      if (etapaMudouPatch || responsavelMudouPatch) {
+        await registrarHistoricoFunilSeguro({
+          leadId: String(req.params.id),
+          etapaDe: etapaMudouPatch ? etapaAnteriorUiPatch : etapaAtualUiPatch,
+          etapaPara: etapaAtualUiPatch,
+          motivo: req.body?.motivo ? String(req.body.motivo) : (responsavelMudouPatch && !etapaMudouPatch ? "Responsável alterado" : null),
+          colaboradorId: usuarioLogId,
+          origemIa: req.body?.origem_ia === true,
+        });
+      }
+
       if (fields.proximo_followup !== undefined) {
         await registrarCrmLog({
           leadId: req.params.id,
@@ -5402,10 +5450,52 @@ async function startServer() {
     }
   });
 
+  // ─── GET /api/crm/historico-funil ─────────────────────────────────────────
+  app.get("/api/crm/historico-funil", auth, async (req: Request, res: Response) => {
+    try {
+      const leadId = String(req.query.lead_id || "").trim();
+      const colaborador = (req as Request & { colaborador: any }).colaborador;
+      if (!leadId) {
+        res.status(400).json({ error: "lead_id é obrigatório." });
+        return;
+      }
+      if (!(await leadPertenceAoColaborador(leadId, colaborador))) {
+        res.status(403).json({ error: "Sem permissão para visualizar este lead." });
+        return;
+      }
+      const { rows } = await pool.query(
+        `SELECT h.id,
+                h.lead_id,
+                h.etapa_de,
+                h.etapa_para,
+                h.motivo,
+                h.origem_ia,
+                h.created_at,
+                h.colaborador_id,
+                c.nome AS colaborador_nome,
+                c.cargo AS colaborador_cargo
+           FROM public.crm_historico_funil h
+           LEFT JOIN public.colaboradores c ON c.id = h.colaborador_id
+          WHERE h.lead_id = $1
+          ORDER BY h.created_at DESC NULLS LAST, h.id DESC
+          LIMIT 200`,
+        [leadId],
+      );
+      res.json(rows);
+    } catch (err: any) {
+      if (err?.code === "42P01" || err?.code === "42703") {
+        res.status(503).json({ error: "O histórico de funil ainda não foi migrado.", migration_pending: true });
+        return;
+      }
+      console.error("[GET /api/crm/historico-funil]", err);
+      res.status(500).json({ error: "Erro ao listar histórico de mudanças." });
+    }
+  });
+
   // ─── POST /api/crm/mover-funil ────────────────────────────────────────────
   app.post("/api/crm/mover-funil", auth, async (req: Request, res: Response) => {
     try {
-      const { lead_id, etapa_funil, temperatura } = req.body;
+      const { lead_id, etapa_funil, temperatura, motivo, origem_ia } = req.body;
       const colaborador = (req as Request & { colaborador: any }).colaborador;
 
       console.info("[POST /api/crm/mover-funil] payload recebido", {
@@ -5481,11 +5571,24 @@ async function startServer() {
         });
       }
 
-      if ((atuais[0]?.responsavel_id || null) !== (responsavelFinal || null)) {
+      const etapaAnteriorUi = etapaLegadaParaUi(atuais[0]?.etapa_funil) || ETAPA_FUNIL_DEFAULT;
+      const etapaMudou = etapaAnteriorUi !== etapaNormalizada;
+      const responsavelMudou = (atuais[0]?.responsavel_id || null) !== (responsavelFinal || null);
+      if (responsavelMudou) {
         await registrarCrmLog({
           leadId: lead_id,
           usuarioId: colaborador?.id || null,
           acao: `mudanca_responsavel:${atuais[0]?.responsavel_id || 'sem_responsavel'}->${responsavelFinal || 'sem_responsavel'}`,
+        });
+      }
+      if (etapaMudou || responsavelMudou) {
+        await registrarHistoricoFunilSeguro({
+          leadId: String(lead_id),
+          etapaDe: etapaMudou ? etapaAnteriorUi : etapaNormalizada,
+          etapaPara: etapaNormalizada,
+          motivo: motivo || (responsavelMudou && !etapaMudou ? "Responsável atribuído durante movimentação" : null),
+          colaboradorId: colaborador?.id || null,
+          origemIa: origem_ia === true,
         });
       }
 
@@ -5493,8 +5596,8 @@ async function startServer() {
         acao: 'lead.etapa_alterada',
         entidade: 'lead',
         entidade_id: Number(lead_id) || null,
-        dados_antes: { etapa_funil: atuais[0]?.etapa_funil },
-        dados_depois: { etapa_funil: etapaNormalizada },
+        dados_antes: { etapa_funil: atuais[0]?.etapa_funil, responsavel_id: atuais[0]?.responsavel_id || null },
+        dados_depois: { etapa_funil: etapaNormalizada, responsavel_id: responsavelFinal || null },
       });
       res.json({ success: true, etapa_funil: etapaNormalizada, responsavel_id: responsavelFinal });
     } catch (err: any) {

@@ -159,6 +159,19 @@ interface DelegacaoOperacional {
   created_at: string;
 }
 
+interface HistoricoFunil {
+  id: string;
+  lead_id: string;
+  etapa_de?: string | null;
+  etapa_para: string;
+  motivo?: string | null;
+  origem_ia?: boolean;
+  colaborador_id?: string | null;
+  colaborador_nome?: string | null;
+  colaborador_cargo?: string | null;
+  created_at: string;
+}
+
 // ─── Configurações ────────────────────────────────────────────
 const ETAPA_FUNIL_STYLE: Record<string, { color: string; text: string; dot: string }> = {
   entrada:      { color: "bg-muted border-input",    text: "text-foreground",   dot: "bg-muted" },
@@ -594,6 +607,7 @@ function FichaLead({
   const [atividades, setAtividades] = useState<Atividade[]>([]);
   const [documentos, setDocumentos] = useState<Documento[]>([]);
   const [qualificacoes, setQualificacoes] = useState<QualificacaoIA[]>([]);
+  const [historicoFunil, setHistoricoFunil] = useState<HistoricoFunil[]>([]);
   const [loading, setLoading] = useState(true);
   const [salvando, setSalvando] = useState(false);
   const [novaAtiv, setNovaAtiv] = useState({ tipo: "nota", titulo: "", descricao: "", resultado: "" });
@@ -686,14 +700,16 @@ function FichaLead({
     try {
       // As rotas da camada operacional podem responder migration_pending durante
       // uma implantação gradual; isso não pode esconder as abas legadas.
-      const [ativs, docs, quals] = await Promise.all([
+      const [ativs, docs, quals, historico] = await Promise.all([
         apiFetch(`/api/crm/atividades?lead_id=${lead.id}`),
         apiFetch(`/api/crm/documentos?lead_id=${lead.id}`),
         apiFetch(`/api/crm/qualificacoes?lead_id=${lead.id}`),
+        apiFetch(`/api/crm/historico-funil?lead_id=${lead.id}`).catch(() => []),
       ]);
       setAtividades(ativs ?? []);
       setDocumentos(docs ?? []);
       setQualificacoes(quals ?? []);
+      setHistoricoFunil(Array.isArray(historico) ? historico : []);
     } finally {
       setLoading(false);
     }
@@ -1100,6 +1116,42 @@ function FichaLead({
                           <p className="text-foreground font-medium text-xs mt-0.5">{v as string}</p>
                         </div>
                       ))}
+                    </div>
+                  )}
+                </div>
+
+                {/* Histórico de mudanças do funil */}
+                <div className="bg-card rounded-xl border border-border p-4">
+                  <h3 className="text-sm font-semibold text-foreground mb-3 flex items-center gap-2">
+                    <Activity className="h-4 w-4 text-primary" />
+                    Histórico de mudanças
+                    {historicoFunil.length > 0 && (
+                      <span className="ml-auto text-[11px] font-bold text-muted-foreground">{historicoFunil.length} registro{historicoFunil.length !== 1 ? "s" : ""}</span>
+                    )}
+                  </h3>
+                  {historicoFunil.length === 0 ? (
+                    <p className="text-xs text-muted-foreground">Nenhuma mudança de etapa ou responsável registrada.</p>
+                  ) : (
+                    <div className="space-y-3">
+                      {historicoFunil.map((evento) => {
+                        const etapaDe = evento.etapa_de ? (ETAPAS_FUNIL_LABELS[evento.etapa_de as EtapaFunil] ?? evento.etapa_de) : "Sem etapa";
+                        const etapaPara = ETAPAS_FUNIL_LABELS[evento.etapa_para as EtapaFunil] ?? evento.etapa_para;
+                        return (
+                          <div key={evento.id} className="border-l-2 border-primary/20 pl-3">
+                            <div className="flex items-center gap-2 text-xs font-semibold text-foreground">
+                              <span>{etapaDe}</span>
+                              <ArrowRight className="h-3.5 w-3.5 text-muted-foreground" />
+                              <span>{etapaPara}</span>
+                              {evento.origem_ia && <Badge variant="outline" className="text-[10px]">IA</Badge>}
+                            </div>
+                            <p className="text-[11px] text-muted-foreground mt-1">
+                              {fmtDateTime(evento.created_at)}
+                              {evento.colaborador_nome ? ` · ${evento.colaborador_nome}` : " · Sistema"}
+                              {evento.motivo ? ` · ${evento.motivo}` : ""}
+                            </p>
+                          </div>
+                        );
+                      })}
                     </div>
                   )}
                 </div>
