@@ -109,6 +109,12 @@ const upload = multer({
 });
 
 async function getPipelineStatusForUpload(empresaId: string): Promise<DocumentPipelineStatus> {
+  // O bloco 'enquadramento_tributario' é reforço documental opcional (o regime tributário
+  // já vem da consulta de CNPJ/Receita Federal, sincronizada em `empresas.regime_tributario`)
+  // -- ver o mesmo tratamento em server/routes/documentacao.ts, avaliarProntidaoIdentidadeCnpj.
+  // Uma leitura de baixa confiança ou pendente de revisão desse comprovante opcional não pode
+  // travar o anexo dos documentos obrigatórios da Fase 2 (Atos da Junta/Contrato Social).
+  const BLOCOS_OBRIGATORIOS_FASE_1 = ['cnpj_receita', 'qsa_quadro_societario'];
   const phase1 = await pool.query(
     `SELECT COUNT(DISTINCT b.codigo)::int AS total
        FROM public.documentacao_entidade_blocos eb
@@ -118,9 +124,9 @@ async function getPipelineStatusForUpload(empresaId: string): Promise<DocumentPi
         AND eb.status = 'validado'
         AND eb.completo = true
         AND eb.validado = true`,
-    [empresaId, ['cnpj_receita', 'qsa_quadro_societario', 'enquadramento_tributario']],
+    [empresaId, BLOCOS_OBRIGATORIOS_FASE_1],
   ).catch(() => ({ rows: [{ total: 0 }] } as any));
-  if (Number(phase1.rows[0]?.total || 0) !== 3) return DocumentPipelineStatus.PHASE_1_PENDING;
+  if (Number(phase1.rows[0]?.total || 0) !== BLOCOS_OBRIGATORIOS_FASE_1.length) return DocumentPipelineStatus.PHASE_1_PENDING;
 
   const junta = await pool.query(
     `SELECT 1

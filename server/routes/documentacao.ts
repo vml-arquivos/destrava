@@ -1765,7 +1765,12 @@ async function avaliarProntidaoIdentidadeCnpj(params: {
     && (!enquadramentoAnexado || enquadramentoAnalisado);
   if (!enquadramentoIdentificado) addBloqueio('Regime tributário não identificado. Sincronize os dados de CNPJ (Receita Federal) da empresa.');
   else if (enquadramentoAnexado && !enquadramentoAnalisado) addBloqueio(params.enquadramentoDados?.erro_processamento || 'Documento de enquadramento anexado, mas a análise ainda não foi concluída.');
-  else if (enquadramentoTemGrave) addBloqueio('Enquadramento tributário possui divergência relevante.');
+  // Uma leitura automática de baixa confiança (ou não totalmente confirmada) do
+  // comprovante opcional de enquadramento não é uma divergência de dado -- o regime
+  // tributário em si já está identificado pela consulta de CNPJ acima. Por isso vira
+  // aviso de revisão (visível na ficha da empresa), não bloqueio da Fase 1: o time
+  // consegue revisar o comprovante depois, sem travar o anexo dos demais documentos.
+  else if (enquadramentoTemGrave) addAviso('Enquadramento tributário: o comprovante anexado como reforço precisa de revisão humana (divergência ou baixa confiança na leitura automática).');
   else pontosPositivos.push(`Enquadramento tributário identificado via consulta de CNPJ: ${regime || situacaoSimples}.`);
 
   const textoEnquadramento = [regime, situacaoSimples, params.empresa?.porte, params.empresa?.natureza_juridica].filter(Boolean).join(' ');
@@ -1774,9 +1779,13 @@ async function avaliarProntidaoIdentidadeCnpj(params: {
     addAviso('Empresa identificada como MEI: a ausência de Atos da Junta será dispensada na etapa societária, sem impedir a inclusão dos demais documentos.');
   }
 
-  const todasPendencias = [...params.cnpjPendencias, ...params.qsaPendencias, ...params.enquadramentoPendencias];
+  const todasPendencias = [...params.cnpjPendencias, ...params.qsaPendencias];
   for (const pendencia of todasPendencias.filter((p) => p.severidade === 'alta')) addBloqueio(pendencia.mensagem);
   for (const pendencia of todasPendencias.filter((p) => p.severidade === 'media')) addAviso(pendencia.mensagem);
+  // Pendências do Enquadramento Tributário nunca bloqueiam a Fase 1 (documento de reforço
+  // opcional -- ver comentário acima). Tanto as de severidade alta quanto média viram
+  // aviso, para o time continuar vendo o que precisa de revisão sem travar o avanço.
+  for (const pendencia of params.enquadramentoPendencias.filter((p) => p.severidade === 'alta' || p.severidade === 'media')) addAviso(pendencia.mensagem);
 
   const statusDocumento = (anexado: boolean, analisado: boolean, consistente: boolean, falha: boolean) => {
     if (consistente) return 'ok';
@@ -1827,7 +1836,11 @@ async function avaliarProntidaoIdentidadeCnpj(params: {
       campos_principais: { cnpj: params.enquadramentoDados?.cnpj || null, regime_tributario: regime || null, situacao_simples: situacaoSimples || null, exclusao_agendada: params.enquadramentoDados?.agendamento_exclusao === true },
     },
   };
-  const tresDocumentosOk = Object.values(documentosIniciais).every((item) => item.consistente);
+  // O Enquadramento Tributário é reforço documental opcional (ver comentário acima) --
+  // sua própria consistência fica visível no card dele ("revisão necessária" quando for
+  // o caso), mas não integra o portão de avanço da Fase 1, que depende apenas dos dois
+  // documentos obrigatórios (Cartão CNPJ e QSA) e da ausência de bloqueios reais.
+  const tresDocumentosOk = cartaoConsistente && qsaConsistente;
   const apto = situacaoAtiva && tresDocumentosOk && bloqueios.length === 0;
 
   return {
@@ -1837,7 +1850,7 @@ async function avaliarProntidaoIdentidadeCnpj(params: {
     enquadramento_tributario: regime || situacaoSimples || null, empresa_mei: ehMei, estrategia_alternativa_disponivel: ehMei,
     score_cnpj: analiseCnpj?.score_cnpj ?? null, motivos_pendentes: bloqueios, avisos_estrategicos: avisos, pontos_positivos: pontosPositivos,
     relatorio: { conclusao: apto ? 'APTO_PARA_AVANCAR' : 'PENDENTE', documentos_conferidos: Object.values(documentosIniciais).filter((item) => item.consistente).length, documentos_analisados: Object.values(documentosIniciais).filter((item) => item.analisado).length, falhas_leitura: Object.values(documentosIniciais).filter((item) => item.status === 'falha_leitura').length, total_documentos_iniciais: 3, bloqueios: bloqueios.length, avisos: avisos.length },
-    diagnostico: apto ? 'Identidade empresarial validada pelos três documentos iniciais. A empresa pode avançar para conferir Contrato Social/Alteração e Atos da Junta Comercial.' : Object.values(documentosIniciais).some((item) => item.status === 'falha_leitura') ? 'Um ou mais arquivos apresentaram falha técnica ou baixa legibilidade.' : `A etapa Identidade do CNPJ possui ${bloqueios.length} bloqueio(s). O avanço será liberado quando os três documentos estiverem consistentes.`,
+    diagnostico: apto ? 'Identidade empresarial validada pelos documentos obrigatórios (Cartão CNPJ e QSA). A empresa pode avançar para conferir Contrato Social/Alteração e Atos da Junta Comercial.' : Object.values(documentosIniciais).some((item) => item.status === 'falha_leitura') ? 'Um ou mais arquivos apresentaram falha técnica ou baixa legibilidade.' : `A etapa Identidade do CNPJ possui ${bloqueios.length} bloqueio(s). O avanço será liberado quando o Cartão CNPJ e o QSA estiverem consistentes.`,
   };
 }
 
