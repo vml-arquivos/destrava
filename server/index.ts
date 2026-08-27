@@ -11859,7 +11859,7 @@ ${(temTest1 || temTest2) ? `
       );
       const colaborador = rows[0];
       if (!colaborador) { res.status(404).json({ error: 'Colaborador não encontrado.' }); return; }
-      if (String(solicitante?.id) !== String(colaborador.id) && !podeGerenciarCargo(solicitante?.cargo || '', colaborador.cargo || '')) {
+      if (String(solicitante?.id) !== String(colaborador.id) && !podecriarUsuarios(solicitante?.cargo || '')) {
         res.status(403).json({ error: 'Você não tem permissão para visualizar esta ficha.' });
         return;
       }
@@ -11883,7 +11883,7 @@ ${(temTest1 || temTest2) ? `
       );
       const colaborador = rows[0];
       if (!colaborador) { res.status(404).json({ error: 'Colaborador não encontrado.' }); return; }
-      if (String(solicitante?.id) !== String(colaborador.id) && !podeGerenciarCargo(solicitante?.cargo || '', colaborador.cargo || '')) {
+      if (String(solicitante?.id) !== String(colaborador.id) && !podecriarUsuarios(solicitante?.cargo || '')) {
         res.status(403).json({ error: 'Você não tem permissão para visualizar esta ficha.' });
         return;
       }
