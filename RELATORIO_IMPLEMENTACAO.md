@@ -91,7 +91,7 @@ Nenhuma tabela existente foi removida e nenhuma informação de contrato, comiss
 | `pnpm build` | Aprovado. |
 | Pré-renderização e budgets | Aprovados. |
 | `git diff --check` | Aprovado. |
-| Escopo Git | `main` limpo no commit `21901bf`. |
+| Escopo Git | Baseline Onda 1 em `21901bf`; após a promoção da Onda 2, `origin/main` ficou em `2c338c8`. |
 
 Os avisos de conexão recusada e fallback de Inteligência 360 observados na suíte são cenários deliberados de testes já existentes; não causaram falha.
 
@@ -117,7 +117,7 @@ As migrations `091`, `092`, `093` e `094` foram aplicadas em produção em 27/08
 
 A fonte atual do ciclo comercial é `leads.created_at` até `contratos_gerados.data_assinatura`; contratos sem lead não entram no denominador do ciclo. O endpoint declara essa limitação e deverá usar histórico do funil em evolução posterior. Não foi inventada comissão: o comissionamento interno permanece **aguardando definição do cliente**.
 
-A publicação do código da Onda 2 na `main` e o deployment Coolify estão pendentes desta etapa de relatório; a produção continua servindo o commit Onda 1 `21901bf` até a integração autorizada.
+A branch da Onda 2 foi promovida para `origin/main` no commit `2c338c8b40c767a69366874fc9b486539cfacf3d`. O deployment Coolify `vlb8ezviipjxyhmemek50rxg` terminou com **Success** em aproximadamente 4m38s; o novo container passou em healthcheck (**healthy**, código 0), o rolling update foi concluído e a aplicação permaneceu **Running**.
 
 ## Itens ainda bloqueados por dependência externa ou decisão de negócio
 
@@ -127,7 +127,7 @@ A validação real de upload da foto do Administrador e a submissão de um cadas
 
 ## Rollback
 
-O rollback do conjunto publicado pode retornar a `081c5d7`, que contém a correção de autorização das fichas antes dos commits de CNPJ, autoedição e convites. O último deployment anterior ao conjunto foi `52c843c`, com o fluxo de preview/PDF já validado. Como as migrations são aditivas, o rollback de aplicação não remove as colunas/tabelas criadas; eventual limpeza de dados de teste deve ser deliberada e manual, nunca destrutiva por padrão.
+O rollback da aplicação da Onda 2 deve retornar ao código funcional de produção `21901bf`; o último registro documental anterior na `main` era `30ba3c8`. O deployment anterior da Onda 1 foi `fkk1pleycovjpc0snq3akync`, com **Success**, healthcheck **healthy** e aplicação **Running**. Como as migrations `091`–`094` são aditivas, o rollback da aplicação não remove as colunas, índices ou função criados; eventual limpeza de dados de teste deve ser deliberada e manual, nunca destrutiva por padrão.
 
 ## Arquivos principais
 

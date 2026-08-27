@@ -4,7 +4,7 @@ Data do registro: 27/08/2026.
 
 ## Estado de código e produção antes do rollout
 
-A produção Coolify estava saudável no código da Onda 1 (`21901bf`; deployment `fkk1pleycovjpc0snq3akync`, **Success**, healthcheck **healthy**, aplicação **Running**). A `main` remota permanecia em `30ba3c8`. A branch isolada `onda-2-maquina-de-vendas` recebeu os commits funcionais da Onda 2 e foi publicada no remoto até `1863314`.
+A produção Coolify estava saudável no código da Onda 1 (`21901bf`; deployment `fkk1pleycovjpc0snq3akync`, **Success**, healthcheck **healthy**, aplicação **Running**). A `main` remota foi promovida ao commit `2c338c8b40c767a69366874fc9b486539cfacf3d` após o rollout. A branch isolada `onda-2-maquina-de-vendas` recebeu os commits funcionais da Onda 2 e foi publicada no remoto até `1863314`.
 
 A alteração local deste arquivo foi mantida fora do commit funcional do item 6 e só está sendo consolidada agora como documentação factual. O commit funcional `1863314` contém somente código, migration 094, agregador e teste focal; não contém este relatório.
 
@@ -77,7 +77,11 @@ A função 094 não foi chamada porque a aplicação atual preserva uma camada d
 
 Foram aprovados na branch final `pnpm check`, `pnpm test --run`, `pnpm build` e `git diff --check`. A suíte focal do item 6 passou com 4 testes; as suítes de timeline e métricas passaram com 40 e 5 testes, respectivamente. A suíte completa e o build terminaram sem falhas; permanecem apenas os warnings já conhecidos de bundle inicial `dist/index.js` aproximadamente 2,0 MB e cenários deliberados de conexão recusada/fallback em testes de IA.
 
-Rollback de aplicação antes da Onda 2: `21901bf` em produção e `30ba3c8` como último commit documental da `main` anterior à integração. O rollback do código não remove as estruturas 091–094; elas são aditivas e devem permanecer compatíveis. Não executar DROP, DELETE ou TRUNCATE como “rollback” automático.
+Rollback de aplicação: retornar ao código funcional `21901bf`; `30ba3c8` é o último registro documental anterior à integração na `main`. O deployment da Onda 2 foi `vlb8ezviipjxyhmemek50rxg`, com **Success** em aproximadamente 4m38s, healthcheck **healthy**, rolling update concluído e aplicação **Running**. O rollback do código não remove as estruturas 091–094; elas são aditivas e devem permanecer compatíveis. Não executar DROP, DELETE ou TRUNCATE como “rollback” automático.
+
+## Validação pós-publicação em produção
+
+Após o deployment `vlb8ezviipjxyhmemek50rxg`, foram executados smoke tests somente leitura. `GET /api/health` retornou `status: ok`, `db: connected` e `n8n_configured: true`; a landing respondeu HTTP 200 e token de convite inválido retornou HTTP 404. A fila CRM carregou com 3 leads ativos e a ficha abriu exibindo “Histórico de mudanças”; a triagem carregou 30 itens, com 16 aguardando, 2 possíveis clientes e 1 convertido. Os endpoints autenticados responderam HTTP 200: metas sem registros, forecast com 1 lead e pipeline bruto de R$ 250.000 com forecast ponderado R$ 0, e métricas com 14 contratos fechados, receita R$ 0 e 14 contratos sem lead. Orçamentos e contratos carregaram com seus controles existentes, sem criação ou edição. O Histórico 360 autenticado respondeu HTTP 200 com 27 eventos reais para a empresa testada; não havia evento de triagem nessa empresa específica.
 
 ## Restrições de negócio preservadas
 
