@@ -914,7 +914,7 @@ export default function SimuladorPublico() {
                 <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-4">
                   Resultado da Simulação
                 </p>
-                <div className="grid grid-cols-3 gap-4 mb-4">
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-4">
                   <div className="text-center p-4 bg-primary/10 rounded-xl">
                     <Banknote className="w-6 h-6 text-[#0033A0] mx-auto mb-1" />
                     <p className="text-xs text-muted-foreground mb-1">Valor da Parcela</p>

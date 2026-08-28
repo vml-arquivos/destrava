@@ -339,6 +339,27 @@ function calcularScore(e: Empresa) {
   return { score, risco, tags };
 }
 
+// Empresas com menos de 12 meses de CNPJ ficam separadas das que já podem
+// entrar em análise de crédito -- não devem aparecer juntas na mesma lista
+// nem seguir para a mesma etapa de análise (ver bloqueio equivalente em
+// server/services/esteiraCreditoService.ts, avaliarEtapa3AnaliseCredito).
+// Empresa sem `data_abertura` conhecida é tratada como "em captação" (não
+// entra no grupo pronta para análise até a data ser confirmada).
+function mesesDesdeAbertura(dataAbertura?: string | null): number | null {
+  if (!dataAbertura) return null;
+  const abertura = new Date(dataAbertura);
+  if (Number.isNaN(abertura.getTime())) return null;
+  const agora = new Date();
+  let meses = (agora.getFullYear() - abertura.getFullYear()) * 12 + (agora.getMonth() - abertura.getMonth());
+  if (agora.getDate() < abertura.getDate()) meses -= 1;
+  return Math.max(0, meses);
+}
+
+function empresaProntaParaAnalise(e: Empresa): boolean {
+  const meses = mesesDesdeAbertura(e.data_abertura);
+  return meses !== null && meses >= 12;
+}
+
 // ─── Sub-componentes ──────────────────────────────────────────────────────────
 
 function StatusBadge({ status }: { status: string }) {
@@ -978,6 +999,10 @@ export default function Empresas() {
   const [loading, setLoading] = useState(true);
   const [busca, setBusca] = useState("");
   const [filtroStatus, setFiltroStatus] = useState("todos");
+  // Prontas para análise (12+ meses de CNPJ) x em captação de documentos
+  // (menos de 12 meses) -- os dois grupos não podem aparecer juntos na
+  // mesma lista, ver mesesDesdeAbertura/empresaProntaParaAnalise acima.
+  const [grupoEmpresa, setGrupoEmpresa] = useState<"pronta" | "captacao">("pronta");
   const [selecionada, setSelecionada] = useState<Empresa | null>(null);
   const [showDetail, setShowDetail] = useState(false); // mobile toggle
   const [comboAberto, setComboAberto] = useState(false);
@@ -1853,8 +1878,21 @@ export default function Empresas() {
     } catch { /* silencioso -- widget só some se a chamada falhar, resto da página funciona normal */ }
   }, []);
   useEffect(() => { carregarDocumentosResumo(); }, [carregarDocumentosResumo]);
+
+  // Divide o resultado já filtrado pelo servidor (busca/status/porte/origem)
+  // nos dois grupos que não podem se misturar: prontas para análise (12+
+  // meses de CNPJ) e em captação de documentos (menos de 12 meses, ou data
+  // de abertura ainda não confirmada).
+  const { empresasProntas, empresasCaptacao } = useMemo(() => {
+    const pronta: Empresa[] = [];
+    const captacao: Empresa[] = [];
+    for (const emp of empresas) (empresaProntaParaAnalise(emp) ? pronta : captacao).push(emp);
+    return { empresasProntas: pronta, empresasCaptacao: captacao };
+  }, [empresas]);
+  const empresasDoGrupo = grupoEmpresa === "pronta" ? empresasProntas : empresasCaptacao;
+
   const empresasRecentes = useMemo(() => {
-    return [...empresas]
+    return [...empresasDoGrupo]
       .filter((emp) => documentosResumo[emp.id])
       .sort((a, b) => {
         const chaveA = documentosResumo[a.id]?.ultima_movimentacao || a.updated_at || a.created_at || 0;
@@ -1862,7 +1900,7 @@ export default function Empresas() {
         return new Date(chaveB).getTime() - new Date(chaveA).getTime();
       })
       .slice(0, LIMITE_EMPRESAS_RECENTES);
-  }, [empresas, documentosResumo]);
+  }, [empresasDoGrupo, documentosResumo]);
 
   // ─────────────────────────────────────────────────────────────────────────
   // RENDER
@@ -1917,7 +1955,7 @@ export default function Empresas() {
                 <div className="min-w-0">
                   <h1 className="text-xl font-black text-foreground tracking-tight leading-tight">Empresas</h1>
                   <p className="text-xs font-medium text-muted-foreground mt-0.5">
-                    {loading ? "Carregando..." : `${empresas.length} encontrada${empresas.length !== 1 ? "s" : ""}`}
+                    {loading ? "Carregando..." : `${empresasDoGrupo.length} encontrada${empresasDoGrupo.length !== 1 ? "s" : ""}`}
                   </p>
                 </div>
                 <div className="flex items-center gap-1.5 shrink-0">
@@ -1937,6 +1975,26 @@ export default function Empresas() {
                     Nova
                   </button>
                 </div>
+              </div>
+
+              {/* Prontas para análise x em captação de documentos -- grupos
+                  separados, nunca misturados na mesma lista (ver
+                  empresaProntaParaAnalise). */}
+              <div className="mb-2.5 flex items-center gap-1.5">
+                <button
+                  type="button"
+                  onClick={() => setGrupoEmpresa("pronta")}
+                  className={`flex-1 rounded-xl px-3 py-2 text-xs font-bold transition ${grupoEmpresa === "pronta" ? "bg-brand-navy text-primary-foreground" : "bg-muted text-muted-foreground hover:bg-muted"}`}
+                >
+                  Prontas para análise ({empresasProntas.length})
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setGrupoEmpresa("captacao")}
+                  className={`flex-1 rounded-xl px-3 py-2 text-xs font-bold transition ${grupoEmpresa === "captacao" ? "bg-brand-navy text-primary-foreground" : "bg-muted text-muted-foreground hover:bg-muted"}`}
+                >
+                  Em captação ({empresasCaptacao.length})
+                </button>
               </div>
 
               {/* Select com busca */}
@@ -2001,7 +2059,7 @@ export default function Empresas() {
                     <div className="scroll-area overflow-y-auto max-h-[360px] p-1.5 space-y-1">
                       {loading ? (
                         <LoadingState message="Carregando empresas…" className="py-10" />
-                      ) : empresas.length === 0 ? (
+                      ) : empresasDoGrupo.length === 0 ? (
                         <EmptyState
                           preset="empresas"
                           title="Nenhuma empresa encontrada"
@@ -2009,7 +2067,7 @@ export default function Empresas() {
                           action={<button onClick={abrirNova} className="text-xs text-primary hover:underline">+ Cadastrar primeira empresa</button>}
                           className="py-10"
                         />
-                      ) : empresas.map(emp => {
+                      ) : empresasDoGrupo.map(emp => {
                         const sc = STATUS_CFG[emp.status] || STATUS_CFG.ativo;
                         const ativa = selecionada?.id === emp.id;
                         return (
@@ -2211,7 +2269,7 @@ export default function Empresas() {
                         ))}
                       </div>
                     )}
-                    {!loading && empresas.filter(e => documentosResumo[e.id]).length > empresasRecentes.length && (
+                    {!loading && empresasDoGrupo.filter(e => documentosResumo[e.id]).length > empresasRecentes.length && (
                       <p className="mt-3 text-center text-[11px] text-muted-foreground">
                         Mostrando as {empresasRecentes.length} mais recentes — refine a busca ou os filtros acima para ver outras.
                       </p>

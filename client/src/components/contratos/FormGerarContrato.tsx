@@ -853,7 +853,7 @@ export function FormGerarContrato({ onSubmit, loading, userCargo }: Props) {
             )}
           </div>
 
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <div>
               <label className={lbl}>Valor de Referência (R$) *</label>
               <input
@@ -873,7 +873,7 @@ export function FormGerarContrato({ onSubmit, loading, userCargo }: Props) {
                 onChange={e => setTaxaComissao(e.target.value)} className={cls} />
             </div>
           </div>
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <div>
               <label className={lbl}>Multa por Desistência — Cláusula 4.3 (%)</label>
               <input type="number" min="1" max="100" step="0.1" value={taxaDesistencia}
@@ -887,7 +887,7 @@ export function FormGerarContrato({ onSubmit, loading, userCargo }: Props) {
               <p className="text-[11px] text-muted-foreground mt-1">Incide sobre o crédito contratado se a CONTRATANTE atrasar 3 parcelas seguidas ou 5 alternadas.</p>
             </div>
           </div>
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <div>
               <label className={lbl}>Custeio Mensal — Cláusula 5.7-V (R$)</label>
               <input
@@ -1091,7 +1091,7 @@ export function FormGerarContrato({ onSubmit, loading, userCargo }: Props) {
             errorKey="contratadaIdLimpaNome"
           />
 
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <div>
               <label className={lbl}>Valor do Contrato (R$) *</label>
               <input
@@ -1136,7 +1136,7 @@ export function FormGerarContrato({ onSubmit, loading, userCargo }: Props) {
               </div>
             )}
           </div>
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <div>
               <label className={lbl}>Taxa Consulta Serasa</label>
               <input type="text" value={taxaConsulta} onChange={e => setTaxaConsulta(e.target.value)} placeholder="R$ 50,00" className={cls} />
@@ -1170,7 +1170,7 @@ export function FormGerarContrato({ onSubmit, loading, userCargo }: Props) {
                 </select>
                 {errors.empresaIdBacen && <p className="text-destructive text-xs mt-1">{errors.empresaIdBacen}</p>}
               </div>
-              <div className="grid grid-cols-2 gap-3">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div>
                   <label className={lbl}>Nome do Representante *</label>
                   <input type="text" value={representanteNomeBacen} onChange={e => setRepresentanteNomeBacen(e.target.value)}
@@ -1202,7 +1202,7 @@ export function FormGerarContrato({ onSubmit, loading, userCargo }: Props) {
             onResponsavelChange={setResponsavelContratoIdBacen}
             errorKey="contratadaIdBacen"
           />
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <div>
               <label className={lbl}>Valor do Contrato (R$) *</label>
               <input
@@ -1262,7 +1262,7 @@ export function FormGerarContrato({ onSubmit, loading, userCargo }: Props) {
             </select>
             {errors.empresaIdRating && <p className="text-destructive text-xs mt-1">{errors.empresaIdRating}</p>}
           </div>
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <div>
               <label className={lbl}>Nome do Representante *</label>
               <input type="text" value={representanteNomeRating} onChange={e => setRepresentanteNomeRating(e.target.value)}
@@ -1276,7 +1276,7 @@ export function FormGerarContrato({ onSubmit, loading, userCargo }: Props) {
               {errors.representanteCpfRating && <p className="text-destructive text-xs mt-1">{errors.representanteCpfRating}</p>}
             </div>
           </div>
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <div>
               <label className={lbl}>Valor do Contrato (R$) *</label>
               <input
@@ -1297,7 +1297,7 @@ export function FormGerarContrato({ onSubmit, loading, userCargo }: Props) {
               {errors.condicaoPgtoRating && <p className="text-destructive text-xs mt-1">{errors.condicaoPgtoRating}</p>}
             </div>
           </div>
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <div>
               <label className={lbl}>Prazo de Acompanhamento (dias)</label>
               <input type="number" min="1" value={prazoAcompanhamento} onChange={e => setPrazoAcompanhamento(e.target.value)} className={cls} />
@@ -1337,7 +1337,7 @@ export function FormGerarContrato({ onSubmit, loading, userCargo }: Props) {
             </select>
             {errors.parceiroIdPC && <p className="text-destructive text-xs mt-1">{errors.parceiroIdPC}</p>}
           </div>
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <div>
               <label className={lbl}>CPF do Parceiro *</label>
               <input type="text" value={parceiroCpfPC} onChange={e => setParceiroCpfPC(e.target.value)}
@@ -1350,7 +1350,7 @@ export function FormGerarContrato({ onSubmit, loading, userCargo }: Props) {
                 placeholder="00.000.000/0001-00" className={cls} />
             </div>
           </div>
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <div>
               <label className={lbl}>Estado Civil (opcional)</label>
               <input type="text" value={parceiroEstadoCivilPC} onChange={e => setParceiroEstadoCivilPC(e.target.value)}
@@ -1387,7 +1387,7 @@ export function FormGerarContrato({ onSubmit, loading, userCargo }: Props) {
                 onChange={e => setPrazoPagamentoDiasUteis(e.target.value)} className={cls} />
             </div>
           </div>
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <div>
               <label className={lbl}>Vigência</label>
               <input type="text" value={vigencia} onChange={e => setVigencia(e.target.value)}
@@ -1401,7 +1401,7 @@ export function FormGerarContrato({ onSubmit, loading, userCargo }: Props) {
           </div>
           <div className="border-t border-border pt-3">
             <p className="text-xs font-medium text-muted-foreground mb-2">Testemunhas (opcional)</p>
-            <div className="grid grid-cols-2 gap-3">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <div>
                 <label className={lbl}>Testemunha 1 — Nome</label>
                 <input type="text" value={testemunha1Nome} onChange={e => setTestemunha1Nome(e.target.value)} className={cls} />
@@ -1424,7 +1424,7 @@ export function FormGerarContrato({ onSubmit, loading, userCargo }: Props) {
       )}
 
       {/* ── CAMPOS COMUNS ── */}
-      <div className="grid grid-cols-2 gap-3">
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
         <div>
           <label className={lbl}>Data de Assinatura *</label>
           <input type="date" value={dataAssinatura} onChange={e => setDataAssinatura(e.target.value)} className={cls} />

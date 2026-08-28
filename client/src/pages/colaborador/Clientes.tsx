@@ -643,7 +643,7 @@ export default function Clientes() {
           </div>
 
           {/* Stats cards */}
-          <div className="grid grid-cols-4 gap-3 px-6 py-3 bg-muted border-b">
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 px-6 py-3 bg-muted border-b">
             {[
               { label: "Total",          value: stats.total,      color: "text-foreground",    sub: "clientes" },
               { label: "Leads Novos",    value: stats.leads,      color: "text-muted-foreground",    sub: "aguardando" },

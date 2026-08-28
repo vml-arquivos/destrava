@@ -460,7 +460,7 @@ export default function CapturaLead() {
                           Sobre o Certificado
                           <span className="text-muted-foreground text-xs ml-1.5 font-normal normal-case">(ajuda a gente a te atender mais rápido)</span>
                         </p>
-                        <div className="grid grid-cols-2 gap-4">
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                           <div className="space-y-1.5">
                             <Label>Documento</Label>
                             <Select value={form.documentoTipo} onValueChange={(v) => set("documentoTipo", v)}>
@@ -512,7 +512,7 @@ export default function CapturaLead() {
                           <span className="text-muted-foreground text-xs ml-1.5 font-normal normal-case">(todos opcionais)</span>
                         </p>
 
-                        <div className="grid grid-cols-2 gap-4">
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                           <div className="space-y-1.5">
                             <Label>Valor Desejado</Label>
                             <Select value={form.valorDesejado} onValueChange={(v) => set("valorDesejado", v)}>

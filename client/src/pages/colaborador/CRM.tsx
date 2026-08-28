@@ -2026,6 +2026,7 @@ export default function CRM() {
               <LoadingState message="Carregando leads…" size="lg" className="py-16" />
             ) : (
               <div className="bg-card rounded-xl border border-border overflow-hidden">
+                <div className="overflow-x-auto">
                 <table className="w-full text-sm">
                   <thead className="bg-muted border-b border-border">
                     <tr>
@@ -2084,6 +2085,7 @@ export default function CRM() {
                     })}
                   </tbody>
                 </table>
+                </div>
                 {leadsFiltrados.length === 0 && (
                   <EmptyState preset="busca" title="Nenhum lead encontrado" description="Tente ajustar os filtros ou adicione um novo lead." className="py-12" />
                 )}

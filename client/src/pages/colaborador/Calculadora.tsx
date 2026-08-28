@@ -1619,6 +1619,7 @@ function CenarioComparativo({ initialData }: { initialData?: { nome: string; emp
 
           {/* Tabela comparativa detalhada */}
           <div className="bg-card rounded-2xl border overflow-hidden">
+            <div className="overflow-x-auto">
             <table className="w-full text-sm">
               <thead>
                 <tr className="bg-muted border-b">
@@ -1697,6 +1698,7 @@ function CenarioComparativo({ initialData }: { initialData?: { nome: string; emp
                 </tr>
               </tbody>
             </table>
+            </div>
           </div>
 
           {/* Resumo visual da diferença */}

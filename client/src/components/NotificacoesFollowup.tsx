@@ -86,7 +86,7 @@ export default function NotificacoesFollowup() {
       </button>
 
       {aberto && (
-        <div className="absolute right-0 top-11 z-50 w-80 rounded-lg border bg-card shadow-xl">
+        <div className="absolute right-0 top-11 z-50 w-80 max-w-[calc(100vw-1.5rem)] rounded-lg border bg-card shadow-xl">
           {/* Header */}
           <div className="flex items-center justify-between px-4 py-3 border-b">
             <div className="flex items-center gap-2">
