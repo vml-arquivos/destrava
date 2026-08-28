@@ -129,8 +129,7 @@ export default function CofreDocumentosPublico() {
           </div>
 
           <div className="rounded-2xl border border-violet-200 bg-violet-50 p-5">
-            <p className="text-[10px] font-black uppercase tracking-widest text-violet-800">Link livre compartilhável</p>
-            <p className="mt-1 text-sm leading-6 text-violet-900">Gere um link que recebe documentos de qualquer pessoa física ou empresa, mesmo sem cadastro no sistema — não é preciso abrir a ficha de nenhuma empresa para isso.</p>
+            <h2 className="text-sm font-black text-violet-950">Link de coleta de documentos</h2>
             {urlLivre && (
               <div className="mt-3 flex flex-col gap-2 sm:flex-row">
                 <input readOnly value={urlLivre} className="min-w-0 flex-1 rounded-lg border border-violet-200 bg-white px-3 py-2 text-xs text-violet-900" onFocus={(event) => event.currentTarget.select()} />
@@ -138,7 +137,7 @@ export default function CofreDocumentosPublico() {
               </div>
             )}
             {expiraLivre && <p className="mt-2 text-[11px] text-violet-800">Válido até {new Date(expiraLivre).toLocaleDateString("pt-BR")}.</p>}
-            <Button size="sm" variant="outline" onClick={() => void gerarLivre()} disabled={gerando} className="mt-3 border-violet-200 bg-white text-violet-800 hover:bg-violet-100">{gerando ? <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" /> : <Link2 className="mr-1.5 h-3.5 w-3.5" />}{urlLivre ? "Gerar outro link livre" : "Gerar link livre"}</Button>
+            <Button size="sm" variant="outline" onClick={() => void gerarLivre()} disabled={gerando} className="mt-3 border-violet-200 bg-white text-violet-800 hover:bg-violet-100">{gerando ? <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" /> : <Link2 className="mr-1.5 h-3.5 w-3.5" />}{urlLivre ? "Gerar outro link" : "Gerar link"}</Button>
           </div>
 
           {error && <Alert variant="destructive"><AlertDescription>{error}</AlertDescription></Alert>}
