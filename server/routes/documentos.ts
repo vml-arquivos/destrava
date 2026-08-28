@@ -13,6 +13,7 @@ import {
 } from '../services/documentStorage';
 import { DocumentPipelineStatus, assertUploadAllowed } from '../services/documentPipelineService';
 import { analiseDocumentalService } from '../services/analiseDocumentalEspecializada';
+import { analisarCnpjReceitaCartaoEmpresa } from '../services/analiseCnpjReceitaCartao';
 
 const { Pool } = pkg;
 const pool = new Pool({
@@ -558,15 +559,40 @@ async function auditar(documentoId: string, acao: string, antes: any, depois: an
   ).catch((err) => console.warn('[auditoria_documentos]', err.message));
 }
 
+// Tipos com análise automática no upload -- não exige mais clicar em
+// "iniciar análise" separadamente. Cartão CNPJ, QSA e Simples Nacional
+// entraram aqui porque já tinham motor de leitura/validação pronto
+// (analiseDocumentalEspecializada.ts / analiseCnpjReceitaCartao.ts), só
+// não eram disparados no momento do upload -- ver auditoria que motivou
+// esta mudança. `enquadramento_tributario_cnpj` é tratado como o mesmo
+// documento de `simples_nacional` (mesmo `promptCodigo` em
+// server/routes/documentacao.ts, ANALISE_ESPECIALIZADA_POR_TIPO).
+const TIPOS_COM_ANALISE_AUTOMATICA = [
+  'faturamento_12_meses', 'comprovante_faturamento', 'declaracao_faturamento', 'comprovante_residencia',
+  'cartao_cnpj', 'qsa', 'simples_nacional', 'enquadramento_tributario_cnpj',
+] as const;
+
 function agendarAnaliseRegraDocumental(documento: any) {
   const empresaId = documento?.empresa_id || (documento?.entidade_tipo === 'empresa' ? documento?.entidade_id : null);
   const tipo = String(documento?.tipo_documento || '');
-  if (!empresaId || !documento?.id || !['faturamento_12_meses', 'comprovante_faturamento', 'declaracao_faturamento', 'comprovante_residencia'].includes(tipo)) return;
+  if (!empresaId || !documento?.id || !TIPOS_COM_ANALISE_AUTOMATICA.includes(tipo as any)) return;
   setTimeout(async () => {
     try {
+      // Cartão CNPJ tem motor próprio que já persiste o resultado sozinho
+      // (analises_cnpj_empresa + o UPDATE em documentos_arquivos), igual ao
+      // que a rota manual POST /analise-cnpj já faz -- não repetimos esse
+      // UPDATE aqui pra não sobrescrever o que a própria função já grava.
+      if (tipo === 'cartao_cnpj') {
+        await analisarCnpjReceitaCartaoEmpresa(empresaId, documento.criado_por || null, documento.id);
+        return;
+      }
       const resultado = tipo === 'comprovante_residencia'
         ? await analiseDocumentalService.analisarComprovanteResidencia(empresaId, documento.id)
-        : await analiseDocumentalService.analisarFaturamento(empresaId, documento.id);
+        : tipo === 'qsa'
+          ? await analiseDocumentalService.analisarQSA(empresaId, documento.id)
+          : (tipo === 'simples_nacional' || tipo === 'enquadramento_tributario_cnpj')
+            ? await analiseDocumentalService.analisarSimplesNacional(empresaId, documento.id)
+            : await analiseDocumentalService.analisarFaturamento(empresaId, documento.id);
       await pool.query(
         `UPDATE public.documentos_arquivos
             SET resultado_validacao=COALESCE(resultado_validacao,'{}'::jsonb)||$2::jsonb,
