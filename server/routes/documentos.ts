@@ -92,7 +92,7 @@ const DOCUMENTOS_EMPRESA = new Set([
   'cnd_municipal', 'certidao_municipal', 'projecao_receitas', 'demonstrativo_receitas_projetadas',
 ]);
 
-const MIME_EXT: Record<string, string[]> = {
+export const MIME_EXT: Record<string, string[]> = {
   'application/pdf': ['.pdf'],
   'image/jpeg': ['.jpg', '.jpeg'],
   'image/png': ['.png'],
@@ -203,7 +203,7 @@ function safeJson(value: unknown): Record<string, unknown> {
   }
 }
 
-function sanitizeFileName(original: string): string {
+export function sanitizeFileName(original: string): string {
   const base = path.basename(original || 'arquivo');
   const normalized = base.normalize('NFD').replace(/[\u0300-\u036f]/g, '');
   return normalized.replace(/[^a-zA-Z0-9_.-]+/g, '_').replace(/^\.+/, '').slice(0, 140) || 'arquivo';
@@ -541,7 +541,7 @@ export async function validarEntidade(entidadeTipo: string, entidadeId: string, 
   return {};
 }
 
-function validarArquivo(file: Express.Multer.File, tipoDocumento: string) {
+export function validarArquivo(file: Express.Multer.File, tipoDocumento: string) {
   const ext = path.extname(file.originalname || '').toLowerCase();
   const allowedExt = MIME_EXT[file.mimetype];
   if (!allowedExt) throw new Error(`MIME type não permitido: ${file.mimetype || 'desconhecido'}`);
@@ -591,7 +591,7 @@ function agendarAnaliseRegraDocumental(documento: any) {
 router.get('/', auth, async (req: Request, res: Response) => {
   try {
     const filtrosPermitidos = ['entidade_tipo', 'entidade_id', 'empresa_id', 'cliente_pf_id', 'lead_id', 'socio_id', 'contrato_id', 'simulacao_id', 'tipo_documento', 'status'];
-    const where: string[] = ['excluido_em IS NULL', "status <> 'excluido'"];
+      const where: string[] = ['excluido_em IS NULL', "status <> 'excluido'", "COALESCE(metadados->>'coleta_status', '') <> 'staging'"];
     const values: unknown[] = [];
 
     // Quando busca por empresa (entidade_tipo='empresa' + entidade_id=UUID),
@@ -1077,7 +1077,7 @@ export async function calcularPendenciasDocumentais(entidadeTipo: string, entida
   const { rows } = await pool.query(
     `SELECT tipo_documento, status, validado
        FROM public.documentos_arquivos
-      WHERE entidade_tipo=$1 AND entidade_id=$2 AND excluido_em IS NULL AND status <> 'excluido'`,
+      WHERE entidade_tipo=$1 AND entidade_id=$2 AND excluido_em IS NULL AND status <> 'excluido' AND COALESCE(metadados->>'coleta_status', '') <> 'staging'`,
     [entidadeTipo, entidadeId]
   );
   const porTipo = new Map<string, any[]>();

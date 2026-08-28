@@ -894,6 +894,7 @@ async function listarDocumentosEmpresaPorTipos(empresaId: string, tipos: string[
        FROM public.documentos_arquivos
       WHERE excluido_em IS NULL
         AND status <> 'excluido'
+        AND COALESCE(metadados->>'coleta_status', '') <> 'staging'
         AND (empresa_id = $1 OR (entidade_tipo = 'empresa' AND entidade_id = $1))
         AND tipo_documento = ANY($2::text[])
       ORDER BY criado_em DESC
@@ -1660,6 +1661,7 @@ async function vincularDocumentosAutomaticos(empresaId: string) {
           AND (b.codigo <> 'socios_representantes' OR deb.socio_id IS NULL OR da.socio_id = deb.socio_id OR (da.entidade_tipo='socio' AND da.entidade_id=deb.socio_id))
           AND da.excluido_em IS NULL
           AND da.status <> 'excluido'
+          AND COALESCE(da.metadados->>'coleta_status', '') <> 'staging'
        ON CONFLICT (entidade_bloco_id, arquivo_id) DO NOTHING`,
       [empresaId, regra.codigo, regra.tipos]
     );
@@ -2072,7 +2074,7 @@ async function montarValidacaoSocietaria(
   };
 }
 
-async function montarDossieCreditoEmpresa(empresaId: string, options: { processarDocumentos?: boolean; processarSocietario?: boolean; usuarioId?: string | null } = {}) {
+export async function montarDossieCreditoEmpresa(empresaId: string, options: { processarDocumentos?: boolean; processarSocietario?: boolean; usuarioId?: string | null } = {}) {
   await ensureBlocosCatalogo();
   let erroProcessamentoCartao: string | null = null;
   if (options.processarDocumentos) {

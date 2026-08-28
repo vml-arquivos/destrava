@@ -119,6 +119,26 @@ A fonte atual do ciclo comercial é `leads.created_at` até `contratos_gerados.d
 
 A branch da Onda 2 foi promovida para `origin/main` no commit `2c338c8b40c767a69366874fc9b486539cfacf3d`. O deployment Coolify `vlb8ezviipjxyhmemek50rxg` terminou com **Success** em aproximadamente 4m38s; o novo container passou em healthcheck (**healthy**, código 0), o rolling update foi concluído e a aplicação permaneceu **Running**.
 
+## Link público de coleta guiada de documentos
+
+A funcionalidade foi implementada na branch isolada `feature-link-publico-coleta-documentos`, derivada da `origin/main` após a Onda 2, sem misturar o lote de responsividade mobile. O assistente público `/documentos/:token` é mobile-first, apresenta somente o próximo documento obrigatório calculado pelo `gerarMapaDocumentalCredito`, mostra progresso, finalidade, formatos aceitos e permite foto pela câmera do celular ou arquivo de até 25 MB.
+
+A migration aditiva `095_coleta_documentos_publica.sql` cria `links_coleta_documentos` e `coleta_documentos`. O token aleatório de 24 bytes é armazenado somente como SHA-256, o link é escopado pela empresa resolvida no banco e há apenas um link ativo por empresa. O prazo adotado inicialmente é de **30 dias**, com geração de novo link para renovação/substituição; essa decisão foi documentada e deve ser confirmada ou ajustada pelo cliente.
+
+| Camada | Implementação | Proteção/evidência |
+| --- | --- | --- |
+| Carregamento público | `GET /api/coleta-documentos/:token` | Rate limit, token hash, validade, status e resposta mínima sem e-mail, CNPJ, IDs, indicadores ou programas internos |
+| Upload público | `POST /api/coleta-documentos/:token/upload` | Rate limit mais restritivo, um arquivo por vez, validação reutilizada do upload interno, empresa/item resolvidos pelo token e etapa atual |
+| Staging e análise | `documentos_arquivos` com `coleta_status=staging` + `coleta_documentos` | Staging é excluído do Acervo/mapa oficial; Cartão CNPJ, QSA, Simples, Atos, faturamento, residência e contrato reutilizam os analisadores existentes; tipos sem analisador não são aprovados artificialmente |
+| Promoção | Transação `promoteSubmission` | Só ocorre sem alerta alto/crítico; após promoção o staging é marcado como promovido e vinculado ao bloco documental oficial |
+| Revisão humana | Endpoints internos de pendências e revisão | Aceitar promove; recusar mantém o arquivo fora do Acervo e registra follow-up para reenvio |
+| Notificação | `empresa_followups` | Chegada, revisão, aceite e conclusão geram acompanhamento na estrutura já existente; nenhum canal paralelo foi criado |
+| Ação interna | `Solicitar documentos` na ficha de Empresas | Gera/copia link, envia e-mail via Resend já configurado ou prepara WhatsApp via `wa.me` |
+
+A seleção do passo percorre todas as etapas desbloqueadas do mapa, em vez de parar na etapa numérica inicial. Códigos documentais ainda ausentes da constraint legada são preservados como código solicitado no staging e usam o tipo físico seguro `outros` até revisão; não foi alterada nem recriada a constraint existente. O Acervo e o montador do dossiê ignoram staging, e o Cartão CNPJ possui override opcional não persistente para que a análise pública não substitua um laudo global antes da promoção.
+
+A validação local foi concluída com `pnpm check`, teste focal `tests/coletaDocumentos.test.ts` com 5 testes, suíte completa com 61 arquivos e 586 testes, `pnpm build`, pré-renderização, budgets e `git diff --check`. A captura visual em viewport real de 390×844 confirmou o layout sem overflow e, após ajuste específico, sem o banner global de cookies cobrindo o CTA. A publicação em produção, aplicação da migration 095 e o teste ponta a ponta com empresas de teste dos regimes Simples Nacional e MEI ainda não foram executados nesta etapa; dependem de commit/push, rollout aditivo e autorização operacional específica.
+
 ## Itens ainda bloqueados por dependência externa ou decisão de negócio
 
 Não foram inventados IDs de Meta Pixel, Google Ads, LinkedIn ou credenciais de WhatsApp Business API. Esses itens continuam aguardando os identificadores, provedor, token, número e regras de consentimento fornecidos pelo cliente. O roteamento automático e SLA continuam aguardando a aprovação do critério de distribuição, janela e responsável; nenhum algoritmo arbitrário foi introduzido.
@@ -146,4 +166,9 @@ O rollback da aplicação da Onda 2 deve retornar ao código funcional de produ�
 | `tests/cadastroConviteAuthorization.test.ts` | Regressão de token, aprovação e ausência de sessão automática. |
 | `tests/referralService.test.ts` | Regressão de normalização e formato de links. |
 | `tests/usuarioSelfEditAuthorization.test.ts` | Regressão da autoedição e hierarquia de terceiros. |
+| `db/migrations/095_coleta_documentos_publica.sql` | Links tokenizados, staging e revisão da coleta pública. |
+| `server/routes/coletaDocumentos.ts` | Rotas públicas, upload, análise, promoção, revisão e notificações. |
+| `client/src/pages/ColetaDocumentos.tsx` | Assistente público mobile-first por token. |
+| `client/src/components/documentos/SolicitarDocumentos.tsx` | Ação interna de geração e envio do link. |
+| `tests/coletaDocumentos.test.ts` | Regressão de token, isolamento, etapa única, tipos e severidade. |
 | `RELATORIO_IMPLEMENTACAO.md` | Este registro de implementação e evidências. |
