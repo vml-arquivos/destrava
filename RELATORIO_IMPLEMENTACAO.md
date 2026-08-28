@@ -145,6 +145,18 @@ Não foram inventados IDs de Meta Pixel, Google Ads, LinkedIn ou credenciais de 
 
 A validação real de upload da foto do Administrador e a submissão de um cadastro de parceiro/captador não foram executadas para evitar alterar registros reais. Para o teste ponta a ponta desses dois passos, deve ser fornecido um colaborador/registro de teste ou autorização explícita para usar um cadastro controlado.
 
+## Extensão: cofre documental público livre
+
+Foi implementada em branch separada a modalidade de link público livre para recebimento de documentos de pessoa física ou jurídica, inclusive remetentes não cadastrados. O token é armazenado somente como hash SHA-256; cada envio identifica o remetente, aceita um arquivo por vez e exige consentimento. O arquivo é gravado pelo mesmo serviço de storage persistente, porém em tabela própria de cofre, sem inserir `documentos_arquivos` e sem preencher `empresa_id`, `cliente_pf_id` ou `lead_id`. Portanto, não aparece automaticamente em empresas, clientes PF, leads ou no Acervo Documental.
+
+Cada primeiro envio cria um dossiê individual tokenizado, associado ao link livre, com identidade do remetente persistida. O token do dossiê é mantido apenas no navegador do remetente para que os próximos arquivos sejam gravados com o mesmo `dossie_id`; a identidade fica desabilitada para edição durante a continuidade. Um novo remetente ou uma nova pessoa deve iniciar outro dossiê, e o backend rejeita o uso de um token de dossiê em outro link. Assim, documentos de empresas ou pessoas físicas diferentes não são agrupados pela simples coincidência do link compartilhável.
+
+A triagem interna autenticada permite listar, baixar, aceitar no próprio cofre ou recusar os itens, exibindo o identificador resumido do dossiê. A aceitação não cria vínculo oficial; eventual associação futura deverá ser uma ação interna deliberada e auditável. A modalidade atrelada a uma empresa permanece em `/documentos/:token`, continua usando `gerarMapaDocumentalCredito` como fonte do checklist e não foi substituída pelo cofre livre. A Onda 3/portal do cliente continua fora do escopo.
+
+A validade inicial continua definida em 30 dias, como decisão provisória sujeita à confirmação do cliente. O link livre pode ser gerado novamente para novas campanhas sem invalidar links anteriores ainda válidos. Foram adicionadas as migrations aditivas `096_cofre_documentos_publico.sql` e `097_dossies_cofre_documentos_publico.sql`, o router `coletaDocumentosLivre.ts`, as telas públicas e internas correspondentes e testes de token, isolamento entre links, continuidade no mesmo dossiê, consentimento, staging separado e rejeição de `empresa_id` enviado pelo remetente.
+
+A validação local da extensão anterior passou em `pnpm check`, nos testes focais combinados da coleta empresarial e do cofre livre (9 testes), e a correção de agrupamento passou no teste focal do cofre livre (5 testes). A suíte completa (`62` arquivos e `590` testes), o `pnpm build`, os budgets existentes, a pré-renderização e o `git diff --check` também passaram. Também foi feita inspeção visual local da tela pública em layout estreito, sem overflow observado. Ainda não foram aplicadas a migration `096` em produção, criados links reais, feitos uploads reais ou iniciado novo deployment; os commits estão isolados em `feature-cofre-publico-documentos` (`6cd04d6` e `fae0289`) para revisão e rollout posterior.
+
 ## Rollback
 
 O rollback da aplicação da Onda 2 deve retornar ao código funcional de produção `21901bf`; o último registro documental anterior na `main` era `30ba3c8`. O deployment anterior da Onda 1 foi `fkk1pleycovjpc0snq3akync`, com **Success**, healthcheck **healthy** e aplicação **Running**. Como as migrations `091`–`094` são aditivas, o rollback da aplicação não remove as colunas, índices ou função criados; eventual limpeza de dados de teste deve ser deliberada e manual, nunca destrutiva por padrão.
@@ -171,4 +183,10 @@ O rollback da aplicação da Onda 2 deve retornar ao código funcional de produ�
 | `client/src/pages/ColetaDocumentos.tsx` | Assistente público mobile-first por token. |
 | `client/src/components/documentos/SolicitarDocumentos.tsx` | Ação interna de geração e envio do link. |
 | `tests/coletaDocumentos.test.ts` | Regressão de token, isolamento, etapa única, tipos e severidade. |
+| `db/migrations/096_cofre_documentos_publico.sql` | Estrutura aditiva do cofre livre, sem vínculos oficiais automáticos. |
+| `db/migrations/097_dossies_cofre_documentos_publico.sql` | Dossiês isolados por remetente e coluna `dossie_id` dos arquivos. |
+| `server/routes/coletaDocumentosLivre.ts` | Geração de link, GET/POST público, upload separado, download e revisão autenticada. |
+| `client/src/pages/ColetaDocumentosLivre.tsx` | Tela pública mobile-first para PF/PJ e um arquivo por envio. |
+| `client/src/pages/colaborador/CofreDocumentosPublico.tsx` | Triagem interna autenticada do cofre livre. |
+| `tests/coletaDocumentosLivre.test.ts` | Testes de token, isolamento, consentimento, staging e não vinculação. |
 | `RELATORIO_IMPLEMENTACAO.md` | Este registro de implementação e evidências. |
