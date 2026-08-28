@@ -405,4 +405,39 @@ describe("calcularEsteiraCredito", () => {
     expect(etapa8!.percentual_conclusao).toBeGreaterThan(50);
   });
 
+  // ── Cenário: empresa com menos de 12 meses de abertura ───────────────────────
+  // Empresas recém-abertas não podem entrar na Análise de Crédito junto com as
+  // que já têm 12+ meses -- ver comentário em avaliarEtapa3AnaliseCredito.
+
+  it("empresa com menos de 12 meses de abertura deve ter etapa 3 bloqueada mesmo com faturamento e simulação", () => {
+    const input = inputVazio();
+    const dataRecente = new Date();
+    dataRecente.setMonth(dataRecente.getMonth() - 3); // 3 meses de abertura
+    input.empresa = { faturamento_anual: 500000, data_abertura: dataRecente.toISOString().slice(0, 10) };
+    input.simulacoes = [{ id: "s1", produto: "Capital de Giro", valor_solicitado: 100000 }];
+    const resultado = calcularEsteiraCredito(input);
+    const etapa3 = resultado.etapas.find(e => e.numero === 3);
+    expect(etapa3!.status).toBe("bloqueada");
+    expect(etapa3!.bloqueios.some(b => b.id === "e3-menos-12-meses" && b.critico)).toBe(true);
+    expect(etapa3!.dados_resumo.idade_meses).toBe(3);
+  });
+
+  it("empresa com 12+ meses de abertura não deve ter o bloqueio de maturidade na etapa 3", () => {
+    const input = inputVazio();
+    const dataAntiga = new Date();
+    dataAntiga.setFullYear(dataAntiga.getFullYear() - 2); // 2 anos de abertura
+    input.empresa = { faturamento_anual: 500000, data_abertura: dataAntiga.toISOString().slice(0, 10) };
+    input.simulacoes = [{ id: "s1", produto: "Capital de Giro", valor_solicitado: 100000 }];
+    const resultado = calcularEsteiraCredito(input);
+    const etapa3 = resultado.etapas.find(e => e.numero === 3);
+    expect(etapa3!.bloqueios.some(b => b.id === "e3-menos-12-meses")).toBe(false);
+  });
+
+  it("empresa sem data_abertura informada não deve ter o bloqueio de maturidade (idade desconhecida não bloqueia)", () => {
+    const resultado = calcularEsteiraCredito(inputCompleto());
+    const etapa3 = resultado.etapas.find(e => e.numero === 3);
+    expect(etapa3!.bloqueios.some(b => b.id === "e3-menos-12-meses")).toBe(false);
+    expect(etapa3!.dados_resumo.idade_meses).toBe("Não informado");
+  });
+
 });

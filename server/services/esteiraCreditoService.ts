@@ -183,11 +183,42 @@ function avaliarEtapa2Documentos(documentos: any[]): EtapaEsteira {
   };
 }
 
+// A empresa só entra de fato na Análise de Crédito depois de completar 12
+// meses de abertura (CNPJ) -- antes disso ela fica na Coleta Documental,
+// sendo acompanhada, mas sem avançar pra etapa de análise. Isso não é uma
+// preferência de exibição: o pedido foi que as duas populações (prontas
+// para análise vs. em captação/maturação) nunca se misturem na mesma
+// análise. `data_abertura` já é sincronizada a partir do CNPJ (ver
+// empresaCnpjEnrichment.ts) -- calculamos aqui em vez de reusar um dos
+// outros 3 lugares que já fazem essa conta (empresaMaturidadeFollowup.ts,
+// inteligencia360Service.ts, analiseCnpjReceitaCartao.ts) pra não acoplar
+// este serviço, que é somente leitura, a nenhum deles.
+function mesesDesdeAbertura(dataAbertura: unknown): number | null {
+  const str = safeStr(dataAbertura);
+  if (!str) return null;
+  const abertura = new Date(str);
+  if (Number.isNaN(abertura.getTime())) return null;
+  const agora = new Date();
+  let meses = (agora.getFullYear() - abertura.getFullYear()) * 12 + (agora.getMonth() - abertura.getMonth());
+  if (agora.getDate() < abertura.getDate()) meses -= 1;
+  return Math.max(0, meses);
+}
+
 function avaliarEtapa3AnaliseCredito(empresa: any, simulacoes: any[]): EtapaEsteira {
   const sims = safeArr<any>(simulacoes);
   const bloqueios: BloqueioEsteira[] = [];
   const acoes: AcaoEsteira[] = [];
 
+  const idadeMeses = mesesDesdeAbertura(empresa?.data_abertura);
+  if (idadeMeses !== null && idadeMeses < 12) {
+    bloqueios.push({
+      id: "e3-menos-12-meses",
+      titulo: "Empresa com menos de 12 meses de abertura",
+      descricao: `Abertura há ${idadeMeses} mês(es). A análise de crédito só é conduzida a partir de 12 meses de CNPJ; até lá, a empresa segue em coleta de documentos e acompanhamento.`,
+      critico: true,
+      modulo: "cadastro_empresa",
+    });
+  }
   if (!safeNum(empresa?.faturamento_anual)) bloqueios.push({ id: "e3-faturamento", titulo: "Faturamento não informado", descricao: "Faturamento anual é obrigatório para análise.", critico: true, modulo: "cadastro_empresa" });
   if (sims.length === 0) acoes.push({ titulo: "Criar simulação de crédito", descricao: "Simule o produto, valor e prazo desejados.", modulo: "simulacoes", prioridade: "imediata" });
   if (!empresa?.score_interno && !empresa?.score_serasa) acoes.push({ titulo: "Consultar score de crédito", descricao: "Obter score Serasa ou interno para análise de risco.", modulo: "inteligencia_360", prioridade: "proxima" });
@@ -209,6 +240,7 @@ function avaliarEtapa3AnaliseCredito(empresa: any, simulacoes: any[]): EtapaEste
       simulacoes: sims.length,
       score_interno: safeNum(empresa?.score_interno) ?? "Não informado",
       score_serasa: safeNum(empresa?.score_serasa) ?? "Não informado",
+      idade_meses: idadeMeses ?? "Não informado",
     },
   };
 }
