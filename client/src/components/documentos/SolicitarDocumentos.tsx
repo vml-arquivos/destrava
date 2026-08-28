@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Copy, Link2, Loader2, Mail, MessageCircle, Send, Check, X } from "lucide-react";
+import { Copy, Link2, Loader2, Mail, MessageCircle, Send, Check, X, ExternalLink } from "lucide-react";
 import { toast } from "sonner";
 import { apiFetch } from "@/lib/api";
 
@@ -23,6 +23,9 @@ export default function SolicitarDocumentos({ empresaId, empresaNome, destinatar
   const [url, setUrl] = useState("");
   const [expiraEm, setExpiraEm] = useState("");
   const [copiado, setCopiado] = useState(false);
+  const [urlLivre, setUrlLivre] = useState("");
+  const [expiraLivre, setExpiraLivre] = useState("");
+  const [copiadoLivre, setCopiadoLivre] = useState(false);
 
   function abrir() {
     setNome(destinatario?.nome || "");
@@ -31,6 +34,9 @@ export default function SolicitarDocumentos({ empresaId, empresaNome, destinatar
     setUrl("");
     setExpiraEm("");
     setCopiado(false);
+    setUrlLivre("");
+    setExpiraLivre("");
+    setCopiadoLivre(false);
     setAberto(true);
   }
 
@@ -67,6 +73,35 @@ export default function SolicitarDocumentos({ empresaId, empresaNome, destinatar
       else toast.error(error?.message || "Não foi possível gerar o link de coleta.");
     } finally {
       setGerando(false);
+    }
+  }
+
+  async function gerarLivre() {
+    setGerando(true);
+    try {
+      const resultado = await apiFetch("/api/coleta-documentos-livre/interno/link", {
+        method: "POST",
+        body: JSON.stringify({ rotulo: `Link livre — ${empresaNome}` }),
+      });
+      setUrlLivre(resultado?.url || "");
+      setExpiraLivre(resultado?.expira_em || "");
+      toast.success("Link livre gerado. Ele pode ser compartilhado com PF ou PJ.");
+    } catch (error: any) {
+      toast.error(error?.message || "Não foi possível gerar o link livre.");
+    } finally {
+      setGerando(false);
+    }
+  }
+
+  async function copiarLivre() {
+    if (!urlLivre) return;
+    try {
+      await navigator.clipboard.writeText(urlLivre);
+      setCopiadoLivre(true);
+      toast.success("Link livre copiado.");
+      window.setTimeout(() => setCopiadoLivre(false), 1800);
+    } catch {
+      toast.error("Não foi possível copiar automaticamente. Selecione o link para copiar.");
     }
   }
 
@@ -119,6 +154,14 @@ export default function SolicitarDocumentos({ empresaId, empresaNome, destinatar
                 {expiraEm && <p className="mt-2 text-[11px] text-cyan-800">Válido até {new Date(expiraEm).toLocaleDateString("pt-BR")}.</p>}
               </div>
             )}
+
+            <div className="mt-4 rounded-xl border border-violet-200 bg-violet-50 p-3">
+              <p className="text-[10px] font-black uppercase tracking-widest text-violet-800">Link livre compartilhável</p>
+              <p className="mt-1 text-[11px] leading-5 text-violet-900">Recebe documentos de PF ou PJ, mesmo sem cadastro. Os arquivos ficam em cofre separado e não entram automaticamente em fichas.</p>
+              {urlLivre && <div className="mt-2 flex gap-2"><input readOnly value={urlLivre} className="min-w-0 flex-1 rounded-lg border border-violet-200 bg-white px-2 py-2 text-xs text-violet-900" onFocus={(event) => event.currentTarget.select()} /><button type="button" onClick={copiarLivre} className="inline-flex shrink-0 items-center gap-1 rounded-lg bg-violet-700 px-3 py-2 text-xs font-bold text-white">{copiadoLivre ? <Check className="h-3.5 w-3.5" /> : <Copy className="h-3.5 w-3.5" />}{copiadoLivre ? "Copiado" : "Copiar"}</button></div>}
+              {expiraLivre && <p className="mt-2 text-[11px] text-violet-800">Válido até {new Date(expiraLivre).toLocaleDateString("pt-BR")}.</p>}
+              <div className="mt-3 flex flex-wrap gap-2"><button type="button" onClick={() => void gerarLivre()} disabled={gerando} className="h-9 rounded-lg border border-violet-200 bg-white px-3 text-xs font-bold text-violet-800 hover:bg-violet-100 flex items-center gap-1.5"><Link2 className="h-3.5 w-3.5" /> {urlLivre ? "Gerar outro link livre" : "Gerar link livre"}</button><button type="button" onClick={() => window.open("/colaborador/cofre-documentos-publico", "_blank", "noopener,noreferrer")} className="h-9 rounded-lg border border-violet-200 bg-white px-3 text-xs font-bold text-violet-800 hover:bg-violet-100 flex items-center gap-1.5"><ExternalLink className="h-3.5 w-3.5" /> Ver cofre interno</button></div>
+            </div>
 
             <div className="mt-5 flex flex-wrap justify-end gap-2">
               <button type="button" onClick={() => setAberto(false)} disabled={gerando} className="h-9 px-3 rounded-lg border border-border text-xs font-bold text-muted-foreground hover:bg-muted">Fechar</button>

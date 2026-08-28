@@ -22,6 +22,7 @@ import cnpjRouter, { consultarCnpj } from './routes/cnpj';
 import sociosDocumentosRouter, { upsertSocioEmpresa } from './routes/socios_documentos';
 import documentosRouter, { createZip as createZipServer } from './routes/documentos';
 import { createColetaDocumentosRouter } from './routes/coletaDocumentos';
+import { createColetaDocumentosLivreRouter } from './routes/coletaDocumentosLivre';
 import documentacaoRouter from './routes/documentacao';
 import blogRoutes from './routes/blogRoutes';
 import bannerRoutes from './routes/bannerRoutes';
@@ -2616,6 +2617,7 @@ async function startServer() {
   // body parser, CORS e no-cache já registrados no topo de startServer()
   app.use('/api/documentos', documentosRouter);
   app.use('/api/coleta-documentos', createColetaDocumentosRouter(pool, requireEmpresaAccess));
+  app.use('/api/coleta-documentos-livre', createColetaDocumentosLivreRouter(pool));
   app.use('/api/orcamentos', auth, createOrcamentosOperacoesRouter(pool));
   app.use('/api/automation', createAutomationEngineRouter(pool));
 

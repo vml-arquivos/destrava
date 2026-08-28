@@ -26,6 +26,7 @@ const CapturaLead = lazy(() => import("./pages/CapturaLead"));
 const SimuladorPublico = lazy(() => import("./pages/SimuladorPublico"));
 const CadastroConvite = lazy(() => import("./pages/CadastroConvite"));
 const ColetaDocumentos = lazy(() => import("./pages/ColetaDocumentos"));
+const ColetaDocumentosLivre = lazy(() => import("./pages/ColetaDocumentosLivre"));
 const RatingBancoBrasil = lazy(() => import("./pages/RatingBancoBrasil"));
 const RatingBancoCentral = lazy(() => import("./pages/RatingBancoCentral"));
 const Pronampe = lazy(() => import("./pages/Pronampe"));
@@ -75,6 +76,7 @@ const AcompanhamentoFinanceiro = lazy(() => import("./pages/colaborador/Acompanh
 const WeeklyMonitorPage = lazy(() => import("./pages/colaborador/WeeklyMonitorPage"));
 const CadastroEmpresa = lazy(() => import("./pages/colaborador/CadastroEmpresa"));
 const DadosIncompletos = lazy(() => import("./pages/colaborador/DadosIncompletos"));
+const CofreDocumentosPublico = lazy(() => import("./pages/colaborador/CofreDocumentosPublico"));
 const ConfiguracaoFuncoes = lazy(() => import("./pages/colaborador/ConfiguracaoFuncoes"));
 const GestaoBlog = lazy(() => import("./pages/colaborador/GestaoBlog"));
 const GestaoBanners = lazy(() => import("./pages/colaborador/GestaoBanners"));
@@ -165,6 +167,7 @@ function Router() {
       <Route path="/captura" component={CapturaLead} />
       <Route path="/cadastro-convite" component={CadastroConvite} />
       <Route path="/documentos/:token" component={ColetaDocumentos} />
+      <Route path="/documentos-livre/:token" component={ColetaDocumentosLivre} />
 
       {/* Legais */}
       <Route path="/politica-privacidade" component={PoliticaPrivacidade} />
@@ -322,6 +325,13 @@ function Router() {
             <FeatureGate featureKey="cadastros-incompletos">
               <DadosIncompletos />
             </FeatureGate>
+          </ProtectedRoute>
+        )}
+      </Route>
+      <Route path="/colaborador/cofre-documentos-publico">
+        {() => (
+          <ProtectedRoute>
+            <CofreDocumentosPublico />
           </ProtectedRoute>
         )}
       </Route>
@@ -491,7 +501,7 @@ function Router() {
 
 function App() {
   const [location] = useLocation();
-  const isPublicDocumentCollection = /^\/documentos\/[^/]+/.test(location);
+  const isPublicDocumentCollection = /^\/documentos(?:-livre)?\/[^/]+/.test(location);
   return (
     <ErrorBoundary>
       <ThemeProvider defaultTheme="light" switchable>
