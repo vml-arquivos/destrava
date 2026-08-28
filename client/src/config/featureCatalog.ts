@@ -46,6 +46,7 @@ export const FEATURE_CATALOG: FeatureCatalogItem[] = [
   { key: "clientes-pf", group: "clientes", label: "Clientes PF", href: "/colaborador/clientes", description: "Carteira de pessoas físicas." },
   { key: "relatorios-pj", group: "clientes", label: "Relatórios PJ", href: "/colaborador/relatorio-empresas", description: "Relatórios e exportações da carteira PJ." },
   { key: "cadastros-incompletos", group: "clientes", label: "Cadastros Incompletos", href: "/colaborador/cadastros-incompletos", description: "Fila de cadastros com pendências ou incompletos." },
+  { key: "cofre-documentos-publico", group: "clientes", label: "Cofre Documental Público", href: "/colaborador/cofre-documentos-publico", description: "Gera o link livre (sem vínculo a uma empresa) e revisa os documentos recebidos por ele." },
   { key: "assessoria-ia", group: "assessoria", label: "Central de Assessoria", href: "/colaborador/assessoria", description: "Central de análise e recomendações de IA." },
   { key: "diagnostico-credito", group: "assessoria", label: "Diagnóstico de Crédito", href: "/colaborador/diagnostico-credito", description: "Diagnóstico consolidado de crédito." },
   { key: "acompanhamento-bancario", group: "financeiro", label: "Acompanhamento Bancário", href: "/colaborador/acompanhamento-bancario", description: "Acompanhamento bancário semanal/mensal e relatórios inteligentes." },
