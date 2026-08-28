@@ -555,7 +555,20 @@ export async function limparAnalisesCnpjEmpresa(empresaId: string): Promise<numb
   return rowCount || 0;
 }
 
-async function buscarUltimoCartaoCnpj(empresaId: string): Promise<DocCartao | null> {
+async function buscarUltimoCartaoCnpj(empresaId: string, overrideArquivoId?: string): Promise<DocCartao | null> {
+  if (overrideArquivoId) {
+    const { rows } = await pool.query(
+      `SELECT id, entidade_tipo, entidade_id, empresa_id, nome_original, nome_arquivo, hash_arquivo, mime_type, caminho_arquivo, data_emissao_documento, status_validade, resultado_validacao, criado_em
+         FROM public.documentos_arquivos
+        WHERE id = $1
+          AND (empresa_id = $2 OR (entidade_tipo = 'empresa' AND entidade_id = $2))
+          AND excluido_em IS NULL
+        LIMIT 1`,
+      [overrideArquivoId, empresaId],
+    );
+    if (rows[0]) return rows[0];
+  }
+
   // Fonte principal: acervo documental novo. Aceita sinônimos porque versões
   // anteriores/classificação IA usavam "cnpj_cartao".
   const existsCentral = await tableExists('documentos_arquivos');
@@ -570,6 +583,7 @@ async function buscarUltimoCartaoCnpj(empresaId: string): Promise<DocCartao | nu
                OR lower(COALESCE(nome_original, '')) LIKE '%receita%')
           AND excluido_em IS NULL
           AND COALESCE(status, 'ativo') <> 'excluido'
+          AND COALESCE(metadados->>'coleta_status', '') <> 'staging'
         ORDER BY
           CASE WHEN tipo_documento IN ('cartao_cnpj','cnpj_cartao') THEN 0 ELSE 1 END,
           criado_em DESC
@@ -713,12 +727,12 @@ export async function buscarUltimaAnaliseCnpjEmpresa(empresaId: string) {
   return sanitizarAnaliseCnpjPersistida(rows[0] || null);
 }
 
-export async function analisarCnpjReceitaCartaoEmpresa(empresaId: string, criadoPor?: string | null) {
+export async function analisarCnpjReceitaCartaoEmpresa(empresaId: string, criadoPor?: string | null, overrideArquivoId?: string, opcoes?: { persistir?: boolean }) {
   const empresa = await buscarEmpresa(empresaId);
   if (!empresa) return null;
 
   const socios = await buscarSocios(empresaId);
-  const cartao = await buscarUltimoCartaoCnpj(empresaId);
+  const cartao = await buscarUltimoCartaoCnpj(empresaId, overrideArquivoId);
   const camposReceita = montarCamposReceita(empresa);
   const extracaoGemini = await tentarExtrairCartaoComGemini(cartao);
 
@@ -822,56 +836,61 @@ export async function analisarCnpjReceitaCartaoEmpresa(empresaId: string, criado
     diagnostico,
   };
 
-  await ensureAnalisesCnpjSchema();
-  const { rows } = await pool.query(
-    `INSERT INTO public.analises_cnpj_empresa
-      (empresa_id, cartao_cnpj_arquivo_id, status, score_cnpj, risco_cnpj, cnpj, matriz_filial, data_abertura,
-       idade_meses, tempo_abertura_descricao, alerta_menos_12_meses, alerta_mais_36_meses, situacao_cadastral,
-       risco_situacao, cnae_principal, natureza_juridica, porte, capital_social, data_emissao_cartao,
-       dias_emissao_cartao, status_validade_cartao, cartao_pendente_ocr, cartao_anexado, campos_receita,
-       campos_cartao, comparacao, divergencias, alertas, pontos_positivos, pontos_atencao, pontos_impeditivos,
-       recomendacoes, diagnostico, resultado, fonte_receita, criado_por)
-     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,$24::jsonb,$25::jsonb,$26::jsonb,$27::jsonb,$28::jsonb,$29::jsonb,$30::jsonb,$31::jsonb,$32::jsonb,$33,$34::jsonb,$35,$36)
-     RETURNING *`,
-    [
-      empresaId,
-      cartao?.id || null,
-      status,
-      score,
-      risco,
-      camposReceita.cnpj,
-      camposReceita.matriz_filial,
-      camposReceita.data_abertura,
-      camposReceita.idade_meses,
-      camposReceita.tempo_abertura_descricao,
-      (camposReceita.idade_meses ?? 999) < 12,
-      (camposReceita.idade_meses ?? 0) >= 36,
-      camposReceita.situacao_cadastral,
-      situacao.risco,
-      camposReceita.cnae_principal,
-      camposReceita.natureza_juridica,
-      camposReceita.porte,
-      camposReceita.capital_social,
-      dataEmissaoCartao,
-      diasEmissaoCartao,
-      statusValidadeCartao,
-      !!cartao && !cartaoFoiLido,
-      !!cartao,
-      JSON.stringify(camposReceita),
-      JSON.stringify(camposCartao),
-      JSON.stringify(comparacao),
-      JSON.stringify(divergencias),
-      JSON.stringify(alertas),
-      JSON.stringify(pontosPositivos),
-      JSON.stringify(pontosAtencao),
-      JSON.stringify(pontosImpeditivos),
-      JSON.stringify(recomendacoes),
-      diagnostico,
-      JSON.stringify(resultado),
-      camposReceita.fonte_dados,
-      criadoPor || null,
-    ]
-  );
+  const persistir = opcoes?.persistir !== false;
+  let persistedRow: any = null;
+  if (persistir) {
+    await ensureAnalisesCnpjSchema();
+    const { rows } = await pool.query(
+      `INSERT INTO public.analises_cnpj_empresa
+        (empresa_id, cartao_cnpj_arquivo_id, status, score_cnpj, risco_cnpj, cnpj, matriz_filial, data_abertura,
+         idade_meses, tempo_abertura_descricao, alerta_menos_12_meses, alerta_mais_36_meses, situacao_cadastral,
+         risco_situacao, cnae_principal, natureza_juridica, porte, capital_social, data_emissao_cartao,
+         dias_emissao_cartao, status_validade_cartao, cartao_pendente_ocr, cartao_anexado, campos_receita,
+         campos_cartao, comparacao, divergencias, alertas, pontos_positivos, pontos_atencao, pontos_impeditivos,
+         recomendacoes, diagnostico, resultado, fonte_receita, criado_por)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,$24::jsonb,$25::jsonb,$26::jsonb,$27::jsonb,$28::jsonb,$29::jsonb,$30::jsonb,$31::jsonb,$32::jsonb,$33,$34::jsonb,$35,$36)
+       RETURNING *`,
+      [
+        empresaId,
+        cartao?.id || null,
+        status,
+        score,
+        risco,
+        camposReceita.cnpj,
+        camposReceita.matriz_filial,
+        camposReceita.data_abertura,
+        camposReceita.idade_meses,
+        camposReceita.tempo_abertura_descricao,
+        (camposReceita.idade_meses ?? 999) < 12,
+        (camposReceita.idade_meses ?? 0) >= 36,
+        camposReceita.situacao_cadastral,
+        situacao.risco,
+        camposReceita.cnae_principal,
+        camposReceita.natureza_juridica,
+        camposReceita.porte,
+        camposReceita.capital_social,
+        dataEmissaoCartao,
+        diasEmissaoCartao,
+        statusValidadeCartao,
+        !!cartao && !cartaoFoiLido,
+        !!cartao,
+        JSON.stringify(camposReceita),
+        JSON.stringify(camposCartao),
+        JSON.stringify(comparacao),
+        JSON.stringify(divergencias),
+        JSON.stringify(alertas),
+        JSON.stringify(pontosPositivos),
+        JSON.stringify(pontosAtencao),
+        JSON.stringify(pontosImpeditivos),
+        JSON.stringify(recomendacoes),
+        diagnostico,
+        JSON.stringify(resultado),
+        camposReceita.fonte_dados,
+        criadoPor || null,
+      ]
+    );
+    persistedRow = rows[0] || null;
+  }
 
   if (cartao?.id) {
     await pool.query(
@@ -882,11 +901,21 @@ export async function analisarCnpjReceitaCartaoEmpresa(empresaId: string, criado
               exige_revisao_humana = CASE WHEN $2 IN ('vencido','divergente','ilegivel') THEN true ELSE exige_revisao_humana END,
               atualizado_em = NOW()
         WHERE id = $1`,
-      [cartao.id, statusValidadeCartao, dataEmissaoCartao, JSON.stringify({ analise_cnpj_empresa_id: rows[0].id, dias_emissao_cartao: diasEmissaoCartao, divergencias: divergencias.length })]
+      [cartao.id, statusValidadeCartao, dataEmissaoCartao, JSON.stringify({ analise_cnpj_empresa_id: persistedRow?.id || null, dias_emissao_cartao: diasEmissaoCartao, divergencias: divergencias.length })]
     ).catch(() => undefined);
   }
 
-  return rows[0];
+  return persistedRow || {
+    id: null,
+    empresa_id: empresaId,
+    cartao_cnpj_arquivo_id: cartao?.id || null,
+    status,
+    score_cnpj: score,
+    risco_cnpj: risco,
+    resultado,
+    alertas,
+    divergencias,
+  };
 }
 
 function gerarDiagnostico(args: { empresa: any; camposReceita: any; cartao: DocCartao | null; statusValidadeCartao: string; diasEmissaoCartao: number | null; score: number; risco: string; alertas: AlertaAnalise[]; recomendacoes: string[] }) {

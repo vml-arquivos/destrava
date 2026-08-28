@@ -1,6 +1,6 @@
 import { Toaster } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
-import { Route, Switch } from "wouter";
+import { Route, Switch, useLocation } from "wouter";
 import { lazy, Suspense } from "react";
 import ErrorBoundary from "./components/ErrorBoundary";
 import { ThemeProvider } from "./contexts/ThemeContext";
@@ -25,6 +25,7 @@ const Sucesso = lazy(() => import("./pages/Sucesso"));
 const CapturaLead = lazy(() => import("./pages/CapturaLead"));
 const SimuladorPublico = lazy(() => import("./pages/SimuladorPublico"));
 const CadastroConvite = lazy(() => import("./pages/CadastroConvite"));
+const ColetaDocumentos = lazy(() => import("./pages/ColetaDocumentos"));
 const RatingBancoBrasil = lazy(() => import("./pages/RatingBancoBrasil"));
 const RatingBancoCentral = lazy(() => import("./pages/RatingBancoCentral"));
 const Pronampe = lazy(() => import("./pages/Pronampe"));
@@ -163,6 +164,7 @@ function Router() {
       {/* Captura de Lead */}
       <Route path="/captura" component={CapturaLead} />
       <Route path="/cadastro-convite" component={CadastroConvite} />
+      <Route path="/documentos/:token" component={ColetaDocumentos} />
 
       {/* Legais */}
       <Route path="/politica-privacidade" component={PoliticaPrivacidade} />
@@ -488,6 +490,8 @@ function Router() {
 }
 
 function App() {
+  const [location] = useLocation();
+  const isPublicDocumentCollection = /^\/documentos\/[^/]+/.test(location);
   return (
     <ErrorBoundary>
       <ThemeProvider defaultTheme="light" switchable>
@@ -495,7 +499,7 @@ function App() {
           <Toaster />
           <RouteSeoDefaults />
           <AnalyticsObserver />
-          <ConsentBanner />
+          {!isPublicDocumentCollection && <ConsentBanner />}
           <Suspense fallback={<PageLoader />}>
             <Router />
           </Suspense>

@@ -30,6 +30,7 @@ import EsteiraCredito from "./EsteiraCredito";
 import Historico360 from "./Historico360";
 import NexusTarefasEmpresa from "./NexusTarefasEmpresa";
 import CriarTarefaNexusModal from "./CriarTarefaNexusModal";
+import SolicitarDocumentos from "@/components/documentos/SolicitarDocumentos";
 
 // ─── Tipos ────────────────────────────────────────────────────────────────────
 
@@ -2371,6 +2372,18 @@ export default function Empresas() {
                         <Bell className="w-3.5 h-3.5" />
                         <span>Iniciar conversa</span>
                       </button>
+                      )}
+                      {selecionada?.id && (
+                        <SolicitarDocumentos
+                          empresaId={selecionada.id}
+                          empresaNome={selecionada.razao_social || selecionada.nome_fantasia || "Empresa"}
+                          destinatario={{
+                            nome: selecionada.responsavel_nome || selecionada.nome_fantasia || selecionada.razao_social,
+                            email: selecionada.responsavel_email || selecionada.email,
+                            telefone: selecionada.responsavel_telefone || selecionada.telefone,
+                            whatsapp: selecionada.whatsapp,
+                          }}
+                        />
                       )}
                       <button
                         onClick={() => setTarefaNexusOpen(true)}

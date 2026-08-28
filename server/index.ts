@@ -21,6 +21,7 @@ import { getPermissoes, temPermissao, LISTA_CARGOS_VALIDOS, nivelHierarquico, po
 import cnpjRouter, { consultarCnpj } from './routes/cnpj';
 import sociosDocumentosRouter, { upsertSocioEmpresa } from './routes/socios_documentos';
 import documentosRouter, { createZip as createZipServer } from './routes/documentos';
+import { createColetaDocumentosRouter } from './routes/coletaDocumentos';
 import documentacaoRouter from './routes/documentacao';
 import blogRoutes from './routes/blogRoutes';
 import bannerRoutes from './routes/bannerRoutes';
@@ -2614,6 +2615,7 @@ async function startServer() {
 
   // body parser, CORS e no-cache já registrados no topo de startServer()
   app.use('/api/documentos', documentosRouter);
+  app.use('/api/coleta-documentos', createColetaDocumentosRouter(pool, requireEmpresaAccess));
   app.use('/api/orcamentos', auth, createOrcamentosOperacoesRouter(pool));
   app.use('/api/automation', createAutomationEngineRouter(pool));
 
