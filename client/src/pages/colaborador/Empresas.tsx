@@ -1891,6 +1891,20 @@ export default function Empresas() {
   }, [empresas]);
   const empresasDoGrupo = grupoEmpresa === "pronta" ? empresasProntas : empresasCaptacao;
 
+  // Trocar de grupo (Em análise / Em preparação) sempre volta para a lista
+  // de empresas -- se houver uma empresa aberta, ela é fechada com a mesma
+  // limpeza de estado do botão "Voltar" (ver abaixo), pra não deixar a
+  // ficha de uma empresa do outro grupo aberta atrás da aba selecionada.
+  function selecionarGrupo(grupo: "pronta" | "captacao") {
+    setGrupoEmpresa(grupo);
+    if (selecionada) {
+      setSelecionada(null);
+      setShowDetail(false);
+      setLocation("/colaborador/empresas");
+      carregarDocumentosResumo();
+    }
+  }
+
   const empresasRecentes = useMemo(() => {
     return [...empresasDoGrupo]
       .filter((emp) => documentosResumo[emp.id])
@@ -1977,23 +1991,25 @@ export default function Empresas() {
                 </div>
               </div>
 
-              {/* Prontas para análise x em captação de documentos -- grupos
-                  separados, nunca misturados na mesma lista (ver
-                  empresaProntaParaAnalise). */}
+              {/* Em análise (12+ meses de CNPJ) x em preparação (menos de 12
+                  meses) -- grupos separados, nunca misturados na mesma lista
+                  (ver empresaProntaParaAnalise). Trocar de grupo também
+                  fecha a empresa aberta e volta para a lista -- mesma
+                  limpeza de estado do botão "Voltar" abaixo. */}
               <div className="mb-2.5 flex items-center gap-1.5">
                 <button
                   type="button"
-                  onClick={() => setGrupoEmpresa("pronta")}
+                  onClick={() => selecionarGrupo("pronta")}
                   className={`flex-1 rounded-xl px-3 py-2 text-xs font-bold transition ${grupoEmpresa === "pronta" ? "bg-brand-navy text-primary-foreground" : "bg-muted text-muted-foreground hover:bg-muted"}`}
                 >
-                  Prontas para análise ({empresasProntas.length})
+                  Em análise ({empresasProntas.length})
                 </button>
                 <button
                   type="button"
-                  onClick={() => setGrupoEmpresa("captacao")}
+                  onClick={() => selecionarGrupo("captacao")}
                   className={`flex-1 rounded-xl px-3 py-2 text-xs font-bold transition ${grupoEmpresa === "captacao" ? "bg-brand-navy text-primary-foreground" : "bg-muted text-muted-foreground hover:bg-muted"}`}
                 >
-                  Em captação ({empresasCaptacao.length})
+                  Em preparação ({empresasCaptacao.length})
                 </button>
               </div>
 
