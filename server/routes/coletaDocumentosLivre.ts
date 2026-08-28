@@ -113,6 +113,58 @@ async function resolveFreeLink(pool: Pool, token: string): Promise<{ id: string;
   return link;
 }
 
+type FreeDossier = {
+  id: string;
+  link_id: string;
+  tipo_pessoa: "pf" | "pj";
+  nome_remetente: string;
+  documento_tipo: string | null;
+  documento_valor: string | null;
+  nome_organizacao: string | null;
+  email_remetente: string | null;
+  telefone_remetente: string | null;
+  status: string;
+};
+
+async function resolveDossier(pool: Pool, linkId: string, dossierToken: string): Promise<FreeDossier | null> {
+  if (!dossierToken || dossierToken.length > 160) return null;
+  const { rows } = await pool.query(
+    `SELECT id, link_id, tipo_pessoa, nome_remetente, documento_tipo, documento_valor,
+            nome_organizacao, email_remetente, telefone_remetente, status
+       FROM public.cofre_dossies_publico
+      WHERE link_id = $1 AND token_hash = $2 AND status = 'ativo'
+      LIMIT 1`,
+    [linkId, tokenHash(dossierToken)],
+  );
+  return rows[0] || null;
+}
+
+async function createDossier(pool: Pool, linkId: string, params: {
+  tipoPessoa: "pf" | "pj";
+  nome: string;
+  documentoTipo: string | null;
+  documentoValor: string | null;
+  nomeOrganizacao: string | null;
+  email: string | null;
+  telefone: string | null;
+}): Promise<{ dossier: FreeDossier; token: string }> {
+  const token = crypto.randomBytes(24).toString("base64url");
+  const result = await pool.query(
+    `INSERT INTO public.cofre_dossies_publico
+      (link_id, token_hash, tipo_pessoa, nome_remetente, documento_tipo, documento_valor,
+       nome_organizacao, email_remetente, telefone_remetente, status, consentimento, consentido_em)
+     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,'ativo',true,NOW())
+     RETURNING id, link_id, tipo_pessoa, nome_remetente, documento_tipo, documento_valor,
+               nome_organizacao, email_remetente, telefone_remetente, status`,
+    [
+      linkId, tokenHash(token), params.tipoPessoa, params.nome, params.documentoTipo,
+      params.documentoValor, params.nomeOrganizacao, params.email, params.telefone,
+    ],
+  );
+  if (!result.rows[0]) throw new Error("Não foi possível criar o dossiê do remetente.");
+  return { dossier: result.rows[0] as FreeDossier, token };
+}
+
 function requireCollaborator(req: Request): string | null {
   const colaborador = (req as Request & { colaborador?: { id?: string } }).colaborador;
   return colaborador?.id || null;
@@ -151,14 +203,14 @@ export function createColetaDocumentosLivreRouter(pool: Pool): Router {
   router.get("/interno/pendencias", auth, async (_req: Request, res: Response) => {
     try {
       const { rows } = await pool.query(
-        `SELECT d.id, d.link_id, d.tipo_pessoa, d.nome_remetente, d.documento_tipo,
+        `SELECT d.id, d.link_id, d.dossie_id, d.tipo_pessoa, d.nome_remetente, d.documento_tipo,
                 d.nome_organizacao, d.email_remetente, d.telefone_remetente,
                 d.tipo_documento, d.descricao_documento, d.nome_original, d.mime_type,
                 d.tamanho_bytes, d.hash_arquivo, d.status, d.analise_status,
                 d.analise_resultado, d.motivo_revisao, d.criado_em, d.atualizado_em
            FROM public.cofre_documentos_publico d
           WHERE d.status IN ('pendente_analise','processando','revisao_humana')
-          ORDER BY d.criado_em ASC
+          ORDER BY d.dossie_id, d.criado_em ASC
           LIMIT 200`,
       );
       return res.json({ items: rows });
@@ -234,6 +286,7 @@ export function createColetaDocumentosLivreRouter(pool: Pool): Router {
 
   router.post("/:token/upload", uploadRateLimiter, uploadWithFriendlyError, async (req: Request, res: Response) => {
     let saved: { absolutePath: string; relativePath: string } | null = null;
+    let createdDossierId: string | null = null;
     try {
       const link = await resolveFreeLink(pool, req.params.token);
       if (!link) return res.status(410).json({ error: "Link inválido. Solicite um novo link à equipe responsável." });
@@ -259,25 +312,43 @@ export function createColetaDocumentosLivreRouter(pool: Pool): Router {
       const file = req.file;
       if (!file) return res.status(400).json({ error: "Anexe um PDF, foto ou arquivo do documento." });
       validarArquivo(file, FREE_DOCUMENT_TYPES[tipoDocumento].physicalType);
-
+      const dossierToken = safeText(req.body?.dossie_token, 160);
       const id = crypto.randomUUID();
       const hash = crypto.createHash("sha256").update(file.buffer).digest("hex");
       const original = sanitizeFileName(file.originalname || "arquivo");
       const ext = original.includes(".") ? original.slice(original.lastIndexOf(".")).toLowerCase() : "";
       const filename = `${id}${ext}`;
       saved = await saveDocumentBuffer({ entidadeTipo: "cofre_publico", entidadeId: id, filename, buffer: file.buffer, expectedSha256: hash });
+      let dossier: FreeDossier | null = dossierToken ? await resolveDossier(pool, link.id, dossierToken) : null;
+      if (dossierToken && !dossier) return res.status(410).json({ error: "A sessão documental não existe ou já foi encerrada. Inicie um novo envio." });
+      let returnedDossierToken = dossierToken;
+      if (!dossier) {
+        const created = await createDossier(pool, link.id, {
+          tipoPessoa: tipoPessoa as "pf" | "pj",
+          nome,
+          documentoTipo,
+          documentoValor,
+          nomeOrganizacao,
+          email: email || null,
+          telefone,
+        });
+        dossier = created.dossier;
+        returnedDossierToken = created.token;
+        createdDossierId = dossier.id;
+      }
       const result = await pool.query(
         `INSERT INTO public.cofre_documentos_publico
-          (id, link_id, tipo_pessoa, nome_remetente, documento_tipo, documento_valor,
+          (id, link_id, dossie_id, tipo_pessoa, nome_remetente, documento_tipo, documento_valor,
            nome_organizacao, email_remetente, telefone_remetente, tipo_documento,
            descricao_documento, nome_original, nome_arquivo, caminho_arquivo,
            mime_type, tamanho_bytes, hash_arquivo, status, consentimento, consentido_em,
            origem_ip_hash, user_agent_hash)
-         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,'revisao_humana',true,NOW(),$18,$19)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,'revisao_humana',true,NOW(),$19,$20)
          RETURNING id, status, criado_em`,
         [
-          id, link.id, tipoPessoa, nome, documentoTipo, documentoValor,
-          nomeOrganizacao, email || null, telefone, tipoDocumento, descricao,
+          id, link.id, dossier.id, dossier.tipo_pessoa, dossier.nome_remetente,
+          dossier.documento_tipo, dossier.documento_valor, dossier.nome_organizacao,
+          dossier.email_remetente, dossier.telefone_remetente, tipoDocumento, descricao,
           file.originalname || original, filename, saved.relativePath, file.mimetype,
           file.size, hash, valueHash(req.ip), valueHash(req.get("user-agent")),
         ],
@@ -286,11 +357,13 @@ export function createColetaDocumentosLivreRouter(pool: Pool): Router {
         ok: true,
         item: result.rows[0],
         status: "revisao_humana",
-        mensagem: "Documento recebido no cofre de triagem. A equipe fará a conferência antes de qualquer vinculação.",
+        mensagem: "Documento recebido no dossiê individual. A equipe fará a conferência antes de qualquer vinculação.",
         vinculado: false,
+        dossie_token: returnedDossierToken,
       });
     } catch (error: any) {
       if (saved) await fs.unlink(saved.absolutePath).catch(() => undefined);
+      if (createdDossierId) await pool.query(`UPDATE public.cofre_dossies_publico SET status = 'arquivado', atualizado_em = NOW() WHERE id = $1 AND status = 'ativo'`, [createdDossierId]).catch(() => undefined);
       console.error("[POST /api/coleta-documentos-livre/:token/upload]", error);
       return res.status(Number(error?.statusCode || 400)).json({ error: error?.message || "Não foi possível receber o documento." });
     }

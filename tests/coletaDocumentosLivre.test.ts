@@ -21,8 +21,10 @@ import { createColetaDocumentosLivreRouter, tokenHash } from "../server/routes/c
 
 const LINK_ID = "11111111-1111-4111-8111-111111111111";
 const ITEM_ID = "33333333-3333-4333-8333-333333333333";
+const DOSSIER_ID = "44444444-4444-4444-8444-444444444444";
+const OTHER_LINK_ID = "55555555-5555-4555-8555-555555555555";
 
-function makePool() {
+function makePool(linkId = LINK_ID, dossierLinkId = LINK_ID) {
   const calls: Array<{ sql: string; params?: any[] }> = [];
   const pool = {
     calls,
@@ -31,9 +33,15 @@ function makePool() {
       if (sql.includes("FROM public.links_cofre_documentos_publico") && sql.includes("token_hash")) {
         return {
           rows: params?.[0] === tokenHash("livre-valido")
-            ? [{ id: LINK_ID, status: "ativo", expira_em: "2099-01-01T00:00:00.000Z" }]
+            ? [{ id: linkId, status: "ativo", expira_em: "2099-01-01T00:00:00.000Z" }]
             : [],
         };
+      }
+      if (sql.includes("FROM public.cofre_dossies_publico")) {
+        return { rows: params?.[0] === dossierLinkId ? [{ id: DOSSIER_ID, link_id: dossierLinkId, tipo_pessoa: "pj", nome_remetente: "Pessoa de Homologação", documento_tipo: "cnpj", documento_valor: "12345678000190", nome_organizacao: "Empresa de Homologação", email_remetente: null, telefone_remetente: null, status: "ativo" }] : [] };
+      }
+      if (sql.includes("INSERT INTO public.cofre_dossies_publico")) {
+        return { rows: [{ id: DOSSIER_ID, link_id: linkId, tipo_pessoa: "pj", nome_remetente: "Pessoa de Homologação", documento_tipo: "cnpj", documento_valor: "12345678000190", nome_organizacao: "Empresa de Homologação", email_remetente: null, telefone_remetente: null, status: "ativo" }] };
       }
       if (sql.includes("INSERT INTO public.cofre_documentos_publico")) {
         return { rows: [{ id: ITEM_ID, status: "revisao_humana", criado_em: "2099-01-01T00:00:00.000Z" }] };
@@ -103,6 +111,48 @@ describe("cofre documental público livre", () => {
     expect(validarArquivo).toHaveBeenCalledWith(expect.anything(), "outros");
     const insert = pool.calls.find((call) => call.sql.includes("INSERT INTO public.cofre_documentos_publico"));
     expect(insert?.sql).not.toContain("empresa_id");
+  });
+
+  it("mantém vários arquivos do mesmo remetente no mesmo dossiê e não permite cruzar tokens entre links", async () => {
+    const pool = makePool();
+    const app = makeApp(pool);
+    const first = await request(app)
+      .post("/api/coleta-documentos-livre/livre-valido/upload")
+      .field("tipo_pessoa", "pj")
+      .field("nome_remetente", "Pessoa de Homologação")
+      .field("documento_tipo", "cnpj")
+      .field("documento_valor", "12.345.678/0001-90")
+      .field("tipo_documento", "outros")
+      .field("consentimento", "true")
+      .attach("file", Buffer.from("arquivo um"), { filename: "um.pdf", contentType: "application/pdf" });
+    expect(first.status).toBe(201);
+    expect(first.body.dossie_token).toEqual(expect.any(String));
+    const second = await request(app)
+      .post("/api/coleta-documentos-livre/livre-valido/upload")
+      .field("tipo_pessoa", "pf")
+      .field("nome_remetente", "Tentativa de alteração")
+      .field("tipo_documento", "outros")
+      .field("dossie_token", first.body.dossie_token)
+      .field("consentimento", "true")
+      .attach("file", Buffer.from("arquivo dois"), { filename: "dois.pdf", contentType: "application/pdf" });
+    expect(second.status).toBe(201);
+    const inserts = pool.calls.filter((call) => call.sql.includes("INSERT INTO public.cofre_documentos_publico"));
+    expect(inserts).toHaveLength(2);
+    expect(inserts[0].params?.[2]).toBe(DOSSIER_ID);
+    expect(inserts[1].params?.[2]).toBe(DOSSIER_ID);
+    expect(inserts[1].params?.[3]).toBe("pj");
+    expect(inserts[1].params?.[4]).toBe("Pessoa de Homologação");
+
+    const otherLink = makePool(OTHER_LINK_ID, LINK_ID);
+    const cross = await request(makeApp(otherLink))
+      .post("/api/coleta-documentos-livre/livre-valido/upload")
+      .field("tipo_pessoa", "pj")
+      .field("nome_remetente", "Pessoa de Homologação")
+      .field("tipo_documento", "outros")
+      .field("dossie_token", first.body.dossie_token)
+      .field("consentimento", "true")
+      .attach("file", Buffer.from("arquivo cruzado"), { filename: "cruzado.pdf", contentType: "application/pdf" });
+    expect(cross.status).toBe(410);
   });
 
   it("exige consentimento antes de gravar o arquivo", async () => {
