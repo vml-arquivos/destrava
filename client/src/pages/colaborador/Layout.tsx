@@ -43,6 +43,7 @@ import {
   Sun,
   Moon,
   Terminal,
+  ShieldCheck,
 } from "lucide-react";
 
 const CARGOS_GESTAO = ["administrador", "diretor", "gerente comercial"];
@@ -152,6 +153,12 @@ const NAV_MODULES: NavModule[] = [
         label: "Cadastros Incompletos",
         icon: DatabaseZap,
         featureKey: "cadastros-incompletos",
+      },
+      {
+        href: "/colaborador/cofre-documentos-publico",
+        label: "Cofre Documental Público",
+        icon: ShieldCheck,
+        featureKey: "cofre-documentos-publico",
       },
     ],
   },
