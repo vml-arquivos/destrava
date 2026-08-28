@@ -302,11 +302,16 @@ export function createColetaDocumentosLivreRouter(pool: Pool): Router {
       const tipoDocumento = safeText(req.body?.tipo_documento, 80).toLowerCase() || "outros";
       const descricao = safeText(req.body?.descricao_documento, 1000) || null;
       const consentimento = String(req.body?.consentimento || "").toLowerCase() === "true";
+      const telefoneDigits = onlyDigits(telefone);
+      // Este link é usado por remetentes de fora da base (sem empresa/lead vinculado),
+      // por isso a identificação precisa ser obrigatória aqui -- diferente do link de
+      // coleta vinculado a uma empresa já cadastrada, onde esses dados já existem.
       if (!["pf", "pj"].includes(tipoPessoa)) return res.status(400).json({ error: "Informe se a documentação é de pessoa física ou jurídica." });
       if (nome.length < 2) return res.status(400).json({ error: "Informe o nome da pessoa ou responsável." });
-      if (documentoTipo && !["cpf", "cnpj"].includes(documentoTipo)) return res.status(400).json({ error: "Tipo de identificação inválido." });
-      if (documentoValor && ((documentoTipo === "cpf" && documentoValor.length !== 11) || (documentoTipo === "cnpj" && documentoValor.length !== 14))) return res.status(400).json({ error: "CPF ou CNPJ inválido." });
-      if (!validEmail(email)) return res.status(400).json({ error: "Informe um e-mail válido ou deixe o campo em branco." });
+      if (!documentoTipo || !["cpf", "cnpj"].includes(documentoTipo)) return res.status(400).json({ error: "Informe o CPF ou CNPJ do remetente." });
+      if (!documentoValor || (documentoTipo === "cpf" && documentoValor.length !== 11) || (documentoTipo === "cnpj" && documentoValor.length !== 14)) return res.status(400).json({ error: "CPF ou CNPJ inválido." });
+      if (!email || !validEmail(email)) return res.status(400).json({ error: "Informe um e-mail válido." });
+      if (telefoneDigits.length < 10) return res.status(400).json({ error: "Informe um telefone válido, com DDD." });
       if (!FREE_DOCUMENT_TYPES[tipoDocumento]) return res.status(400).json({ error: "Tipo de documento não permitido." });
       if (!consentimento) return res.status(400).json({ error: "É necessário aceitar o uso dos dados para enviar o documento." });
       const file = req.file;
