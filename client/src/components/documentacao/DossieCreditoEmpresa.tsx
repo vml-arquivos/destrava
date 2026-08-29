@@ -623,145 +623,115 @@ export function ProntidaoIdentidadeCard({
   const documentos = Object.values(identidade.documentos_iniciais || {});
   const bloqueios = identidade.motivos_pendentes || [];
   const avisos = identidade.avisos_estrategicos || [];
-  const positivos = identidade.pontos_positivos || [];
   const apto = identidade.apto_para_avancar === true;
-  const totalDocumentos = identidade.relatorio?.total_documentos_iniciais ?? documentos.length;
   const falhasLeitura = documentos.filter((item) => item.status === "falha_leitura");
   const aguardando = documentos.filter((item) => item.anexado && !item.analisado && item.status !== "falha_leitura");
+  // Documento a documento, o resultado agora fica no próprio campo de anexo
+  // (ver StatusAnaliseSlot em DocumentosEntidade.tsx). Aqui fica só o que é da
+  // etapa como um todo: o veredito e, quando houver, o que precisa ser
+  // resolvido. Sem repetir os mesmos documentos duas vezes na mesma tela e sem
+  // caixas vazias dizendo "nenhuma pendência" / "sem avisos".
+  const inconsistentes = documentos.filter((item) => item.anexado && item.analisado && !item.consistente);
+  const podeReprocessar = falhasLeitura.length > 0
+    || (documentos.length === 3 && documentos.every((item) => item.anexado || item.consistente) && aguardando.length > 0);
 
-  const statusLabel = (item: DocumentoInicialStatus) => {
-    if (item.consistente) return "Lido e consistente";
-    if (!item.anexado) return "Não anexado";
-    if (item.status === "falha_leitura") return "Falha na leitura";
-    if (!item.analisado) return processando ? "Processando..." : "Aguardando início da análise";
-    return "Revisão necessária";
-  };
+  const resumo = [
+    identidade.idade_meses == null ? null : `${identidade.idade_meses} meses de abertura`,
+    identidade.enquadramento_tributario || null,
+  ].filter(Boolean).join(" · ");
 
-  const campoLabel: Record<string, string> = {
-    cnpj: "CNPJ",
-    razao_social: "Razão social",
-    cnae: "CNAE",
-    situacao_cadastral: "Situação",
-    capital_social: "Capital social",
-    socios_identificados: "Sócios",
-    administradores: "Sócio-Administrador",
-    regime_tributario: "Regime",
-    situacao_simples: "Simples",
-    exclusao_agendada: "Exclusão agendada",
-  };
-
-  const formatarCampo = (chave: string, valor: unknown) => {
-    if (valor === null || valor === undefined || valor === "") return null;
-    if (typeof valor === "boolean") return valor ? "Sim" : "Não";
-    if (Array.isArray(valor)) return valor.filter(Boolean).join(", ") || null;
-    if (chave.includes("capital")) return formatMoney(valor);
-    return String(valor);
-  };
+  if (apto && !processando) {
+    return (
+      <section className="rounded-2xl border border-success/20 bg-success/10 px-4 py-3">
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <div className="flex min-w-0 items-center gap-2">
+            <ShieldCheck className="h-4 w-4 shrink-0 text-success" />
+            <p className="text-xs font-black text-success">Etapa 1 validada</p>
+            {resumo && <span className="truncate text-[11px] text-muted-foreground">{resumo}</span>}
+          </div>
+          <div className="flex shrink-0 items-center gap-2">
+            {avisos.length > 0 && (
+              <span className="rounded-full border border-warning/20 bg-card px-2 py-0.5 text-[10px] font-black text-warning">
+                {avisos.length} aviso{avisos.length > 1 ? "s" : ""}
+              </span>
+            )}
+            {onAvancar && (
+              <button
+                type="button"
+                onClick={onAvancar}
+                className="inline-flex items-center gap-1.5 rounded-xl bg-success px-3 py-2 text-xs font-black text-primary-foreground hover:bg-success/90"
+              >
+                Avançar <ArrowRight className="h-3.5 w-3.5" />
+              </button>
+            )}
+          </div>
+        </div>
+        {avisos.length > 0 && (
+          <div className="mt-2 space-y-1 border-t border-success/20 pt-2">
+            {avisos.slice(0, 4).map((item, index) => (
+              <p key={index} className="text-[11px] leading-relaxed text-warning">• {item}</p>
+            ))}
+          </div>
+        )}
+      </section>
+    );
+  }
 
   return (
-    <section className={`rounded-2xl border p-4 ${apto ? "border-success/20 bg-success/10" : falhasLeitura.length ? "border-destructive/20 bg-destructive/10/40" : "border-warning/20 bg-warning/10/50"}`}>
+    <section className={`rounded-2xl border p-4 ${falhasLeitura.length ? "border-destructive/20 bg-destructive/10" : "border-warning/20 bg-warning/10"}`}>
       <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
-        <div className="min-w-0">
-          <div className="flex flex-wrap items-center gap-2">
-            {apto ? <ShieldCheck className="h-5 w-5 text-success" /> : falhasLeitura.length ? <ShieldAlert className="h-5 w-5 text-destructive" /> : <ShieldAlert className="h-5 w-5 text-warning" />}
-            <h3 className="text-sm font-extrabold text-foreground">Relatório inicial — Identidade do CNPJ</h3>
-            <span className={`rounded-full border bg-card px-2.5 py-1 text-[11px] font-extrabold ${apto ? "border-success/20 text-success" : falhasLeitura.length ? "border-destructive/20 text-destructive" : "border-warning/20 text-warning"}`}>
-              {apto ? "Tudo OK — pode avançar" : processando ? "Lendo e cruzando documentos" : falhasLeitura.length ? `${falhasLeitura.length} falha(s) de leitura` : "Avanço bloqueado"}
-            </span>
-          </div>
-          <p className="mt-2 max-w-4xl text-xs leading-relaxed text-muted-foreground">{identidade.diagnostico}</p>
-          <p className="mt-1 max-w-4xl text-[11px] font-semibold text-muted-foreground">Nesta etapa, o QSA confere somente CNPJ, razão social, capital social, nomes dos sócios e Sócio-Administrador. Dados pessoais dos sócios pertencem às próximas etapas e não bloqueiam este resultado.</p>
+        <div className="flex min-w-0 items-center gap-2">
+          {falhasLeitura.length ? <ShieldAlert className="h-4 w-4 shrink-0 text-destructive" /> : <ShieldAlert className="h-4 w-4 shrink-0 text-warning" />}
+          <p className={`text-xs font-black ${falhasLeitura.length ? "text-destructive" : "text-warning"}`}>
+            {processando
+              ? "Lendo e cruzando os documentos"
+              : falhasLeitura.length
+                ? `${falhasLeitura.length} documento(s) com falha de leitura`
+                : "Etapa 1 pendente"}
+          </p>
+          {resumo && <span className="truncate text-[11px] text-muted-foreground">{resumo}</span>}
         </div>
-        <div className="flex shrink-0 flex-wrap gap-2">
-          {/* O Enquadramento Tributário não exige upload (vem da consulta de CNPJ) --
-              `item.consistente` cobre o caso "resolvido via Receita, sem anexo". */}
-          {(falhasLeitura.length > 0 || (documentos.length === 3 && documentos.every((item) => item.anexado || item.consistente) && aguardando.length > 0)) && onTentarNovamente && (
-            <button
-              type="button"
-              onClick={onTentarNovamente}
-              disabled={processando}
-              className={`inline-flex items-center justify-center gap-2 rounded-xl border bg-card px-4 py-2.5 text-xs font-extrabold shadow-sm disabled:opacity-60 ${falhasLeitura.length ? "border-destructive/20 text-destructive hover:bg-destructive/10" : "border-primary/20 text-primary hover:bg-primary/10"}`}
-            >
-              {processando ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCw className="h-4 w-4" />}
-              {processando ? "Processando..." : falhasLeitura.length ? "Tentar leitura novamente" : "Iniciar análise documental"}
-            </button>
-          )}
-          {apto && onAvancar && (
-            <button
-              type="button"
-              onClick={onAvancar}
-              className="inline-flex items-center justify-center gap-2 rounded-xl bg-success px-4 py-2.5 text-xs font-extrabold text-primary-foreground shadow-sm hover:bg-success/90"
-            >
-              Avançar para próxima etapa <ArrowRight className="h-4 w-4" />
-            </button>
-          )}
-        </div>
+        {podeReprocessar && onTentarNovamente && (
+          <button
+            type="button"
+            onClick={onTentarNovamente}
+            disabled={processando}
+            className={`inline-flex shrink-0 items-center justify-center gap-2 rounded-xl border bg-card px-3 py-2 text-xs font-black shadow-sm disabled:opacity-60 ${falhasLeitura.length ? "border-destructive/20 text-destructive hover:bg-destructive/10" : "border-primary/20 text-primary hover:bg-primary/10"}`}
+          >
+            {processando ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <RefreshCw className="h-3.5 w-3.5" />}
+            {processando ? "Processando..." : falhasLeitura.length ? "Tentar leitura novamente" : "Iniciar análise documental"}
+          </button>
+        )}
       </div>
 
-      {processando && (
-        <div className="mt-3 flex items-center gap-2 rounded-xl border border-primary/20 bg-card px-3 py-2 text-xs font-semibold text-primary">
-          <Loader2 className="h-4 w-4 animate-spin" /> Análise documental em andamento. O resultado será atualizado nesta tela.
-        </div>
-      )}
-
-      <div className="mt-4 grid grid-cols-1 gap-3 md:grid-cols-3">
-        {documentos.map((item) => {
-          const campos = Object.entries(item.campos_principais || {})
-            .map(([chave, valor]) => ({ chave, valor: formatarCampo(chave, valor) }))
-            .filter((campo) => campo.valor !== null)
-            .slice(0, 4);
-          const cor = item.consistente ? "emerald" : item.status === "falha_leitura" ? "red" : "amber";
-          return (
-            <article key={item.codigo || item.nome} className="rounded-xl border border-border bg-card p-3 shadow-sm">
-              <div className="flex items-start gap-2">
-                {item.consistente
-                  ? <CheckCircle className="mt-0.5 h-4 w-4 shrink-0 text-success" />
-                  : <AlertTriangle className={`mt-0.5 h-4 w-4 shrink-0 ${cor === "red" ? "text-destructive" : "text-warning"}`} />}
-                <div className="min-w-0">
-                  <p className="text-xs font-extrabold text-foreground">{item.nome}</p>
-                  <p className={`mt-1 text-[11px] font-bold ${cor === "emerald" ? "text-success" : cor === "red" ? "text-destructive" : "text-warning"}`}>{statusLabel(item)}</p>
-                </div>
-              </div>
-              <p className="mt-2 text-[11px] leading-relaxed text-muted-foreground">{item.diagnostico || "Sem diagnóstico registrado."}</p>
-              {campos.length > 0 && (
-                <dl className="mt-2 space-y-1 border-t border-border pt-2">
-                  {campos.map(({ chave, valor }) => (
-                    <div key={chave} className="flex items-start justify-between gap-2 text-[10px]">
-                      <dt className="shrink-0 font-semibold text-muted-foreground">{campoLabel[chave] || chave.replace(/_/g, " ")}</dt>
-                      <dd className="min-w-0 truncate text-right font-bold text-muted-foreground" title={String(valor)}>{valor}</dd>
-                    </div>
-                  ))}
-                </dl>
-              )}
-            </article>
-          );
-        })}
-      </div>
-
-      <div className="mt-3 grid grid-cols-2 gap-2 md:grid-cols-4">
-        <div className="rounded-xl border border-border bg-card p-3"><span className="text-[10px] font-bold uppercase text-muted-foreground">Analisados</span><b className="block text-base text-foreground">{identidade.relatorio?.documentos_analisados ?? documentos.filter((item) => item.analisado).length}/{totalDocumentos}</b></div>
-        <div className="rounded-xl border border-border bg-card p-3"><span className="text-[10px] font-bold uppercase text-muted-foreground">Consistentes</span><b className="block text-base text-foreground">{identidade.relatorio?.documentos_conferidos ?? 0}/{totalDocumentos}</b></div>
-        <div className="rounded-xl border border-border bg-card p-3"><span className="text-[10px] font-bold uppercase text-muted-foreground">Tempo de abertura</span><b className="block text-base text-foreground">{identidade.idade_meses == null ? "Não confirmado" : `${identidade.idade_meses} meses`}</b></div>
-        <div className="rounded-xl border border-border bg-card p-3"><span className="text-[10px] font-bold uppercase text-muted-foreground">Enquadramento</span><b className="block truncate text-sm text-foreground">{identidade.enquadramento_tributario || "Não identificado"}</b></div>
-      </div>
-
-      {(bloqueios.length > 0 || avisos.length > 0 || positivos.length > 0) && (
-        <div className="mt-3 grid grid-cols-1 gap-3 lg:grid-cols-3">
-          <div className="rounded-xl border border-success/20 bg-card p-3">
-            <p className="text-xs font-extrabold text-success">Confirmações</p>
-            <div className="mt-2 space-y-1">{positivos.length ? positivos.slice(0, 6).map((item, index) => <p key={index} className="text-[11px] leading-relaxed text-success">• {item}</p>) : <p className="text-[11px] text-muted-foreground">Aguardando confirmações.</p>}</div>
-          </div>
-          <div className="rounded-xl border border-destructive/20 bg-card p-3">
-            <p className="text-xs font-extrabold text-destructive">O que precisa ser resolvido</p>
-            <div className="mt-2 space-y-1">{bloqueios.length ? bloqueios.slice(0, 8).map((item, index) => <p key={index} className="text-[11px] leading-relaxed text-destructive">• {item}</p>) : <p className="text-[11px] text-success">Nenhuma pendência impeditiva.</p>}</div>
-          </div>
-          <div className="rounded-xl border border-warning/20 bg-card p-3">
-            <p className="text-xs font-extrabold text-warning">Avisos estratégicos</p>
-            <div className="mt-2 space-y-1">{avisos.length ? avisos.slice(0, 6).map((item, index) => <p key={index} className="text-[11px] leading-relaxed text-warning">• {item}</p>) : <p className="text-[11px] text-muted-foreground">Sem avisos adicionais.</p>}</div>
+      {/* O que está acontecendo e o que resolve -- só aparece quando existe algo
+          de fato pendente; nada de caixa vazia dizendo que está tudo certo. */}
+      {(bloqueios.length > 0 || inconsistentes.length > 0) && (
+        <div className="mt-3 rounded-xl border border-border bg-card p-3">
+          <p className="text-[11px] font-black text-destructive">O que precisa ser resolvido</p>
+          <div className="mt-1.5 space-y-1">
+            {bloqueios.slice(0, 8).map((item, index) => (
+              <p key={`bloqueio-${index}`} className="text-[11px] leading-relaxed text-destructive">• {item}</p>
+            ))}
+            {inconsistentes
+              .filter((item) => item.diagnostico)
+              .map((item, index) => (
+                <p key={`doc-${index}`} className="text-[11px] leading-relaxed text-destructive">• {item.nome}: {item.diagnostico}</p>
+              ))}
           </div>
         </div>
       )}
 
+      {avisos.length > 0 && (
+        <div className="mt-2 rounded-xl border border-warning/20 bg-card p-3">
+          <p className="text-[11px] font-black text-warning">Avisos</p>
+          <div className="mt-1.5 space-y-1">
+            {avisos.slice(0, 6).map((item, index) => (
+              <p key={index} className="text-[11px] leading-relaxed text-warning">• {item}</p>
+            ))}
+          </div>
+        </div>
+      )}
     </section>
   );
 }

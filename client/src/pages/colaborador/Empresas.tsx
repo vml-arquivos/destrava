@@ -2522,9 +2522,10 @@ export default function Empresas() {
                     <div className="flex flex-wrap gap-1">
                       {([
                         { id: "visao_geral", label: "Dados da Empresa", badge: sociosExibicao.length || undefined },
-                        { id: "dossie_credito", label: "Dossiê / Laudo IA" },
                         { id: "inteligencia_360", label: "Inteligência 360" },
                         { id: "esteira_credito", label: "Esteira de Crédito" },
+                        // Acervo Documental concentra tambem o antigo "Dossie / Laudo IA":
+                        // era a mesma tela, aberta com ?view=analise.
                         { id: "documentos", label: "Acervo Documental", badge: documentos.length + contratosSociais.length || undefined },
                         { id: "followup", label: "Conversas", badge: followups.filter(f => !f.concluido).length || undefined },
                         { id: "simulacoes", label: "Simulações", badge: simulacoesEmpresa.length || undefined },
