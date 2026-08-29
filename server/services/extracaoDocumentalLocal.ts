@@ -387,6 +387,48 @@ function parseQsa(texto: string): { dados: Record<string, any>; confianca: numbe
   };
 }
 
+/**
+ * Lê o regime tributário declarado em QUALQUER documento fiscal (Consulta de
+ * Optantes, ECF, DCTF, Relatório de Situação Fiscal...). O regime é o que
+ * define a documentação exigida adiante -- Simples pede PGDAS/DEFIS, enquanto
+ * Presumido e Real pedem ECF/ECD/DCTF, com exigências diferentes entre si.
+ *
+ * Em análise de crédito, afirmar o regime errado é pior do que assumi-lo
+ * pendente: o regime errado puxa a lista errada de documentos. Por isso só é
+ * aceito o regime AFIRMADO no texto -- nunca o negado ("não optou pelo lucro
+ * presumido"), nunca um entre vários citados numa lista de opções.
+ */
+export function detectarRegimeTributarioDeclarado(texto: string): { regime: string | null; ambiguo: boolean } {
+  const norm = textoNormalizado(texto);
+  const afirmado = (termo: string) => {
+    const negado = new RegExp(`(n[ãa]o|nao)\\s+(?:[a-zç]+\\s+){0,3}${termo}`, 'i');
+    if (negado.test(norm)) return false;
+    return norm.includes(termo);
+  };
+  const lucroPresumido = afirmado('lucro presumido');
+  const lucroReal = afirmado('lucro real');
+  const lucroArbitrado = afirmado('lucro arbitrado');
+  // Imune/isenta só conta quando o texto fala do regime, não quando a palavra
+  // aparece solta (ex: "isenta de multa").
+  const imuneIsenta = /regime\s+(?:tribut[aá]rio\s+)?(?:de\s+)?(?:imunidade|isen[cç][aã]o)/i.test(texto)
+    || /(?:imune|isenta)\s+(?:de\s+)?(?:irpj|tributa[cç][aã]o|impostos)/i.test(texto);
+
+  const ambiguo = [lucroPresumido, lucroReal, lucroArbitrado].filter(Boolean).length > 1;
+  if (ambiguo) return { regime: null, ambiguo: true };
+
+  const regime = lucroReal
+    ? 'Lucro Real'
+    : lucroPresumido
+      ? 'Lucro Presumido'
+      : lucroArbitrado
+        ? 'Lucro Arbitrado'
+        : imuneIsenta
+          ? 'Imune ou isenta'
+          : null;
+  return { regime, ambiguo: false };
+}
+
+
 function parseSimples(texto: string): { dados: Record<string, any>; confianca: number } {
   const norm = textoNormalizado(texto);
   const compativel = norm.includes('simples nacional') || norm.includes('consulta optantes') || norm.includes('simei')
@@ -410,38 +452,8 @@ function parseSimples(texto: string): { dados: Record<string, any>; confianca: n
   // ver 'nao_optante_regime_a_confirmar' em mapaDocumentalCreditoService.ts.
   // "Não Optante" nunca é tratado como regime: Presumido, Real e Arbitrado são
   // todos não optantes e exigem documentos diferentes entre si.
-  // Guarda contra falso positivo: em análise de crédito, afirmar o regime
-  // errado é pior do que assumi-lo pendente -- o regime errado puxa a lista
-  // errada de documentos. Só é aceito o regime que aparece afirmado, nunca o
-  // que aparece negado ("não optou pelo lucro presumido") nem o que aparece
-  // como item de uma lista de opções.
-  const regimeAfirmado = (termo: string) => {
-    const padrao = new RegExp(`(n[ãa]o|nao)\\s+(?:[a-zç]+\\s+){0,3}${termo}`, 'i');
-    if (padrao.test(norm)) return false;
-    return norm.includes(termo);
-  };
-  const lucroPresumido = regimeAfirmado('lucro presumido');
-  const lucroReal = regimeAfirmado('lucro real');
-  const lucroArbitrado = regimeAfirmado('lucro arbitrado');
-  // Imune/isenta só conta quando o documento fala do regime, não quando a
-  // palavra aparece solta (ex: "isenta de multa").
-  const imuneIsenta = /regime\s+(?:tribut[aá]rio\s+)?(?:de\s+)?(?:imunidade|isen[cç][aã]o)/i.test(texto)
-    || /(?:imune|isenta)\s+(?:de\s+)?(?:irpj|tributa[cç][aã]o|impostos)/i.test(texto);
-  // Quando mais de um regime aparece afirmado, o documento é ambíguo: melhor
-  // deixar pendente de confirmação do que escolher um dos dois no chute.
-  const regimesEncontrados = [lucroPresumido, lucroReal, lucroArbitrado].filter(Boolean).length;
-  const regimeAmbiguo = regimesEncontrados > 1;
-  const regimeDeclarado = regimeAmbiguo
-    ? null
-    : lucroReal
-      ? 'Lucro Real'
-      : lucroPresumido
-        ? 'Lucro Presumido'
-        : lucroArbitrado
-          ? 'Lucro Arbitrado'
-          : imuneIsenta
-            ? 'Imune ou isenta'
-            : null;
+  const { regime: regimeDeclaradoBruto, ambiguo: regimeAmbiguo } = detectarRegimeTributarioDeclarado(texto);
+  const regimeDeclarado = regimeDeclaradoBruto;
   const regime = simei
     ? 'MEI / SIMEI'
     : optante

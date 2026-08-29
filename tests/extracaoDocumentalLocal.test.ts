@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { analisarTextoDocumentoLocal } from '../server/services/extracaoDocumentalLocal';
+import { analisarTextoDocumentoLocal, detectarRegimeTributarioDeclarado } from '../server/services/extracaoDocumentalLocal';
 import { compararEndereco } from '../server/utils/helpers';
 
 describe('extração documental local determinística', () => {
@@ -233,6 +233,41 @@ describe('extração documental local determinística', () => {
     `);
     expect(mei.dados.regime_tributario).toBe('MEI / SIMEI');
     expect(mei.dados.regime_confirmado).toBe(true);
+  });
+
+  // O regime aparece declarado em vários documentos fiscais, não só na Consulta
+  // de Optantes -- ECF, DCTF e Relatório de Situação Fiscal também o informam.
+  // A mesma regra (e as mesmas proteções) precisa valer para todos eles.
+  describe('leitura do regime tributário em qualquer documento fiscal', () => {
+    it('lê o regime declarado em texto de ECF', () => {
+      const r = detectarRegimeTributarioDeclarado('ESCRITURAÇÃO CONTÁBIL FISCAL — FORMA DE TRIBUTAÇÃO: LUCRO REAL');
+      expect(r.regime).toBe('Lucro Real');
+      expect(r.ambiguo).toBe(false);
+    });
+
+    it('lê o regime declarado em Relatório de Situação Fiscal', () => {
+      const r = detectarRegimeTributarioDeclarado('RELATÓRIO DE SITUAÇÃO FISCAL\nRegime de apuração: Lucro Presumido');
+      expect(r.regime).toBe('Lucro Presumido');
+    });
+
+    it('não aceita regime negado', () => {
+      expect(detectarRegimeTributarioDeclarado('A empresa não é optante do lucro presumido.').regime).toBeNull();
+      expect(detectarRegimeTributarioDeclarado('Nao apurou lucro real no periodo.').regime).toBeNull();
+    });
+
+    it('marca como ambíguo quando cita mais de um regime', () => {
+      const r = detectarRegimeTributarioDeclarado('Assinale: ( ) LUCRO PRESUMIDO ( ) LUCRO REAL');
+      expect(r.regime).toBeNull();
+      expect(r.ambiguo).toBe(true);
+    });
+
+    it('não confunde "isenta de multa" com regime de isenção', () => {
+      expect(detectarRegimeTributarioDeclarado('Empresa isenta de multa por atraso.').regime).toBeNull();
+    });
+
+    it('devolve nulo quando o documento não fala de regime', () => {
+      expect(detectarRegimeTributarioDeclarado('CERTIDÃO NEGATIVA DE DÉBITOS').regime).toBeNull();
+    });
   });
 
   it('extrai histórico e último ato da Junta Comercial', () => {
