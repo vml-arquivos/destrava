@@ -26,11 +26,11 @@ describe('mapa documental de crédito', () => {
 
   it('direciona empresa não optante para ECF e não solicita PGDAS/DEFIS', () => {
     const empresa = { regime_tributario: 'Não optante pelo Simples Nacional', opcao_simples: false };
-    expect(identificarRegimeCredito(empresa)).toBe('nao_optante_simples');
+    expect(identificarRegimeCredito(empresa)).toBe('nao_optante_regime_a_confirmar');
     const mapa = gerarMapaDocumentalCredito({ empresa, etapa1Aprovada: true, etapa2Aprovada: true, tiposAnexados: [] });
     const documentos = mapa.etapas.find((e) => e.numero === 4)?.documentos || [];
     const codigos = documentos.map((documento) => documento.codigo);
-    expect(codigos).toContain('ecf_nao_optante');
+    expect(codigos).toContain('confirmacao_regime_nao_optante');
     expect(codigos).not.toContain('pgdas_12m');
     expect(codigos).not.toContain('defis');
   });
@@ -67,10 +67,10 @@ describe('mapa documental de crédito', () => {
     expect(codigosFase4).toContain('projecao_receitas');
     expect(codigosFase4).toContain('rating_bureau_privado');
     expect(codigosFase4).toContain('consulta_protestos');
-    // CNDT é obrigatória (mesma categoria de certidão que CND Federal e FGTS);
-    // os outros três são complementares/condicionais, não travam o avanço.
+    // CNDT, projeção, bureau e CENPROT são complementares/condicionais;
+    // nenhum deve virar hard gate universal sem contexto que justifique a exigência.
     const cndt = mapa.etapas.find((e) => e.numero === 3)?.documentos.find((d) => d.codigo === 'cndt');
-    expect(cndt?.obrigatorio).toBe(true);
+    expect(cndt?.obrigatorio).toBe(false);
     const projecao = mapa.etapas.find((e) => e.numero === 4)?.documentos.find((d) => d.codigo === 'projecao_receitas');
     expect(projecao?.obrigatorio).toBe(false);
   });

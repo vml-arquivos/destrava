@@ -14,6 +14,7 @@ import {
 import { DocumentPipelineStatus, assertUploadAllowed } from '../services/documentPipelineService';
 import { analiseDocumentalService } from '../services/analiseDocumentalEspecializada';
 import { analisarCnpjReceitaCartaoEmpresa } from '../services/analiseCnpjReceitaCartao';
+import { TIPOS_DOCUMENTO as TIPOS_DOCUMENTO_CATALOGO, getDocumentCatalogEntry, isKnownDocumentType } from '../../shared/documentTypes';
 
 const { Pool } = pkg;
 const pool = new Pool({
@@ -34,46 +35,7 @@ const ENTIDADES = [
 const STATUS = ['ativo', 'arquivado', 'substituido', 'excluido', 'pendente_validacao', 'validado', 'recusado'];
 const ORIGENS = ['upload_manual', 'gerado_sistema', 'importado_api', 'sincronizacao', 'migracao'];
 
-export const TIPOS_DOCUMENTO = [
-  // Contratos
-  'contrato_prestacao_servicos', 'contrato_assessoria', 'contrato_social', 'alteracao_contratual',
-  'contrato_gerado', 'contrato_assinado',
-  // Empresa
-  'cartao_cnpj', 'qsa', 'atos_junta_comercial', 'nire', 'estatuto', 'procuracao',
-  // Sócios / Pessoal
-  'documento_socio', 'rg', 'cpf', 'cnh', 'comprovante_residencia', 'comprovante_endereco',
-  'imposto_renda', 'irpf', 'recibo_irpf', 'certidao_casamento', 'averbacao_divorcio', 'certidao_obito',
-  // Certidões CNPJ
-  'rating_bacen_cnpj', 'cenprot_cnpj', 'cnd_rfb_cnpj', 'cadin_cnpj', 'pgfn_cnpj',
-  'enquadramento_tributario_cnpj', 'situacao_fiscal_cnpj',
-  'scr_cnpj', 'ccs_cnpj', 'ccf_cnpj', 'consulta_serasa_cnpj',
-  // Certidões adicionais (fiscal/trabalhista) -- adicionadas para fechar a
-  // documentação exigida por regime no mapa documental de crédito (pesquisa de
-  // mercado 2026-08-12): FGTS, CNDT e certidões estadual/municipal são certidões
-  // distintas entre si, comumente exigidas em conjunto por bancos e financeiras.
-  'crf_fgts', 'fgts', 'cndt', 'certidao_trabalhista', 'cnd_estadual', 'certidao_estadual',
-  'cnd_municipal', 'certidao_municipal',
-  // Demonstrativo/projeção de receitas -- exigido por bancos no lugar do
-  // faturamento histórico de 12 meses quando a empresa tem menos de 12 meses de
-  // constituição ou de faturamento documentado.
-  'projecao_receitas', 'demonstrativo_receitas_projetadas',
-  // Certidões CPF
-  'rating_bacen_cpf', 'cenprot_cpf', 'cnd_rfb_cpf', 'cadin_cpf', 'pgfn_cpf',
-  'enquadramento_tributario_cpf', 'situacao_fiscal_cpf',
-  'scr_cpf', 'ccs_cpf', 'ccf_cpf', 'consulta_serasa_cpf',
-  // Fiscal / Tributário
-  'simples_nacional', 'pgdas', 'pgmei', 'ecf',
-  'recibo_ecf', 'recibo_pgdas', 'recibo_pgmei',
-  'defis', 'dasn_simei', 'recibo_defis', 'recibo_dasn_simei',
-  // Financeiro
-  'faturamento_12_meses', 'comprovante_faturamento', 'declaracao_faturamento',
-  'extrato_bancario', 'balanco', 'dre', 'certidao',
-  // eCAC / Fotos
-  'compartilhamento_ecac',
-  'foto_fachada', 'foto_interna_1', 'foto_interna_2', 'foto_interna_3',
-  // Outros
-  'outros',
-];
+export const TIPOS_DOCUMENTO = TIPOS_DOCUMENTO_CATALOGO;
 
 const DOCUMENTOS_PESSOAIS = new Set([
   'documento_socio', 'rg', 'cpf', 'cnh', 'comprovante_residencia', 'imposto_renda', 'irpf', 'recibo_irpf',
@@ -738,7 +700,7 @@ router.put('/observacoes-slots', auth, async (req: Request, res: Response) => {
     const socioId = String(req.body?.socio_id || '').trim() || null;
     const empresaId = String(req.body?.empresa_id || '').trim() || (entidadeTipo === 'empresa' ? entidadeId : null);
     const observacao = String(req.body?.observacao || '').trim().slice(0, 4000);
-    if (!ENTIDADES.includes(entidadeTipo as any) || !isUuid(entidadeId) || !TIPOS_DOCUMENTO.includes(tipoDocumento)) {
+    if (!ENTIDADES.includes(entidadeTipo as any) || !isUuid(entidadeId) || !isKnownDocumentType(tipoDocumento) || !getDocumentCatalogEntry(tipoDocumento)?.uploadavel) {
       res.status(400).json({ error: 'Contexto documental inválido.' });
       return;
     }
@@ -799,7 +761,7 @@ router.post('/upload', auth, upload.single('file'), async (req: Request, res: Re
     const entidadeTipo = String(req.body.entidade_tipo || '').trim();
     const entidadeId = String(req.body.entidade_id || '').trim();
     const tipoDocumento = String(req.body.tipo_documento || '').trim();
-    if (!TIPOS_DOCUMENTO.includes(tipoDocumento)) { res.status(400).json({ error: 'tipo_documento inválido' }); return; }
+    if (!isKnownDocumentType(tipoDocumento) || !getDocumentCatalogEntry(tipoDocumento)?.uploadavel) { res.status(400).json({ error: 'tipo_documento inválido' }); return; }
     assertAllowedRelation(entidadeTipo, tipoDocumento, req.body);
     const refs = await validarEntidade(entidadeTipo, entidadeId, req.body);
     const empresaIdPipeline = String((refs as any).empresa_id || req.body.empresa_id || '').trim();
@@ -925,7 +887,7 @@ router.patch('/:id', auth, async (req: Request, res: Response) => {
     const values: unknown[] = [];
     const body = req.body || {};
     if (body.tipo_documento !== undefined) {
-      if (!TIPOS_DOCUMENTO.includes(String(body.tipo_documento))) { res.status(400).json({ error: 'tipo_documento inválido' }); return; }
+      if (!isKnownDocumentType(String(body.tipo_documento)) || !getDocumentCatalogEntry(String(body.tipo_documento))?.uploadavel) { res.status(400).json({ error: 'tipo_documento inválido' }); return; }
       values.push(String(body.tipo_documento)); fields.push(`tipo_documento=$${values.length}`);
     }
     if (body.status !== undefined) {

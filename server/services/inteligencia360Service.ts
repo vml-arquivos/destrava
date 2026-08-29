@@ -8,6 +8,15 @@
 
 // ─── Tipos ────────────────────────────────────────────────────────────────────
 
+import {
+  calcularIndicadoresFinanceiros,
+  calcularRatingInterno,
+  construirElegibilidadeCredito,
+  construirPlanoAdequacao,
+  type ResultadoIndicadoresFinanceiros,
+  type ResultadoRatingInterno,
+} from './indicadoresFinanceiros';
+
 export interface Recomendacao360 {
   titulo: string;
   prioridade: "alta" | "media" | "baixa";
@@ -166,6 +175,10 @@ export interface Inteligencia360Result {
   // vazios), preservando compatibilidade com o comportamento anterior.
   automacao_engine: AutomacaoEngineResumo;
   recomendacoes_automacao: string[];
+  indicadores_financeiros?: ResultadoIndicadoresFinanceiros;
+  rating_interno?: ResultadoRatingInterno;
+  elegibilidade_credito?: Array<{ programa_codigo: string; programa_nome: string; elegivel: boolean; status: 'elegivel' | 'nao_elegivel' | 'pendente'; requisitos: Array<{ requisito: string; atendido: boolean | null; evidencia: string | null }>; limitacoes: string[] }>;
+  plano_adequacao_credito?: Array<{ prioridade: 'alta' | 'media' | 'baixa'; titulo: string; descricao: string; impacto: string; acao: string; evidencia: Record<string, unknown> }>;
 }
 
 export interface AlertaDocumental360 {
@@ -1181,6 +1194,7 @@ export function calcularInteligencia360(params: {
   const documentos_sem_arquivo = docsArr.length - documentos_com_arquivo;
   const documentos_validados = docsArr.filter(d => d?.status === "validado").length;
   const documentos_pendentes_validacao = docsArr.filter(d => d?.status === "pendente_validacao").length;
+  const indicadores_financeiros = calcularIndicadoresFinanceiros({ empresa, documentos: docsArr, extracoes: analisesDocumentais });
 
   // Sócios
   const socios_com_cpf = socsArr.filter(s => s?.cpf_cnpj && String(s.cpf_cnpj).replace(/\D/g, "").length >= 11).length;
@@ -1197,6 +1211,14 @@ export function calcularInteligencia360(params: {
       pendencias.push({ tipo: "documental", descricao: alerta.mensagem, severidade: alerta.severidade });
     }
   }
+  const rating_interno = calcularRatingInterno({ empresa, indicadores: indicadores_financeiros, documentos: docsArr, pendencias });
+  const programasElegibilidade = [
+    { codigo: 'credito_bancario_padrao', nome: 'Crédito empresarial — bancos e cooperativas', requisitos_chave: ['Cadastro empresarial atualizado', 'Faturamento comprovado', 'Endividamento e fluxo de caixa conciliados'] },
+    { codigo: 'pronampe', nome: 'PRONAMPE e programas garantidos', requisitos_chave: ['Cadastro empresarial atualizado', 'Compartilhamento eletrônico de faturamento no e-CAC', 'Faturamento comprovado'] },
+    { codigo: 'bndes_indireto', nome: 'BNDES — operação indireta', requisitos_chave: ['Projeto de investimento', 'Capacidade financeira', 'Regularidade cadastral'] },
+  ];
+  const elegibilidade_credito = construirElegibilidadeCredito({ empresa, indicadores: indicadores_financeiros, documentos: docsArr, programas: programasElegibilidade });
+  const plano_adequacao_credito = construirPlanoAdequacao({ indicadores: indicadores_financeiros, rating: rating_interno, elegibilidade: elegibilidade_credito });
 
   const { status_aptidao, motivos_aptidao } = calcularStatusAptidao({
     riscoCredito: risco_credito,
@@ -1357,5 +1379,9 @@ export function calcularInteligencia360(params: {
 
     automacao_engine,
     recomendacoes_automacao,
+    indicadores_financeiros,
+    rating_interno,
+    elegibilidade_credito,
+    plano_adequacao_credito,
   };
 }

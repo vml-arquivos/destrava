@@ -10,6 +10,8 @@ import { InsufficientHistoricalPeriodException, validateTwelveMonthContractHisto
 import { buildCadastralValidationDTO, phase1Approved } from '../services/phase1AnalysisService';
 import { ensureDocumentacaoSchema } from '../services/documentacaoSchema';
 import { gerarMapaDocumentalCredito } from '../services/mapaDocumentalCreditoService';
+import { DOCUMENT_TYPE_CATALOG, canonicalizeDocumentType, documentAnalysisConfig } from '../../shared/documentTypes';
+import { resolverRegrasDocumentais, type RegraResolvida } from '../services/regrasDocumentaisCredito';
 import { upsertSocioEmpresa } from './socios_documentos';
 import { generateBrandedPdfBuffer } from '../services/brandedPdfLayout';
 import { construirSecoesAnaliseDocumento } from '../../shared/documentalPresentation';
@@ -2290,6 +2292,69 @@ export async function montarDossieCreditoEmpresa(empresaId: string, options: { p
     etapa1Aprovada: identidadeCnpj.apto_para_avancar === true,
     etapa2Aprovada: documentacaoSocietaria.apto_para_avancar === true,
   });
+  const modoMotorRegras = String(process.env.DOCUMENTAL_RULE_ENGINE_MODE || 'shadow').toLowerCase() === 'active' ? 'active' : 'shadow';
+  const regrasResolvidas = await resolverRegrasDocumentais({
+    db: pool,
+    contexto: {
+      regime: mapaDocumentalCredito.regime_identificado,
+      natureza_juridica: empresa.natureza_juridica,
+      porte: empresa.porte,
+      cnae: empresa.cnae_principal,
+      atividade: empresa.segmento,
+      possui_inscricao_estadual: Boolean(empresa.inscricao_estadual),
+      possui_inscricao_municipal: Boolean(empresa.inscricao_municipal),
+      possui_empregados: Number(empresa.numero_funcionarios || 0) > 0 || empresa.possui_empregados === true,
+      atividade_regulada: empresa.atividade_regulada === true,
+      etapa_atual: mapaDocumentalCredito.etapa_atual,
+    },
+  });
+  if (modoMotorRegras === 'shadow') {
+    const divergencias = regrasResolvidas.filter((regra) => regra.aplicabilidade === 'nao_aplicavel').map((regra) => ({
+      codigo: regra.codigo,
+      tipo_documento: regra.tipo_documento,
+      motivo: regra.motivo_aplicabilidade,
+    }));
+    await pool.query(
+      `INSERT INTO public.documentos_regras_shadow_log
+        (empresa_id, contexto, motor_legado, motor_novo, divergencias, modo)
+       VALUES ($1, $2::jsonb, $3::jsonb, $4::jsonb, $5::jsonb, 'shadow')`,
+      [
+        empresa.id,
+        JSON.stringify({ regime: mapaDocumentalCredito.regime_identificado, etapa_atual: mapaDocumentalCredito.etapa_atual }),
+        JSON.stringify({ etapas: mapaDocumentalCredito.etapas.map((etapa) => ({ numero: etapa.numero, documentos: etapa.documentos.map((documento) => ({ codigo: documento.codigo, obrigatorio: documento.obrigatorio })) })) }),
+        JSON.stringify(regrasResolvidas),
+        JSON.stringify(divergencias),
+      ],
+    ).catch((error: any) => console.warn('[Dossiê] Telemetria shadow indisponível; mapa legado preservado:', error?.message || error));
+  }
+  const regraPorTipo = new Map<string, RegraResolvida>();
+  for (const regra of regrasResolvidas) {
+    regraPorTipo.set(regra.tipo_documento, regra);
+    regraPorTipo.set(canonicalizeDocumentType(regra.tipo_documento), regra);
+  }
+  for (const etapa of mapaDocumentalCredito.etapas) {
+    for (const documento of etapa.documentos) {
+      const regra = documento.tipos_arquivo
+        .map((tipo) => regraPorTipo.get(tipo) || regraPorTipo.get(canonicalizeDocumentType(tipo)))
+        .find(Boolean);
+      if (!regra) continue;
+      documento.tipo_exigencia = regra.tipo_exigencia || documento.tipo_exigencia;
+      documento.vigencia_inicio = regra.vigencia_inicio || null;
+      documento.vigencia_fim = regra.vigencia_fim || null;
+      if (modoMotorRegras === 'active' && regra.aplicabilidade === 'nao_aplicavel') {
+        documento.obrigatorio = false;
+        documento.aplicabilidade = 'nao_aplicavel';
+        documento.status = 'nao_aplicavel';
+        documento.motivo = regra.motivo_aplicabilidade;
+      }
+    }
+  }
+  mapaDocumentalCredito.motor_regras = {
+    modo: modoMotorRegras,
+    fonte: regrasResolvidas.some((regra) => regra.fonte_resolucao === 'banco') ? 'banco' : 'fallback',
+    total_regras: regrasResolvidas.length,
+    divergencias_shadow: modoMotorRegras === 'shadow' ? regrasResolvidas.filter((regra) => regra.aplicabilidade === 'nao_aplicavel').length : 0,
+  };
 
   return {
     empresa: {
@@ -2809,14 +2874,47 @@ const ANALISE_ESPECIALIZADA_POR_TIPO: Partial<Record<string, { tipo: TipoAnalise
   declaracao_faturamento: { tipo: 'faturamento_12_meses', promptCodigo: 'faturamento_12m_extract' },
   comprovante_residencia: { tipo: 'comprovante_residencia', promptCodigo: 'comprovante_residencia_extract' },
 };
+for (const item of DOCUMENT_TYPE_CATALOG) {
+  const config = documentAnalysisConfig(item.tipo);
+  if (config && !ANALISE_ESPECIALIZADA_POR_TIPO[item.tipo]) {
+    ANALISE_ESPECIALIZADA_POR_TIPO[item.tipo] = { tipo: 'documento_generico', promptCodigo: config.promptCodigo };
+  }
+}
+
+async function persistirMetadadosExtracaoCatalogada(extracaoId: string, resultado: any): Promise<void> {
+  if (resultado?.tipo_analise !== 'documento_generico') return;
+  await pool.query(
+    `UPDATE public.documentos_extracoes_ia
+        SET evidencias = $2::jsonb,
+            campos_inferidos = $3::jsonb,
+            competencia_inicio = $4,
+            competencia_fim = $5,
+            validade_inicio = $6,
+            validade_fim = $7,
+            fonte_extracao = $8,
+            regra_versao = '2026.08.29'
+      WHERE id = $1`,
+    [
+      extracaoId,
+      JSON.stringify(resultado.evidencias || resultado.dados_extraidos?.evidencias || []),
+      JSON.stringify(resultado.campos_inferidos || resultado.dados_extraidos?.campos_inferidos || {}),
+      resultado.competencia?.inicio || null,
+      resultado.competencia?.fim || null,
+      resultado.validade?.inicio || null,
+      resultado.validade?.fim || null,
+      resultado.dados_extraidos?.fonte_extracao || null,
+    ],
+  ).catch((error: any) => console.warn('[AnaliseDocumentalEspecializada] Metadados 098 indisponíveis; resultado legado preservado:', error?.message || error));
+}
 
 async function executarAnaliseDocumentalEspecializada(params: {
   extracaoId: string;
   empresaId: string;
   arquivoId: string;
   tipo: TipoAnaliseDocumental;
+  tipoDocumento?: string;
 }) {
-  const { extracaoId, empresaId, arquivoId, tipo } = params;
+  const { extracaoId, empresaId, arquivoId, tipo, tipoDocumento } = params;
   try {
     await pool.query(
       `UPDATE public.documentos_extracoes_ia
@@ -2825,15 +2923,14 @@ async function executarAnaliseDocumentalEspecializada(params: {
       [extracaoId],
     );
 
-    const resultado = tipo === 'qsa'
-      ? await analiseDocumentalService.analisarQSA(empresaId, arquivoId)
-      : tipo === 'simples_nacional'
-        ? await analiseDocumentalService.analisarSimplesNacional(empresaId, arquivoId)
-        : tipo === 'atos_junta_comercial'
-          ? await analiseDocumentalService.analisarAtosJuntaComercial(empresaId, arquivoId)
-          : tipo === 'faturamento_12_meses'
-            ? await analiseDocumentalService.analisarFaturamento(empresaId, arquivoId)
-            : await analiseDocumentalService.analisarComprovanteResidencia(empresaId, arquivoId);
+    let resultado: any;
+    if (tipo === 'qsa') resultado = await analiseDocumentalService.analisarQSA(empresaId, arquivoId);
+    else if (tipo === 'simples_nacional') resultado = await analiseDocumentalService.analisarSimplesNacional(empresaId, arquivoId);
+    else if (tipo === 'atos_junta_comercial') resultado = await analiseDocumentalService.analisarAtosJuntaComercial(empresaId, arquivoId);
+    else if (tipo === 'faturamento_12_meses') resultado = await analiseDocumentalService.analisarFaturamento(empresaId, arquivoId);
+    else if (tipo === 'comprovante_residencia') resultado = await analiseDocumentalService.analisarComprovanteResidencia(empresaId, arquivoId);
+    else if (tipo === 'documento_generico' && tipoDocumento) resultado = await analiseDocumentalService.analisarDocumentoCatalogado(empresaId, arquivoId, tipoDocumento);
+    else throw new Error(`Tipo de análise documental sem executor: ${tipo}`);
 
     await pool.query(
       `UPDATE public.documentos_extracoes_ia
@@ -2856,6 +2953,7 @@ async function executarAnaliseDocumentalEspecializada(params: {
         JSON.stringify(resultado.alertas || []),
       ],
     );
+    await persistirMetadadosExtracaoCatalogada(extracaoId, resultado);
   } catch (error: any) {
     console.warn('[AnaliseDocumentalEspecializada] Falha controlada na análise:', tipo, arquivoId, error?.message || error);
     await pool.query(
@@ -2988,6 +3086,7 @@ router.post('/ia/documentos/:documentoId/extrair', auth, async (req: Request, re
           empresaId,
           arquivoId,
           tipo: configuracao.tipo,
+          tipoDocumento: String(documento.tipo_documento || ''),
         });
       });
     }

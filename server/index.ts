@@ -2141,53 +2141,11 @@ async function startServer() {
     console.log('[startup] Migration 066b (ocultar_conteudo orcamentos): OK.');
   } catch (err: any) { console.warn('[startup] Migration 066b:', err?.message); }
 
-  // ── Migration 067: corrige CHECK constraint de documentos_arquivos ────────
-  // O banco em produção pode ter versão antiga da constraint que rejeita tipos
-  // válidos como 'irpf', 'comprovante_endereco', etc. Esta migration reconstrói.
-  // Migration 078 (2026-08, db/migrations/078_documentos_enquadramento_situacao_fiscal.sql):
-  // adicionados 'enquadramento_tributario_cnpj/cpf' e 'situacao_fiscal_cnpj/cpf' --
-  // o checklist do Acervo Documental já tinha esses campos no frontend, mas o INSERT
-  // falhava com "violates check constraint documentos_arquivos_tipo_chk" porque a
-  // constraint nunca foi atualizada. Reproduzido e confirmado com teste real em
-  // Postgres antes da correção. (Número escolhido para não colidir com a Migration
-  // 073 já existente abaixo, de orcamentos_timbrados_anexos.)
-  try {
-    await pool.query(`
-      DO $$
-      BEGIN
-        ALTER TABLE public.documentos_arquivos DROP CONSTRAINT IF EXISTS documentos_arquivos_tipo_documento_check;
-        ALTER TABLE public.documentos_arquivos DROP CONSTRAINT IF EXISTS documentos_arquivos_tipo_chk;
-      EXCEPTION WHEN OTHERS THEN NULL;
-      END$$;
-    `);
-    await pool.query(`
-      ALTER TABLE public.documentos_arquivos
-        ADD CONSTRAINT documentos_arquivos_tipo_chk CHECK (tipo_documento IN (
-          'contrato_prestacao_servicos','contrato_assessoria','contrato_social','alteracao_contratual',
-          'contrato_gerado','contrato_assinado',
-          'cartao_cnpj','qsa','atos_junta_comercial','nire','estatuto','procuracao',
-          'documento_socio','rg','cpf','cnh','comprovante_residencia','comprovante_endereco',
-          'imposto_renda','irpf','recibo_irpf',
-          'certidao_casamento','averbacao_divorcio','certidao_obito',
-          'rating_bacen_cnpj','cenprot_cnpj','cnd_rfb_cnpj','cadin_cnpj','pgfn_cnpj',
-          'enquadramento_tributario_cnpj','situacao_fiscal_cnpj',
-          'scr_cnpj','ccs_cnpj','ccf_cnpj','consulta_serasa_cnpj',
-          'rating_bacen_cpf','cenprot_cpf','cnd_rfb_cpf','cadin_cpf','pgfn_cpf',
-          'enquadramento_tributario_cpf','situacao_fiscal_cpf',
-          'scr_cpf','ccs_cpf','ccf_cpf','consulta_serasa_cpf',
-          'simples_nacional','pgdas','pgmei','ecf',
-          'recibo_ecf','recibo_pgdas','recibo_pgmei',
-          'defis','dasn_simei','recibo_defis','recibo_dasn_simei',
-          'faturamento_12_meses','comprovante_faturamento','declaracao_faturamento',
-          'extrato_bancario','balanco','dre','certidao',
-          'compartilhamento_ecac',
-          'foto_fachada','foto_interna_1','foto_interna_2','foto_interna_3',
-          'outros'
-        ))
-    `);
-    console.log('[startup] Migration 067 (documentos CHECK constraint): OK.');
-  } catch (err: any) { console.warn('[startup] Migration 067:', err?.message); }
-  // ─────────────────────────────────────────────────────────────────────────────
+  // A taxonomia documental agora é mantida por db/migrations/098 e pelo
+  // catálogo compartilhado. Não recriar uma CHECK com lista fixa no boot: isso
+  // reintroduziria a divergência que bloqueou tipos novos durante rollouts.
+  // A migration 098 remove o legado quando necessário e instala validação
+  // catalogada de forma aditiva; o backend continua preservando os aliases.
 
   // ── Migration 069: corrige CHECK constraint de cadastro_status ────────────────
   // O banco em produção tem uma constraint "empresas_cadastro_status_check"

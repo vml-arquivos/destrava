@@ -1,4 +1,6 @@
-export type RegimeCredito = 'mei' | 'simples_nacional' | 'nao_optante_simples' | 'lucro_presumido' | 'lucro_real' | 'imune_isenta' | 'nao_identificado';
+import { canonicalizeDocumentType, getDocumentCatalogEntry } from '../../shared/documentTypes';
+
+export type RegimeCredito = 'mei' | 'simples_nacional' | 'nao_optante_regime_a_confirmar' | 'nao_optante_simples' | 'lucro_presumido' | 'lucro_real' | 'lucro_arbitrado' | 'imune' | 'isenta' | 'imune_isenta' | 'nao_identificado';
 export type TipoOperacaoCredito = 'capital_giro' | 'investimento' | 'maquinas_equipamentos' | 'inovacao' | 'fundos_regionais' | 'pronampe' | 'antecipacao_recebiveis' | 'comercio_exterior' | 'credito_rural' | 'sustentabilidade';
 
 export type DocumentoMapa = {
@@ -12,6 +14,13 @@ export type DocumentoMapa = {
   alternativas?: string[];
   observacao?: string;
   anexado?: boolean;
+  aplicabilidade?: 'aplicavel' | 'condicional' | 'nao_aplicavel' | 'automatico';
+  status?: 'nao_aplicavel' | 'pendente' | 'anexado' | 'em_analise' | 'validado' | 'validado_com_alerta' | 'reprovado' | 'vencido' | 'substituido' | 'dispensado';
+  motivo?: string;
+  tipo_exigencia?: string;
+  regra_versao?: string;
+  vigencia_inicio?: string | null;
+  vigencia_fim?: string | null;
 };
 
 export type EtapaMapa = {
@@ -49,6 +58,8 @@ export type MapaDocumentalCredito = {
   etapa_atual: number;
   proxima_acao: string;
   etapas: EtapaMapa[];
+  documentos_nao_aplicaveis: DocumentoMapa[];
+  motor_regras?: { modo: 'shadow' | 'active'; fonte: 'banco' | 'fallback'; total_regras: number; divergencias_shadow: number };
   operacoes_disponiveis: Array<{ codigo: TipoOperacaoCredito; nome: string; objetivo: string; documentos_adicionais: string[] }>;
   programas_referencia: PerfilProgramaCredito[];
   indicadores: IndicadorCredito[];
@@ -96,14 +107,33 @@ export function identificarRegimeCredito(empresa: any, enquadramento?: any): Reg
     || (/\bnao optante\b/.test(textoRegimeTributario) && !/\bsimei\b|\bmei\b/.test(textoRegimeTributario));
   if (/lucro presumido|presumido/.test(texto)) return 'lucro_presumido';
   if (/lucro real/.test(texto)) return 'lucro_real';
-  if (naoOptanteSimples) return 'nao_optante_simples';
+  if (/lucro arbitrado|arbitrado/.test(texto)) return 'lucro_arbitrado';
+  if (naoOptanteSimples) return 'nao_optante_regime_a_confirmar';
   if (opcaoSimplesExplicita || /simples nacional|optante(?: pelo)? simples/.test(texto)) return 'simples_nacional';
-  if (/imune|isenta|sem fins lucrativos/.test(texto)) return 'imune_isenta';
+  if (/imune/.test(texto)) return 'imune';
+  if (/isenta/.test(texto)) return 'isenta';
+  if (/sem fins lucrativos/.test(texto)) return 'imune_isenta';
   return 'nao_identificado';
 }
 
 function doc(codigo: string, nome: string, tipos: string[], fase: number, finalidade: string, extras: Partial<DocumentoMapa> = {}): DocumentoMapa {
-  return { codigo, nome, tipos_arquivo: tipos, obrigatorio: true, fase, finalidade, ...extras };
+  const catalogEntry = tipos.map((tipo) => getDocumentCatalogEntry(tipo)).find(Boolean);
+  const tipoExigencia = extras.tipo_exigencia || catalogEntry?.tipoExigencia || 'documento_complementar';
+  const aplicabilidade = extras.aplicabilidade || (extras.status === 'nao_aplicavel' ? 'nao_aplicavel' : extras.obrigatorio === false ? 'condicional' : 'aplicavel');
+  const status = extras.status || (aplicabilidade === 'nao_aplicavel' ? 'nao_aplicavel' : 'pendente');
+  return {
+    codigo,
+    nome,
+    tipos_arquivo: tipos,
+    obrigatorio: true,
+    fase,
+    finalidade,
+    tipo_exigencia: tipoExigencia,
+    aplicabilidade,
+    status,
+    regra_versao: '2026.08.29',
+    ...extras,
+  };
 }
 
 const DOCUMENTOS_UNIVERSAIS_EMPRESA: DocumentoMapa[] = [
@@ -116,11 +146,11 @@ const DOCUMENTOS_UNIVERSAIS_EMPRESA: DocumentoMapa[] = [
   // comumente exigida junto das outras duas em operações de crédito bancário
   // (confirmado: bancos/financeiras pedem CNDT em conjunto com CND federal, sem que
   // uma substitua a outra).
-  doc('cndt', 'Certidão Negativa de Débitos Trabalhistas (CNDT)', ['cndt', 'certidao_trabalhista'], 3, 'Comprovar regularidade perante a Justiça do Trabalho -- certidão distinta da CND Federal e do FGTS, comumente exigida em conjunto por bancos e financeiras.'),
-  doc('certidao_estadual', 'Certidão estadual', ['cnd_estadual', 'certidao_estadual'], 3, 'Comprovar regularidade fiscal estadual.'),
-  doc('certidao_municipal', 'Certidão municipal', ['cnd_municipal', 'certidao_municipal'], 3, 'Comprovar regularidade fiscal municipal.'),
+  doc('cndt', 'Certidão Negativa de Débitos Trabalhistas (CNDT)', ['cndt', 'certidao_trabalhista'], 3, 'Comprovar regularidade perante a Justiça do Trabalho -- certidão distinta da CND Federal e do FGTS, comumente exigida em conjunto por bancos e financeiras.', { obrigatorio: false, tipo_exigencia: 'politica_bancaria', motivo: 'Aplicável quando houver empregados ou quando a linha bancária exigir.' }),
+  doc('certidao_estadual', 'Certidão estadual', ['cnd_estadual', 'certidao_estadual'], 3, 'Comprovar regularidade fiscal estadual.', { obrigatorio: false, tipo_exigencia: 'politica_bancaria', motivo: 'Aplicável quando houver inscrição estadual, atividade sujeita ou exigência da linha.' }),
+  doc('certidao_municipal', 'Certidão municipal', ['cnd_municipal', 'certidao_municipal'], 3, 'Comprovar regularidade fiscal municipal.', { obrigatorio: false, tipo_exigencia: 'politica_bancaria', motivo: 'Aplicável conforme atividade, inscrição municipal ou política da linha.' }),
   doc('extratos_bancarios', 'Extratos bancários empresariais', ['extrato_bancario'], 4, 'Comprovar movimentação, sazonalidade e capacidade de pagamento.', { observacao: 'Preferencialmente 6 a 12 meses, conforme produto e instituição.' }),
-  doc('faturamento_12m', 'Faturamento mensal dos últimos 12 meses', ['faturamento_12_meses', 'comprovante_faturamento', 'declaracao_faturamento'], 4, 'Medir receita recorrente, sazonalidade e limite operacional.'),
+  doc('faturamento_12m', 'Faturamento mensal dos últimos 12 meses', ['faturamento_12_meses', 'comprovante_faturamento', 'declaracao_faturamento'], 4, 'Medir receita recorrente, sazonalidade e limite operacional.', { obrigatorio: false, tipo_exigencia: 'boa_pratica_analise', motivo: 'Não é hard gate universal; torna-se requisito apenas quando a linha ou a instituição exigir.' }),
   // Bancos (ex.: Banco do Nordeste, para Simples Nacional, Lucro Presumido e Lucro
   // Real) exigem um demonstrativo de receitas projetadas no lugar do faturamento
   // histórico quando a empresa tem menos de 12 meses de constituição ou menos de
@@ -154,6 +184,9 @@ const DOCUMENTOS_REGIME: Record<RegimeCredito, DocumentoMapa[]> = {
     doc('defis', 'DEFIS do último exercício e recibo', ['defis', 'recibo_defis'], 4, 'Comprovar informações socioeconômicas e fiscais anuais.'),
     doc('bp_dre_simples', 'Balanço Patrimonial e DRE', ['balanco', 'dre'], 4, 'Demonstrar resultado e patrimônio quando exigido pela operação ou pelo porte.', { obrigatorio: false, observacao: 'Torna-se prioritário em operações estruturadas, investimentos e empresas de maior faturamento.' }),
   ],
+  nao_optante_regime_a_confirmar: [
+    doc('confirmacao_regime_nao_optante', 'Comprovação do regime tributário não optante', ['ecf', 'dctf', 'livro_caixa'], 4, 'Confirmar se a empresa está no Lucro Presumido, Lucro Real, Arbitrado ou hipótese de Livro Caixa antes de concluir a trilha fiscal.', { obrigatorio: true, tipo_exigencia: 'obrigacao_legal' }),
+  ],
   nao_optante_simples: [
     doc('ecf_nao_optante', 'ECF e recibo de entrega', ['ecf', 'recibo_ecf'], 4, 'Comprovar a apuração fiscal e o faturamento da empresa não optante pelo Simples Nacional.'),
   ],
@@ -164,12 +197,27 @@ const DOCUMENTOS_REGIME: Record<RegimeCredito, DocumentoMapa[]> = {
     doc('balancete_atual', 'Balancete e DRE acumulada do exercício atual', ['balancete', 'dre'], 4, 'Atualizar a análise entre fechamentos anuais.'),
     doc('dctf_dctfweb', 'DCTF/DCTFWeb ou comprovantes fiscais equivalentes', ['dctf', 'dctfweb', 'darf'], 4, 'Confirmar obrigações tributárias e regime informado.'),
   ],
+  lucro_arbitrado: [
+    doc('ecf_arbitrado', 'ECF e recibo de entrega', ['ecf', 'recibo_ecf'], 4, 'Comprovar a apuração fiscal no Lucro Arbitrado.'),
+    doc('bp_dre_arbitrado', 'Balanço Patrimonial e DRE', ['balanco', 'dre'], 4, 'Avaliar patrimônio e capacidade de pagamento.', { obrigatorio: false }),
+    doc('dctf_arbitrado', 'DCTF/DCTFWeb e comprovantes fiscais', ['dctf', 'dctfweb', 'darf'], 4, 'Conferir as obrigações e recolhimentos do regime.', { obrigatorio: false }),
+  ],
   lucro_real: [
     doc('ecf_real', 'ECF e recibo de entrega', ['ecf', 'recibo_ecf'], 4, 'Comprovar apuração fiscal e parâmetros do Lucro Real.'),
     doc('ecd_real', 'ECD e recibo de entrega', ['ecd', 'recibo_ecd'], 4, 'Comprovar escrituração contábil oficial.'),
     doc('demonstracoes_real', 'Balanço, DRE, DFC e notas explicativas', ['balanco', 'dre', 'dfc', 'notas_explicativas'], 4, 'Avaliar estrutura financeira e geração de caixa.'),
     doc('balancete_real', 'Balancete atual, razão e DRE acumulada', ['balancete', 'razao_contabil', 'dre'], 4, 'Atualizar a posição financeira do exercício corrente.'),
     doc('dctf_real', 'DCTF/DCTFWeb e comprovantes de recolhimento', ['dctf', 'dctfweb', 'darf'], 4, 'Conferir regularidade das obrigações fiscais.'),
+  ],
+  imune: [
+    doc('estatuto_ata_imune', 'Estatuto e atas vigentes', ['estatuto', 'ata'], 3, 'Comprovar governança e poderes de representação.', { tipo_exigencia: 'obrigacao_legal' }),
+    doc('ecf_imune', 'ECF ou declaração fiscal aplicável', ['ecf', 'recibo_ecf'], 4, 'Comprovar enquadramento e dados fiscais.', { obrigatorio: false }),
+    doc('demonstracoes_imune', 'Balanço, DRE/resultado e notas explicativas', ['balanco', 'dre', 'notas_explicativas'], 4, 'Demonstrar sustentabilidade financeira.', { obrigatorio: false }),
+  ],
+  isenta: [
+    doc('estatuto_ata_isenta', 'Estatuto e atas vigentes', ['estatuto', 'ata'], 3, 'Comprovar governança e poderes de representação.', { tipo_exigencia: 'obrigacao_legal' }),
+    doc('ecf_isenta', 'ECF ou declaração fiscal aplicável', ['ecf', 'recibo_ecf'], 4, 'Comprovar enquadramento e dados fiscais.', { obrigatorio: false }),
+    doc('demonstracoes_isenta', 'Balanço, DRE/resultado e notas explicativas', ['balanco', 'dre', 'notas_explicativas'], 4, 'Demonstrar sustentabilidade financeira.', { obrigatorio: false }),
   ],
   imune_isenta: [
     doc('estatuto_ata', 'Estatuto e atas vigentes', ['estatuto', 'ata'], 3, 'Comprovar governança e poderes de representação.'),
@@ -285,18 +333,110 @@ const PROGRAMAS: PerfilProgramaCredito[] = [
 
 const INDICADORES: IndicadorCredito[] = [
   { codigo: 'receita_media_mensal', nome: 'Receita média mensal', formula: 'Faturamento dos últimos 12 meses ÷ 12', interpretacao: 'Base para dimensionar parcela, limite e sazonalidade.', fase: 4 },
-  { codigo: 'margem_ebitda', nome: 'Margem EBITDA', formula: 'EBITDA ÷ Receita líquida', interpretacao: 'Mede geração operacional antes da estrutura financeira e tributária.', fase: 5 },
-  { codigo: 'dscr', nome: 'Cobertura do serviço da dívida (DSCR)', formula: 'Geração de caixa disponível ÷ Serviço total da dívida', interpretacao: 'Acima de 1 indica cobertura matemática; a margem exigida varia por instituição.', fase: 5 },
-  { codigo: 'divida_ebitda', nome: 'Dívida líquida / EBITDA', formula: '(Dívida financeira − Caixa) ÷ EBITDA', interpretacao: 'Mede alavancagem e tempo teórico de amortização.', fase: 5 },
   { codigo: 'liquidez_corrente', nome: 'Liquidez corrente', formula: 'Ativo circulante ÷ Passivo circulante', interpretacao: 'Avalia capacidade de cumprir obrigações de curto prazo.', fase: 5 },
-  { codigo: 'cobertura_juros', nome: 'Cobertura de juros', formula: 'EBIT ÷ Despesa financeira', interpretacao: 'Mede folga operacional para pagamento de juros.', fase: 5 },
+  { codigo: 'liquidez_seca', nome: 'Liquidez seca', formula: '(Ativo circulante − Estoque) ÷ Passivo circulante', interpretacao: 'Mede liquidez sem depender da venda de estoques.', fase: 5 },
   { codigo: 'capital_giro_liquido', nome: 'Capital de giro líquido', formula: 'Ativo circulante − Passivo circulante', interpretacao: 'Mostra a folga financeira de curto prazo.', fase: 5 },
   { codigo: 'necessidade_capital_giro', nome: 'Necessidade de capital de giro', formula: 'Estoques + Contas a receber − Fornecedores − Obrigações operacionais', interpretacao: 'Dimensiona a necessidade operacional de caixa.', fase: 5 },
+  { codigo: 'divida_liquida', nome: 'Dívida líquida', formula: 'Dívida financeira − Caixa', interpretacao: 'Mede o endividamento após disponibilidades.', fase: 5 },
+  { codigo: 'endividamento_patrimonial', nome: 'Dívida / patrimônio', formula: 'Dívida financeira ÷ Patrimônio líquido', interpretacao: 'Mede dependência de capital de terceiros.', fase: 5 },
+  { codigo: 'margem_bruta', nome: 'Margem bruta', formula: 'Lucro bruto ÷ Receita', interpretacao: 'Mede resultado após custos diretamente associados às vendas.', fase: 5 },
+  { codigo: 'margem_ebitda', nome: 'Margem EBITDA', formula: 'EBITDA ÷ Receita líquida', interpretacao: 'Mede geração operacional antes da estrutura financeira e tributária.', fase: 5 },
+  { codigo: 'margem_operacional', nome: 'Margem operacional', formula: 'EBIT ÷ Receita', interpretacao: 'Mede eficiência operacional.', fase: 5 },
+  { codigo: 'margem_liquida', nome: 'Margem líquida', formula: 'Lucro líquido ÷ Receita', interpretacao: 'Mede resultado líquido sobre vendas.', fase: 5 },
+  { codigo: 'roa', nome: 'ROA', formula: 'Lucro líquido ÷ Ativos totais', interpretacao: 'Mede retorno sobre ativos.', fase: 5 },
+  { codigo: 'roe', nome: 'ROE', formula: 'Lucro líquido ÷ Patrimônio líquido', interpretacao: 'Mede retorno sobre capital próprio.', fase: 5 },
+  { codigo: 'giro_estoque', nome: 'Giro de estoque', formula: 'Custo das vendas ÷ Estoque médio', interpretacao: 'Mede renovação de estoque.', fase: 5 },
+  { codigo: 'pmr', nome: 'Prazo médio de recebimento', formula: 'Contas a receber ÷ Vendas × 365', interpretacao: 'Mede conversão de vendas em caixa.', fase: 5 },
+  { codigo: 'pmp', nome: 'Prazo médio de pagamento', formula: 'Fornecedores ÷ Compras × 365', interpretacao: 'Mede prazo concedido pelos fornecedores.', fase: 5 },
+  { codigo: 'ciclo_financeiro', nome: 'Ciclo financeiro', formula: 'PME + PMR − PMP', interpretacao: 'Mede dias de caixa investido no ciclo operacional.', fase: 5 },
+  { codigo: 'dscr', nome: 'Cobertura do serviço da dívida (DSCR)', formula: 'Geração de caixa disponível ÷ Serviço total da dívida', interpretacao: 'Mede cobertura matemática do serviço da dívida.', fase: 5 },
+  { codigo: 'concentracao_clientes', nome: 'Concentração de clientes', formula: 'Maior cliente ÷ Receita, quando informado', interpretacao: 'Mede dependência de poucos clientes.', fase: 5 },
+  { codigo: 'concentracao_fornecedores', nome: 'Concentração de fornecedores', formula: 'Maior fornecedor ÷ Compras, quando informado', interpretacao: 'Mede dependência de poucos fornecedores.', fase: 5 },
 ];
 
-function marcarAnexados(documentos: DocumentoMapa[], tiposAnexados: Set<string>): DocumentoMapa[] {
-  return documentos.map((item) => ({ ...item, anexado: item.tipos_arquivo.some((tipo) => tiposAnexados.has(tipo)) }));
+function documentosUniversaisFase4(empresa: any): DocumentoMapa[] {
+  const linhaCredito = String(empresa?.linha_credito || empresa?.linhaCredito || '').trim();
+  const dataAbertura = empresa?.data_abertura ? new Date(empresa.data_abertura) : null;
+  const idadeMeses = dataAbertura && !Number.isNaN(dataAbertura.getTime())
+    ? Math.max(0, (new Date().getFullYear() - dataAbertura.getFullYear()) * 12 + new Date().getMonth() - dataAbertura.getMonth())
+    : null;
+  return DOCUMENTOS_UNIVERSAIS_EMPRESA.filter((item) => item.fase === 4).map((item) => {
+    if (item.codigo === 'faturamento_12m' && linhaCredito) {
+      return { ...item, obrigatorio: true, aplicabilidade: 'aplicavel', status: 'pendente', tipo_exigencia: 'politica_bancaria', motivo: `A linha ${linhaCredito} solicitou comprovação de faturamento; esta exigência não é universal.` };
+    }
+    if (item.codigo === 'projecao_receitas' && idadeMeses !== null && idadeMeses < 12) {
+      return { ...item, obrigatorio: true, aplicabilidade: 'aplicavel', status: 'pendente', tipo_exigencia: 'politica_bancaria', motivo: 'Empresa com menos de 12 meses; utilizar projeção/receitas até formar histórico suficiente.' };
+    }
+    return item;
+  });
 }
+
+function marcarAnexados(documentos: DocumentoMapa[], tiposAnexados: Set<string>): DocumentoMapa[] {
+  return documentos.map((item) => {
+    const anexado = item.tipos_arquivo.some((tipo) => tiposAnexados.has(tipo) || tiposAnexados.has(canonicalizeDocumentType(tipo)));
+    return {
+      ...item,
+      anexado,
+      status: item.aplicabilidade === 'nao_aplicavel' ? 'nao_aplicavel' : anexado ? 'anexado' : item.status || 'pendente',
+    };
+  });
+}
+
+function documentosSocietariosPorNatureza(empresa: any, regime: RegimeCredito): DocumentoMapa[] {
+  if (regime === 'mei' || /microempreendedor|mei|empresario individual/.test(normalizar(empresa?.natureza_juridica))) return [];
+  const natureza = normalizar(empresa?.natureza_juridica);
+  const base = DOCUMENTOS_UNIVERSAIS_EMPRESA.filter((item) => item.fase === 2);
+  if (/sociedade anonima|companhia|s a\b/.test(natureza)) {
+    return [
+      doc('estatuto_ata_natureza', 'Estatuto e atas societárias vigentes', ['estatuto', 'ata'], 2, 'Comprovar governança, poderes de representação e atos da companhia.', { tipo_exigencia: 'obrigacao_legal' }),
+      ...base.filter((item) => item.codigo === 'atos_junta'),
+    ];
+  }
+  if (/cooperativa|associacao|fundacao/.test(natureza)) {
+    return [
+      doc('estatuto_ata_natureza', 'Estatuto e atas vigentes', ['estatuto', 'ata'], 2, 'Comprovar governança, poderes de representação e registro da entidade.', { tipo_exigencia: 'obrigacao_legal' }),
+      ...base.filter((item) => item.codigo === 'atos_junta'),
+    ];
+  }
+  if (/advogad|oab/.test(natureza)) {
+    return [
+      ...base,
+      doc('registro_oab', 'Registro/ato da OAB', ['registro_oab'], 2, 'Comprovar registro da sociedade e poderes de representação perante a OAB.', { tipo_exigencia: 'obrigacao_legal' }),
+    ];
+  }
+  return base;
+}
+
+const DOCUMENTOS_NAO_APLICAVEIS_POR_REGIME: Record<RegimeCredito, DocumentoMapa[]> = {
+  mei: [
+    doc('nao_aplicavel_contrato_social_mei', 'Contrato social e atos da Junta', ['contrato_social', 'alteracao_contratual', 'atos_junta_comercial'], 2, 'O MEI não segue o fluxo societário de LTDA/S.A.', { obrigatorio: false, aplicabilidade: 'nao_aplicavel', status: 'nao_aplicavel', motivo: 'MEI/SIMEI utiliza CCMEI; não deve receber exigência padrão de contrato social ou Junta Comercial.' }),
+    doc('nao_aplicavel_pgdas_mei', 'PGDAS-D convencional', ['pgdas'], 4, 'Não aplicável ao SIMEI; utilizar PGMEI/DAS-MEI e DASN-SIMEI.', { obrigatorio: false, aplicabilidade: 'nao_aplicavel', status: 'nao_aplicavel', motivo: 'O MEI/SIMEI não utiliza o PGDAS-D convencional.' }),
+    doc('nao_aplicavel_defis_mei', 'DEFIS', ['defis'], 4, 'Não aplicável ao MEI; utilizar DASN-SIMEI.', { obrigatorio: false, aplicabilidade: 'nao_aplicavel', status: 'nao_aplicavel', motivo: 'O MEI/SIMEI utiliza a DASN-SIMEI.' }),
+    doc('nao_aplicavel_ecd_mei', 'ECD/ECF como padrão', ['ecd', 'ecf'], 4, 'Não é exigência padrão do MEI.', { obrigatorio: false, aplicabilidade: 'nao_aplicavel', status: 'nao_aplicavel', motivo: 'Somente uma linha ou evidência específica pode solicitar demonstração adicional.' }),
+  ],
+  simples_nacional: [
+    doc('nao_aplicavel_ecf_simples', 'ECF como regra geral', ['ecf'], 4, 'Não é solicitada como regra geral do Simples Nacional.', { obrigatorio: false, aplicabilidade: 'nao_aplicavel', status: 'nao_aplicavel', motivo: 'O Simples Nacional segue PGDAS-D e DEFIS; exceções devem ser justificadas pela operação.' }),
+    doc('nao_aplicavel_ecd_simples', 'ECD como regra geral', ['ecd'], 4, 'Não é solicitada como regra geral do Simples Nacional.', { obrigatorio: false, aplicabilidade: 'nao_aplicavel', status: 'nao_aplicavel', motivo: 'A exigência depende de obrigação específica ou política da operação.' }),
+  ],
+  nao_optante_regime_a_confirmar: [],
+  nao_optante_simples: [],
+  lucro_presumido: [
+    doc('nao_aplicavel_pgdas_presumido', 'PGDAS-D', ['pgdas'], 4, 'Não aplicável ao Lucro Presumido.', { obrigatorio: false, aplicabilidade: 'nao_aplicavel', status: 'nao_aplicavel', motivo: 'A empresa não é optante do Simples Nacional.' }),
+    doc('nao_aplicavel_defis_presumido', 'DEFIS', ['defis'], 4, 'Não aplicável ao Lucro Presumido.', { obrigatorio: false, aplicabilidade: 'nao_aplicavel', status: 'nao_aplicavel', motivo: 'A DEFIS é específica do Simples Nacional.' }),
+  ],
+  lucro_real: [
+    doc('nao_aplicavel_pgdas_real', 'PGDAS-D', ['pgdas'], 4, 'Não aplicável ao Lucro Real.', { obrigatorio: false, aplicabilidade: 'nao_aplicavel', status: 'nao_aplicavel', motivo: 'A empresa não é optante do Simples Nacional.' }),
+    doc('nao_aplicavel_defis_real', 'DEFIS', ['defis'], 4, 'Não aplicável ao Lucro Real.', { obrigatorio: false, aplicabilidade: 'nao_aplicavel', status: 'nao_aplicavel', motivo: 'A DEFIS é específica do Simples Nacional.' }),
+  ],
+  lucro_arbitrado: [
+    doc('nao_aplicavel_pgdas_arbitrado', 'PGDAS-D', ['pgdas'], 4, 'Não aplicável ao Lucro Arbitrado.', { obrigatorio: false, aplicabilidade: 'nao_aplicavel', status: 'nao_aplicavel', motivo: 'A empresa não é optante do Simples Nacional.' }),
+    doc('nao_aplicavel_defis_arbitrado', 'DEFIS', ['defis'], 4, 'Não aplicável ao Lucro Arbitrado.', { obrigatorio: false, aplicabilidade: 'nao_aplicavel', status: 'nao_aplicavel', motivo: 'A DEFIS é específica do Simples Nacional.' }),
+  ],
+  imune: [],
+  isenta: [],
+  imune_isenta: [],
+  nao_identificado: [],
+};
 
 export function gerarMapaDocumentalCredito(params: {
   empresa: any;
@@ -327,7 +467,8 @@ export function gerarMapaDocumentalCredito(params: {
       titulo: 'Continuidade societária mínima de 12 meses',
       objetivo: 'Validar NIRE e datas dos atos e solicitar alterações anteriores até comprovar pelo menos 12 meses de continuidade registral.',
       bloqueada: !params.etapa1Aprovada,
-      documentos: marcarAnexados(DOCUMENTOS_UNIVERSAIS_EMPRESA.filter((item) => item.fase === 2), tipos),
+              documentos: marcarAnexados(documentosSocietariosPorNatureza(params.empresa, regime), tipos),
+
     },
     {
       numero: 3,
@@ -346,10 +487,11 @@ export function gerarMapaDocumentalCredito(params: {
       titulo: `Faturamento e documentação fiscal — ${regime.replace(/_/g, ' ')}`,
       objetivo: 'Comprovar faturamento e obrigações conforme o regime tributário da empresa.',
       bloqueada: !params.etapa2Aprovada,
-      documentos: marcarAnexados([
-        ...DOCUMENTOS_UNIVERSAIS_EMPRESA.filter((item) => item.fase === 4),
+              documentos: marcarAnexados([
+        ...documentosUniversaisFase4(params.empresa),
         ...DOCUMENTOS_REGIME[regime].filter((item) => item.fase === 4),
       ], tipos),
+
     },
     {
       numero: 5,
@@ -372,17 +514,22 @@ export function gerarMapaDocumentalCredito(params: {
   const descricaoRegime: Record<RegimeCredito, string> = {
     mei: 'Microempreendedor Individual / SIMEI',
     simples_nacional: 'Simples Nacional — optante',
-    nao_optante_simples: 'Não optante do Simples Nacional',
+    nao_optante_regime_a_confirmar: 'Não optante do Simples — regime a confirmar',
+    nao_optante_simples: 'Não optante do Simples Nacional (legado)',
     lucro_presumido: 'Lucro Presumido',
     lucro_real: 'Lucro Real',
+    lucro_arbitrado: 'Lucro Arbitrado',
+    imune: 'Imune',
+    isenta: 'Isenta',
     imune_isenta: 'Imune ou isenta',
     nao_identificado: 'Regime ainda não identificado',
   };
 
   return {
-    versao: '1.3.0',
+    versao: '2.0.0',
     regime_identificado: regime,
     regime_descricao: descricaoRegime[regime],
+    documentos_nao_aplicaveis: marcarAnexados(DOCUMENTOS_NAO_APLICAVEIS_POR_REGIME[regime], tipos),
     etapa_atual: etapaAtual,
     proxima_acao: etapaAtual === 1
       ? 'Concluir a análise de Cartão CNPJ, QSA e enquadramento tributário.'

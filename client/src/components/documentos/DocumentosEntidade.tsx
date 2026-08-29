@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { apiFetch, apiFetchBlob } from "@/lib/api";
+import { DOCUMENT_TYPE_CATALOG, documentLabel } from "@shared/documentTypes";
 import { ResultadoAnaliseDocumento } from "./ResultadoAnaliseDocumento";
 import { ProntidaoIdentidadeCard, type IdentidadeCnpj } from "../documentacao/DossieCreditoEmpresa";
 import { toast } from "sonner";
@@ -103,74 +104,9 @@ function nomeCampoRelatorio(label: string): string {
   return label.replace(/\b\w/g, (letra) => letra.toUpperCase());
 }
 
-const tipoDocumentoLabel: Record<string, string> = {
-  contrato_prestacao_servicos: "1. Contrato de prestação de serviços",
-  contrato_assessoria: "1. Contrato de prestação de serviços",
-  cartao_cnpj: "2. CNPJ / Cartão CNPJ",
-  qsa: "3. QSA",
-  atos_junta_comercial: "6. Atos da Junta Comercial",
-  contrato_social: "5. Contrato social",
-  alteracao_contratual: "5. Contrato social e alterações contratuais",
-  documento_socio: "6A. Documento de identificação do sócio",
-  rg: "6A. Documento de identificação do sócio",
-  cnh: "6A. Documento de identificação do sócio",
-  cpf: "6A. Documento de identificação do sócio",
-  comprovante_residencia: "6B. Comprovante de endereço do sócio",
-  comprovante_endereco: "Comprovante de endereço da empresa",
-  imposto_renda: "6C. IRPF do sócio",
-  irpf: "6C. IRPF do sócio",
-  recibo_irpf: "6D. Recibo de entrega do IRPF",
-  certidao_casamento: "6E. Estado civil / cônjuge / averbações",
-  averbacao_divorcio: "6E. Estado civil / cônjuge / averbações",
-  certidao_obito: "6E. Estado civil / cônjuge / averbações",
-  rating_bacen_cnpj: "7. Relatório SCR/Registrato (CNPJ)",
-  rating_bacen_cpf: "8. Relatório SCR/Registrato (CPF)",
-  cenprot_cnpj: "9. Consulta CENPROT (CNPJ)",
-  cenprot_cpf: "10. Consulta CENPROT (CPF)",
-  cnd_rfb_cnpj: "11. CND RFB (CNPJ)",
-  cnd_rfb_cpf: "12. CND RFB (CPF)",
-  cadin_cnpj: "12A. Nada consta CADIN (CNPJ)",
-  cadin_cpf: "12A. Nada consta CADIN (CPF)",
-  pgfn_cnpj: "12B. Nada consta PGFN (CNPJ)",
-  pgfn_cpf: "12B. Nada consta PGFN (CPF)",
-  simples_nacional: "13. Consulta de optante pelo Simples Nacional",
-  pgdas: "14. PGDAS, PGMEI ou ECF",
-  pgmei: "14. PGDAS, PGMEI ou ECF",
-  ecf: "14. PGDAS, PGMEI ou ECF",
-  recibo_ecf: "15. Recibo de entrega da ECF, PGDAS ou PGMEI",
-  recibo_pgdas: "15. Recibo de entrega da ECF, PGDAS ou PGMEI",
-  recibo_pgmei: "15. Recibo de entrega da ECF, PGDAS ou PGMEI",
-  defis: "16. DEFIS ou DASN-SIMEI",
-  dasn_simei: "16. DEFIS ou DASN-SIMEI",
-  recibo_defis: "17. Recibo de entrega da DEFIS, DASN-SIMEI ou ECF",
-  recibo_dasn_simei: "17. Recibo de entrega da DEFIS, DASN-SIMEI ou ECF",
-  scr_cnpj: "18. Relatório SCR do CNPJ",
-  ccs_cnpj: "19. Relatório CCS do CNPJ",
-  ccf_cnpj: "20. Relatório CCF do CNPJ",
-  scr_cpf: "21. Relatório SCR do CPF",
-  ccs_cpf: "22. Relatório CCS do CPF",
-  ccf_cpf: "23. Relatório CCF do CPF",
-  consulta_serasa_cnpj: "Rating (CNPJ)",
-  consulta_serasa_cpf: "Rating (CPF)",
-  compartilhamento_ecac: "24. Compartilhamento eCAC por banco",
-  foto_fachada: "25. Fotos da empresa",
-  foto_interna_1: "25. Fotos da empresa",
-  foto_interna_2: "25. Fotos da empresa",
-  foto_interna_3: "25. Fotos da empresa",
-  faturamento_12_meses: "26. Faturamento bruto dos últimos 12 meses",
-  comprovante_faturamento: "26. Faturamento bruto dos últimos 12 meses",
-  declaracao_faturamento: "26. Faturamento bruto dos últimos 12 meses",
-  extrato_bancario: "Extrato bancário",
-  balanco: "Balanço",
-  dre: "DRE",
-  certidao: "Certidão",
-  procuracao: "Procuração",
-  nire: "NIRE",
-  estatuto: "Estatuto",
-  contrato_gerado: "Contrato gerado",
-  contrato_assinado: "Contrato assinado",
-  outros: "Campo outros / Documento nomeado",
-};
+const tipoDocumentoLabel: Record<string, string> = Object.fromEntries(
+  DOCUMENT_TYPE_CATALOG.map((item) => [item.tipo, item.nome]),
+);
 
 export type DocumentoSlot = {
   titulo: string;
@@ -235,7 +171,7 @@ export const SECOES_DOCUMENTAIS: SecaoDocumento[] = [
     slots: [
       slot("Atos da Junta Comercial", "atos_junta_comercial", [], { obrigatorio: true, descricao: "Primeiro documento da Etapa 2. A IA identifica todos os atos e define quais contratos/alterações devem ser anexados até comprovar 12 meses. Para MEI, a dispensa é registrada automaticamente." }),
       slot("Contrato social e alterações contratuais", "contrato_social", ["alteracao_contratual"], { obrigatorio: true, descricao: "Lido depois dos Atos da Junta e conferido por número do ato, data de registro, NIRE, CNPJ e sócios do QSA." }),
-      slot("Relatório SCR/Registrato (CNPJ)", "rating_bacen_cnpj", ["scr_cnpj"], { descricao: "Sequência de análise: SCR, CCS e CCF." }),
+      slot("Relatório SCR/Registrato (CNPJ)", "rating_bacen_cnpj", ["scr_cnpj", "relatorio_scr"], { descricao: "Sequência de análise: SCR, CCS e CCF." }),
       slot("Relatório CCS do CNPJ", "ccs_cnpj"),
       slot("Relatório CCF do CNPJ", "ccf_cnpj"),
       slot("Consulta CENPROT (CNPJ)", "cenprot_cnpj"),
@@ -254,21 +190,43 @@ export const SECOES_DOCUMENTAIS: SecaoDocumento[] = [
       slot("Certidão estadual de regularidade fiscal", "cnd_estadual", ["certidao_estadual"], { descricao: "Comprova regularidade fiscal estadual." }),
       slot("Certidão municipal de regularidade fiscal", "cnd_municipal", ["certidao_municipal"], { descricao: "Comprova regularidade fiscal municipal." }),
       slot("Rating (CNPJ)", "consulta_serasa_cnpj"),
-      slot("PGDAS / PGMEI", "pgdas", ["pgmei"], { descricao: "Declaração mensal de faturamento para empresa optante do Simples Nacional ou MEI. Não se aplica a empresas não optantes." }),
+      slot("PGDAS / PGMEI", "pgdas", ["pgmei", "pgdas_d"], { descricao: "Declaração mensal de faturamento para empresa optante do Simples Nacional ou MEI. Não se aplica a empresas não optantes." }),
+      slot("CCMEI", "ccmei", [], { descricao: "Comprovação da constituição e da condição de Microempreendedor Individual." }),
+      slot("DAS-MEI", "das_mei", [], { descricao: "Documento de arrecadação do MEI, quando aplicável." }),
       slot("Recibo de entrega do PGDAS / PGMEI", "recibo_pgdas", ["recibo_pgmei"], { descricao: "Recibo correspondente ao PGDAS ou PGMEI anexado." }),
       slot("ECF", "ecf", [], { descricao: "Escrituração Contábil Fiscal para empresas não optantes do Simples Nacional, inclusive Lucro Presumido e Lucro Real." }),
       slot("Recibo de entrega da ECF", "recibo_ecf", [], { descricao: "Recibo de entrega correspondente à ECF." }),
       slot("DEFIS / DASN-SIMEI", "defis", ["dasn_simei"], { descricao: "Declaração anual: DEFIS para optantes do Simples Nacional e DASN-SIMEI para MEI. Não se aplica a empresas não optantes." }),
       slot("Recibo de entrega da DEFIS / DASN-SIMEI", "recibo_defis", ["recibo_dasn_simei"], { descricao: "Recibo correspondente à DEFIS ou DASN-SIMEI anexada." }),
+      slot("ECD e recibo", "ecd", ["recibo_ecd"], { descricao: "Escrituração Contábil Digital e recibo, quando a empresa estiver obrigada ou a operação exigir." }),
+      slot("DCTFWeb / MIT", "dctf", ["dctfweb", "mit"], { descricao: "Obrigações fiscais e comprovantes correspondentes, quando aplicável." }),
+      slot("DARF", "darf", [], { descricao: "Comprovante de arrecadação fiscal, quando aplicável." }),
+      slot("EFD-Contribuições / EFD ICMS-IPI", "efd_contribuicoes", ["efd_icms_ipi", "efd"], { descricao: "Escrituração fiscal digital aplicável ao regime e à atividade." }),
+      slot("eSocial / EFD-Reinf", "esocial", ["efd_reinf"], { descricao: "Obrigações trabalhistas e previdenciárias somente quando aplicáveis à empresa." }),
       slot("Faturamento bruto dos últimos 12 meses", "faturamento_12_meses", ["comprovante_faturamento", "declaracao_faturamento"], { descricao: "Documento opcional. Quando anexado, a IA confere meses, último mês fechado, data e modalidade das assinaturas, CNPJ, sócio-administrador e contador." }),
+      slot("Relatório mensal de receitas do MEI", "relatorio_receitas_mei", [], { descricao: "Comprova os meses ainda não abrangidos pela DASN-SIMEI." }),
       // Exigido por bancos (ex.: Banco do Nordeste) no lugar do faturamento histórico
       // quando a empresa tem menos de 12 meses de constituição ou de faturamento
       // documentado -- situação que o próprio pipeline já identifica na Etapa 2/3.
       slot("Demonstrativo ou projeção de receitas", "projecao_receitas", ["demonstrativo_receitas_projetadas"], { descricao: "Obrigatório apenas quando a empresa tem menos de 12 meses de constituição ou de faturamento comprovado -- substitui o Faturamento bruto dos últimos 12 meses nesse caso." }),
+      slot("Notas fiscais (NF-e / NFS-e)", "nf_e", ["nfe", "nfs_e", "nfse", "notas_fiscais"], { descricao: "Notas fiscais usadas no cruzamento de faturamento e atividade." }),
+      slot("Extrato bancário", "extrato_bancario", [], { descricao: "Movimentação bancária usada no cruzamento financeiro." }),
+      slot("Balanço Patrimonial", "balanco", ["balanco_patrimonial"], { descricao: "Demonstração patrimonial para análise financeira." }),
+      slot("DRE", "dre", [], { descricao: "Demonstração de resultado para análise financeira." }),
+      slot("DFC", "dfc", [], { descricao: "Demonstração dos fluxos de caixa, quando necessária." }),
+      slot("DMPL", "dmpl", [], { descricao: "Demonstração das mutações do patrimônio líquido, quando aplicável." }),
+      slot("Notas explicativas", "notas_explicativas", [], { descricao: "Notas explicativas que complementam as demonstrações contábeis." }),
+      slot("Balancete", "balancete", [], { descricao: "Posição contábil do exercício corrente." }),
+      slot("Razão contábil", "razao_contabil", [], { descricao: "Livro razão ou relatório contábil detalhado." }),
+      slot("Contas a receber / a pagar", "contas_receber", ["contas_pagar"], { descricao: "Obrigações e recebíveis usados no fluxo de caixa." }),
+      slot("Recebíveis", "recebiveis", [], { descricao: "Recebíveis cedidos ou elegíveis para antecipação." }),
+      slot("Estoque", "estoque", [], { descricao: "Estoque considerado no capital de giro e nas garantias." }),
+      slot("Memória de capital de giro", "capital_giro", [], { descricao: "Memória da necessidade de capital de giro da operação." }),
+      slot("Documentos de garantia", "garantia", ["documento_bem_garantia", "contrato_garantia", "alienacao_fiduciaria", "aval", "nota_promissoria", "patrimonio_garantia"], { descricao: "Anexar somente quando a linha ou o banco exigir garantia." }),
       slot("Compartilhamento eCAC por banco", "compartilhamento_ecac", [], { exigeNome: true, placeholderNome: "Banco/destinatário eCAC" }),
       slot("Fotos da empresa", "foto_fachada", ["foto_interna_1", "foto_interna_2", "foto_interna_3"], { descricao: "Anexe fachada e fotos internas no mesmo local." }),
       slot("Campo outros / Documento nomeado", "outros", [
-        "extrato_bancario", "balanco", "dre", "comprovante_endereco", "procuracao", "nire", "estatuto",
+        "comprovante_endereco", "procuracao", "nire", "estatuto",
       ], {
         exigeNome: true,
         placeholderNome: "Nome do documento",
@@ -329,8 +287,8 @@ TODOS_SLOTS.forEach((documentoSlot) => documentoSlot.matchTipos.forEach((tipo) =
 // 100% acessível pela aba Contratos Firmados, só não é exibido nesta tela.
 const TIPOS_FORA_DO_CHECKLIST_CREDITO = new Set(["contrato_prestacao_servicos", "contrato_assessoria", "enquadramento_tributario_cpf"]);
 const TIPOS_COM_ANALISE_AUTOMATICA = new Set(["faturamento_12_meses", "comprovante_faturamento", "declaracao_faturamento", "comprovante_residencia"]);
-const TIPOS_FISCAIS_SIMPLIFICADOS = new Set(["pgdas", "pgmei", "recibo_pgdas", "recibo_pgmei", "defis", "dasn_simei", "recibo_defis", "recibo_dasn_simei"]);
-const TIPOS_FISCAIS_ECF = new Set(["ecf", "recibo_ecf"]);
+const TIPOS_FISCAIS_SIMPLIFICADOS = new Set(["pgdas", "pgdas_d", "pgmei", "das_mei", "ccmei", "recibo_pgdas", "recibo_pgmei", "defis", "dasn_simei", "recibo_defis", "recibo_dasn_simei", "relatorio_receitas_mei"]);
+const TIPOS_FISCAIS_ECF = new Set(["ecf", "recibo_ecf", "ecd", "recibo_ecd", "dctf", "dctfweb", "mit", "efd_contribuicoes", "efd_icms_ipi", "efd"]);
 
 // Documentos que, ao serem anexados, disparam automaticamente a análise da Etapa 2/3
 // (montarValidacaoSocietaria no backend) -- Atos da Junta é sempre o primeiro exigido
@@ -344,7 +302,7 @@ function chaveContextoSlot(tipo: string, socioId?: string | null) {
 
 export function labelTipoDocumento(tipo: string) {
   const documentoSlot = TIPO_PARA_SLOT.get(tipo);
-  return documentoSlot?.titulo || tipoDocumentoLabel[tipo] || tipo.replace(/_/g, " ");
+  return documentoSlot?.titulo || tipoDocumentoLabel[tipo] || documentLabel(tipo) || tipo.replace(/_/g, " ");
 }
 
 function slotDoTipo(tipo: string) {

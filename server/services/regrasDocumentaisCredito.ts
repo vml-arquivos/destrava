@@ -191,3 +191,211 @@ export function calcularCoberturaDocumentalSocios(
   });
   return { total_socios: sociosAtivos.length, socios_completos: porSocio.filter((item) => item.completo).length, completo: porSocio.every((item) => item.completo), por_socio: porSocio };
 }
+
+
+export type AplicabilidadeRegra = 'aplicavel' | 'condicional' | 'nao_aplicavel' | 'automatico';
+export type StatusRegraDocumental = 'nao_aplicavel' | 'pendente' | 'anexado' | 'em_analise' | 'validado' | 'validado_com_alerta' | 'reprovado' | 'vencido' | 'substituido' | 'dispensado';
+
+export type RegraDocumentalCredito = {
+  codigo: string;
+  tipo_documento: string;
+  nome_amigavel: string;
+  categoria?: string | null;
+  entidade_tipo: 'empresa' | 'socio' | 'garantia' | string;
+  escopo: string;
+  obrigatorio: boolean;
+  permite_multiplos: boolean;
+  validade_dias?: number | null;
+  condicao: Record<string, any>;
+  descricao?: string | null;
+  tipo_exigencia?: string | null;
+  regra_validacao?: Record<string, any>;
+  regra_cruzamento?: Record<string, any>;
+  bloqueia_etapa?: number | null;
+  vigencia_inicio?: string | null;
+  vigencia_fim?: string | null;
+  versao?: string | null;
+  ativo?: boolean;
+  fonte?: string | null;
+};
+
+export type ContextoRegraDocumental = {
+  regime?: string | null;
+  natureza_juridica?: string | null;
+  porte?: string | null;
+  cnae?: string | null;
+  atividade?: string | null;
+  possui_inscricao_estadual?: boolean | null;
+  possui_inscricao_municipal?: boolean | null;
+  possui_empregados?: boolean | null;
+  atividade_regulada?: boolean | null;
+  linha_credito?: string | null;
+  finalidade?: string | null;
+  possui_garantia?: boolean | null;
+  etapa_atual?: number | null;
+  competencia?: string | null;
+  referencia?: Date;
+};
+
+export type RegraResolvida = RegraDocumentalCredito & {
+  aplicabilidade: AplicabilidadeRegra;
+  status: StatusRegraDocumental;
+  motivo_aplicabilidade: string;
+  fonte_resolucao: 'banco' | 'fallback';
+};
+
+const FALLBACK_REGRAS_DOCUMENTAIS: RegraDocumentalCredito[] = [
+  {
+    codigo: 'empresa_faturamento_12m', tipo_documento: 'faturamento_12_meses', nome_amigavel: 'Faturamento dos últimos 12 meses',
+    entidade_tipo: 'empresa', escopo: 'empresa', obrigatorio: false, permite_multiplos: true, validade_dias: null,
+    condicao: { quando_anexado: true }, descricao: 'Documento opcional universalmente; quando anexado, deve ser analisado.', tipo_exigencia: 'boa_pratica_analise', bloqueia_etapa: null, versao: 'fallback-2026.08.29', ativo: true, fonte: 'matriz_estrategica_2026',
+  },
+  {
+    codigo: 'empresa_pgdas', tipo_documento: 'pgdas', nome_amigavel: 'PGDAS-D', entidade_tipo: 'empresa', escopo: 'empresa', obrigatorio: false, permite_multiplos: true, condicao: { regime: 'simples_nacional' }, tipo_exigencia: 'obrigacao_legal', bloqueia_etapa: 4, versao: 'fallback-2026.08.29', ativo: true, fonte: 'matriz_estrategica_2026',
+  },
+  {
+    codigo: 'empresa_defis', tipo_documento: 'defis', nome_amigavel: 'DEFIS', entidade_tipo: 'empresa', escopo: 'empresa', obrigatorio: false, permite_multiplos: true, condicao: { regime: 'simples_nacional', exceto: 'mei' }, tipo_exigencia: 'obrigacao_legal', bloqueia_etapa: 4, versao: 'fallback-2026.08.29', ativo: true, fonte: 'matriz_estrategica_2026',
+  },
+  {
+    codigo: 'empresa_dasn_simei', tipo_documento: 'dasn_simei', nome_amigavel: 'DASN-SIMEI', entidade_tipo: 'empresa', escopo: 'empresa', obrigatorio: false, permite_multiplos: true, condicao: { regime: 'mei' }, tipo_exigencia: 'obrigacao_legal', bloqueia_etapa: 4, versao: 'fallback-2026.08.29', ativo: true, fonte: 'matriz_estrategica_2026',
+  },
+  {
+    codigo: 'empresa_ecf', tipo_documento: 'ecf', nome_amigavel: 'ECF', entidade_tipo: 'empresa', escopo: 'empresa', obrigatorio: false, permite_multiplos: true, condicao: { regime: ['lucro_presumido', 'lucro_real', 'lucro_arbitrado'] }, tipo_exigencia: 'obrigacao_legal', bloqueia_etapa: 4, versao: 'fallback-2026.08.29', ativo: true, fonte: 'matriz_estrategica_2026',
+  },
+  {
+    codigo: 'empresa_cndt', tipo_documento: 'cndt', nome_amigavel: 'CNDT', entidade_tipo: 'empresa', escopo: 'empresa', obrigatorio: false, permite_multiplos: false, condicao: { somente_se: 'possui_empregados_ou_linha_exigir' }, tipo_exigencia: 'politica_bancaria', bloqueia_etapa: null, versao: 'fallback-2026.08.29', ativo: true, fonte: 'matriz_estrategica_2026',
+  },
+  {
+    codigo: 'empresa_cnd_estadual', tipo_documento: 'cnd_estadual', nome_amigavel: 'CND estadual', entidade_tipo: 'empresa', escopo: 'empresa', obrigatorio: false, permite_multiplos: false, condicao: { somente_se: 'possui_inscricao_estadual_ou_atividade_exigir' }, tipo_exigencia: 'politica_bancaria', bloqueia_etapa: null, versao: 'fallback-2026.08.29', ativo: true, fonte: 'matriz_estrategica_2026',
+  },
+  {
+    codigo: 'socio_documento_id', tipo_documento: 'documento_socio', nome_amigavel: 'Documento de identificação do sócio', entidade_tipo: 'socio', escopo: 'socio', obrigatorio: true, permite_multiplos: true, condicao: { depois_etapa: 2 }, tipo_exigencia: 'obrigacao_legal', bloqueia_etapa: 3, versao: 'fallback-2026.08.29', ativo: true, fonte: 'matriz_estrategica_2026',
+  },
+  {
+    codigo: 'socio_comprovante_residencia', tipo_documento: 'comprovante_residencia', nome_amigavel: 'Comprovante de residência do sócio', entidade_tipo: 'socio', escopo: 'socio', obrigatorio: true, permite_multiplos: false, validade_dias: 60, condicao: { depois_etapa: 2 }, tipo_exigencia: 'obrigacao_legal', bloqueia_etapa: 3, versao: 'fallback-2026.08.29', ativo: true, fonte: 'matriz_estrategica_2026',
+  },
+];
+
+function normalizarRegraContexto(value: unknown): string {
+  return normalizarBasico(value).replace(/\s+/g, '_');
+}
+
+function arrayOuValor(value: unknown): string[] {
+  return Array.isArray(value) ? value.map(normalizarRegraContexto) : [normalizarRegraContexto(value)];
+}
+
+function regraVigente(regra: RegraDocumentalCredito, referencia: Date): boolean {
+  if (regra.ativo === false) return false;
+  const inicio = regra.vigencia_inicio ? new Date(`${regra.vigencia_inicio}T00:00:00Z`) : null;
+  const fim = regra.vigencia_fim ? new Date(`${regra.vigencia_fim}T23:59:59Z`) : null;
+  if (inicio && !Number.isNaN(inicio.getTime()) && inicio > referencia) return false;
+  if (fim && !Number.isNaN(fim.getTime()) && fim < referencia) return false;
+  return true;
+}
+
+export function avaliarAplicabilidadeRegra(regra: RegraDocumentalCredito, contexto: ContextoRegraDocumental): Pick<RegraResolvida, 'aplicabilidade' | 'status' | 'motivo_aplicabilidade'> {
+  const etapa = Number(contexto.etapa_atual || 1);
+  const regime = normalizarRegraContexto(contexto.regime);
+  const condicao = regra.condicao || {};
+  const regimes = condicao.regime ? arrayOuValor(condicao.regime) : [];
+  if (regimes.length && !regimes.includes(regime)) {
+    return { aplicabilidade: 'nao_aplicavel', status: 'nao_aplicavel', motivo_aplicabilidade: `A regra é específica para ${regimes.join(', ')} e o regime atual é ${regime || 'não identificado'}.` };
+  }
+  if (condicao.exceto && regime === normalizarRegraContexto(condicao.exceto)) {
+    return { aplicabilidade: 'nao_aplicavel', status: 'nao_aplicavel', motivo_aplicabilidade: `A regra não se aplica ao regime ${regime}.` };
+  }
+  if (condicao.depois_etapa && etapa < Number(condicao.depois_etapa)) {
+    return { aplicabilidade: 'condicional', status: 'nao_aplicavel', motivo_aplicabilidade: 'Dados pessoais e documentos de sócios só entram após a conclusão da etapa societária.' };
+  }
+  if (condicao.somente_se === 'possui_empregados_ou_linha_exigir' && contexto.possui_empregados !== true && !contexto.linha_credito) {
+    return { aplicabilidade: 'nao_aplicavel', status: 'nao_aplicavel', motivo_aplicabilidade: 'A empresa não possui empregados identificados e não há linha bancária que exija a certidão.' };
+  }
+  if (condicao.somente_se === 'possui_inscricao_estadual_ou_atividade_exigir' && contexto.possui_inscricao_estadual !== true && contexto.atividade_regulada !== true && !contexto.linha_credito) {
+    return { aplicabilidade: 'nao_aplicavel', status: 'nao_aplicavel', motivo_aplicabilidade: 'Não há inscrição estadual ou atividade regulada que justifique a exigência automática.' };
+  }
+  if (regra.fonte && /receita|automatic/i.test(regra.fonte)) {
+    return { aplicabilidade: 'automatico', status: 'validado', motivo_aplicabilidade: 'Dado obtido de fonte automática; upload físico não é necessário.' };
+  }
+  if (regra.obrigatorio) return { aplicabilidade: 'aplicavel', status: 'pendente', motivo_aplicabilidade: regra.descricao || 'Documento aplicável ao contexto informado.' };
+  return { aplicabilidade: 'condicional', status: 'pendente', motivo_aplicabilidade: regra.descricao || 'Documento complementar ou exigido conforme operação.' };
+}
+
+function chaveCacheRegras(contexto: ContextoRegraDocumental): string {
+  return JSON.stringify({
+    regime: normalizarRegraContexto(contexto.regime),
+    natureza: normalizarRegraContexto(contexto.natureza_juridica),
+    porte: normalizarRegraContexto(contexto.porte),
+    cnae: normalizarRegraContexto(contexto.cnae),
+    atividade: normalizarRegraContexto(contexto.atividade),
+    ie: contexto.possui_inscricao_estadual,
+    im: contexto.possui_inscricao_municipal,
+    empregados: contexto.possui_empregados,
+    regulada: contexto.atividade_regulada,
+    linha: normalizarRegraContexto(contexto.linha_credito),
+    garantia: contexto.possui_garantia,
+    etapa: contexto.etapa_atual,
+    competencia: contexto.competencia,
+  });
+}
+
+export type QueryableRules = { query: (text: string, values?: any[]) => Promise<{ rows: any[] }> };
+const cacheRegrasDocumentais = new Map<string, { expiresAt: number; regras: RegraDocumentalCredito[] }>();
+
+function normalizarRegraBanco(row: any): RegraDocumentalCredito {
+  return {
+    codigo: String(row.codigo || ''),
+    tipo_documento: String(row.tipo_documento || ''),
+    nome_amigavel: String(row.nome_amigavel || row.tipo_documento || 'Documento'),
+    categoria: row.categoria || null,
+    entidade_tipo: String(row.entidade_tipo || 'empresa'),
+    escopo: String(row.escopo || 'empresa'),
+    obrigatorio: row.obrigatorio === true,
+    permite_multiplos: row.permite_multiplos === true,
+    validade_dias: row.validade_dias == null ? null : Number(row.validade_dias),
+    condicao: row.condicao && typeof row.condicao === 'object' ? row.condicao : {},
+    descricao: row.descricao || null,
+    tipo_exigencia: row.tipo_exigencia || null,
+    regra_validacao: row.regra_validacao || {},
+    regra_cruzamento: row.regra_cruzamento || {},
+    bloqueia_etapa: row.bloqueia_etapa == null ? null : Number(row.bloqueia_etapa),
+    vigencia_inicio: row.vigencia_inicio || null,
+    vigencia_fim: row.vigencia_fim || null,
+    versao: row.versao || null,
+    ativo: row.ativo !== false,
+    fonte: row.fonte || null,
+  };
+}
+
+export async function resolverRegrasDocumentais(params: { db?: QueryableRules; contexto: ContextoRegraDocumental; ttlMs?: number }): Promise<RegraResolvida[]> {
+  const referencia = params.contexto.referencia || new Date();
+  const chave = chaveCacheRegras(params.contexto);
+  const agora = Date.now();
+  const cache = cacheRegrasDocumentais.get(chave);
+  let regras = cache && cache.expiresAt > agora ? cache.regras : null;
+  let fonteResolucao: 'banco' | 'fallback' = 'banco';
+  if (!regras && params.db) {
+    try {
+      const resultado = await params.db.query('SELECT * FROM public.documentos_regras_credito WHERE COALESCE(ativo, true) = true ORDER BY ordem ASC, codigo ASC');
+      regras = (resultado.rows || []).map(normalizarRegraBanco).filter((regra) => regra.codigo && regra.tipo_documento);
+    } catch (error: any) {
+      fonteResolucao = 'fallback';
+      console.warn('[regrasDocumentaisCredito] Banco indisponível; usando fallback seguro:', error?.message || error);
+    }
+  }
+  if (!regras || regras.length === 0) {
+    regras = FALLBACK_REGRAS_DOCUMENTAIS;
+    fonteResolucao = 'fallback';
+  }
+  cacheRegrasDocumentais.set(chave, { expiresAt: agora + Math.max(1000, params.ttlMs ?? 60_000), regras });
+  return regras
+    .filter((regra) => regraVigente(regra, referencia))
+    .map((regra) => ({ ...regra, ...avaliarAplicabilidadeRegra(regra, params.contexto), fonte_resolucao: fonteResolucao }));
+}
+
+export function limparCacheRegrasDocumentais(): void {
+  cacheRegrasDocumentais.clear();
+}
+
+export function regrasDocumentaisFallback(): RegraDocumentalCredito[] {
+  return FALLBACK_REGRAS_DOCUMENTAIS.map((regra) => ({ ...regra, condicao: { ...regra.condicao } }));
+}

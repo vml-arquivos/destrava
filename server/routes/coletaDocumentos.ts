@@ -17,6 +17,7 @@ import {
 import { analisarCnpjReceitaCartaoEmpresa } from "../services/analiseCnpjReceitaCartao";
 import { gerarMapaDocumentalCredito, type DocumentoMapa, type MapaDocumentalCredito } from "../services/mapaDocumentalCreditoService";
 import { saveDocumentBuffer } from "../services/documentStorage";
+import { DOCUMENT_TYPE_CATALOG, documentAnalysisConfig } from "../../shared/documentTypes";
 
 const MAX_UPLOAD_BYTES = 25 * 1024 * 1024;
 const PUBLIC_LINK_DAYS = 30;
@@ -53,18 +54,11 @@ const uploadRateLimiter = rateLimit({
   message: { error: "Muitos envios em pouco tempo. Aguarde alguns minutos antes de tentar novamente." },
 });
 
-const FISICOS_DOCUMENTOS_ARQUIVOS = new Set([
-  "contrato_prestacao_servicos", "contrato_assessoria", "contrato_social", "alteracao_contratual", "contrato_gerado", "contrato_assinado",
-  "cartao_cnpj", "qsa", "atos_junta_comercial", "nire", "estatuto", "procuracao",
-  "documento_socio", "rg", "cpf", "cnh", "comprovante_residencia", "comprovante_endereco", "imposto_renda", "irpf", "recibo_irpf", "certidao_casamento", "averbacao_divorcio", "certidao_obito",
-  "rating_bacen_cnpj", "cenprot_cnpj", "cnd_rfb_cnpj", "cadin_cnpj", "pgfn_cnpj", "enquadramento_tributario_cnpj", "situacao_fiscal_cnpj", "scr_cnpj", "ccs_cnpj", "ccf_cnpj", "consulta_serasa_cnpj",
-  "rating_bacen_cpf", "cenprot_cpf", "cnd_rfb_cpf", "cadin_cpf", "pgfn_cpf", "enquadramento_tributario_cpf", "situacao_fiscal_cpf", "scr_cpf", "ccs_cpf", "ccf_cpf", "consulta_serasa_cpf",
-  "simples_nacional", "pgdas", "pgmei", "ecf", "recibo_ecf", "recibo_pgdas", "recibo_pgmei", "defis", "dasn_simei", "recibo_defis",
-  "faturamento_12_meses", "comprovante_faturamento", "declaracao_faturamento", "extrato_bancario", "balanco", "dre", "certidao",
-  "compartilhamento_ecac", "foto_fachada", "foto_interna_1", "foto_interna_2", "foto_interna_3", "outros",
-]);
+const FISICOS_DOCUMENTOS_ARQUIVOS = new Set(
+  DOCUMENT_TYPE_CATALOG.filter((item) => item.uploadavel).map((item) => item.tipo),
+);
 
-const ANALISE_POR_TIPO: Record<string, { tipo: "qsa" | "simples_nacional" | "atos_junta_comercial" | "faturamento_12_meses" | "comprovante_residencia"; prompt: string }> = {
+const ANALISE_POR_TIPO: Record<string, { tipo: "qsa" | "simples_nacional" | "atos_junta_comercial" | "faturamento_12_meses" | "comprovante_residencia" | "documento_generico"; prompt: string }> = {
   qsa: { tipo: "qsa", prompt: "qsa_extract" },
   simples_nacional: { tipo: "simples_nacional", prompt: "simples_extract" },
   enquadramento_tributario_cnpj: { tipo: "simples_nacional", prompt: "simples_extract" },
@@ -74,6 +68,10 @@ const ANALISE_POR_TIPO: Record<string, { tipo: "qsa" | "simples_nacional" | "ato
   declaracao_faturamento: { tipo: "faturamento_12_meses", prompt: "faturamento_12m_extract" },
   comprovante_residencia: { tipo: "comprovante_residencia", prompt: "comprovante_residencia_extract" },
 };
+for (const item of DOCUMENT_TYPE_CATALOG) {
+  const config = documentAnalysisConfig(item.tipo);
+  if (config && !ANALISE_POR_TIPO[item.tipo]) ANALISE_POR_TIPO[item.tipo] = { tipo: "documento_generico", prompt: config.promptCodigo };
+}
 
 type RequireEmpresaAccess = (req: Request, res: Response, empresaId: string) => Promise<boolean>;
 type LinkRow = {
@@ -397,15 +395,13 @@ async function executeAnalysis(pool: Pool, empresaId: string, arquivoId: string,
   );
   const extractionId = extraction.rows[0]?.id || null;
   try {
-    const result: AnaliseDocumentalResult = config.tipo === "qsa"
-      ? await analiseDocumentalService.analisarQSA(empresaId, arquivoId)
-      : config.tipo === "simples_nacional"
-        ? await analiseDocumentalService.analisarSimplesNacional(empresaId, arquivoId)
-        : config.tipo === "atos_junta_comercial"
-          ? await analiseDocumentalService.analisarAtosJuntaComercial(empresaId, arquivoId)
-          : config.tipo === "faturamento_12_meses"
-            ? await analiseDocumentalService.analisarFaturamento(empresaId, arquivoId)
-            : await analiseDocumentalService.analisarComprovanteResidencia(empresaId, arquivoId);
+    let result: AnaliseDocumentalResult;
+    if (config.tipo === "qsa") result = await analiseDocumentalService.analisarQSA(empresaId, arquivoId);
+    else if (config.tipo === "simples_nacional") result = await analiseDocumentalService.analisarSimplesNacional(empresaId, arquivoId);
+    else if (config.tipo === "atos_junta_comercial") result = await analiseDocumentalService.analisarAtosJuntaComercial(empresaId, arquivoId);
+    else if (config.tipo === "faturamento_12_meses") result = await analiseDocumentalService.analisarFaturamento(empresaId, arquivoId);
+    else if (config.tipo === "comprovante_residencia") result = await analiseDocumentalService.analisarComprovanteResidencia(empresaId, arquivoId);
+    else result = await analiseDocumentalService.analisarDocumentoCatalogado(empresaId, arquivoId, physicalType);
     await pool.query(
       `UPDATE public.documentos_extracoes_ia
           SET status = $2, modelo = $3, campos_extraidos = $4::jsonb, resultado = $5::jsonb,

@@ -16,6 +16,7 @@ import {
   validarComprovanteEnderecoExtraido,
   validarFaturamentoExtraido,
 } from './regrasDocumentaisCredito';
+import { canonicalizeDocumentType, documentAnalysisConfig, documentLabel, getDocumentCatalogEntry } from '../../shared/documentTypes';
 
 const { Pool } = pkg;
 
@@ -26,7 +27,8 @@ export type TipoAnaliseDocumental =
   | 'atos_junta_comercial'
   | 'contrato_junta'
   | 'faturamento_12_meses'
-  | 'comprovante_residencia';
+  | 'comprovante_residencia'
+  | 'documento_generico';
 
 export interface AlertaDocumental {
   codigo: string;
@@ -59,6 +61,16 @@ export interface LancamentoExtratoExtraido {
   descricao: string;
   valor: number;
   evidencia: string | null;
+}
+
+export interface AnaliseDocumentalGenericaResult extends AnaliseDocumentalResult {
+  tipo_analise: 'documento_generico';
+  tipo_documento: string;
+  tipo_documento_canonico: string;
+  evidencias: Array<{ campo: string; valor: unknown; pagina?: number | null; trecho?: string | null; confianca?: number | null }>;
+  campos_inferidos: Record<string, unknown>;
+  competencia?: { inicio?: string | null; fim?: string | null } | null;
+  validade?: { inicio?: string | null; fim?: string | null } | null;
 }
 
 export interface AnaliseExtratoBancarioResult {
@@ -1365,6 +1377,56 @@ function normalizarExtratoBancario(
   };
 }
 
+function promptDocumentoCatalogado(tipoDocumento: string, nome: string, categoria: string, promptCodigo: string): string {
+  return `Você é um analista documental de crédito empresarial. Analise exclusivamente o arquivo enviado como ${nome} (${tipoDocumento}), categoria ${categoria}. Retorne somente JSON válido e não tome decisão final de crédito. Separe rigorosamente campos_comprovados (valor, campo, página/trecho e confiança) de campos_inferidos; se algo não estiver legível, use null e registre pendencia. Identifique documento_compativel, competencia (inicio/fim), validade (inicio/fim), cnpj, cpf, razão social, nomes, valores financeiros, órgão emissor, número, situação, assinaturas e evidencias quando existirem. Nunca invente dados, não trate ausência de evidência como confirmação e indique revisao_humana_necessaria para divergência, baixa confiança ou documento incompatível. Prompt ${promptCodigo}.`;
+}
+
+function normalizarDocumentoCatalogado(extraidos: any, tipoDocumento: string): {
+  dados: Record<string, any>;
+  evidencias: AnaliseDocumentalGenericaResult['evidencias'];
+  camposInferidos: Record<string, unknown>;
+  alertas: AlertaDocumental[];
+} {
+  const bruto = extraidos && typeof extraidos === 'object' ? extraidos : {};
+  const comprovados = bruto.campos_comprovados || bruto.campos_extraidos || bruto.dados || {};
+  const camposInferidos = bruto.campos_inferidos && typeof bruto.campos_inferidos === 'object' ? bruto.campos_inferidos : {};
+  const evidencias = (Array.isArray(bruto.evidencias) ? bruto.evidencias : []).map((evidencia: any) => ({
+    campo: String(evidencia?.campo || 'não especificado'),
+    valor: evidencia?.valor ?? null,
+    pagina: evidencia?.pagina == null ? null : Number(evidencia.pagina),
+    trecho: evidencia?.trecho ? String(evidencia.trecho).slice(0, 1000) : null,
+    confianca: normalizarConfianca(evidencia?.confianca),
+  }));
+  const alertas: AlertaDocumental[] = [];
+  if (bruto.documento_compativel === false) {
+    alertas.push({ codigo: 'documento_catalogado_incompativel', mensagem: `O arquivo não foi reconhecido como ${documentLabel(tipoDocumento)}.`, severidade: 'alta', recomendacao: 'Reclassificar o arquivo ou anexar o documento solicitado.' });
+  }
+  const confianca = normalizarConfianca(bruto.confianca ?? bruto.nivel_confianca);
+  if (confianca !== null && confianca < 0.72) {
+    alertas.push({ codigo: 'documento_catalogado_baixa_confianca', mensagem: 'A leitura automática ficou abaixo do limiar de confiança.', severidade: 'media', valor_documento: confianca, recomendacao: 'Conferir o arquivo inteiro e confirmar os campos extraídos.' });
+  }
+  if (!evidencias.length && Object.keys(comprovados).length === 0) {
+    alertas.push({ codigo: 'documento_catalogado_sem_evidencia', mensagem: 'Não foram encontrados campos comprovados nem evidências suficientes.', severidade: 'alta', recomendacao: 'Solicitar novo arquivo legível e encaminhar para revisão humana.' });
+  }
+  return {
+    dados: {
+      ...bruto,
+      campos_comprovados: comprovados,
+      campos_inferidos: camposInferidos,
+      evidencias,
+      documento_compativel: bruto.documento_compativel !== false,
+      confianca,
+      tipo_documento: tipoDocumento,
+      competencia: bruto.competencia || { inicio: bruto.competencia_inicio || null, fim: bruto.competencia_fim || null },
+      validade: bruto.validade || { inicio: bruto.validade_inicio || null, fim: bruto.validade_fim || null },
+      separacao_comprovado_inferido: true,
+    },
+    evidencias,
+    camposInferidos,
+    alertas,
+  };
+}
+
 export class AnaliseDocumentalService {
   private ultimoModeloUsado: string | null = null;
   private ultimaFonteExtracao: 'local' | 'gemini' | 'injetada' | null = null;
@@ -1441,8 +1503,9 @@ export class AnaliseDocumentalService {
     prompt: string,
     mimeType: string,
     tipo: TipoDocumentoLocal,
+    usarExtracaoLocal = true,
   ): Promise<any> {
-    if (this.extratorInjetado) return this.extrairComIA(arquivoPath, prompt, mimeType);
+    if (this.extratorInjetado || !usarExtracaoLocal) return this.extrairComIA(arquivoPath, prompt, mimeType);
 
     const resolvedPath = await resolverCaminhoSeguro(arquivoPath);
     const thresholdConfigurado = Number(process.env.LOCAL_DOCUMENT_CONFIDENCE_MIN || 0.72);
@@ -1612,6 +1675,30 @@ export class AnaliseDocumentalService {
     const extraidos = await this.extrairHibrido(documento.caminho_arquivo!, promptComprovanteResidencia(), documento.mime_type || 'application/pdf', 'comprovante_residencia');
     const validacao = validarComprovanteEnderecoExtraido(socios, extraidos, documento.socio_id || null);
     return criarResultado('comprovante_residencia', empresaId, arquivoId, validacao.dados, validacao.alertas, this.ultimoModeloUsado);
+  }
+
+  async analisarDocumentoCatalogado(empresaId: string, arquivoId: string, tipoDocumento: string): Promise<AnaliseDocumentalGenericaResult> {
+    this.ultimoModeloUsado = null;
+    this.ultimaFonteExtracao = null;
+    const catalogo = getDocumentCatalogEntry(tipoDocumento);
+    if (!catalogo) throw new Error(`Tipo documental não catalogado: ${tipoDocumento}`);
+    const tipoCanonico = canonicalizeDocumentType(tipoDocumento);
+    const promptConfig = documentAnalysisConfig(tipoDocumento);
+    const prompt = promptDocumentoCatalogado(tipoDocumento, catalogo.nome, catalogo.categoria, promptConfig?.promptCodigo || `catalogo_${tipoCanonico}`);
+    const { documento } = await this.carregarContexto(empresaId, arquivoId);
+    const extraidos = await this.extrairHibrido(documento.caminho_arquivo!, prompt, documento.mime_type || 'application/pdf', 'contrato_social_alteracao', false);
+    const normalizado = normalizarDocumentoCatalogado(extraidos, tipoDocumento);
+    const resultadoBase = criarResultado('documento_generico', empresaId, arquivoId, normalizado.dados, normalizado.alertas, this.ultimoModeloUsado);
+    return {
+      ...resultadoBase,
+      tipo_analise: 'documento_generico',
+      tipo_documento: tipoDocumento,
+      tipo_documento_canonico: tipoCanonico,
+      evidencias: normalizado.evidencias,
+      campos_inferidos: normalizado.camposInferidos,
+      competencia: normalizado.dados.competencia,
+      validade: normalizado.dados.validade,
+    };
   }
 
   async analisarExtratoBancario(empresaId: string, arquivoId: string, semanaInicio: string, semanaFim: string): Promise<AnaliseExtratoBancarioResult> {

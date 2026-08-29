@@ -111,7 +111,7 @@ describe("coleta documental pública", () => {
 
   it("aceita apenas o tipo físico conhecido ou cai em outros sem violar a constraint", () => {
     expect(mapItemToPhysicalType({ codigo: "faturamento_12m", nome: "", finalidade: "", tipos_arquivo: ["faturamento_12_meses"], obrigatorio: true, fase: 4 })).toBe("faturamento_12_meses");
-    expect(mapItemToPhysicalType({ codigo: "ccmei", nome: "", finalidade: "", tipos_arquivo: ["ccmei"], obrigatorio: true, fase: 3 })).toBe("outros");
+    expect(mapItemToPhysicalType({ codigo: "ccmei", nome: "", finalidade: "", tipos_arquivo: ["ccmei"], obrigatorio: true, fase: 3 })).toBe("ccmei");
   });
 
   it("trata alertas altos ou críticos como revisão e não como aprovação automática", () => {

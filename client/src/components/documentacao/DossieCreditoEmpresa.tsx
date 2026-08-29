@@ -166,11 +166,18 @@ type DocumentacaoSocietaria = {
 type DocumentoMapaCredito = {
   codigo: string;
   nome: string;
+  tipos_arquivo?: string[];
   obrigatorio: boolean;
   fase: number;
   finalidade: string;
   anexado?: boolean;
   observacao?: string;
+  aplicabilidade?: "aplicavel" | "condicional" | "nao_aplicavel" | "automatico";
+  status?: string;
+  motivo?: string;
+  tipo_exigencia?: string;
+  vigencia_inicio?: string | null;
+  vigencia_fim?: string | null;
 };
 
 type MapaDocumentalCredito = {
@@ -180,6 +187,8 @@ type MapaDocumentalCredito = {
   etapa_atual: number;
   proxima_acao: string;
   etapas: Array<{ numero: number; codigo: string; titulo: string; objetivo: string; bloqueada: boolean; documentos: DocumentoMapaCredito[] }>;
+  documentos_nao_aplicaveis?: DocumentoMapaCredito[];
+  motor_regras?: { modo: string; fonte: string; total_regras: number; divergencias_shadow: number };
   operacoes_disponiveis: Array<{ codigo: string; nome: string; objetivo: string; documentos_adicionais: string[] }>;
   programas_referencia: Array<{ codigo: string; nome: string; instituicao: string; operacao: string; publico_alvo: string; requisitos_chave: string[]; documentos_adicionais: string[]; observacao: string }>;
   indicadores: Array<{ codigo: string; nome: string; formula: string; interpretacao: string; fase: number }>;
@@ -923,8 +932,10 @@ function MapaDocumentalCreditoCard({ mapa }: { mapa?: MapaDocumentalCredito }) {
                     <div key={documento.codigo} className="flex items-start gap-2 rounded-lg border border-border bg-card p-2">
                       {documento.anexado ? <CheckCircle className="mt-0.5 h-3.5 w-3.5 shrink-0 text-success" /> : <FileText className="mt-0.5 h-3.5 w-3.5 shrink-0 text-muted-foreground" />}
                       <div className="min-w-0">
-                        <p className="text-[10px] font-bold text-foreground">{documento.nome}{!documento.obrigatorio ? " (quando aplicável)" : ""}</p>
+                        <p className="text-[10px] font-bold text-foreground">{documento.nome}{documento.aplicabilidade === "nao_aplicavel" ? " (não aplicável)" : !documento.obrigatorio ? " (quando aplicável)" : ""}</p>
                         <p className="text-[9px] leading-relaxed text-muted-foreground">{documento.finalidade}</p>
+                        {!!documento.motivo && <p className="mt-1 text-[9px] leading-relaxed text-warning">Motivo: {documento.motivo}</p>}
+                        {!!documento.tipo_exigencia && <p className="mt-1 text-[8px] uppercase text-muted-foreground">Tipo de exigência: {documento.tipo_exigencia.replace(/_/g, " ")}</p>}
                       </div>
                     </div>
                   ))}
@@ -933,6 +944,20 @@ function MapaDocumentalCreditoCard({ mapa }: { mapa?: MapaDocumentalCredito }) {
             </article>
           ))}
         </div>
+        {!!mapa.documentos_nao_aplicaveis?.length && (
+          <section className="rounded-xl border border-border bg-muted p-3">
+            <p className="text-xs font-extrabold text-foreground">Regras não aplicáveis ao contexto atual</p>
+            <div className="mt-2 grid gap-2 md:grid-cols-2">
+              {mapa.documentos_nao_aplicaveis.map((documento) => (
+                <article key={documento.codigo} className="rounded-lg border border-border bg-card p-2">
+                  <p className="text-[10px] font-bold text-foreground">{documento.nome}</p>
+                  <p className="mt-1 text-[9px] leading-relaxed text-muted-foreground">{documento.motivo || documento.finalidade}</p>
+                  <span className="mt-1 inline-block rounded-full bg-muted px-1.5 py-0.5 text-[8px] font-bold uppercase text-muted-foreground">não aplicável</span>
+                </article>
+              ))}
+            </div>
+          </section>
+        )}
 
         <div>
           <p className="text-xs font-extrabold text-foreground">Trilhas por finalidade da operação</p>

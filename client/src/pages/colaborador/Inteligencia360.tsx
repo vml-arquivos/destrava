@@ -138,6 +138,15 @@ interface Inteligencia360Data {
   gerado_em: string;
   fonte: string;
   falha_consulta_documental?: boolean;
+  indicadores_financeiros?: {
+    qualidade: string;
+    competencia: { inicio: string | null; fim: string | null };
+    limitacoes: string[];
+    indicadores: Record<string, { nome: string; valor: number | null; unidade: string; formula: string; interpretacao: string; qualidade: string; fonte: string | null }>;
+  };
+  rating_interno?: { nota: number | null; classificacao: string; pilares: Array<{ nome: string; pontos: number; maximo: number; evidencias: string[]; limitacoes: string[] }>; limitacoes: string[] };
+  elegibilidade_credito?: Array<{ programa_codigo: string; programa_nome: string; elegivel: boolean; status: string; requisitos: Array<{ requisito: string; atendido: boolean | null; evidencia: string | null }>; limitacoes: string[] }>;
+  plano_adequacao_credito?: Array<{ prioridade: string; titulo: string; descricao: string; impacto: string; acao: string }>;
 }
 
 // ─── Utilitários ──────────────────────────────────────────────────────────────
@@ -847,6 +856,51 @@ export default function Inteligencia360({ empresaId, onNavegar }: Props) {
         </div>
       </div>
 
+      {/* ── Indicadores Financeiros, Rating e Elegibilidade ── */}
+      {(data.indicadores_financeiros || data.rating_interno || data.elegibilidade_credito?.length || data.plano_adequacao_credito?.length) && (
+        <div className="rounded-xl border border-border bg-card p-4 space-y-4">
+          <div className="flex items-center gap-2">
+            <BarChart3 className="w-4 h-4 text-primary" />
+            <h3 className="text-sm font-bold text-foreground">Capacidade financeira e prontidão bancária</h3>
+            {data.indicadores_financeiros?.qualidade && <span className="text-[10px] rounded-full bg-muted px-2 py-0.5 font-bold uppercase text-muted-foreground">Base {data.indicadores_financeiros.qualidade}</span>}
+            {data.rating_interno?.classificacao && <span className="text-[10px] rounded-full bg-primary/10 px-2 py-0.5 font-bold text-primary">Rating {data.rating_interno.classificacao}{data.rating_interno.nota !== null ? ` · ${data.rating_interno.nota}/100` : ""}</span>}
+          </div>
+          {!!data.indicadores_financeiros?.indicadores && (
+            <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-5">
+              {Object.values(data.indicadores_financeiros.indicadores).slice(0, 10).map((indicador) => (
+                <div key={indicador.nome} className="rounded-lg border border-border bg-muted p-2">
+                  <p className="text-[9px] font-bold uppercase text-muted-foreground">{indicador.nome}</p>
+                  <p className="mt-1 text-sm font-black text-foreground">{indicador.valor === null ? "—" : indicador.valor.toLocaleString("pt-BR", { maximumFractionDigits: 2 })} <span className="text-[9px] font-semibold text-muted-foreground">{indicador.unidade}</span></p>
+                  <p className="mt-1 text-[9px] leading-relaxed text-muted-foreground">{indicador.formula}</p>
+                  {indicador.fonte && <p className="mt-1 truncate text-[8px] text-muted-foreground">Fonte: {indicador.fonte}</p>}
+                </div>
+              ))}
+            </div>
+          )}
+          {!!data.rating_interno?.pilares?.length && (
+            <div>
+              <p className="text-[10px] font-bold uppercase text-muted-foreground">Pilares do rating explicável</p>
+              <div className="mt-2 grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
+                {data.rating_interno.pilares.map((pilar) => <div key={pilar.nome} className="rounded-lg border border-border p-2"><div className="flex items-center justify-between gap-2"><span className="text-[10px] font-bold text-foreground">{pilar.nome}</span><span className="text-[10px] font-black text-primary">{pilar.pontos}/{pilar.maximo}</span></div><div className="mt-1 h-1.5 overflow-hidden rounded-full bg-muted"><div className="h-full rounded-full bg-primary" style={{ width: `${pilar.maximo ? Math.min(100, (pilar.pontos / pilar.maximo) * 100) : 0}%` }} /></div></div>)}
+              </div>
+            </div>
+          )}
+          {!!data.elegibilidade_credito?.length && (
+            <div>
+              <p className="text-[10px] font-bold uppercase text-muted-foreground">Elegibilidade por rota</p>
+              <div className="mt-2 grid gap-2 md:grid-cols-3">
+                {data.elegibilidade_credito.map((item) => <div key={item.programa_codigo} className="rounded-lg border border-border p-2"><div className="flex items-start justify-between gap-2"><p className="text-[10px] font-bold text-foreground">{item.programa_nome}</p><span className={`rounded-full px-1.5 py-0.5 text-[8px] font-black uppercase ${item.elegivel ? "bg-success/20 text-success" : "bg-warning/20 text-warning"}`}>{item.elegivel ? "elegível" : item.status}</span></div>{item.requisitos.slice(0, 3).map((req) => <p key={req.requisito} className="mt-1 text-[9px] text-muted-foreground">{req.atendido === true ? "✓" : req.atendido === false ? "×" : "•"} {req.requisito}</p>)}</div>)}
+              </div>
+            </div>
+          )}
+          {!!data.plano_adequacao_credito?.length && (
+            <div>
+              <p className="text-[10px] font-bold uppercase text-muted-foreground">Plano de adequação</p>
+              <div className="mt-2 space-y-1.5">{data.plano_adequacao_credito.slice(0, 5).map((item, index) => <div key={`${item.titulo}-${index}`} className="rounded-lg border border-border p-2"><p className="text-[10px] font-bold text-foreground">{item.titulo} <span className="ml-1 text-[8px] uppercase text-warning">{item.prioridade}</span></p><p className="mt-1 text-[9px] text-muted-foreground">{item.descricao}</p><p className="mt-1 text-[9px] font-semibold text-foreground">Ação: {item.acao}</p></div>)}</div>
+            </div>
+          )}
+        </div>
+      )}
       {/* ── Proposta Preliminar de Crédito ── */}
       <div className={`rounded-xl border p-4 ${data.proposta_preliminar?.apto_para_proposta ? "border-success/20 bg-success/10" : "border-border bg-card"}`}>
         <div className="flex items-center gap-2 mb-3">

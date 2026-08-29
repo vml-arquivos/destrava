@@ -10,6 +10,7 @@ const mocks = vi.hoisted(() => ({
   analisarQSA: vi.fn(),
   analisarSimples: vi.fn(),
   analisarAtos: vi.fn(),
+  analisarGenerico: vi.fn(),
 }));
 
 vi.mock('pg', () => {
@@ -35,6 +36,7 @@ vi.mock('../server/services/analiseDocumentalEspecializada', () => ({
     analisarQSA: mocks.analisarQSA,
     analisarSimplesNacional: mocks.analisarSimples,
     analisarAtosJuntaComercial: mocks.analisarAtos,
+    analisarDocumentoCatalogado: mocks.analisarGenerico,
   },
 }));
 
@@ -170,13 +172,27 @@ describe('POST /api/documentacao/ia/documentos/:documentoId/extrair', () => {
     expect(mocks.analisarQSA).not.toHaveBeenCalled();
   });
 
-  it('recusa explicitamente tipos não especializados sem registrar pendência', async () => {
+  it('processa tipos novos do catálogo pelo analisador genérico sem perder revisão humana', async () => {
+    mocks.analisarGenerico.mockResolvedValue({
+      ...resultadoQsa,
+      tipo_analise: 'documento_generico',
+      tipo_documento: 'balanco',
+      tipo_documento_canonico: 'balanco',
+      dados_extraidos: { campos_comprovados: { ativo_circulante: 1000 }, evidencias: [] },
+      evidencias: [],
+      campos_inferidos: {},
+      status: 'revisao_humana',
+    });
     mocks.poolQuery.mockImplementation(async (text: string) => {
       if (text.includes('FROM public.documentos_arquivos')) {
-        return { rows: [{ id: 'doc-2', empresa_id: 'empresa-1', entidade_tipo: 'empresa', tipo_documento: 'balanco' }] };
+        return { rows: [{ id: 'doc-2', empresa_id: 'empresa-1', entidade_id: 'empresa-1', entidade_tipo: 'empresa', tipo_documento: 'balanco' }] };
       }
+      return { rows: [] };
+    });
+    mocks.clientQuery.mockImplementation(async (text: string) => {
+      if (text.includes('FROM public.documentos_extracoes_ia')) return { rows: [] };
       if (text.includes('INSERT INTO public.documentos_extracoes_ia')) {
-        return { rows: [{ id: 'extracao-legada', arquivo_id: 'doc-2', prompt_codigo: 'balanco_extract', status: 'pendente' }] };
+        return { rows: [{ id: 'extracao-generica', arquivo_id: 'doc-2', prompt_codigo: 'balanco_extract', status: 'pendente' }] };
       }
       return { rows: [] };
     });
@@ -185,9 +201,10 @@ describe('POST /api/documentacao/ia/documentos/:documentoId/extrair', () => {
       .post('/api/documentacao/ia/documentos/doc-2/extrair')
       .send({ prompt_codigo: 'balanco_extract' });
 
-    expect(response.status).toBe(501);
-    expect(response.body.error).toContain('Processamento assíncrono genérico ainda não implementado');
-    expect(mocks.connect).not.toHaveBeenCalled();
-    expect(mocks.analisarQSA).not.toHaveBeenCalled();
+    expect(response.status).toBe(202);
+    expect(response.body.tipo_analise).toBe('documento_generico');
+    expect(response.body.extracao.prompt_codigo).toBe('balanco_extract');
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    expect(mocks.analisarGenerico).toHaveBeenCalledWith('empresa-1', 'doc-2', 'balanco');
   });
 });
