@@ -1,6 +1,23 @@
 import { canonicalizeDocumentType, getDocumentCatalogEntry } from '../../shared/documentTypes';
 
 export type RegimeCredito = 'mei' | 'simples_nacional' | 'nao_optante_regime_a_confirmar' | 'nao_optante_simples' | 'lucro_presumido' | 'lucro_real' | 'lucro_arbitrado' | 'imune' | 'isenta' | 'imune_isenta' | 'nao_identificado';
+
+// Nome do regime como ele deve aparecer em qualquer tela. Exportado porque a
+// ficha da empresa (Etapa 1) precisa mostrar o MESMO regime que decide a
+// documentação exigida -- eram dois textos independentes antes.
+export const ROTULO_REGIME_CREDITO: Record<RegimeCredito, string> = {
+  mei: 'Microempreendedor Individual / SIMEI',
+  simples_nacional: 'Simples Nacional — optante',
+  nao_optante_regime_a_confirmar: 'Não optante do Simples — regime a confirmar',
+  nao_optante_simples: 'Não optante do Simples Nacional (legado)',
+  lucro_presumido: 'Lucro Presumido',
+  lucro_real: 'Lucro Real',
+  lucro_arbitrado: 'Lucro Arbitrado',
+  imune: 'Imune',
+  isenta: 'Isenta',
+  imune_isenta: 'Imune ou isenta',
+  nao_identificado: 'Regime ainda não identificado',
+};
 export type TipoOperacaoCredito = 'capital_giro' | 'investimento' | 'maquinas_equipamentos' | 'inovacao' | 'fundos_regionais' | 'pronampe' | 'antecipacao_recebiveis' | 'comercio_exterior' | 'credito_rural' | 'sustentabilidade';
 
 export type DocumentoMapa = {
@@ -511,19 +528,7 @@ export function gerarMapaDocumentalCredito(params: {
     },
   ];
 
-  const descricaoRegime: Record<RegimeCredito, string> = {
-    mei: 'Microempreendedor Individual / SIMEI',
-    simples_nacional: 'Simples Nacional — optante',
-    nao_optante_regime_a_confirmar: 'Não optante do Simples — regime a confirmar',
-    nao_optante_simples: 'Não optante do Simples Nacional (legado)',
-    lucro_presumido: 'Lucro Presumido',
-    lucro_real: 'Lucro Real',
-    lucro_arbitrado: 'Lucro Arbitrado',
-    imune: 'Imune',
-    isenta: 'Isenta',
-    imune_isenta: 'Imune ou isenta',
-    nao_identificado: 'Regime ainda não identificado',
-  };
+  const descricaoRegime = ROTULO_REGIME_CREDITO;
 
   return {
     versao: '2.0.0',

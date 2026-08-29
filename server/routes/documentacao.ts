@@ -9,7 +9,7 @@ import { calcularCadeiaComprovacaoSocietaria } from '../services/cadeiaSocietari
 import { InsufficientHistoricalPeriodException, validateTwelveMonthContractHistory } from '../services/documentPipelineService';
 import { buildCadastralValidationDTO, phase1Approved } from '../services/phase1AnalysisService';
 import { ensureDocumentacaoSchema } from '../services/documentacaoSchema';
-import { gerarMapaDocumentalCredito } from '../services/mapaDocumentalCreditoService';
+import { gerarMapaDocumentalCredito, identificarRegimeCredito, ROTULO_REGIME_CREDITO } from '../services/mapaDocumentalCreditoService';
 import { DOCUMENT_TYPE_CATALOG, canonicalizeDocumentType, documentAnalysisConfig } from '../../shared/documentTypes';
 import { resolverRegrasDocumentais, type RegraResolvida } from '../services/regrasDocumentaisCredito';
 import { upsertSocioEmpresa } from './socios_documentos';
@@ -164,6 +164,17 @@ function deduplicarDocumentosRelatorio<T extends Record<string, any>>(documentos
   return Array.from(unicos.values());
 }
 
+// A confiança da leitura é calculada em fração (0 a 1) e vinha para a tela com
+// o resíduo do ponto flutuante ("0.8999999999999999"). Num relatório de
+// crédito isso passa impressão de dado sujo -- vira percentual inteiro.
+function formatarConfiancaRelatorio(value: unknown): string | null {
+  if (value === null || value === undefined || value === '') return null;
+  const numero = Number(value);
+  if (!Number.isFinite(numero)) return null;
+  const fracao = numero > 1 ? numero / 100 : numero;
+  return `${Math.round(Math.max(0, Math.min(1, fracao)) * 100)}%`;
+}
+
 function valorResultadoRelatorio(value: unknown): string | null {
   if (value === null || value === undefined || value === '') return null;
   if (Array.isArray(value)) return value.filter(Boolean).map((item) => typeof item === 'object' ? item.nome || item.label || item.valor || null : String(item)).filter(Boolean).join(', ') || null;
@@ -244,29 +255,47 @@ function montarResultadoDetalhadoRelatorio(documento: any, analiseEspecializada:
     if (valor) camposResultado.push({ label, valor });
   };
   Object.entries(campos).forEach(([chave, valor]) => adicionarCampo(chave.replace(/_/g, ' '), valor));
-  adicionarCampo('CNPJ do QSA', dados?.cnpj);
-  adicionarCampo('Razão social do QSA', dados?.razao_social);
-  adicionarCampo('Capital social do QSA', dados?.capital_social);
-  adicionarCampo('Sócios lidos no QSA', sociosLidos.length || null);
-  adicionarCampo('NIRE', documento?.nire || dados?.nire || dados?.contrato?.nire);
-  adicionarCampo('Data de registro', documento?.data_registro || dados?.data_registro || dados?.contrato?.data_registro);
-  adicionarCampo('Tipo do ato', documento?.tipo_ato || dados?.tipo_ato || dados?.contrato?.tipo_ato);
-  adicionarCampo('Sócios identificados', sociosLidos.length || (Array.isArray(documento?.socios) ? documento.socios.length : null));
+
+  // Cada bloco abaixo pertence a um tipo de documento. Antes todos eram
+  // aplicados a qualquer documento, e por isso o comprovante de enquadramento
+  // aparecia com o CNPJ rotulado como "CNPJ do QSA". O rótulo tem que
+  // corresponder ao documento que está sendo lido -- num laudo de crédito, um
+  // campo com o nome errado é pior do que campo nenhum.
+  const tipoDoDocumento = String(documento?.tipo_documento || documento?.codigo || documento?.tipo_leitura || '').toLowerCase();
+  const ehQsa = tipoDoDocumento.includes('qsa') || documento?.qsa_leitura === true || sociosLidos.length > 0;
+  const ehSocietario = ehQsa
+    || /contrato_social|alteracao_contratual|atos_junta|junta_comercial/.test(tipoDoDocumento)
+    || Boolean(contratoDados?.cnpj || contratoDados?.numero_arquivamento || documento?.nire || dados?.nire);
+
+  if (ehQsa) {
+    adicionarCampo('CNPJ do QSA', dados?.cnpj);
+    adicionarCampo('Razão social do QSA', dados?.razao_social);
+    adicionarCampo('Capital social do QSA', dados?.capital_social);
+    adicionarCampo('Sócios lidos no QSA', sociosLidos.length || null);
+  }
+  if (ehSocietario) {
+    adicionarCampo('NIRE', documento?.nire || dados?.nire || dados?.contrato?.nire);
+    adicionarCampo('Data de registro', documento?.data_registro || dados?.data_registro || dados?.contrato?.data_registro);
+    adicionarCampo('Tipo do ato', documento?.tipo_ato || dados?.tipo_ato || dados?.contrato?.tipo_ato);
+    adicionarCampo('Sócios identificados', sociosLidos.length || (Array.isArray(documento?.socios) ? documento.socios.length : null));
+  }
   adicionarCampo('Fonte da leitura', documento?.fonte || documento?.fonte_extracao || analise?.modelo_ia);
-  adicionarCampo('Confiança da leitura', documento?.confianca ?? documento?.nivel_confianca ?? analise?.nivel_confianca);
+  adicionarCampo('Confiança da leitura', formatarConfiancaRelatorio(documento?.confianca ?? documento?.nivel_confianca ?? analise?.nivel_confianca));
   adicionarCampo('Status da leitura', documento?.status_leitura || analise?.status);
   if (dados?.periodo_analisado) adicionarCampo('Período analisado', dados.periodo_analisado);
   if (dados?.titular_identificado) adicionarCampo('Titular identificado', dados.titular_identificado);
-  adicionarCampo('CNPJ do contrato', contratoDados?.cnpj);
-  adicionarCampo('Razão social do contrato', contratoDados?.razao_social);
-  adicionarCampo('Número do arquivamento', contratoDados?.numero_arquivamento);
-  adicionarCampo('Capital social anterior', contratoDados?.capital_social_anterior);
-  adicionarCampo('Capital social atual', contratoDados?.capital_social_atual);
-  adicionarCampo('Status societário', analiseSocietariaAuditavel?.status_documento || dados?.status_societario);
-  adicionarCampo('Data do documento', contratoDados?.data_documento || dados?.datas_chave?.data_documento);
-  adicionarCampo('Data de efeitos do registro', contratoDados?.data_efeitos_registro || dados?.datas_chave?.data_efeitos_registro);
-  adicionarCampo('Data do ato mais recente da Junta', dados?.datas_chave?.data_ato_junta_mais_recente);
-  adicionarCampo('Confronto com QSA', analiseSocietariaAuditavel?.confronto_qsa?.status || dados?.estado_atual_societario?.fonte);
+  if (ehSocietario) {
+    adicionarCampo('CNPJ do contrato', contratoDados?.cnpj);
+    adicionarCampo('Razão social do contrato', contratoDados?.razao_social);
+    adicionarCampo('Número do arquivamento', contratoDados?.numero_arquivamento);
+    adicionarCampo('Capital social anterior', contratoDados?.capital_social_anterior);
+    adicionarCampo('Capital social atual', contratoDados?.capital_social_atual);
+    adicionarCampo('Status societário', analiseSocietariaAuditavel?.status_documento || dados?.status_societario);
+    adicionarCampo('Data do documento', contratoDados?.data_documento || dados?.datas_chave?.data_documento);
+    adicionarCampo('Data de efeitos do registro', contratoDados?.data_efeitos_registro || dados?.datas_chave?.data_efeitos_registro);
+    adicionarCampo('Data do ato mais recente da Junta', dados?.datas_chave?.data_ato_junta_mais_recente);
+    adicionarCampo('Confronto com QSA', analiseSocietariaAuditavel?.confronto_qsa?.status || dados?.estado_atual_societario?.fonte);
+  }
 
   const alertas = [
     ...(Array.isArray(documento?.alertas) ? documento.alertas : []),
@@ -1762,6 +1791,14 @@ async function avaliarProntidaoIdentidadeCnpj(params: {
   const enquadramentoTemGrave = params.enquadramentoPendencias.some((p) => p.severidade === 'alta');
   const regime = String(params.enquadramentoDados?.regime_tributario || params.empresa?.regime_tributario || '').trim();
   const situacaoSimples = String(params.enquadramentoDados?.situacao_simples || '').trim();
+  // Regime efetivo = o mesmo que o mapa documental usa para decidir quais
+  // documentos serão exigidos (PGDAS/DEFIS no Simples, ECF/ECD/DCTF no
+  // Presumido/Real, e assim por diante). Sem isso a tela dizia "Regime: Não
+  // Optante", que não é um regime -- e escondia que Lucro Presumido, Lucro
+  // Real e Arbitrado ainda estavam todos em aberto.
+  const regimeCodigo = identificarRegimeCredito(params.empresa, params.enquadramentoDados);
+  const regimeRotulo = ROTULO_REGIME_CREDITO[regimeCodigo] || 'Regime ainda não identificado';
+  const regimeAConfirmar = regimeCodigo === 'nao_optante_regime_a_confirmar' || regimeCodigo === 'nao_identificado';
   const enquadramentoIdentificado = !!regime || !!situacaoSimples
     || params.empresa?.opcao_simples != null || params.empresa?.opcao_mei != null;
   const enquadramentoConsistente = enquadramentoIdentificado
@@ -1775,7 +1812,15 @@ async function avaliarProntidaoIdentidadeCnpj(params: {
   // aviso de revisão (visível na ficha da empresa), não bloqueio da Fase 1: o time
   // consegue revisar o comprovante depois, sem travar o anexo dos demais documentos.
   else if (enquadramentoTemGrave) addAviso('Enquadramento tributário: o comprovante anexado como reforço precisa de revisão humana (divergência ou baixa confiança na leitura automática).');
-  else pontosPositivos.push(`Enquadramento tributário identificado via consulta de CNPJ: ${regime || situacaoSimples}.`);
+  else if (!regimeAConfirmar) pontosPositivos.push(`Enquadramento tributário identificado: ${regimeRotulo}.`);
+  // Fora do Simples, o regime efetivo ainda define quais documentos fiscais
+  // serão exigidos adiante (ECF/ECD/DCTF no Presumido e no Real; PGDAS/DEFIS
+  // só no Simples). Fica como aviso, não bloqueio: a Etapa 1 trata de
+  // identidade do CNPJ, e o mapa documental já exige o comprovante do regime
+  // na etapa fiscal (ver 'confirmacao_regime_nao_optante').
+  if (regimeAConfirmar && situacaoSimples) {
+    addAviso('Empresa não optante do Simples: o regime efetivo (Lucro Presumido, Lucro Real ou Arbitrado) precisa ser comprovado por ECF, DCTF/DCTFWeb ou Livro Caixa — é ele que define a documentação fiscal exigida.');
+  }
 
   const textoEnquadramento = [regime, situacaoSimples, params.empresa?.porte, params.empresa?.natureza_juridica].filter(Boolean).join(' ');
   const ehMei = params.enquadramentoDados?.opcao_mei === true || params.empresa?.opcao_mei === true || /\bmei\b|microempreendedor individual|simei/i.test(textoEnquadramento);
@@ -1835,9 +1880,29 @@ async function avaliarProntidaoIdentidadeCnpj(params: {
     enquadramento_tributario: {
       codigo: 'enquadramento_tributario', nome: 'Enquadramento Tributário', anexado: enquadramentoAnexado, analisado: enquadramentoAnalisado, consistente: enquadramentoConsistente,
       status: statusDocumento(enquadramentoAnexado, enquadramentoAnalisado, enquadramentoConsistente, params.enquadramentoDados?.status_leitura === 'falha_leitura'),
-      diagnostico: enquadramentoConsistente ? `Regime tributário confirmado: ${regime || situacaoSimples}.` : params.enquadramentoDados?.diagnostico || enquadramentoPendencia?.mensagem || (enquadramentoAnexado ? 'Documento anexado; o enquadramento ainda precisa ser confirmado.' : 'Documento não anexado.'),
+      // O enquadramento existe para dizer QUAL regime a empresa usa, porque é o
+      // regime que define o restante da documentação exigida. Quando a empresa
+      // está fora do Simples, a Consulta de Optantes não responde isso sozinha:
+      // Lucro Presumido, Real e Arbitrado são todos "não optante" e pedem
+      // documentos diferentes. Nesse caso o diagnóstico diz o que falta para
+      // fechar o regime, em vez de exibir "Não Optante" como se fosse resposta.
+      diagnostico: regimeAConfirmar
+        ? (situacaoSimples
+            ? `Empresa não optante do Simples Nacional. O regime efetivo (Lucro Presumido, Lucro Real ou Arbitrado) ainda não está comprovado — anexe ECF, DCTF/DCTFWeb ou Livro Caixa para definir a documentação fiscal exigida.`
+            : 'Regime tributário ainda não identificado. Sincronize o CNPJ na Receita Federal ou anexe o comprovante de enquadramento.')
+        : enquadramentoConsistente
+          ? `Regime tributário confirmado: ${regimeRotulo}.`
+          : params.enquadramentoDados?.diagnostico || enquadramentoPendencia?.mensagem || (enquadramentoAnexado ? 'Documento anexado; o enquadramento ainda precisa ser confirmado.' : 'Documento não anexado.'),
       fonte: params.enquadramentoDados?.fonte_extracao || params.enquadramentoDados?.modelo || null, confianca: params.enquadramentoDados?.nivel_confianca ?? params.enquadramentoDados?.confianca ?? null,
-      campos_principais: { cnpj: params.enquadramentoDados?.cnpj || null, regime_tributario: regime || null, situacao_simples: situacaoSimples || null, exclusao_agendada: params.enquadramentoDados?.agendamento_exclusao === true },
+      regime_codigo: regimeCodigo,
+      regime_a_confirmar: regimeAConfirmar,
+      campos_principais: {
+        regime_tributario: regimeRotulo,
+        situacao_simples: situacaoSimples || null,
+        cnpj: params.enquadramentoDados?.cnpj || null,
+        data_opcao_simples: params.enquadramentoDados?.data_opcao_simples || null,
+        exclusao_agendada: params.enquadramentoDados?.agendamento_exclusao === true,
+      },
     },
   };
   // O Enquadramento Tributário é reforço documental opcional (ver comentário acima) --

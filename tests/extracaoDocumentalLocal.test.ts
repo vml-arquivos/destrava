@@ -139,6 +139,102 @@ describe('extração documental local determinística', () => {
     expect(resultado.confianca).toBeGreaterThanOrEqual(0.8);
   });
 
+  // O enquadramento existe para dizer QUAL regime a empresa usa -- é o regime
+  // que define a documentação fiscal exigida depois. "Não Optante" responde
+  // apenas se a empresa está no Simples; Lucro Presumido, Real e Arbitrado são
+  // todos não optantes e pedem documentos diferentes entre si.
+  it('não trata "Não Optante" como se fosse um regime tributário', () => {
+    const texto = `
+      CONSULTA OPTANTES
+      CNPJ: 50.509.651/0001-80
+      Situação no Simples Nacional: Não optante pelo Simples Nacional
+      Situação no SIMEI: NÃO enquadrado no SIMEI
+    `;
+
+    const resultado = analisarTextoDocumentoLocal('simples_nacional', texto);
+
+    expect(resultado.dados.situacao_simples).toBe('Não Optante');
+    expect(resultado.dados.regime_tributario).toBeNull();
+    expect(resultado.dados.regime_confirmado).toBe(false);
+    expect(resultado.dados.regime_a_confirmar).toBe(true);
+  });
+
+  it('lê o regime declarado no documento quando a empresa não é optante do Simples', () => {
+    const texto = `
+      COMPROVANTE DE ENQUADRAMENTO TRIBUTÁRIO
+      CNPJ: 50.509.651/0001-80
+      Situação no Simples Nacional: Não optante pelo Simples Nacional
+      Regime de apuração: LUCRO PRESUMIDO
+    `;
+
+    const resultado = analisarTextoDocumentoLocal('simples_nacional', texto);
+
+    expect(resultado.dados.situacao_simples).toBe('Não Optante');
+    expect(resultado.dados.regime_tributario).toBe('Lucro Presumido');
+    expect(resultado.dados.regime_confirmado).toBe(true);
+    expect(resultado.dados.regime_a_confirmar).toBe(false);
+  });
+
+  it('lê Lucro Real declarado no documento', () => {
+    const texto = `
+      RELATÓRIO DE SITUAÇÃO FISCAL
+      CNPJ: 50.509.651/0001-80
+      Regime tributário: LUCRO REAL
+    `;
+
+    const resultado = analisarTextoDocumentoLocal('simples_nacional', texto);
+
+    expect(resultado.dados.regime_tributario).toBe('Lucro Real');
+    expect(resultado.dados.regime_confirmado).toBe(true);
+  });
+
+  it('mantém o regime pendente quando o documento apenas nega um regime', () => {
+    const texto = `
+      CONSULTA DE REGIME
+      CNPJ: 50.509.651/0001-80
+      Situação no Simples Nacional: Não optante pelo Simples Nacional
+      A empresa não optou pelo lucro presumido neste exercício.
+    `;
+
+    const resultado = analisarTextoDocumentoLocal('simples_nacional', texto);
+
+    expect(resultado.dados.regime_tributario).toBeNull();
+    expect(resultado.dados.regime_a_confirmar).toBe(true);
+  });
+
+  it('não escolhe regime quando o documento cita mais de um', () => {
+    const texto = `
+      TABELA DE REGIMES
+      CNPJ: 50.509.651/0001-80
+      Situação no Simples Nacional: Não optante pelo Simples Nacional
+      Regimes possíveis: LUCRO PRESUMIDO ou LUCRO REAL, conforme apuração.
+    `;
+
+    const resultado = analisarTextoDocumentoLocal('simples_nacional', texto);
+
+    expect(resultado.dados.regime_tributario).toBeNull();
+    expect(resultado.dados.regime_a_confirmar).toBe(true);
+  });
+
+  it('mantém Simples Nacional e MEI como regimes lidos do próprio documento', () => {
+    const simples = analisarTextoDocumentoLocal('simples_nacional', `
+      CONSULTA OPTANTES
+      CNPJ: 52.008.360/0001-33
+      Situação no Simples Nacional: Optante pelo Simples Nacional desde 18/09/2023
+    `);
+    expect(simples.dados.regime_tributario).toBe('Simples Nacional');
+    expect(simples.dados.regime_confirmado).toBe(true);
+
+    const mei = analisarTextoDocumentoLocal('simples_nacional', `
+      CONSULTA OPTANTES
+      CNPJ: 52.008.360/0001-33
+      Situação no Simples Nacional: Optante pelo Simples Nacional desde 18/09/2023
+      Situação no SIMEI: Optante pelo SIMEI
+    `);
+    expect(mei.dados.regime_tributario).toBe('MEI / SIMEI');
+    expect(mei.dados.regime_confirmado).toBe(true);
+  });
+
   it('extrai histórico e último ato da Junta Comercial', () => {
     const texto = `
       JUNTA COMERCIAL DO ESTADO DE GOIÁS

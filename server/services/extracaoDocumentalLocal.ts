@@ -389,7 +389,9 @@ function parseQsa(texto: string): { dados: Record<string, any>; confianca: numbe
 
 function parseSimples(texto: string): { dados: Record<string, any>; confianca: number } {
   const norm = textoNormalizado(texto);
-  const compativel = norm.includes('simples nacional') || norm.includes('consulta optantes') || norm.includes('simei');
+  const compativel = norm.includes('simples nacional') || norm.includes('consulta optantes') || norm.includes('simei')
+    || norm.includes('lucro presumido') || norm.includes('lucro real') || norm.includes('lucro arbitrado')
+    || norm.includes('regime tributario') || norm.includes('regime de apuracao');
   const cnpj = formatarCnpj(primeiroCnpj(texto));
   const naoOptante = /n[aã]o\s+optante\s+pelo\s+simples\s+nacional/i.test(texto) || /situacao\s+no\s+simples\s+nacional\W{0,8}nao\s+optante/i.test(norm);
   const excluido = /exclu[ií]d[oa]\s+do\s+simples/i.test(texto) || norm.includes('exclusao do simples nacional efetivada');
@@ -399,14 +401,62 @@ function parseSimples(texto: string): { dados: Record<string, any>; confianca: n
   const dataOpcao = dataProximaDe(texto, /(?:optante\s+pelo\s+simples\s+nacional\s+desde|data\s+de\s+op[cç][aã]o)\D{0,40}(\d{2}\/\d{2}\/\d{4})/i);
   const dataExclusao = dataProximaDe(texto, /(?:data\s+(?:de|da)\s+exclus[aã]o|exclu[ií]d[oa]\s+em)\D{0,40}(\d{2}\/\d{2}\/\d{4})/i);
   const situacao = excluido ? 'Excluído' : naoOptante ? 'Não Optante' : optante ? 'Optante' : null;
-  const regime = simei ? 'MEI / SIMEI' : optante ? 'Simples Nacional' : situacao;
-  const confianca = clamp((compativel ? 0.25 : 0) + (cnpj ? 0.35 : 0) + (situacao ? 0.3 : 0) + ((dataOpcao || dataExclusao || agendamento) ? 0.1 : 0));
+  // O enquadramento serve para dizer QUAL regime a empresa usa -- é ele que
+  // define a documentação fiscal exigida adiante. Quando o próprio documento
+  // declara o regime (comprovantes de enquadramento, situação fiscal e
+  // declarações costumam trazer "LUCRO PRESUMIDO"/"LUCRO REAL" escrito), essa
+  // informação é lida e usada. Só quando o documento realmente não informa é
+  // que o regime fica pendente de outro comprovante (ECF/DCTF/Livro Caixa) --
+  // ver 'nao_optante_regime_a_confirmar' em mapaDocumentalCreditoService.ts.
+  // "Não Optante" nunca é tratado como regime: Presumido, Real e Arbitrado são
+  // todos não optantes e exigem documentos diferentes entre si.
+  // Guarda contra falso positivo: em análise de crédito, afirmar o regime
+  // errado é pior do que assumi-lo pendente -- o regime errado puxa a lista
+  // errada de documentos. Só é aceito o regime que aparece afirmado, nunca o
+  // que aparece negado ("não optou pelo lucro presumido") nem o que aparece
+  // como item de uma lista de opções.
+  const regimeAfirmado = (termo: string) => {
+    const padrao = new RegExp(`(n[ãa]o|nao)\\s+(?:[a-zç]+\\s+){0,3}${termo}`, 'i');
+    if (padrao.test(norm)) return false;
+    return norm.includes(termo);
+  };
+  const lucroPresumido = regimeAfirmado('lucro presumido');
+  const lucroReal = regimeAfirmado('lucro real');
+  const lucroArbitrado = regimeAfirmado('lucro arbitrado');
+  // Imune/isenta só conta quando o documento fala do regime, não quando a
+  // palavra aparece solta (ex: "isenta de multa").
+  const imuneIsenta = /regime\s+(?:tribut[aá]rio\s+)?(?:de\s+)?(?:imunidade|isen[cç][aã]o)/i.test(texto)
+    || /(?:imune|isenta)\s+(?:de\s+)?(?:irpj|tributa[cç][aã]o|impostos)/i.test(texto);
+  // Quando mais de um regime aparece afirmado, o documento é ambíguo: melhor
+  // deixar pendente de confirmação do que escolher um dos dois no chute.
+  const regimesEncontrados = [lucroPresumido, lucroReal, lucroArbitrado].filter(Boolean).length;
+  const regimeAmbiguo = regimesEncontrados > 1;
+  const regimeDeclarado = regimeAmbiguo
+    ? null
+    : lucroReal
+      ? 'Lucro Real'
+      : lucroPresumido
+        ? 'Lucro Presumido'
+        : lucroArbitrado
+          ? 'Lucro Arbitrado'
+          : imuneIsenta
+            ? 'Imune ou isenta'
+            : null;
+  const regime = simei
+    ? 'MEI / SIMEI'
+    : optante
+      ? 'Simples Nacional'
+      : regimeDeclarado;
+  const regimeConfirmado = Boolean(simei || optante || regimeDeclarado);
+  const confianca = clamp((compativel || regimeDeclarado ? 0.25 : 0) + (cnpj ? 0.35 : 0) + (situacao || regimeDeclarado ? 0.3 : 0) + ((dataOpcao || dataExclusao || agendamento) ? 0.1 : 0));
   return {
     dados: {
       documento_compativel: compativel,
       cnpj,
       situacao_simples: situacao,
       regime_tributario: regime,
+      regime_confirmado: regimeConfirmado,
+      regime_a_confirmar: Boolean(situacao) && !regimeConfirmado,
       data_opcao_simples: dataOpcao,
       data_exclusao_simples: dataExclusao,
       agendamento_exclusao: agendamento,

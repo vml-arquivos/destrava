@@ -336,7 +336,7 @@ export function formatDate(value?: string | null) {
 // campos lidos ficam atrás de um clique, porque quem está conferindo não
 // precisa deles pra seguir. Quando há problema, o que aparece é o problema e o
 // que resolve.
-function StatusAnaliseSlot({ item }: { item?: { nome: string; anexado: boolean; analisado: boolean; consistente: boolean; status: string; diagnostico?: string | null; campos_principais?: Record<string, unknown> } }) {
+function StatusAnaliseSlot({ item }: { item?: { nome: string; anexado: boolean; analisado: boolean; consistente: boolean; status: string; diagnostico?: string | null; campos_principais?: Record<string, unknown>; regime_a_confirmar?: boolean } }) {
   const [aberto, setAberto] = useState(false);
   if (!item || !item.anexado) return null;
 
@@ -351,6 +351,27 @@ function StatusAnaliseSlot({ item }: { item?: { nome: string; anexado: boolean; 
       return { chave, valor: String(valor) };
     })
     .filter(Boolean) as Array<{ chave: string; valor: string }>;
+
+  if (item.consistente && item.regime_a_confirmar) {
+    return (
+      <div className="rounded-md border border-warning/20 bg-warning/10 px-2 py-1.5">
+        <span className="inline-flex items-center gap-1 text-[10px] font-black text-warning">
+          <AlertTriangle className="h-3 w-3 shrink-0" /> Regime a confirmar
+        </span>
+        {item.diagnostico && <p className="mt-1 text-[9px] leading-relaxed text-warning">{item.diagnostico}</p>}
+        {campos.length > 0 && (
+          <dl className="mt-1.5 space-y-0.5 border-t border-warning/20 pt-1.5">
+            {campos.map(({ chave, valor }) => (
+              <div key={chave} className="flex items-start justify-between gap-2 text-[9px]">
+                <dt className="shrink-0 font-semibold text-muted-foreground">{CAMPO_ANALISE_LABEL[chave] || chave.replace(/_/g, " ")}</dt>
+                <dd className="min-w-0 truncate text-right font-bold text-muted-foreground" title={valor}>{valor}</dd>
+              </div>
+            ))}
+          </dl>
+        )}
+      </div>
+    );
+  }
 
   if (item.consistente) {
     return (
@@ -409,6 +430,7 @@ const CHAVE_ANALISE_POR_SLOT: Record<string, string> = {
 
 const CAMPO_ANALISE_LABEL: Record<string, string> = {
   cnpj: "CNPJ",
+  data_opcao_simples: "Opção pelo Simples",
   razao_social: "Razão social",
   cnae: "CNAE",
   situacao_cadastral: "Situação",

@@ -16,6 +16,58 @@ describe('mapa documental de crédito', () => {
     expect(mapa.etapas.find((e) => e.numero === 4)?.documentos.some((d) => d.codigo === 'defis')).toBe(true);
   });
 
+  // É o regime que decide a documentação: o mesmo CNPJ, lido como Lucro
+  // Presumido ou como "não optante sem regime definido", produz listas
+  // diferentes de documentos obrigatórios. Foi exatamente isso que o
+  // "Regime: Não Optante" na tela escondia.
+  it('regime lido do documento muda a documentação exigida', () => {
+    const anexados = ['cartao_cnpj', 'qsa', 'atos_junta_comercial', 'contrato_social'];
+
+    // Documento não informou o regime: o sistema exige o comprovante que o define.
+    const pendente = gerarMapaDocumentalCredito({
+      empresa: { razao_social: 'Teste' },
+      enquadramento: { situacao_simples: 'Não Optante', regime_tributario: null },
+      etapa1Aprovada: true,
+      etapa2Aprovada: true,
+      tiposAnexados: anexados,
+    });
+    expect(pendente.regime_identificado).toBe('nao_optante_regime_a_confirmar');
+    const fiscalPendente = pendente.etapas.find((e) => e.numero === 4)?.documentos || [];
+    expect(fiscalPendente.some((d) => d.codigo === 'confirmacao_regime_nao_optante')).toBe(true);
+
+    // Documento informou Lucro Presumido: a trilha fiscal correta é exigida.
+    const presumido = gerarMapaDocumentalCredito({
+      empresa: { razao_social: 'Teste' },
+      enquadramento: { situacao_simples: 'Não Optante', regime_tributario: 'Lucro Presumido' },
+      etapa1Aprovada: true,
+      etapa2Aprovada: true,
+      tiposAnexados: anexados,
+    });
+    expect(presumido.regime_identificado).toBe('lucro_presumido');
+    const fiscalPresumido = presumido.etapas.find((e) => e.numero === 4)?.documentos || [];
+    expect(fiscalPresumido.some((d) => d.codigo === 'ecf_presumido')).toBe(true);
+    expect(fiscalPresumido.some((d) => d.codigo === 'bp_dre_presumido')).toBe(true);
+    // Nada de PGDAS/DEFIS: são do Simples, não se aplicam ao Presumido.
+    expect(fiscalPresumido.some((d) => d.codigo === 'pgdas_12m')).toBe(false);
+
+    // Lucro Real tem a sua própria trilha, distinta do Presumido.
+    const real = gerarMapaDocumentalCredito({
+      empresa: { razao_social: 'Teste' },
+      enquadramento: { situacao_simples: 'Não Optante', regime_tributario: 'Lucro Real' },
+      etapa1Aprovada: true,
+      etapa2Aprovada: true,
+      tiposAnexados: anexados,
+    });
+    expect(real.regime_identificado).toBe('lucro_real');
+  });
+
+  it('continua identificando não optante mesmo sem regime_tributario preenchido', () => {
+    // parseSimples deixou de devolver "Não Optante" como regime; a detecção
+    // precisa continuar funcionando pela situação do Simples.
+    expect(identificarRegimeCredito({}, { situacao_simples: 'Não Optante', regime_tributario: null }))
+      .toBe('nao_optante_regime_a_confirmar');
+  });
+
   it('não classifica como MEI quando o comprovante informa não optante pelo SIMEI', () => {
     const regime = identificarRegimeCredito(
       { regime_tributario: 'Simples Nacional', opcao_simples: true, opcao_mei: false },
