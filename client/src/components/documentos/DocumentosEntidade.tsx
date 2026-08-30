@@ -48,6 +48,9 @@ export type DocumentoArquivo = {
   socio_id?: string | null;
   exige_revisao_humana?: boolean;
   resultado_validacao?: Record<string, any> | null;
+  analisado?: boolean;
+  consistente?: boolean;
+  resultado_analise?: Record<string, any> | null;
 };
 
 type SocioResumo = { id: string; nome?: string | null; cpf_cnpj?: string | null; qualificacao?: string | null; administrador?: boolean | null };
@@ -398,12 +401,12 @@ function StatusAnaliseSlot({ item }: { item?: { nome: string; anexado: boolean; 
             <CheckCircle className="h-3 w-3 shrink-0" /> OK — validado
           </span>
           {campos.length > 0 && (
-            <button
+              <button
               type="button"
               onClick={() => setAberto((v) => !v)}
               className="shrink-0 text-[9px] font-bold text-success underline decoration-dotted"
             >
-              {aberto ? "ocultar" : "ver dados lidos"}
+              {aberto ? "ocultar" : "Dados da análise"}
             </button>
           )}
         </div>
@@ -753,7 +756,18 @@ export default function DocumentosEntidade({
         setMostrarComplementares(false);
       }
       setMapaCredito(dossieAtual?.mapa_documental_credito || null);
-      const lista = Array.isArray(data) ? data : [];
+      const analisesPorArquivo = new Map<string, any>(
+        (Array.isArray(dossieAtual?.blocos) ? dossieAtual.blocos : [])
+          .flatMap((bloco: any) => Array.isArray(bloco?.documentos) ? bloco.documentos : [])
+          .filter((documento: any) => documento?.id && documento?.resultado_analise)
+          .map((documento: any) => [String(documento.id), documento] as [string, any]),
+      );
+      const lista = (Array.isArray(data) ? data : []).map((documento: DocumentoArquivo) => {
+        const enriquecido = analisesPorArquivo.get(String(documento.id));
+        return enriquecido
+          ? { ...documento, analisado: enriquecido.analisado, consistente: enriquecido.consistente, resultado_analise: enriquecido.resultado_analise }
+          : documento;
+      });
       // O contrato de prestação de serviços (Destrava <-> empresa) não é documento
       // de análise de crédito -- vive só na aba "Contratos Firmados". Filtrado
       // apenas para entidadeTipo="empresa" (esta tela específica de Acervo
@@ -1433,6 +1447,37 @@ export default function DocumentosEntidade({
             </div>
           )}
 
+          {mapaCredito?.regime_a_confirmar === true && (() => {
+            const pendencia = mapaCredito.pendencias?.find((item: any) => item.codigo === "nao_optante_regime_a_confirmar");
+            const emAnalise = pendencia?.status === "em_analise";
+            return (
+              <div className="rounded-2xl border border-warning/30 bg-warning/10 p-3">
+                <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
+                  <div className="min-w-0">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <AlertTriangle className="h-4 w-4 shrink-0 text-warning" />
+                      <p className="text-xs font-black text-foreground">{pendencia?.titulo || "Confirmação do regime tributário"}</p>
+                      <span className="rounded-full border border-warning/30 bg-card px-2 py-0.5 text-[10px] font-black text-warning">{emAnalise ? "Aguardando análise" : "Prioridade alta"}</span>
+                    </div>
+                    <p className="mt-2 flex items-center gap-1.5 text-[11px] font-bold text-primary"><ArrowRight className="h-3.5 w-3.5 shrink-0" /> Próximo documento a anexar: ECF, DCTF/DCTFWeb, DARF ou Livro Caixa</p>
+                    <div className="mt-2 rounded-xl border border-warning/20 bg-card p-2.5">
+                      <p className="text-[11px] font-black text-warning">O que precisa ser resolvido</p>
+                      <p className="mt-1 text-[10px] leading-relaxed text-muted-foreground">{emAnalise ? "O documento foi anexado e aguarda leitura para identificar o regime efetivo." : pendencia?.descricao || "A empresa foi identificada como não optante, mas o regime efetivo ainda precisa ser confirmado."}</p>
+                    </div>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => { setSecaoAtiva("Documentação da Empresa"); setMostrarComplementares(true); }}
+                    className="inline-flex h-9 shrink-0 items-center justify-center gap-1.5 rounded-xl bg-primary px-3 text-xs font-black text-primary-foreground hover:bg-primary/90"
+                  >
+                    {emAnalise ? "Ver documento" : "Anexar comprovação"}
+                  </button>
+                </div>
+                <p className="mt-2 text-[10px] text-muted-foreground">Esta pendência não bloqueia a Etapa 1.</p>
+              </div>
+            );
+          })()}
+
           {/* Etapa 2/3 (Atos da Junta + Contrato Social) -- mesma regra da Etapa 1:
               comprovado vira uma linha; pendente mostra o que falta e o que
               resolve. O historico da cadeia societaria so aparece enquanto
@@ -1443,22 +1488,27 @@ export default function DocumentosEntidade({
             const registros = Array.isArray(societaria.registros_requeridos) ? societaria.registros_requeridos : [];
             const faltantes = Array.isArray(societaria.registros_faltantes) ? societaria.registros_faltantes : registros.filter((registro: any) => !registro.comprovado);
             const registrosPendentes = registros.filter((registro: any) => !registro.comprovado);
+            const pendenciaRegime = mapaCredito?.regime_a_confirmar === true
+              ? mapaCredito.pendencias?.find((item: any) => item.codigo === "nao_optante_regime_a_confirmar")
+              : null;
             // Depois que a Etapa 2/3 já está comprovada (apto), o "próximo documento" deixa
             // de ser sobre Atos da Junta/Contrato e passa a vir do mapa documental de
             // crédito (cadastro/regularidade + fiscal do regime, ex: Simples Nacional).
-            const proximoDocumento = !societaria.atos_junta_anexados
-              ? "Atos da Junta Comercial"
-              : !societaria.atos_junta_aprovados
-                ? "Aguardando a análise dos Atos da Junta anexados"
-                : faltantes.length
-                  ? "Contrato Social ou alteração contratual anterior (para completar 12 meses de histórico)"
-                  : !societaria.contrato_anexado
-                    ? "Contrato Social ou alteração contratual"
-                      : apto && proximaLevaCredito
-                        ? `${proximaLevaCredito.proximo.nome} (${proximaLevaCredito.proximo.etapaTitulo})`
-                        : societaria.contrato_anexado
-                          ? "Demais documentos do dossiê conforme o enquadramento tributário"
-                          : null;
+            const proximoDocumento = pendenciaRegime
+              ? pendenciaRegime.titulo
+              : !societaria.atos_junta_anexados
+                ? "Atos da Junta Comercial"
+                  : !societaria.atos_junta_aprovados
+                    ? "Aguardando a análise dos Atos da Junta anexados"
+                    : faltantes.length
+                      ? "Contrato Social ou alteração contratual anterior (para completar 12 meses de histórico)"
+                      : !societaria.contrato_anexado
+                        ? "Contrato Social ou alteração contratual"
+                        : apto && proximaLevaCredito
+                          ? `${proximaLevaCredito.proximo.nome} (${proximaLevaCredito.proximo.etapaTitulo})`
+                          : societaria.contrato_anexado
+                            ? "Demais documentos do dossiê conforme o enquadramento tributário"
+                            : null;
 
             if (apto) {
               return (
@@ -1758,7 +1808,8 @@ export default function DocumentosEntidade({
                               {(camposExpandidos[chaveSlot] ? docsTipo : docsTipo.slice(0, 3)).map((doc) => {
                                 const laudo = doc.resultado_validacao?.analise_regra_documental || null;
                                 const laudoErro = doc.resultado_validacao?.analise_regra_documental_erro || null;
-                                const temLaudo = !!laudo || !!laudoErro;
+                                const resultadoInline = doc.resultado_analise || laudo || laudoErro || null;
+                                const temResultadoInline = Boolean(resultadoInline);
                                 const tipoTemAnaliseAutomatica = TIPOS_COM_ANALISE_AUTOMATICA.has(String(doc.tipo_documento || ""));
                                 const validacaoDocumentalConcluida = !!laudo && !laudoErro && doc.exige_revisao_humana !== true;
                                 const validadoComEvidencia = doc.validado === true
@@ -1782,19 +1833,13 @@ export default function DocumentosEntidade({
                                       {doc.validado && !validadoComEvidencia && tipoTemAnaliseAutomatica && <span title="Ainda sem leitura documental conclusiva" className="text-warning shrink-0 text-[9px]">análise pendente</span>}
                                     </div>
                                     <p className="text-[9px] text-muted-foreground truncate">{formatDate(doc.criado_em)}</p>
-                                    {temLaudo && (
+                                    {temResultadoInline && (
                                       <button
                                         type="button"
                                         onClick={() => setLaudosExpandidos((prev) => ({ ...prev, [doc.id]: !prev[doc.id] }))}
                                         className={`mt-0.5 text-[9px] font-bold underline decoration-dotted ${laudoErro ? "text-destructive" : doc.exige_revisao_humana ? "text-warning" : "text-success"}`}
                                       >
-                                        {laudosExpandidos[doc.id]
-                                          ? "Ocultar laudo da análise"
-                                          : laudoErro
-                                            ? "Ver laudo -- falha na leitura automática"
-                                            : doc.exige_revisao_humana
-                                              ? "Ver laudo -- pendências identificadas"
-                                              : "Ver laudo -- análise concluída"}
+                                        {laudosExpandidos[doc.id] ? "Ocultar" : "Dados da análise"}
                                       </button>
                                     )}
                                   </div>
@@ -1809,7 +1854,7 @@ export default function DocumentosEntidade({
                                     {permitirExcluir && <button type="button" title="Excluir" onClick={() => excluir(doc.id)} className="p-1 rounded-md hover:bg-destructive/10 text-destructive"><Trash2 className="w-3 h-3" /></button>}
                                   </div>
                                   </div>
-                                  {laudosExpandidos[doc.id] && <ResumoLaudoDocumento analise={laudo || laudoErro} />}
+                                  {laudosExpandidos[doc.id] && resultadoInline && <ResultadoAnaliseDocumento resultado={resultadoInline} documento={doc} compacto />}
                                 </div>
                                 );
                               })}

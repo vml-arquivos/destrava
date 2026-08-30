@@ -299,9 +299,9 @@ function montarResultadoDetalhadoRelatorio(documento: any, analiseEspecializada:
     adicionarCampo('Data de exclusão do Simples', dados?.data_exclusao_simples);
     adicionarCampo('Motivo da exclusão do Simples', dados?.motivo_exclusao);
   }
-  adicionarCampo('Fonte da leitura', documento?.fonte || documento?.fonte_extracao || analise?.modelo_ia);
+  adicionarCampo('Fonte da leitura', documento?.fonte || documento?.fonte_extracao || documento?.origem || analise?.modelo_ia);
   adicionarCampo('Confiança da leitura', formatarConfiancaRelatorio(documento?.confianca ?? documento?.nivel_confianca ?? analise?.nivel_confianca));
-  adicionarCampo('Status da leitura', documento?.status_leitura || analise?.status);
+  adicionarCampo('Status da leitura', documento?.status_leitura || documento?.status || analise?.status);
   if (dados?.periodo_analisado) adicionarCampo('Período analisado', dados.periodo_analisado);
   if (dados?.titular_identificado) adicionarCampo('Titular identificado', dados.titular_identificado);
   if (ehSocietario) {
@@ -372,6 +372,59 @@ function montarResultadoDetalhadoRelatorio(documento: any, analiseEspecializada:
       recomendacao: item.recomendacao || null,
     })),
   };
+}
+
+async function enriquecerDocumentosAcervoComAnalise(blocos: any[]): Promise<any[]> {
+  const documentos = blocos.flatMap((bloco: any) => (Array.isArray(bloco.documentos) ? bloco.documentos : []).map((documento: any) => ({
+    ...documento,
+    bloco_codigo: bloco.codigo,
+    bloco_nome: bloco.nome_amigavel,
+    bloco_status: bloco.status,
+  })));
+  const resultados = await Promise.all(documentos.map(async (documento: any) => {
+    const tipo = String(documento?.tipo_documento || '');
+    const configuracao = ANALISE_ESPECIALIZADA_POR_TIPO[tipo];
+    let analiseEspecializada: any = null;
+    if (configuracao && documento?.id) {
+      try {
+        analiseEspecializada = await buscarAnaliseEspecializadaPersistida(String(documento.id), configuracao.promptCodigo);
+      } catch (error) {
+        console.warn('[Acervo] Falha ao buscar análise persistida:', documento.id, configuracao.promptCodigo, (error as any)?.message || error);
+      }
+    }
+    const laudo = documento?.resultado_validacao?.analise_regra_documental;
+    const laudoErro = documento?.resultado_validacao?.analise_regra_documental_erro;
+    const conteudoValido = arquivoDocumentoTemConteudo(documento);
+    const possuiLaudo = Boolean(laudo) || Boolean(laudoErro) || Boolean(analiseEspecializada);
+    const analisado = conteudoValido && possuiLaudo;
+    const especializadaConsistente = Boolean(analiseEspecializada?.consistente)
+      || analiseEspecializada?.status === 'concluido';
+    const consistente = analiseEspecializada
+      ? especializadaConsistente
+      : Boolean(laudo) && documento?.exige_revisao_humana !== true && documento?.consistente !== false;
+    const resultadoAnalise = montarResultadoDetalhadoRelatorio({
+      ...documento,
+      analisado,
+      consistente,
+    }, analiseEspecializada);
+    if (!analisado) {
+      resultadoAnalise.conclusao = 'Anexo recebido, aguardando análise documental.';
+      if (!resultadoAnalise.diagnostico) {
+        resultadoAnalise.diagnostico = 'O arquivo foi anexado, mas ainda não existe laudo concluído para este documento.';
+      }
+    }
+    return {
+      ...documento,
+      analisado,
+      consistente,
+      resultado_analise: resultadoAnalise,
+    };
+  }));
+  const porId = new Map(resultados.filter((documento: any) => documento?.id).map((documento: any) => [String(documento.id), documento]));
+  return blocos.map((bloco: any) => ({
+    ...bloco,
+    documentos: (Array.isArray(bloco.documentos) ? bloco.documentos : []).map((documento: any) => porId.get(String(documento?.id)) || documento),
+  }));
 }
 
 export async function montarRelatorioDocumental(dossie: any) {
@@ -1761,8 +1814,8 @@ async function avaliarProntidaoIdentidadeCnpj(params: {
 
   const empresaApta12Meses = idadeMeses === null ? null : idadeMeses >= 12;
   if (empresaApta12Meses === true) pontosPositivos.push(`Empresa com ${idadeMeses} meses de abertura, acima do mínimo operacional de 12 meses.`);
-  else if (empresaApta12Meses === false) addAviso(`Empresa com ${idadeMeses} meses de abertura. A comprovação temporal será bloqueada e auditada na Fase 3.`);
-  else addAviso('Tempo de abertura ainda não confirmado; a trava temporal será auditada na Fase 3.');
+  else if (empresaApta12Meses === false) addAviso(`Empresa com ${idadeMeses} meses. A comprovação de 12 meses será feita na Fase 3.`);
+  else addAviso('Tempo de abertura pendente; será confirmado na Fase 3.');
 
   const alertasCnpj = [
     ...(Array.isArray(analiseCnpj?.alertas) ? analiseCnpj.alertas : []),
@@ -1786,18 +1839,18 @@ async function avaliarProntidaoIdentidadeCnpj(params: {
   const cartaoFalhou = cartaoAnexado && !cartaoAnalisado && !!params.erroProcessamentoCartao;
   if (!cartaoAnexado) addBloqueio('Cartão CNPJ não anexado.');
   else if (cartaoFalhou) addBloqueio(params.erroProcessamentoCartao!);
-  else if (!cartaoAnalisado) addBloqueio('Cartão CNPJ anexado, mas a leitura e conferência ainda não foram concluídas.');
-  else if (!cartaoConsistente) addBloqueio('Cartão CNPJ possui divergência relevante com os dados da Receita Federal.');
-  else pontosPositivos.push('Cartão CNPJ analisado e convergente com a Receita Federal.');
+  else if (!cartaoAnalisado) addBloqueio('Cartão CNPJ anexado; leitura pendente.');
+  else if (!cartaoConsistente) addBloqueio('Cartão CNPJ diverge dos dados da Receita Federal.');
+  else pontosPositivos.push('Cartão CNPJ conferido com a Receita Federal.');
 
   const qsaAnexado = params.qsaDados?.anexado === true;
   const qsaAnalisado = params.qsaDados?.analisado === true;
   const qsaTemGrave = params.qsaPendencias.some((p) => p.severidade === 'alta');
   const qsaConsistente = qsaAnexado && qsaAnalisado && !qsaTemGrave;
   if (!qsaAnexado) addBloqueio('Documento QSA não anexado.');
-  else if (!qsaAnalisado) addBloqueio(params.qsaDados?.erro_processamento || 'QSA anexado, mas a análise documental ainda não foi concluída.');
-  else if (qsaTemGrave) addBloqueio('QSA possui divergências societárias relevantes.');
-  else pontosPositivos.push('QSA analisado: CNPJ, razão social, capital social, sócios e administrador conferidos.');
+  else if (!qsaAnalisado) addBloqueio(params.qsaDados?.erro_processamento || 'QSA anexado; leitura pendente.');
+  else if (qsaTemGrave) addBloqueio('QSA tem divergências societárias relevantes.');
+  else pontosPositivos.push('QSA conferido: CNPJ, razão social, capital, sócios e administrador.');
 
   // O Enquadramento Tributário NÃO é um documento físico a ser anexado -- essa
   // informação vem estritamente da consulta pública de CNPJ (Receita Federal),
@@ -1945,7 +1998,7 @@ async function avaliarProntidaoIdentidadeCnpj(params: {
     enquadramento_tributario: regime || situacaoSimples || null, empresa_mei: ehMei, estrategia_alternativa_disponivel: ehMei,
     score_cnpj: analiseCnpj?.score_cnpj ?? null, motivos_pendentes: bloqueios, avisos_estrategicos: avisos, pontos_positivos: pontosPositivos,
     relatorio: { conclusao: apto ? 'APTO_PARA_AVANCAR' : 'PENDENTE', documentos_conferidos: Object.values(documentosIniciais).filter((item) => item.consistente).length, documentos_analisados: Object.values(documentosIniciais).filter((item) => item.analisado).length, falhas_leitura: Object.values(documentosIniciais).filter((item) => item.status === 'falha_leitura').length, total_documentos_iniciais: 3, bloqueios: bloqueios.length, avisos: avisos.length },
-    diagnostico: apto ? 'Identidade empresarial validada pelos documentos obrigatórios (Cartão CNPJ e QSA). A empresa pode avançar para conferir Contrato Social/Alteração e Atos da Junta Comercial.' : Object.values(documentosIniciais).some((item) => item.status === 'falha_leitura') ? 'Um ou mais arquivos apresentaram falha técnica ou baixa legibilidade.' : `A etapa Identidade do CNPJ possui ${bloqueios.length} bloqueio(s). O avanço será liberado quando o Cartão CNPJ e o QSA estiverem consistentes.`,
+    diagnostico: apto ? 'Cartão CNPJ e QSA conferidos. Próxima etapa: documentação societária.' : Object.values(documentosIniciais).some((item) => item.status === 'falha_leitura') ? 'Há arquivo com falha técnica ou baixa legibilidade.' : `Identidade do CNPJ com ${bloqueios.length} bloqueio(s). O avanço depende de Cartão CNPJ e QSA consistentes.`,
   };
 }
 
@@ -2335,7 +2388,7 @@ export async function montarDossieCreditoEmpresa(empresaId: string, options: { p
   await ensureSocioBlocos(empresaId, socios);
   await vincularDocumentosAutomaticos(empresaId);
 
-  const { rows: blocos } = await pool.query(
+  const { rows: blocosBrutos } = await pool.query(
     `SELECT deb.id, deb.entidade_tipo, deb.entidade_id, deb.empresa_id, deb.socio_id, deb.status, deb.completo,
             deb.validado, deb.validado_em, deb.dados_estruturados, deb.pendencias, deb.origem,
             deb.criacao_em, deb.atualizacao_em,
@@ -2370,16 +2423,30 @@ export async function montarDossieCreditoEmpresa(empresaId: string, options: { p
     [empresaId]
   );
 
+  const blocos = await enriquecerDocumentosAcervoComAnalise(blocosBrutos);
   const pendencias = blocos.flatMap((b: any) => Array.isArray(b.pendencias) ? b.pendencias.map((p: any) => ({ ...p, bloco_codigo: b.codigo, bloco_nome: b.nome_amigavel })) : []);
   const tiposAnexados = new Set<string>(
     blocos.flatMap((bloco: any) => Array.isArray(bloco.documentos)
       ? bloco.documentos.map((documento: any) => String(documento?.tipo_documento || '')).filter(Boolean)
       : []),
   );
+  const tiposComprovacaoRegime = new Set(['ecf', 'dctf', 'dctfweb', 'darf', 'livro_caixa']);
+  const regimesDeclarados = new Set(['lucro presumido', 'lucro real', 'lucro arbitrado']);
+  const regimeDeclaradoEmDocumento = blocos
+    .flatMap((bloco: any) => Array.isArray(bloco.documentos) ? bloco.documentos : [])
+    .filter((documento: any) => tiposComprovacaoRegime.has(String(documento?.tipo_documento || '')) && arquivoDocumentoTemConteudo(documento) && documento?.analisado === true && documento?.consistente === true)
+    .flatMap((documento: any) => Array.isArray(documento?.resultado_analise?.campos) ? documento.resultado_analise.campos : [])
+    .map((campo: any) => String(campo?.valor || '').trim().toLowerCase())
+    .find((valor: string) => regimesDeclarados.has(valor));
+  const regimeComprovado = Boolean(regimeDeclaradoEmDocumento);
+  const enquadramentoParaMapa = regimeDeclaradoEmDocumento
+    ? { ...enquadramento.dados, regime_tributario: regimeDeclaradoEmDocumento, situacao_simples: 'Não Optante', analisado: true, fonte_extracao: 'documento_comprobatorio_regime' }
+    : enquadramento.dados;
   const mapaDocumentalCredito = gerarMapaDocumentalCredito({
     empresa,
-    enquadramento: enquadramento.dados,
+    enquadramento: enquadramentoParaMapa,
     tiposAnexados,
+    regimeComprovado,
     etapa1Aprovada: identidadeCnpj.apto_para_avancar === true,
     etapa2Aprovada: documentacaoSocietaria.apto_para_avancar === true,
   });

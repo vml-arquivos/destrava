@@ -44,6 +44,8 @@ describe('mapa documental de crédito', () => {
       tiposAnexados: anexados,
     });
     expect(presumido.regime_identificado).toBe('lucro_presumido');
+    expect(presumido.regime_a_confirmar).toBe(false);
+    expect(presumido.pendencias).toEqual([]);
     const fiscalPresumido = presumido.etapas.find((e) => e.numero === 4)?.documentos || [];
     expect(fiscalPresumido.some((d) => d.codigo === 'ecf_presumido')).toBe(true);
     expect(fiscalPresumido.some((d) => d.codigo === 'bp_dre_presumido')).toBe(true);
@@ -85,6 +87,37 @@ describe('mapa documental de crédito', () => {
     expect(codigos).toContain('confirmacao_regime_nao_optante');
     expect(codigos).not.toContain('pgdas_12m');
     expect(codigos).not.toContain('defis');
+  });
+
+  it('expõe pendência prioritária de regime e aceita ECF, DCTF/DCTFWeb, DARF ou Livro Caixa', () => {
+    const pendente = gerarMapaDocumentalCredito({
+      empresa: { regime_tributario: 'Não optante pelo Simples Nacional', opcao_simples: false },
+      etapa1Aprovada: true,
+      etapa2Aprovada: true,
+      tiposAnexados: [],
+    });
+    expect(pendente.regime_a_confirmar).toBe(true);
+    expect(pendente.pendencias).toEqual([
+      expect.objectContaining({
+        codigo: 'nao_optante_regime_a_confirmar',
+        prioridade: 'alta',
+        status: 'pendente',
+        nao_bloqueia_etapa_1: true,
+        tipos_documento_aceitos: expect.arrayContaining(['ecf', 'dctf', 'dctfweb', 'darf', 'livro_caixa']),
+      }),
+    ]);
+    expect(pendente.proxima_acao).toMatch(/ECF, DCTF\/DCTFWeb, DARF ou Livro Caixa/);
+
+    const comDarf = gerarMapaDocumentalCredito({
+      empresa: { regime_tributario: 'Não optante pelo Simples Nacional', opcao_simples: false },
+      etapa1Aprovada: true,
+      etapa2Aprovada: true,
+      tiposAnexados: ['darf'],
+      regimeComprovado: true,
+    });
+    expect(comDarf.regime_a_confirmar).toBe(false);
+    expect(comDarf.pendencias).toEqual([]);
+    expect(comDarf.proxima_acao).not.toMatch(/Anexar ECF/);
   });
 
   it('monta ECF/ECD e demonstrações para Lucro Real', () => {

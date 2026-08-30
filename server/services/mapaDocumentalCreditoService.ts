@@ -68,10 +68,22 @@ export type IndicadorCredito = {
   fase: number;
 };
 
+export type PendenciaMapaDocumental = {
+  codigo: string;
+  titulo: string;
+  descricao: string;
+  acao: string;
+  status: 'pendente' | 'em_analise' | 'resolvida';
+  prioridade: 'alta' | 'media' | 'baixa';
+  tipos_documento_aceitos: string[];
+  nao_bloqueia_etapa_1: boolean;
+};
+
 export type MapaDocumentalCredito = {
   versao: string;
   regime_identificado: RegimeCredito;
   regime_descricao: string;
+  regime_a_confirmar: boolean;
   etapa_atual: number;
   proxima_acao: string;
   etapas: EtapaMapa[];
@@ -81,6 +93,7 @@ export type MapaDocumentalCredito = {
   programas_referencia: PerfilProgramaCredito[];
   indicadores: IndicadorCredito[];
   avisos: string[];
+  pendencias: PendenciaMapaDocumental[];
 };
 
 function normalizar(value: unknown): string {
@@ -202,7 +215,7 @@ const DOCUMENTOS_REGIME: Record<RegimeCredito, DocumentoMapa[]> = {
     doc('bp_dre_simples', 'Balanço Patrimonial e DRE', ['balanco', 'dre'], 4, 'Demonstrar resultado e patrimônio quando exigido pela operação ou pelo porte.', { obrigatorio: false, observacao: 'Torna-se prioritário em operações estruturadas, investimentos e empresas de maior faturamento.' }),
   ],
   nao_optante_regime_a_confirmar: [
-    doc('confirmacao_regime_nao_optante', 'Comprovação do regime tributário não optante', ['ecf', 'dctf', 'livro_caixa'], 4, 'Confirmar se a empresa está no Lucro Presumido, Lucro Real, Arbitrado ou hipótese de Livro Caixa antes de concluir a trilha fiscal.', { obrigatorio: true, tipo_exigencia: 'obrigacao_legal' }),
+    doc('confirmacao_regime_nao_optante', 'Comprovação do regime tributário não optante', ['ecf', 'dctf', 'dctfweb', 'darf', 'livro_caixa'], 4, 'Confirmar se a empresa está no Lucro Presumido, Lucro Real, Arbitrado ou hipótese de Livro Caixa antes de concluir a trilha fiscal.', { obrigatorio: true, tipo_exigencia: 'obrigacao_legal', motivo: 'Anexar ECF, DCTF/DCTFWeb, DARF ou Livro Caixa para confirmar o regime tributário efetivo.' }),
   ],
   nao_optante_simples: [
     doc('ecf_nao_optante', 'ECF e recibo de entrega', ['ecf', 'recibo_ecf'], 4, 'Comprovar a apuração fiscal e o faturamento da empresa não optante pelo Simples Nacional.'),
@@ -466,6 +479,7 @@ export function gerarMapaDocumentalCredito(params: {
   empresa: any;
   enquadramento?: any;
   tiposAnexados?: Iterable<string>;
+  regimeComprovado?: boolean;
   etapa1Aprovada: boolean;
   etapa2Aprovada: boolean;
 }): MapaDocumentalCredito {
@@ -536,18 +550,32 @@ export function gerarMapaDocumentalCredito(params: {
   ];
 
   const descricaoRegime = ROTULO_REGIME_CREDITO;
+  const regimeAConfirmar = (regime === 'nao_optante_regime_a_confirmar' || regime === 'nao_identificado') && params.regimeComprovado !== true;
+  const pendencias: PendenciaMapaDocumental[] = regimeAConfirmar ? [{
+    codigo: 'nao_optante_regime_a_confirmar',
+    titulo: 'Comprovação do regime tributário não optante',
+    descricao: 'A Receita informa “não optante”, mas isso não distingue Presumido, Real, Arbitrado ou Livro Caixa.',
+    acao: 'Anexar ECF, DCTF/DCTFWeb, DARF ou Livro Caixa para confirmar.',
+    status: 'pendente',
+    prioridade: 'alta',
+    tipos_documento_aceitos: ['ecf', 'dctf', 'dctfweb', 'darf', 'livro_caixa'],
+    nao_bloqueia_etapa_1: true,
+  }] : [];
 
   return {
     versao: '2.0.0',
     regime_identificado: regime,
     regime_descricao: descricaoRegime[regime],
+    regime_a_confirmar: regimeAConfirmar,
     documentos_nao_aplicaveis: marcarAnexados(DOCUMENTOS_NAO_APLICAVEIS_POR_REGIME[regime], tipos),
     etapa_atual: etapaAtual,
-    proxima_acao: etapaAtual === 1
-      ? 'Concluir a análise de Cartão CNPJ, QSA e enquadramento tributário.'
-      : etapaAtual === 2
-        ? 'Anexar Atos da Junta e contrato/alterações necessários para comprovar 12 meses de continuidade.'
-        : 'Selecionar a finalidade do crédito e montar a trilha fiscal, financeira e bancária do regime identificado.',
+    proxima_acao: regimeAConfirmar && etapaAtual >= 3
+      ? 'Anexar ECF, DCTF/DCTFWeb, DARF ou Livro Caixa para confirmar o regime tributário não optante.'
+      : etapaAtual === 1
+        ? 'Concluir a análise de Cartão CNPJ, QSA e enquadramento tributário.'
+        : etapaAtual === 2
+          ? 'Anexar Atos da Junta e contrato/alterações necessários para comprovar 12 meses de continuidade.'
+          : 'Selecionar a finalidade do crédito e montar a trilha fiscal, financeira e bancária do regime identificado.',
     etapas,
     operacoes_disponiveis: OPERACOES,
     programas_referencia: PROGRAMAS,
@@ -557,5 +585,6 @@ export function gerarMapaDocumentalCredito(params: {
       'Documentos e condições podem variar por produto, porte, setor, região, garantias e política vigente da instituição.',
       'O catálogo deve ser confirmado no momento da proposta e pode receber perfis adicionais sem alterar o fluxo principal.',
     ],
+    pendencias,
   };
 }

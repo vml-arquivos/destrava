@@ -184,6 +184,7 @@ type MapaDocumentalCredito = {
   versao: string;
   regime_identificado: string;
   regime_descricao: string;
+  regime_a_confirmar?: boolean;
   etapa_atual: number;
   proxima_acao: string;
   etapas: Array<{ numero: number; codigo: string; titulo: string; objetivo: string; bloqueada: boolean; documentos: DocumentoMapaCredito[] }>;
@@ -193,6 +194,16 @@ type MapaDocumentalCredito = {
   programas_referencia: Array<{ codigo: string; nome: string; instituicao: string; operacao: string; publico_alvo: string; requisitos_chave: string[]; documentos_adicionais: string[]; observacao: string }>;
   indicadores: Array<{ codigo: string; nome: string; formula: string; interpretacao: string; fase: number }>;
   avisos: string[];
+  pendencias?: Array<{
+    codigo: string;
+    titulo: string;
+    descricao: string;
+    acao: string;
+    status: string;
+    prioridade: string;
+    tipos_documento_aceitos: string[];
+    nao_bloqueia_etapa_1: boolean;
+  }>;
 };
 
 type DossieResponse = {
