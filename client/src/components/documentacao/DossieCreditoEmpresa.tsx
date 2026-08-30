@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
 import { apiFetch } from "@/lib/api";
 import { ResultadoAnaliseDocumento } from "../documentos/ResultadoAnaliseDocumento";
 import { toast } from "sonner";
@@ -675,11 +675,18 @@ export function ProntidaoIdentidadeCard({
   onAvancar,
   onTentarNovamente,
   processando = false,
+  acaoRegime,
 }: {
   identidade?: IdentidadeCnpj;
   onAvancar?: () => void;
   onTentarNovamente?: () => void;
   processando?: boolean;
+  // Conteúdo do "anexar ECF/DCTF" da pendência de regime tributário -- fica
+  // dentro deste mesmo card, ao lado dos indicadores "Ação necessária"/
+  // "Avisos", em vez de um bloco separado logo abaixo. Pedido explícito do
+  // usuário: unificar tudo no mesmo "modal" (card), sem espaço em branco
+  // sobrando ao lado dos indicadores.
+  acaoRegime?: ReactNode;
 }) {
   if (!identidade) return null;
   const documentos = Object.values(identidade.documentos_iniciais || {});
@@ -769,24 +776,33 @@ export function ProntidaoIdentidadeCard({
       {/* O que está acontecendo e o que resolve -- agora como indicador compacto
           que só expande ao clique (popover), em vez de caixa sempre aberta
           ocupando espaço fixo no topo da tela. Só aparece quando existe algo
-          de fato pendente; nada de selo vazio dizendo que está tudo certo. */}
-      {(bloqueios.length > 0 || inconsistentes.length > 0 || avisos.length > 0) && (
-        <div className="mt-3 flex flex-wrap items-center gap-2">
-          <IndicadorPendencia
-            rotulo="Ação necessária"
-            tom="destructive"
-            titulo="O que precisa ser resolvido"
-            itens={[
-              ...bloqueios.slice(0, 8),
-              ...inconsistentes.filter((item) => item.diagnostico).map((item) => `${item.nome}: ${item.diagnostico}`),
-            ]}
-          />
-          <IndicadorPendencia
-            rotulo="Avisos"
-            tom="warning"
-            titulo="Avisos"
-            itens={avisos.slice(0, 6)}
-          />
+          de fato pendente; nada de selo vazio dizendo que está tudo certo.
+          `acaoRegime` (anexar ECF/DCTF) fica na mesma linha, à direita, no
+          lugar que antes ficava em branco. */}
+      {(bloqueios.length > 0 || inconsistentes.length > 0 || avisos.length > 0 || acaoRegime) && (
+        <div className="mt-3 flex flex-wrap items-center justify-between gap-2">
+          <div className="flex flex-wrap items-center gap-2">
+            {(bloqueios.length > 0 || inconsistentes.length > 0) && (
+              <IndicadorPendencia
+                rotulo="Ação necessária"
+                tom="destructive"
+                titulo="O que precisa ser resolvido"
+                itens={[
+                  ...bloqueios.slice(0, 8),
+                  ...inconsistentes.filter((item) => item.diagnostico).map((item) => `${item.nome}: ${item.diagnostico}`),
+                ]}
+              />
+            )}
+            {avisos.length > 0 && (
+              <IndicadorPendencia
+                rotulo="Avisos"
+                tom="warning"
+                titulo="Avisos"
+                itens={avisos.slice(0, 6)}
+              />
+            )}
+          </div>
+          {acaoRegime && <div className="flex flex-wrap items-center gap-2">{acaoRegime}</div>}
         </div>
       )}
     </section>

@@ -1266,7 +1266,7 @@ export default function DocumentosEntidade({
     const chaveEcf = chaveContextoSlot("ecf", null);
     const chaveDctf = chaveContextoSlot("dctf", null);
     return (
-      <div className="flex flex-wrap items-center gap-2 rounded-xl border border-warning/20 bg-warning/10 px-3 py-2">
+      <div className="flex flex-wrap items-center gap-2">
         <div className="relative">
           <button
             type="button"
@@ -1486,33 +1486,30 @@ export default function DocumentosEntidade({
               Documento a documento, o veredito aparece dentro do proprio campo
               (StatusAnaliseSlot); aqui fica so o da etapa. Sem "Ver detalhes":
               quando esta tudo certo e uma linha, quando nao esta mostra o que
-              resolve -- nao existe estado intermediario pra abrir/fechar. */}
-          {grupoAtivoId === "empresa" && entidadeTipo === "empresa" && empresaId && (
-            <div className="space-y-2">
-              {!identidadeCnpj && (
-                <div className="flex flex-wrap items-center justify-between gap-2 rounded-2xl border border-primary/20 bg-primary/10 px-3 py-2.5">
-                  <p className="text-xs font-black text-foreground">
-                    {identidadeObrigatorios.preenchidos}/{identidadeObrigatorios.total} documentos obrigatórios anexados
-                  </p>
-                  <button
-                    type="button"
-                    onClick={() => void iniciarAnaliseIdentidade()}
-                    disabled={analisandoIdentidade || identidadeObrigatorios.preenchidos !== identidadeObrigatorios.total}
-                    className="inline-flex h-9 shrink-0 items-center justify-center gap-1.5 rounded-xl bg-primary px-3 text-xs font-black text-primary-foreground hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-50"
-                  >
-                    {analisandoIdentidade ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <FileText className="h-3.5 w-3.5" />}
-                    {analisandoIdentidade ? "Analisando..." : "Analisar documentos"}
-                  </button>
-                </div>
-              )}
-
-              {identidadeCnpj && (
-                <ProntidaoIdentidadeCard
-                  identidade={identidadeCnpj}
-                  onTentarNovamente={() => void iniciarAnaliseIdentidade()}
-                  processando={analisandoIdentidade}
-                />
-              )}
+              resolve -- nao existe estado intermediario pra abrir/fechar.
+              O card de status da Etapa 1 (ProntidaoIdentidadeCard) NÃO fica mais
+              aqui em cima -- foi unificado com a pendência de regime tributário
+              (ECF/DCTF) dentro da grade, logo abaixo dos cards de Cartão CNPJ/QSA/
+              Enquadramento (ver blocoPendenciaRegime e o ponto de injeção dentro de
+              secoesDoGrupoAtivo.map(...) mais abaixo). Pedido explícito do usuário:
+              tirar o espaço em branco que sobrava ao lado de "Ação necessária"/
+              "Avisos" juntando os dois num só card, no mesmo lugar onde já se anexa
+              o documento que resolve a pendência. Aqui em cima só fica o prompt
+              para iniciar a primeira análise, quando ainda não há nenhuma. */}
+          {grupoAtivoId === "empresa" && entidadeTipo === "empresa" && empresaId && !identidadeCnpj && (
+            <div className="flex flex-wrap items-center justify-between gap-2 rounded-2xl border border-primary/20 bg-primary/10 px-3 py-2.5">
+              <p className="text-xs font-black text-foreground">
+                {identidadeObrigatorios.preenchidos}/{identidadeObrigatorios.total} documentos obrigatórios anexados
+              </p>
+              <button
+                type="button"
+                onClick={() => void iniciarAnaliseIdentidade()}
+                disabled={analisandoIdentidade || identidadeObrigatorios.preenchidos !== identidadeObrigatorios.total}
+                className="inline-flex h-9 shrink-0 items-center justify-center gap-1.5 rounded-xl bg-primary px-3 text-xs font-black text-primary-foreground hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                {analisandoIdentidade ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <FileText className="h-3.5 w-3.5" />}
+                {analisandoIdentidade ? "Analisando..." : "Analisar documentos"}
+              </button>
             </div>
           )}
 
@@ -1943,10 +1940,19 @@ export default function DocumentosEntidade({
                   })}
                 </div>
               </div>
-              {/* Pendência de regime tributário: aparece só depois da seção de
-                  Identidade do CNPJ (Cartão CNPJ + QSA + Enquadramento), nunca
-                  acima da grade inteira -- pedido explícito do usuário. */}
-              {secaoAtivaObj.titulo === "Identidade do CNPJ" && blocoPendenciaRegime}
+              {/* Status da Etapa 1 (Ação necessária/Avisos) + pendência de regime
+                  tributário (ECF/DCTF), unificados no mesmo card, logo depois da
+                  seção de Identidade do CNPJ (Cartão CNPJ + QSA + Enquadramento) --
+                  nunca acima da grade inteira, e nunca em dois cards separados com
+                  espaço em branco sobrando. Pedido explícito do usuário. */}
+              {secaoAtivaObj.titulo === "Identidade do CNPJ" && identidadeCnpj && (
+                <ProntidaoIdentidadeCard
+                  identidade={identidadeCnpj}
+                  onTentarNovamente={() => void iniciarAnaliseIdentidade()}
+                  processando={analisandoIdentidade}
+                  acaoRegime={blocoPendenciaRegime}
+                />
+              )}
             </Fragment>
             );
           })}
