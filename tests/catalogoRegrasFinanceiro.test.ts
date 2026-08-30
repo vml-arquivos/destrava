@@ -42,6 +42,31 @@ describe('catálogo documental e regras versionadas', () => {
     expect(presumidoFiscais.find((documento) => documento.codigo === 'ecd_presumido')?.obrigatorio).toBe(false);
   });
 
+  // Guia de Análise de Crédito Corporativo (referência do usuário, 2026-08):
+  // fora do Simples não existe PGDAS -- a EFD-Contribuições é o documento que
+  // comprova a receita bruta mensal real. Sem esse item, o mapa documental
+  // pedia comprovação de faturamento apenas via item genérico e opcional.
+  it('exige EFD-Contribuições como comprovação de receita para regimes fora do Simples', () => {
+    const presumido = gerarMapaDocumentalCredito({ empresa: { regime_tributario: 'Lucro Presumido' }, etapa1Aprovada: true, etapa2Aprovada: true });
+    const presumidoFiscais = presumido.etapas.find((etapa) => etapa.numero === 4)?.documentos || [];
+    const efdPresumido = presumidoFiscais.find((documento) => documento.codigo === 'efd_contribuicoes_presumido');
+    expect(efdPresumido?.obrigatorio).toBe(true);
+    expect(efdPresumido?.tipos_arquivo).toContain('efd_contribuicoes');
+
+    const real = gerarMapaDocumentalCredito({ empresa: { regime_tributario: 'Lucro Real' }, etapa1Aprovada: true, etapa2Aprovada: true });
+    const realFiscais = real.etapas.find((etapa) => etapa.numero === 4)?.documentos || [];
+    expect(realFiscais.find((documento) => documento.codigo === 'efd_contribuicoes_real')?.obrigatorio).toBe(true);
+
+    const arbitrado = gerarMapaDocumentalCredito({ empresa: { regime_tributario: 'Lucro Arbitrado' }, etapa1Aprovada: true, etapa2Aprovada: true });
+    const arbitradoFiscais = arbitrado.etapas.find((etapa) => etapa.numero === 4)?.documentos || [];
+    expect(arbitradoFiscais.map((documento) => documento.codigo)).toContain('efd_contribuicoes_arbitrado');
+
+    // Simples Nacional tem PGDAS -- não deve ganhar essa exigência.
+    const simples = gerarMapaDocumentalCredito({ empresa: { regime_tributario: 'Simples Nacional', opcao_simples: true }, etapa1Aprovada: true, etapa2Aprovada: true });
+    const simplesCodigos = simples.etapas.flatMap((etapa) => etapa.documentos.map((documento) => documento.codigo));
+    expect(simplesCodigos.some((codigo) => codigo.startsWith('efd_contribuicoes'))).toBe(false);
+  });
+
   it('mantém faturamento opcional por padrão e condicional por linha/idade da empresa', () => {
     const base = gerarMapaDocumentalCredito({ empresa: { regime_tributario: 'Simples Nacional', opcao_simples: true }, etapa1Aprovada: true, etapa2Aprovada: true });
     const faturamentoBase = base.etapas.find((etapa) => etapa.numero === 4)?.documentos.find((documento) => documento.codigo === 'faturamento_12m');
@@ -118,6 +143,58 @@ describe('indicadores financeiros, rating e prontidão', () => {
     expect(resultado.indicadores.ciclo_financeiro.valor).toBeNull();
     expect(resultado.indicadores.liquidez_corrente.motivo).toBeNull();
     expect(resultado.qualidade).toBe('suficiente');
+  });
+
+  // Indicadores acrescentados para alinhar com o Guia de Análise de Crédito
+  // Corporativo e Regimes Tributários (referência do usuário, 2026-08):
+  // ICSD, Despesas financeiras/Receita, Endividamento Geral e Perfil da
+  // Dívida -- todos exigem o passivo não circulante, que antes não existia
+  // no motor de indicadores.
+  it('calcula ICSD, despesa financeira/receita, endividamento geral e perfil da dívida quando o passivo não circulante é informado', () => {
+    const comPassivoLongoPrazo = { ...empresa, passivo_nao_circulante: 250_000, ativos_totais: 1_000_000 };
+    const resultado = calcularIndicadoresFinanceiros({ empresa: comPassivoLongoPrazo });
+
+    // ICSD = EBITDA ÷ Serviço da dívida = 240.000 ÷ 100.000
+    expect(resultado.indicadores.icsd.valor).toBe(2.4);
+    // Despesa financeira / Receita = 50.000 ÷ 1.200.000
+    expect(resultado.indicadores.despesa_financeira_sobre_receita.valor).toBeCloseTo(50_000 / 1_200_000, 3);
+    // Endividamento geral = (250.000 + 250.000) ÷ 1.000.000
+    expect(resultado.indicadores.endividamento_geral.valor).toBe(0.5);
+    // Perfil da dívida = Passivo circulante ÷ Passivo total exigível = 250.000 ÷ 500.000
+    expect(resultado.indicadores.perfil_divida.valor).toBe(0.5);
+  });
+
+  it('não inventa endividamento geral/perfil da dívida quando o passivo não circulante não foi informado', () => {
+    const resultado = calcularIndicadoresFinanceiros({ empresa });
+    expect(resultado.indicadores.endividamento_geral.valor).toBeNull();
+    expect(resultado.indicadores.perfil_divida.valor).toBeNull();
+    expect(resultado.indicadores.endividamento_geral.qualidade).toBe('insuficiente');
+  });
+
+  // LAJIDA/EBITDA conforme o guia: quando a DRE não traz o EBITDA pronto, ele
+  // é calculado como EBIT + Depreciação + Amortização em vez de ficar vazio.
+  it('calcula o EBITDA como EBIT + Depreciação + Amortização quando o documento não traz o EBITDA pronto', () => {
+    const semEbitdaDireto: Record<string, unknown> = { ...empresa, depreciacao: 30_000, amortizacao: 10_000 };
+    delete semEbitdaDireto.ebitda;
+    const resultado = calcularIndicadoresFinanceiros({ empresa: semEbitdaDireto });
+    // EBITDA resolvido = EBIT (200.000) + Depreciação (30.000) + Amortização (10.000) = 240.000
+    expect(resultado.indicadores.margem_ebitda.valor).toBe(0.2);
+    expect(resultado.indicadores.icsd.valor).toBe(2.4);
+  });
+
+  it('usa a depreciação/amortização combinada quando informada num único campo', () => {
+    const semEbitdaDireto: Record<string, unknown> = { ...empresa, depreciacao_amortizacao: 40_000 };
+    delete semEbitdaDireto.ebitda;
+    const resultado = calcularIndicadoresFinanceiros({ empresa: semEbitdaDireto });
+    expect(resultado.indicadores.margem_ebitda.valor).toBe(0.2);
+  });
+
+  it('não inventa EBITDA quando faltam EBIT e depreciação/amortização', () => {
+    const semNada: Record<string, unknown> = { ...empresa };
+    delete semNada.ebitda;
+    const resultado = calcularIndicadoresFinanceiros({ empresa: { ...semNada, ebit: undefined } });
+    expect(resultado.indicadores.margem_ebitda.valor).toBeNull();
+    expect(resultado.indicadores.icsd.valor).toBeNull();
   });
 
   it('produz rating explicável, elegibilidade condicional e plano de adequação', () => {

@@ -277,6 +277,23 @@ const TODOS_SLOTS = SECOES_DOCUMENTAIS.flatMap((secao) => secao.slots);
 const TIPO_PARA_SLOT = new Map<string, DocumentoSlot>();
 TODOS_SLOTS.forEach((documentoSlot) => documentoSlot.matchTipos.forEach((tipo) => TIPO_PARA_SLOT.set(tipo, documentoSlot)));
 
+// Duas abas de navegação (pedido do usuário, 2026-08): as seções internas
+// (Identidade do CNPJ, Documentação da Empresa, Outros documentos do sistema,
+// Documentação dos Sócios) continuam existindo exatamente como antes -- mesmos
+// slots, mesma ordem, mesma obrigatoriedade, mesmo gate da Etapa 2/3 só liberar
+// depois da Etapa 1. Só a NAVEGAÇÃO deixou de ter uma aba por seção (até 4) e
+// virou duas: "Documentos da empresa" (Identidade + Documentação da Empresa +
+// Outros) e "Documentos dos sócios". Nenhum tipo de documento, obrigatoriedade
+// ou bloqueio foi alterado -- só a barra de abas visível e o texto ao redor.
+const GRUPOS_ABAS_DOCUMENTAIS: Array<{ id: string; titulo: string; secoes: string[] }> = [
+  { id: "empresa", titulo: "Documentos da empresa", secoes: ["Identidade do CNPJ", "Documentação da Empresa", "Outros documentos do sistema"] },
+  { id: "socios", titulo: "Documentos dos sócios", secoes: ["Documentação dos Sócios"] },
+];
+
+function grupoDaSecao(tituloSecao: string): string {
+  return GRUPOS_ABAS_DOCUMENTAIS.find((grupo) => grupo.secoes.includes(tituloSecao))?.id || "empresa";
+}
+
 // O contrato de prestação de serviços entre a Destrava e a empresa não é um
 // documento de análise de crédito -- é um documento operacional que já tem
 // seu próprio lugar (aba "Contratos Firmados", com o ciclo gerado -> assinado).
@@ -966,6 +983,15 @@ export default function DocumentosEntidade({
     return base;
   }, [slotsDaTela]);
 
+  // Agrupa as seções (até 4) nas duas abas visíveis, mantendo só os grupos que
+  // realmente têm alguma seção com slot nesta tela (empresa sem sócio cadastrado,
+  // por exemplo, não mostra a aba "Documentos dos sócios" vazia).
+  const gruposDaTela = useMemo(() => (
+    GRUPOS_ABAS_DOCUMENTAIS
+      .map((grupo) => ({ ...grupo, secoesMembros: secoesDaTela.filter((secao) => grupo.secoes.includes(secao.titulo)) }))
+      .filter((grupo) => grupo.secoesMembros.length > 0)
+  ), [secoesDaTela]);
+
   const selecionadosIds = useMemo(() => docs.filter((doc) => selecionados[doc.id]).map((doc) => doc.id), [docs, selecionados]);
   const totalSlots = useMemo(() => slotsDaTela.length, [slotsDaTela]);
   const slotsPreenchidos = useMemo(() => slotsDaTela.filter((documentoSlot) => {
@@ -1188,7 +1214,13 @@ export default function DocumentosEntidade({
   const secaoAtivaTitulo = (secaoAtiva && secoesDaTela.some((secao) => secao.titulo === secaoAtiva))
     ? secaoAtiva
     : secoesDaTela[0]?.titulo;
-  const secaoAtivaObj = secoesDaTela.find((secao) => secao.titulo === secaoAtivaTitulo);
+  // A aba visível agora é o GRUPO (Documentos da empresa / Documentos dos sócios),
+  // não a seção -- mas internamente cada seção continua existindo com sua própria
+  // ordem, obrigatoriedade e gate, só que todas as seções do grupo ativo aparecem
+  // juntas, empilhadas, em vez de exigir um clique extra pra ver a próxima.
+  const grupoAtivoId = secaoAtivaTitulo ? grupoDaSecao(secaoAtivaTitulo) : gruposDaTela[0]?.id;
+  const grupoAtivoObj = gruposDaTela.find((grupo) => grupo.id === grupoAtivoId) || gruposDaTela[0];
+  const secoesDoGrupoAtivo = grupoAtivoObj?.secoesMembros || [];
 
   function contarPreenchidos(secao: SecaoDocumento) {
     return secao.slots.filter((documentoSlot) => {
@@ -1335,19 +1367,20 @@ export default function DocumentosEntidade({
       {permitirUpload && (
         <div className="rounded-xl border border-border bg-card p-4 space-y-3">
           <div className="flex flex-wrap gap-2">
-            {/* "Etapa N --" na frente do nome de cada aba é só rótulo visual (o texto
-                usado nas comparações de código continua sendo secao.titulo, sem o
-                prefixo) -- pedido do usuário pra deixar claro que as abas seguem uma
-                ordem (1, 2, 3...), não são só categorias soltas. */}
-            {secoesDaTela.map((secao, index) => {
-              const preenchidos = contarPreenchidos(secao);
-              const ativa = secao.titulo === secaoAtivaTitulo;
-              const completa = preenchidos === secao.slots.length;
+            {/* Duas abas só (Documentos da empresa / Documentos dos sócios) -- as
+                seções internas de cada grupo continuam na mesma ordem e com a
+                mesma obrigatoriedade de sempre, só aparecem empilhadas dentro da
+                aba do grupo em vez de precisar de um clique por seção. */}
+            {gruposDaTela.map((grupo) => {
+              const preenchidos = grupo.secoesMembros.reduce((soma, secao) => soma + contarPreenchidos(secao), 0);
+              const total = grupo.secoesMembros.reduce((soma, secao) => soma + secao.slots.length, 0);
+              const ativa = grupo.id === grupoAtivoId;
+              const completa = total > 0 && preenchidos === total;
               return (
                 <button
-                  key={secao.titulo}
+                  key={grupo.id}
                   type="button"
-                  onClick={() => setSecaoAtiva(secao.titulo)}
+                  onClick={() => setSecaoAtiva(grupo.secoesMembros[0]?.titulo || null)}
                   className={`inline-flex items-center gap-1.5 px-3 py-2 rounded-full text-xs font-semibold border transition-colors ${
                     ativa
                       ? "bg-primary border-primary text-primary-foreground"
@@ -1357,9 +1390,9 @@ export default function DocumentosEntidade({
                   }`}
                 >
                   {completa && !ativa && <ShieldCheck className="h-3 w-3 shrink-0" />}
-                  <span className={ativa ? "font-black" : ""}>Etapa {index + 1} — {secao.titulo}</span>
+                  <span className={ativa ? "font-black" : ""}>{grupo.titulo}</span>
                   <span className={`px-1.5 py-0.5 rounded-full text-[10px] font-bold ${ativa ? "bg-card/20 text-primary-foreground" : completa ? "bg-success/20 text-success" : "bg-muted text-muted-foreground"}`}>
-                    {preenchidos}/{secao.slots.length}
+                    {preenchidos}/{total}
                   </span>
                 </button>
               );
@@ -1371,7 +1404,7 @@ export default function DocumentosEntidade({
               (StatusAnaliseSlot); aqui fica so o da etapa. Sem "Ver detalhes":
               quando esta tudo certo e uma linha, quando nao esta mostra o que
               resolve -- nao existe estado intermediario pra abrir/fechar. */}
-          {secaoAtivaTitulo === "Identidade do CNPJ" && entidadeTipo === "empresa" && empresaId && (
+          {grupoAtivoId === "empresa" && entidadeTipo === "empresa" && empresaId && (
             <div className="space-y-2">
               {!identidadeCnpj && (
                 <div className="flex flex-wrap items-center justify-between gap-2 rounded-2xl border border-primary/20 bg-primary/10 px-3 py-2.5">
@@ -1405,7 +1438,7 @@ export default function DocumentosEntidade({
               resolve. O historico da cadeia societaria so aparece enquanto
               houver registro por comprovar (depois de completo ele vira uma
               grade de "Comprovado" repetida, que nao ajuda a decidir nada). */}
-          {secaoAtivaTitulo === "Documentação da Empresa" && entidadeTipo === "empresa" && societaria?.habilitada && (() => {
+          {grupoAtivoId === "empresa" && entidadeTipo === "empresa" && societaria?.habilitada && (() => {
             const apto = societaria.apto_para_avancar === true;
             const registros = Array.isArray(societaria.registros_requeridos) ? societaria.registros_requeridos : [];
             const faltantes = Array.isArray(societaria.registros_faltantes) ? societaria.registros_faltantes : registros.filter((registro: any) => !registro.comprovado);
@@ -1487,7 +1520,7 @@ export default function DocumentosEntidade({
                     <div className="flex flex-wrap items-center gap-2">
                       <FileText className="h-4 w-4 shrink-0 text-warning" />
                       <p className="text-xs font-black text-foreground">
-                        {societaria.atos_junta_aprovados ? "Etapa 3 — Contrato e histórico de 12 meses" : "Etapa 2 — Atos da Junta Comercial"}
+                        {societaria.atos_junta_aprovados ? "Contrato e histórico de 12 meses" : "Atos da Junta Comercial"}
                       </p>
                       <span className="rounded-full border border-warning/20 bg-card px-2 py-0.5 text-[10px] font-black text-warning">
                         {analisandoSocietario ? "Analisando..." : societaria.analisado ? "Documento(s) pendente(s)" : "Aguardando análise"}
@@ -1543,7 +1576,13 @@ export default function DocumentosEntidade({
             );
           })()}
 
-          {secaoAtivaObj && (() => {
+          {/* Cada grupo de abas pode reunir mais de uma seção interna (ex.: "Documentos
+              da empresa" = Identidade do CNPJ + Documentação da Empresa + Outros) --
+              elas aparecem todas empilhadas aqui, na mesma ordem de sempre, cada uma
+              com sua própria checagem de obrigatório/complementar. Uma legenda discreta
+              só aparece quando há mais de uma seção nesta aba, pra não repetir "Identidade
+              do CNPJ" sozinha quando é a única coisa na tela (ex.: aba de sócios). */}
+          {secoesDoGrupoAtivo.map((secaoAtivaObj) => {
             const temObrigatorios = secaoAtivaObj.slots.some((s) => s.obrigatorio);
             const liberarComplementares = societaria?.atos_junta_aprovados === true
               || societaria?.atos_dispensados_por_mei === true;
@@ -1553,6 +1592,9 @@ export default function DocumentosEntidade({
             const ocultos = secaoAtivaObj.slots.length - slotsVisiveis.length;
             return (
             <div key={secaoAtivaObj.titulo} className="rounded-lg border border-border bg-muted p-3">
+              {secoesDoGrupoAtivo.length > 1 && (
+                <p className="mb-2 text-[10px] font-black uppercase tracking-wide text-muted-foreground">{secaoAtivaObj.titulo}</p>
+              )}
               {temObrigatorios && !liberarComplementares && (
                 <button
                   type="button"
@@ -1791,7 +1833,7 @@ export default function DocumentosEntidade({
                 </div>
               </div>
             );
-          })()}
+          })}
           </div>
       )}
 

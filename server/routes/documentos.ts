@@ -528,10 +528,14 @@ async function auditar(documentoId: string, acao: string, antes: any, depois: an
 // não eram disparados no momento do upload -- ver auditoria que motivou
 // esta mudança. `enquadramento_tributario_cnpj` é tratado como o mesmo
 // documento de `simples_nacional` (mesmo `promptCodigo` em
-// server/routes/documentacao.ts, ANALISE_ESPECIALIZADA_POR_TIPO).
+// server/routes/documentacao.ts, ANALISE_ESPECIALIZADA_POR_TIPO). `darf`
+// entrou pelo mesmo motivo: o Guia de Análise de Crédito Corporativo indica
+// o código de receita do DARF (2089/5993=Presumido, 8998/3373=Real) como
+// forma de comprovar o regime tributário efetivo, e essa leitura usa o
+// mesmo motor de `analisarSimplesNacional`.
 const TIPOS_COM_ANALISE_AUTOMATICA = [
   'faturamento_12_meses', 'comprovante_faturamento', 'declaracao_faturamento', 'comprovante_residencia',
-  'cartao_cnpj', 'qsa', 'simples_nacional', 'enquadramento_tributario_cnpj',
+  'cartao_cnpj', 'qsa', 'simples_nacional', 'enquadramento_tributario_cnpj', 'darf',
 ] as const;
 
 function agendarAnaliseRegraDocumental(documento: any) {
@@ -552,7 +556,7 @@ function agendarAnaliseRegraDocumental(documento: any) {
         ? await analiseDocumentalService.analisarComprovanteResidencia(empresaId, documento.id)
         : tipo === 'qsa'
           ? await analiseDocumentalService.analisarQSA(empresaId, documento.id)
-          : (tipo === 'simples_nacional' || tipo === 'enquadramento_tributario_cnpj')
+          : (tipo === 'simples_nacional' || tipo === 'enquadramento_tributario_cnpj' || tipo === 'darf')
             ? await analiseDocumentalService.analisarSimplesNacional(empresaId, documento.id)
             : await analiseDocumentalService.analisarFaturamento(empresaId, documento.id);
       await pool.query(

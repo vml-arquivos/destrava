@@ -387,16 +387,36 @@ function parseQsa(texto: string): { dados: Record<string, any>; confianca: numbe
   };
 }
 
+// DARF de IRPJ não escreve "lucro presumido"/"lucro real" por extenso -- o
+// regime é indicado pelo código de receita do tributo pago (guia de referência
+// do usuário: 2089/5993 = Lucro Presumido; 8998/3373 = Lucro Real). Só aceito
+// quando o código aparece junto do rótulo "código de receita" do próprio DARF,
+// nunca um número de 3-4 dígitos solto em outro lugar do documento (data, CEP,
+// valor) -- mesma cautela de "nunca inventar" aplicada ao resto da função.
+const CODIGO_RECEITA_DARF_PRESUMIDO = new Set(['2089', '5993']);
+const CODIGO_RECEITA_DARF_REAL = new Set(['8998', '3373']);
+function regimeViaCodigoReceitaDarf(texto: string): string | null {
+  const match = texto.match(/c[oó]digo\s+(?:d[ea]\s+)?receita\D{0,12}(\d{3,4})/i);
+  if (!match) return null;
+  const codigo = match[1];
+  if (CODIGO_RECEITA_DARF_PRESUMIDO.has(codigo)) return 'Lucro Presumido';
+  if (CODIGO_RECEITA_DARF_REAL.has(codigo)) return 'Lucro Real';
+  return null;
+}
+
 /**
  * Lê o regime tributário declarado em QUALQUER documento fiscal (Consulta de
- * Optantes, ECF, DCTF, Relatório de Situação Fiscal...). O regime é o que
- * define a documentação exigida adiante -- Simples pede PGDAS/DEFIS, enquanto
- * Presumido e Real pedem ECF/ECD/DCTF, com exigências diferentes entre si.
+ * Optantes, ECF, DCTF, Relatório de Situação Fiscal, DARF de IRPJ...). O
+ * regime é o que define a documentação exigida adiante -- Simples pede
+ * PGDAS/DEFIS, enquanto Presumido e Real pedem ECF/ECD/DCTF, com exigências
+ * diferentes entre si.
  *
  * Em análise de crédito, afirmar o regime errado é pior do que assumi-lo
  * pendente: o regime errado puxa a lista errada de documentos. Por isso só é
  * aceito o regime AFIRMADO no texto -- nunca o negado ("não optou pelo lucro
- * presumido"), nunca um entre vários citados numa lista de opções.
+ * presumido"), nunca um entre vários citados numa lista de opções (incluindo
+ * quando o texto por extenso e o código de receita de um DARF discordam entre
+ * si -- nesse caso também vira ambíguo, em vez de escolher um dos dois).
  */
 export function detectarRegimeTributarioDeclarado(texto: string): { regime: string | null; ambiguo: boolean } {
   const norm = textoNormalizado(texto);
@@ -408,23 +428,25 @@ export function detectarRegimeTributarioDeclarado(texto: string): { regime: stri
   const lucroPresumido = afirmado('lucro presumido');
   const lucroReal = afirmado('lucro real');
   const lucroArbitrado = afirmado('lucro arbitrado');
+  const regimeViaDarf = regimeViaCodigoReceitaDarf(texto);
   // Imune/isenta só conta quando o texto fala do regime, não quando a palavra
   // aparece solta (ex: "isenta de multa").
   const imuneIsenta = /regime\s+(?:tribut[aá]rio\s+)?(?:de\s+)?(?:imunidade|isen[cç][aã]o)/i.test(texto)
     || /(?:imune|isenta)\s+(?:de\s+)?(?:irpj|tributa[cç][aã]o|impostos)/i.test(texto);
 
-  const ambiguo = [lucroPresumido, lucroReal, lucroArbitrado].filter(Boolean).length > 1;
-  if (ambiguo) return { regime: null, ambiguo: true };
+  const regimesEncontrados = new Set<string>([
+    lucroReal ? 'Lucro Real' : null,
+    lucroPresumido ? 'Lucro Presumido' : null,
+    lucroArbitrado ? 'Lucro Arbitrado' : null,
+    regimeViaDarf,
+  ].filter((item): item is string => Boolean(item)));
+  if (regimesEncontrados.size > 1) return { regime: null, ambiguo: true };
 
-  const regime = lucroReal
-    ? 'Lucro Real'
-    : lucroPresumido
-      ? 'Lucro Presumido'
-      : lucroArbitrado
-        ? 'Lucro Arbitrado'
-        : imuneIsenta
-          ? 'Imune ou isenta'
-          : null;
+  const regime = regimesEncontrados.size === 1
+    ? regimesEncontrados.values().next().value as string
+    : imuneIsenta
+      ? 'Imune ou isenta'
+      : null;
   return { regime, ambiguo: false };
 }
 
@@ -433,7 +455,10 @@ function parseSimples(texto: string): { dados: Record<string, any>; confianca: n
   const norm = textoNormalizado(texto);
   const compativel = norm.includes('simples nacional') || norm.includes('consulta optantes') || norm.includes('simei')
     || norm.includes('lucro presumido') || norm.includes('lucro real') || norm.includes('lucro arbitrado')
-    || norm.includes('regime tributario') || norm.includes('regime de apuracao');
+    || norm.includes('regime tributario') || norm.includes('regime de apuracao')
+    // DARF de IRPJ (guia de referência do usuário): não cita o regime por
+    // extenso, só o código de receita -- ver detectarRegimeTributarioDeclarado.
+    || (norm.includes('darf') && norm.includes('codigo de receita'));
   const cnpj = formatarCnpj(primeiroCnpj(texto));
   const naoOptante = /n[aã]o\s+optante\s+pelo\s+simples\s+nacional/i.test(texto) || /situacao\s+no\s+simples\s+nacional\W{0,8}nao\s+optante/i.test(norm);
   const excluido = /exclu[ií]d[oa]\s+do\s+simples/i.test(texto) || norm.includes('exclusao do simples nacional efetivada');

@@ -1168,7 +1168,7 @@ A decisão da Etapa 1 usa SOMENTE: CNPJ, razão social, capital social, nomes do
 }
 
 function promptSimples(): string {
-  return `Você é um auditor tributário brasileiro. Extraia os dados do comprovante de enquadramento tributário anexado (consulta do Simples Nacional, relatório de situação fiscal, ECF, DCTF ou equivalente).
+  return `Você é um auditor tributário brasileiro. Extraia os dados do comprovante de enquadramento tributário anexado (consulta do Simples Nacional, relatório de situação fiscal, ECF, DCTF, DARF ou equivalente).
 Responda SOMENTE JSON válido, sem markdown e sem comentários:
 {
   "documento_compativel": true,
@@ -1189,7 +1189,12 @@ REGRA CRÍTICA sobre "regime_tributario": este campo define qual documentação 
 - Se o documento apenas informar que a empresa não é optante do Simples, sem dizer qual é o regime, devolva "regime_tributario": null.
 - Se o documento NEGAR um regime ("não optou pelo lucro presumido"), não use esse regime.
 - Se o documento citar mais de um regime como opções de uma lista, devolva null.
-- Se a empresa for optante do Simples, use "Simples Nacional"; se for optante do SIMEI/MEI, use "MEI / SIMEI".`;
+- Se a empresa for optante do Simples, use "Simples Nacional"; se for optante do SIMEI/MEI, use "MEI / SIMEI".
+
+REGRA ESPECÍFICA PARA DARF: se o documento for um DARF, o regime é indicado pelo "código de receita" no campo próprio do documento (não confundir com outros números do documento, como CNPJ ou valor). Use exclusivamente esta tabela:
+- Código 2089 ou 5993 → "regime_tributario": "Lucro Presumido"
+- Código 8998 ou 3373 → "regime_tributario": "Lucro Real"
+- Qualquer outro código de receita, ou se o campo "código de receita" não estiver legível/visível → "regime_tributario": null (não adivinhe pelo valor do tributo ou pelo nome do tributo).`;
 }
 
 function promptAtosJunta(): string {

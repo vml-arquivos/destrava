@@ -275,7 +275,7 @@ function montarResultadoDetalhadoRelatorio(documento: any, analiseEspecializada:
   // vem preenchido quando o documento afirma um regime (ver
   // detectarRegimeTributarioDeclarado/normalizarDadosSimples) -- não exibir o
   // campo quando nulo é o comportamento correto, não um bug.
-  const ehEnquadramentoOuSimples = /simples_nacional|enquadramento_tributario/.test(tipoDoDocumento)
+  const ehEnquadramentoOuSimples = /simples_nacional|enquadramento_tributario|^darf$/.test(tipoDoDocumento)
     || Boolean(dados?.situacao_simples || dados?.regime_tributario || dados?.opcao_mei !== undefined && dados?.opcao_mei !== null);
 
   if (ehQsa) {
@@ -1835,11 +1835,14 @@ async function avaliarProntidaoIdentidadeCnpj(params: {
   else if (!regimeAConfirmar) pontosPositivos.push(`Enquadramento tributário identificado: ${regimeRotulo}.`);
   // Fora do Simples, o regime efetivo ainda define quais documentos fiscais
   // serão exigidos adiante (ECF/ECD/DCTF no Presumido e no Real; PGDAS/DEFIS
-  // só no Simples). Fica como aviso, não bloqueio: a Etapa 1 trata de
-  // identidade do CNPJ, e o mapa documental já exige o comprovante do regime
-  // na etapa fiscal (ver 'confirmacao_regime_nao_optante').
+  // só no Simples). Fica como aviso curto, não bloqueio: a Etapa 1 trata só de
+  // identidade do CNPJ -- ECF/DCTF são anexados bem mais adiante, no checklist
+  // de Documentação da Empresa, então o aviso desta etapa não deve instruir a
+  // anexar um documento que ainda não é o passo atual (só registrar o fato).
+  // O mapa documental (mapaDocumentalCreditoService) é quem de fato exige o
+  // comprovante na etapa fiscal certa.
   if (regimeAConfirmar && situacaoSimples) {
-    addAviso('Empresa não optante do Simples: o regime efetivo (Lucro Presumido, Lucro Real ou Arbitrado) precisa ser comprovado por ECF, DCTF/DCTFWeb ou Livro Caixa — é ele que define a documentação fiscal exigida.');
+    addAviso('Regime tributário a confirmar: empresa não optante do Simples.');
   }
 
   const textoEnquadramento = [regime, situacaoSimples, params.empresa?.porte, params.empresa?.natureza_juridica].filter(Boolean).join(' ');
@@ -1904,11 +1907,14 @@ async function avaliarProntidaoIdentidadeCnpj(params: {
       // regime que define o restante da documentação exigida. Quando a empresa
       // está fora do Simples, a Consulta de Optantes não responde isso sozinha:
       // Lucro Presumido, Real e Arbitrado são todos "não optante" e pedem
-      // documentos diferentes. Nesse caso o diagnóstico diz o que falta para
-      // fechar o regime, em vez de exibir "Não Optante" como se fosse resposta.
+      // documentos diferentes. O diagnóstico registra esse fato -- mas sem
+      // instruir a anexar ECF/DCTF/Livro Caixa aqui: este card é da Etapa 1
+      // (Identidade do CNPJ) e é opcional; esses documentos são anexados bem
+      // mais adiante, no checklist de Documentação da Empresa, então pedir por
+      // eles nesta etapa só cria a falsa impressão de que algo já está faltando.
       diagnostico: regimeAConfirmar
         ? (situacaoSimples
-            ? `Empresa não optante do Simples Nacional. O regime efetivo (Lucro Presumido, Lucro Real ou Arbitrado) ainda não está comprovado — anexe ECF, DCTF/DCTFWeb ou Livro Caixa para definir a documentação fiscal exigida.`
+            ? `Não optante do Simples Nacional — regime efetivo (Presumido, Real ou Arbitrado) a confirmar.`
             : 'Regime tributário ainda não identificado. Sincronize o CNPJ na Receita Federal ou anexe o comprovante de enquadramento.')
         : enquadramentoConsistente
           ? `Regime tributário confirmado: ${regimeRotulo}.`
@@ -2953,6 +2959,12 @@ const ANALISE_ESPECIALIZADA_POR_TIPO: Partial<Record<string, { tipo: TipoAnalise
   qsa: { tipo: 'qsa', promptCodigo: 'qsa_extract' },
   simples_nacional: { tipo: 'simples_nacional', promptCodigo: 'simples_extract' },
   enquadramento_tributario_cnpj: { tipo: 'simples_nacional', promptCodigo: 'simples_extract' },
+  // DARF de IRPJ: não declara o regime por extenso, mas o código de receita
+  // denuncia Presumido (2089/5993) ou Real (8998/3373) -- ver o guia de
+  // referência do usuário e detectarRegimeTributarioDeclarado em
+  // extracaoDocumentalLocal.ts. Mesmo pipeline do enquadramento/Simples porque
+  // o objetivo final é o mesmo: preencher regime_tributario em dados_extraidos.
+  darf: { tipo: 'simples_nacional', promptCodigo: 'simples_extract' },
   atos_junta_comercial: { tipo: 'atos_junta_comercial', promptCodigo: 'atos_junta_extract' },
   faturamento_12_meses: { tipo: 'faturamento_12_meses', promptCodigo: 'faturamento_12m_extract' },
   comprovante_faturamento: { tipo: 'faturamento_12_meses', promptCodigo: 'faturamento_12m_extract' },

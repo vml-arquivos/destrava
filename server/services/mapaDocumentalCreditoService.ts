@@ -213,11 +213,17 @@ const DOCUMENTOS_REGIME: Record<RegimeCredito, DocumentoMapa[]> = {
     doc('bp_dre_presumido', 'Balanço Patrimonial e DRE dos últimos exercícios', ['balanco', 'dre'], 4, 'Avaliar patrimônio, resultado e capacidade de pagamento.'),
     doc('balancete_atual', 'Balancete e DRE acumulada do exercício atual', ['balancete', 'dre'], 4, 'Atualizar a análise entre fechamentos anuais.'),
     doc('dctf_dctfweb', 'DCTF/DCTFWeb ou comprovantes fiscais equivalentes', ['dctf', 'dctfweb', 'darf'], 4, 'Confirmar obrigações tributárias e regime informado.'),
+    // Fora do Simples não existe PGDAS -- o Guia de Análise de Crédito Corporativo
+    // aponta a EFD-Contribuições (PIS/COFINS) como o documento que efetivamente
+    // comprova a receita bruta mensal real da empresa nesses regimes, no papel
+    // equivalente ao que o pgdas_12m cumpre para o Simples Nacional.
+    doc('efd_contribuicoes_presumido', 'EFD-Contribuições (PIS/COFINS) dos últimos períodos', ['efd_contribuicoes'], 4, 'Comprovar a receita bruta mensal real da empresa -- não há PGDAS fora do Simples Nacional.'),
   ],
   lucro_arbitrado: [
     doc('ecf_arbitrado', 'ECF e recibo de entrega', ['ecf', 'recibo_ecf'], 4, 'Comprovar a apuração fiscal no Lucro Arbitrado.'),
     doc('bp_dre_arbitrado', 'Balanço Patrimonial e DRE', ['balanco', 'dre'], 4, 'Avaliar patrimônio e capacidade de pagamento.', { obrigatorio: false }),
     doc('dctf_arbitrado', 'DCTF/DCTFWeb e comprovantes fiscais', ['dctf', 'dctfweb', 'darf'], 4, 'Conferir as obrigações e recolhimentos do regime.', { obrigatorio: false }),
+    doc('efd_contribuicoes_arbitrado', 'EFD-Contribuições (PIS/COFINS) dos últimos períodos', ['efd_contribuicoes'], 4, 'Comprovar a receita bruta mensal real da empresa -- não há PGDAS fora do Simples Nacional.', { obrigatorio: false }),
   ],
   lucro_real: [
     doc('ecf_real', 'ECF e recibo de entrega', ['ecf', 'recibo_ecf'], 4, 'Comprovar apuração fiscal e parâmetros do Lucro Real.'),
@@ -225,6 +231,7 @@ const DOCUMENTOS_REGIME: Record<RegimeCredito, DocumentoMapa[]> = {
     doc('demonstracoes_real', 'Balanço, DRE, DFC e notas explicativas', ['balanco', 'dre', 'dfc', 'notas_explicativas'], 4, 'Avaliar estrutura financeira e geração de caixa.'),
     doc('balancete_real', 'Balancete atual, razão e DRE acumulada', ['balancete', 'razao_contabil', 'dre'], 4, 'Atualizar a posição financeira do exercício corrente.'),
     doc('dctf_real', 'DCTF/DCTFWeb e comprovantes de recolhimento', ['dctf', 'dctfweb', 'darf'], 4, 'Conferir regularidade das obrigações fiscais.'),
+    doc('efd_contribuicoes_real', 'EFD-Contribuições (PIS/COFINS) dos últimos períodos', ['efd_contribuicoes'], 4, 'Comprovar a receita bruta mensal real da empresa -- não há PGDAS fora do Simples Nacional.'),
   ],
   imune: [
     doc('estatuto_ata_imune', 'Estatuto e atas vigentes', ['estatuto', 'ata'], 3, 'Comprovar governança e poderes de representação.', { tipo_exigencia: 'obrigacao_legal' }),

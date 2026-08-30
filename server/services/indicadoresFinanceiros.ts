@@ -73,6 +73,15 @@ const ALIASES: Record<string, string[]> = {
   compras: ['compras', 'compras_a_prazo'],
   concentracao_clientes: ['concentracao_clientes', 'maior_cliente_percentual'],
   concentracao_fornecedores: ['concentracao_fornecedores', 'maior_fornecedor_percentual'],
+  // Adicionados para alinhar com o "Guia de Análise de Crédito Corporativo e
+  // Regimes Tributários" (documento de referência do usuário, 2026-08): ICSD,
+  // Endividamento Geral e Perfil da Dívida exigem o passivo não circulante e o
+  // EBITDA precisa poder ser calculado como Lucro Operacional + Depreciação +
+  // Amortização quando o documento não traz o EBITDA já pronto.
+  passivo_nao_circulante: ['passivo_nao_circulante', 'passivo_longo_prazo', 'exigivel_longo_prazo'],
+  depreciacao_amortizacao: ['depreciacao_amortizacao', 'depreciacao_e_amortizacao'],
+  depreciacao: ['depreciacao'],
+  amortizacao: ['amortizacao'],
 };
 
 function numberValue(value: unknown): number | null {
@@ -179,12 +188,41 @@ export function calcularIndicadoresFinanceiros(params: {
   const compras = pickNumber([params.empresa, ...fontes], 'compras');
   const concentracaoClientes = pickNumber([params.empresa, ...fontes], 'concentracao_clientes');
   const concentracaoFornecedores = pickNumber([params.empresa, ...fontes], 'concentracao_fornecedores');
+  const passivoNaoCirculante = pickNumber([params.empresa, ...fontes], 'passivo_nao_circulante');
+  const depreciacaoAmortizacaoDireta = pickNumber([params.empresa, ...fontes], 'depreciacao_amortizacao');
+  const depreciacao = pickNumber([params.empresa, ...fontes], 'depreciacao');
+  const amortizacao = pickNumber([params.empresa, ...fontes], 'amortizacao');
+  // LAJIDA/EBITDA conforme o guia de referência: Lucro Operacional + Depreciação +
+  // Amortização. Nem toda DRE traz "EBITDA" pronto -- quando só vier o EBIT e a(s)
+  // linha(s) de depreciação/amortização, calculamos aqui em vez de deixar o
+  // indicador vazio. Se nada disso vier informado, o indicador some (não inventa 0).
+  const depreciacaoAmortizacaoCombinada = depreciacaoAmortizacaoDireta.value !== null
+    ? depreciacaoAmortizacaoDireta
+    : depreciacao.value !== null || amortizacao.value !== null
+      ? { value: (depreciacao.value || 0) + (amortizacao.value || 0), source: depreciacao.source || amortizacao.source }
+      : { value: null, source: null };
+  const ebitdaResolvido = ebitda.value !== null
+    ? ebitda
+    : ebit.value !== null && depreciacaoAmortizacaoCombinada.value !== null
+      ? { value: ebit.value + depreciacaoAmortizacaoCombinada.value, source: ebit.source }
+      : { value: null, source: null };
+  const passivoTotalExigivel = passivo.value !== null && passivoNaoCirculante.value !== null
+    ? { value: passivo.value + passivoNaoCirculante.value, source: passivo.source }
+    : { value: null, source: null };
   const indicadores: Record<string, IndicadorFinanceiro> = {};
   const add = (item: IndicadorFinanceiro) => { indicadores[item.codigo] = item; };
   add(indicador('receita_media_mensal', 'Receita média mensal', receita.value === null ? null : receita.value / 12, 'BRL', 'Receita anual ou 12 meses ÷ 12', 'Dimensiona a base de receita recorrente.', [receita.source], docsIds));
-  add(indicador('margem_ebitda', 'Margem EBITDA', percentual(ebitda.value, receita.value), 'percentual', 'EBITDA ÷ Receita', 'Mede geração operacional antes da estrutura financeira.', [ebitda.source, receita.source], docsIds));
+  add(indicador('margem_ebitda', 'Margem EBITDA', percentual(ebitdaResolvido.value, receita.value), 'percentual', 'EBITDA (informado, ou Lucro Operacional + Depreciação + Amortização) ÷ Receita', 'Mede geração operacional antes da estrutura financeira.', [ebitdaResolvido.source, receita.source], docsIds));
   add(indicador('dscr', 'DSCR', percentual(geracaoCaixa.value, servico.value), 'vezes', 'Geração de caixa disponível ÷ Serviço da dívida', 'Mede a cobertura do serviço da dívida; valor ausente não deve ser interpretado como aprovação.', [geracaoCaixa.source, servico.source], docsIds));
-  add(indicador('divida_ebitda', 'Dívida líquida / EBITDA', percentual(divida.value === null || caixa.value === null ? null : divida.value - caixa.value, ebitda.value), 'vezes', '(Dívida financeira − Caixa) ÷ EBITDA', 'Mede alavancagem; EBITDA ausente impede o cálculo.', [divida.source, caixa.source, ebitda.source], docsIds));
+  // ICSD (Índice de Cobertura do Serviço da Dívida) é o nome bancário para a
+  // mesma conta do DSCR, mas com o EBITDA no numerador em vez da geração de
+  // caixa -- mantido como indicador próprio porque é o termo e o parâmetro
+  // (>1,3x) usados no guia de referência do usuário.
+  add(indicador('icsd', 'ICSD (Cobertura do Serviço da Dívida)', percentual(ebitdaResolvido.value, servico.value), 'vezes', 'EBITDA ÷ Parcela anual das dívidas', 'Referência de mercado: ideal acima de 1,3x. Abaixo disso, a geração operacional pode não cobrir o serviço da dívida do próximo ano.', [ebitdaResolvido.source, servico.source], docsIds));
+  add(indicador('despesa_financeira_sobre_receita', 'Despesas financeiras sobre a receita', percentual(juros.value, receita.value), 'percentual', 'Despesas financeiras (juros e tarifas) ÷ Receita líquida', 'Acima de 5% a 8% da receita líquida costuma indicar alto risco financeiro.', [juros.source, receita.source], docsIds));
+  add(indicador('endividamento_geral', 'Endividamento geral', percentual(passivoTotalExigivel.value, ativosTotais.value), 'percentual', '(Passivo Circulante + Passivo Não Circulante) ÷ Ativo Total', 'Limite comumente aceito entre 60% e 70%; acima disso, a dependência de capital de terceiros é considerada elevada.', [passivo.source, passivoNaoCirculante.source, ativosTotais.source], docsIds));
+  add(indicador('perfil_divida', 'Perfil da dívida', percentual(passivo.value, passivoTotalExigivel.value), 'percentual', 'Passivo Circulante ÷ Passivo Total Exigível', 'Concentração maior no longo prazo (PNC) é saudável; passivo circulante muito alto em relação ao total gera alerta de risco de curto prazo.', [passivo.source, passivoNaoCirculante.source], docsIds));
+  add(indicador('divida_ebitda', 'Dívida líquida / EBITDA', percentual(divida.value === null || caixa.value === null ? null : divida.value - caixa.value, ebitdaResolvido.value), 'vezes', '(Dívida financeira − Caixa) ÷ EBITDA', 'Mede alavancagem; EBITDA ausente impede o cálculo.', [divida.source, caixa.source, ebitdaResolvido.source], docsIds));
   add(indicador('liquidez_corrente', 'Liquidez corrente', percentual(ativo.value, passivo.value), 'vezes', 'Ativo circulante ÷ Passivo circulante', 'Mede cobertura das obrigações de curto prazo.', [ativo.source, passivo.source], docsIds));
   add(indicador('liquidez_seca', 'Liquidez seca', percentual(ativo.value === null || estoque.value === null ? null : ativo.value - estoque.value, passivo.value), 'vezes', '(Ativo circulante − Estoque) ÷ Passivo circulante', 'Exclui estoques para medir liquidez de maior conversibilidade.', [ativo.source, estoque.source, passivo.source], docsIds));
   add(indicador('cobertura_juros', 'Cobertura de juros', percentual(ebit.value, juros.value), 'vezes', 'EBIT ÷ Despesa financeira', 'Mede folga operacional para juros.', [ebit.source, juros.source], docsIds));
@@ -219,7 +257,7 @@ export function calcularIndicadoresFinanceiros(params: {
     qualidade,
     competencia: { inicio: competencias[0] || null, fim: competencias.at(-1) || null },
     documentos_utilizados: docsIds,
-    fontes: [receita, ativo, passivo, estoque, receber, fornecedores, obrigacoes, divida, caixa, pl, ebitda, ebit, juros, servico, geracaoCaixa, custo, lucroBruto, lucroLiquido, ativosTotais, estoqueMedio, vendasPrazo, compras, concentracaoClientes, concentracaoFornecedores].map((item) => item.source).filter(Boolean) as FonteFinanceira[],
+    fontes: [receita, ativo, passivo, estoque, receber, fornecedores, obrigacoes, divida, caixa, pl, ebitda, ebit, juros, servico, geracaoCaixa, custo, lucroBruto, lucroLiquido, ativosTotais, estoqueMedio, vendasPrazo, compras, concentracaoClientes, concentracaoFornecedores, passivoNaoCirculante, depreciacaoAmortizacaoDireta, depreciacao, amortizacao].map((item) => item.source).filter(Boolean) as FonteFinanceira[],
     limitacoes,
   };
 }
