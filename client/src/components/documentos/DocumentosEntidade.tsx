@@ -680,6 +680,15 @@ export default function DocumentosEntidade({
   // igual ao mecanismo de "Ver detalhes" já usado na Etapa 1/2/3.
   const [descricaoVisivel, setDescricaoVisivel] = useState<Record<string, boolean>>({});
   const [pipeline, setPipeline] = useState<any>(null);
+  // Popover "Detalhes da pendência" do bloco compacto de confirmação de regime
+  // tributário -- pedido explícito do usuário para tirar o texto permanente
+  // ("Comprovação do regime tributário não optante", "Prioridade alta",
+  // "Próximo documento a anexar: ECF, DCTF/DCTFWeb, DARF ou Livro Caixa") e
+  // deixar só um selo "Pendência" com detalhes sob clique, mais os botões
+  // diretos de ECF/DCTF (ninguém vai anexar Livro Caixa, então não aparece
+  // mais como opção em destaque no bloco -- continua valendo como tipo de
+  // documento no catálogo/slots, só não é mais sugerido aqui).
+  const [pendenciaRegimeAberta, setPendenciaRegimeAberta] = useState(false);
   // Resultado da Etapa 1 (Cartão CNPJ + QSA + Enquadramento Tributário), mostrado
   // direto nesta tela com o mesmo cartão usado no Dossiê/Laudo IA
   // (ProntidaoIdentidadeCard) -- antes, clicar em "Iniciar análise documental"
@@ -1254,30 +1263,44 @@ export default function DocumentosEntidade({
   const blocoPendenciaRegime = mapaCredito?.regime_a_confirmar === true ? (() => {
     const pendencia = mapaCredito.pendencias?.find((item: any) => item.codigo === "nao_optante_regime_a_confirmar");
     const emAnalise = pendencia?.status === "em_analise";
+    const chaveEcf = chaveContextoSlot("ecf", null);
+    const chaveDctf = chaveContextoSlot("dctf", null);
     return (
-      <div className="rounded-2xl border border-warning/30 bg-warning/10 p-3">
-        <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
-          <div className="min-w-0">
-            <div className="flex flex-wrap items-center gap-2">
-              <AlertTriangle className="h-4 w-4 shrink-0 text-warning" />
-              <p className="text-xs font-black text-foreground">{pendencia?.titulo || "Confirmação do regime tributário"}</p>
-              <span className="rounded-full border border-warning/30 bg-card px-2 py-0.5 text-[10px] font-black text-warning">{emAnalise ? "Aguardando análise" : "Prioridade alta"}</span>
-            </div>
-            <p className="mt-2 flex items-center gap-1.5 text-[11px] font-bold text-primary"><ArrowRight className="h-3.5 w-3.5 shrink-0" /> Próximo documento a anexar: ECF, DCTF/DCTFWeb, DARF ou Livro Caixa</p>
-            <div className="mt-2 rounded-xl border border-warning/20 bg-card p-2.5">
-              <p className="text-[11px] font-black text-warning">O que precisa ser resolvido</p>
-              <p className="mt-1 text-[10px] leading-relaxed text-muted-foreground">{emAnalise ? "O documento foi anexado e aguarda leitura para identificar o regime efetivo." : pendencia?.descricao || "A empresa foi identificada como não optante, mas o regime efetivo ainda precisa ser confirmado."}</p>
-            </div>
-          </div>
+      <div className="flex flex-wrap items-center gap-2 rounded-xl border border-warning/20 bg-warning/10 px-3 py-2">
+        <div className="relative">
           <button
             type="button"
-            onClick={() => { setSecaoAtiva("Documentação da Empresa"); setMostrarComplementares(true); }}
-            className="inline-flex h-9 shrink-0 items-center justify-center gap-1.5 rounded-xl bg-primary px-3 text-xs font-black text-primary-foreground hover:bg-primary/90"
+            onClick={() => setPendenciaRegimeAberta((v) => !v)}
+            className="inline-flex items-center gap-1.5 rounded-full border border-warning/30 bg-card px-2.5 py-1 text-[10px] font-black text-warning"
           >
-            {emAnalise ? "Ver documento" : "Anexar comprovação"}
+            <AlertTriangle className="h-3 w-3 shrink-0" /> {emAnalise ? "Aguardando análise" : "Pendência"}
           </button>
+          {pendenciaRegimeAberta && (
+            <div className="absolute left-0 top-full z-20 mt-1.5 w-72 max-w-[90vw] rounded-xl border border-border bg-card p-3 shadow-lg">
+              <div className="flex items-center justify-between gap-2">
+                <p className="text-[11px] font-black text-warning">Detalhes da pendência</p>
+                <button type="button" onClick={() => setPendenciaRegimeAberta(false)} className="text-[10px] text-muted-foreground hover:text-foreground">Fechar</button>
+              </div>
+              <p className="mt-1.5 text-[11px] leading-relaxed text-muted-foreground">
+                {emAnalise
+                  ? "O documento foi anexado e aguarda leitura para identificar o regime efetivo."
+                  : pendencia?.descricao || "A empresa não é optante do Simples. Anexe ECF ou DCTF para confirmar o regime efetivo (Lucro Presumido, Real ou Arbitrado)."}
+              </p>
+            </div>
+          )}
         </div>
-        <p className="mt-2 text-[10px] text-muted-foreground">Esta pendência não bloqueia a Etapa 1.</p>
+        {!emAnalise && (
+          <>
+            <label className={`h-7 inline-flex items-center justify-center gap-1 text-[10px] font-bold px-2.5 rounded-lg transition-colors shrink-0 ${uploadingTipo === chaveEcf ? "bg-border text-primary-foreground cursor-not-allowed" : "bg-primary text-primary-foreground cursor-pointer hover:bg-primary/90"}`}>
+              {uploadingTipo === chaveEcf ? <Loader2 className="w-3 h-3 animate-spin" /> : <Upload className="w-3 h-3" />} ECF
+              <input type="file" accept=".pdf,.jpg,.jpeg,.png,.webp,.xlsx,.csv,.docx" className="hidden" disabled={uploadingTipo === chaveEcf} onChange={(e) => { const file = e.target.files?.[0]; if (file) void enviar("ecf", file); e.currentTarget.value = ""; }} />
+            </label>
+            <label className={`h-7 inline-flex items-center justify-center gap-1 text-[10px] font-bold px-2.5 rounded-lg transition-colors shrink-0 ${uploadingTipo === chaveDctf ? "bg-border text-primary-foreground cursor-not-allowed" : "bg-primary text-primary-foreground cursor-pointer hover:bg-primary/90"}`}>
+              {uploadingTipo === chaveDctf ? <Loader2 className="w-3 h-3 animate-spin" /> : <Upload className="w-3 h-3" />} DCTF
+              <input type="file" accept=".pdf,.jpg,.jpeg,.png,.webp,.xlsx,.csv,.docx" className="hidden" disabled={uploadingTipo === chaveDctf} onChange={(e) => { const file = e.target.files?.[0]; if (file) void enviar("dctf", file); e.currentTarget.value = ""; }} />
+            </label>
+          </>
+        )}
       </div>
     );
   })() : null;
