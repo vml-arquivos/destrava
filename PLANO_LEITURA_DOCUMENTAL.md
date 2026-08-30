@@ -41,7 +41,7 @@ Em todos os casos, a resposta ao usuário sempre inclui, quando disponível, uma
 - **Documentos que confirmam o regime efetivo (qualquer um serve)**:
   - **ECF** (Escrituração Contábil Fiscal)
   - **DCTF/DCTFWeb**
-  - **DARF** — o código de receita indica o regime (2089/5993 = Lucro Presumido; 8998/3373 = Lucro Real), lido por `analisarSimplesNacional`/`regimeViaCodigoReceitaDarf` em `extracaoDocumentalLocal.ts`.
+  - **DARF** — o código de receita indica o regime (2089 = Lucro Presumido; 5993/3373 = Lucro Real; 5625 = Lucro Arbitrado), lido por `analisarSimplesNacional`/`regimeViaCodigoReceitaDarf` em `extracaoDocumentalLocal.ts`. Catálogo corrigido em 2026-08-30 (5993 estava classificado como Presumido por engano). O código 8998 não é confirmado na tabela oficial da RFB para IRPJ e nunca infere regime sozinho — fica sinalizado para revisão humana.
   - **Livro Caixa** (regime de caixa, tipicamente MEI/Simples em situações específicas).
 - **Se a leitura não bate**: pendência "Regime a confirmar" (compacta, popover "Ação necessária"); o card de Enquadramento não repete mais esse aviso internamente (era redundante — corrigido nesta rodada), o aviso único vive no bloco dedicado logo abaixo da grade Cartão CNPJ/QSA/Enquadramento.
 
