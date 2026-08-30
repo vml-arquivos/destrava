@@ -266,6 +266,17 @@ function montarResultadoDetalhadoRelatorio(documento: any, analiseEspecializada:
   const ehSocietario = ehQsa
     || /contrato_social|alteracao_contratual|atos_junta|junta_comercial/.test(tipoDoDocumento)
     || Boolean(contratoDados?.cnpj || contratoDados?.numero_arquivamento || documento?.nire || dados?.nire);
+  // Mesmo defeito do QSA/societário, mas no Enquadramento Tributário/Simples
+  // Nacional: o card não tinha NENHUM campo próprio, então mesmo quando a
+  // leitura (local ou IA) já identificava situação no Simples/regime/CNPJ em
+  // `dados_extraidos`, o relatório mostrava só metadados de OCR (fonte,
+  // confiança, status) -- nunca a resposta em si. `situacao_simples` sempre
+  // vem preenchido pela leitura (mesmo "Não Optante"); `regime_tributario` só
+  // vem preenchido quando o documento afirma um regime (ver
+  // detectarRegimeTributarioDeclarado/normalizarDadosSimples) -- não exibir o
+  // campo quando nulo é o comportamento correto, não um bug.
+  const ehEnquadramentoOuSimples = /simples_nacional|enquadramento_tributario/.test(tipoDoDocumento)
+    || Boolean(dados?.situacao_simples || dados?.regime_tributario || dados?.opcao_mei !== undefined && dados?.opcao_mei !== null);
 
   if (ehQsa) {
     adicionarCampo('CNPJ do QSA', dados?.cnpj);
@@ -278,6 +289,15 @@ function montarResultadoDetalhadoRelatorio(documento: any, analiseEspecializada:
     adicionarCampo('Data de registro', documento?.data_registro || dados?.data_registro || dados?.contrato?.data_registro);
     adicionarCampo('Tipo do ato', documento?.tipo_ato || dados?.tipo_ato || dados?.contrato?.tipo_ato);
     adicionarCampo('Sócios identificados', sociosLidos.length || (Array.isArray(documento?.socios) ? documento.socios.length : null));
+  }
+  if (ehEnquadramentoOuSimples) {
+    adicionarCampo('CNPJ do documento fiscal', dados?.cnpj);
+    adicionarCampo('Situação no Simples Nacional', dados?.situacao_simples);
+    adicionarCampo('Regime tributário declarado no documento', dados?.regime_tributario);
+    adicionarCampo('Optante MEI/SIMEI', dados?.opcao_mei);
+    adicionarCampo('Data de opção pelo Simples', dados?.data_opcao_simples);
+    adicionarCampo('Data de exclusão do Simples', dados?.data_exclusao_simples);
+    adicionarCampo('Motivo da exclusão do Simples', dados?.motivo_exclusao);
   }
   adicionarCampo('Fonte da leitura', documento?.fonte || documento?.fonte_extracao || analise?.modelo_ia);
   adicionarCampo('Confiança da leitura', formatarConfiancaRelatorio(documento?.confianca ?? documento?.nivel_confianca ?? analise?.nivel_confianca));
