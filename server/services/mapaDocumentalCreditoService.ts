@@ -559,7 +559,7 @@ export function gerarMapaDocumentalCredito(params: {
     status: 'pendente',
     prioridade: 'alta',
     tipos_documento_aceitos: ['ecf', 'dctf', 'dctfweb', 'darf', 'livro_caixa'],
-    nao_bloqueia_etapa_1: true,
+    nao_bloqueia_etapa_1: false,
   }] : [];
 
   return {

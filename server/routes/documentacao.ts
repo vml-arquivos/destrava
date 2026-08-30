@@ -1540,11 +1540,109 @@ async function montarAtosJuntaDados(
   }
 }
 
+const TIPOS_COMPROVACAO_REGIME = ['ecf', 'recibo_ecf', 'dctf', 'dctfweb', 'mit', 'darf', 'livro_caixa'];
+const REGIMES_COMPROVAVEIS = new Set(['lucro presumido', 'lucro real', 'lucro arbitrado']);
+
+function extrairRegimeComprovadoDoLaudo(analise: any): string | null {
+  const dados = analise?.dados_extraidos && typeof analise.dados_extraidos === 'object' ? analise.dados_extraidos : {};
+  const comprovados = dados.campos_comprovados && typeof dados.campos_comprovados === 'object' ? dados.campos_comprovados : {};
+  const candidatos = [dados.regime_tributario, comprovados.regime_tributario, dados.regime, comprovados.regime]
+    .map((valor) => String(valor || '').trim().toLowerCase())
+    .filter(Boolean);
+  return candidatos.find((valor) => REGIMES_COMPROVAVEIS.has(valor)) || null;
+}
+
+async function resolverComprovacaoRegime(empresaId: string, processar: boolean): Promise<{ dados: Record<string, any>; pendencias: Pendencia[] } | null> {
+  const documentos = await listarDocumentosEmpresaPorTipos(empresaId, TIPOS_COMPROVACAO_REGIME);
+  if (!documentos.length) return null;
+
+  const pendencias: Pendencia[] = [];
+  let ultimoLaudo: any = null;
+  for (const documento of documentos) {
+    const tipoDocumento = String(documento.tipo_documento || '');
+    const configuracao = documentAnalysisConfig(tipoDocumento);
+    const promptCodigo = configuracao?.promptCodigo || (tipoDocumento === 'darf' ? 'simples_extract' : `${tipoDocumento}_extract`);
+    let analise = await buscarAnaliseEspecializadaPersistida(String(documento.id), promptCodigo);
+    // Compatibilidade com DARF analisado pelo executor legado antes do catálogo
+    // generico: o laudo antigo continua sendo aproveitado se já declarar o regime.
+    if (!analise && tipoDocumento === 'darf') analise = await buscarAnaliseEspecializadaPersistida(String(documento.id), 'simples_extract');
+    if (!analise && processar) {
+      try {
+        analise = await analiseDocumentalService.analisarDocumentoCatalogado(empresaId, String(documento.id), tipoDocumento);
+        await persistirAnaliseEspecializada(String(documento.id), promptCodigo, analise);
+      } catch (error: any) {
+        pendencias.push({ codigo: 'comprovacao_regime_falha_leitura', mensagem: mensagemSeguraFalhaLeitura(`${tipoDocumento.toUpperCase()} de confirmação de regime`, error), severidade: 'alta', origem: tipoDocumento, recomendacao: 'Verificar o arquivo e executar novamente a análise documental.' });
+        continue;
+      }
+    }
+    if (!analise) {
+      pendencias.push({ codigo: 'comprovacao_regime_aguardando_analise', mensagem: `${tipoDocumento.toUpperCase()} anexado; aguardando leitura para confirmar o regime tributário.`, severidade: 'alta', origem: tipoDocumento, recomendacao: 'Executar a análise documental do arquivo anexado.' });
+      continue;
+    }
+    ultimoLaudo = { analise, documento };
+    const regime = extrairRegimeComprovadoDoLaudo(analise);
+    if (regime) {
+      const nomeDocumento = String(documento.nome_original || tipoDocumento).trim();
+      return {
+        dados: {
+          anexado: true,
+          analisado: true,
+          tentativa_realizada: processar,
+          documento_id: documento.id,
+          documento_comprobatorio_id: documento.id,
+          tipo_documento_comprobatorio: tipoDocumento,
+          status_leitura: analise.status,
+          lido_em: analise.analisado_em,
+          modelo: analise.modelo_ia,
+          nivel_confianca: analise.nivel_confianca,
+          fonte_extracao: 'documento_comprobatorio_regime',
+          ...analise.dados_extraidos,
+          regime_tributario: regime.replace(/\b\w/g, (letra) => letra.toUpperCase()),
+          regime_confirmado: true,
+          regime_a_confirmar: false,
+          situacao_simples: 'Não Optante',
+          diagnostico: `Regime tributário confirmado por leitura de ${nomeDocumento}: ${regime.replace(/\b\w/g, (letra) => letra.toUpperCase())}.`,
+        },
+        pendencias: [],
+      };
+    }
+    const alerta = Array.isArray(analise.alertas) ? analise.alertas.find((item: any) => item.severidade === 'alta' || item.severidade === 'critica') || analise.alertas[0] : null;
+    pendencias.push({ codigo: alerta?.codigo || 'comprovacao_regime_nao_identificado', mensagem: alerta?.mensagem || `${tipoDocumento.toUpperCase()} foi lido, mas não declarou de forma inequívoca Lucro Presumido, Lucro Real ou Lucro Arbitrado.`, severidade: 'alta', origem: tipoDocumento, recomendacao: alerta?.recomendacao || 'Anexar comprovante legível que declare o regime tributário efetivo.' });
+  }
+
+  return {
+    dados: {
+      anexado: true,
+      analisado: Boolean(ultimoLaudo),
+      tentativa_realizada: processar,
+      documento_id: ultimoLaudo?.documento?.id || documentos[0]?.id || null,
+      regime_confirmado: false,
+      regime_a_confirmar: true,
+      status_leitura: ultimoLaudo?.analise?.status || 'aguardando_analise',
+      fonte_extracao: ultimoLaudo?.analise?.dados_extraidos?.fonte_extracao || null,
+      diagnostico: 'Há comprovante fiscal anexado, mas a leitura ainda não confirmou Lucro Presumido, Lucro Real ou Lucro Arbitrado.',
+    },
+    pendencias: pendencias.length ? pendencias : [{ codigo: 'comprovacao_regime_nao_identificado', mensagem: 'Comprovante fiscal anexado sem regime tributário efetivo identificado.', severidade: 'alta', origem: 'documentos_fiscais', recomendacao: 'Anexar ECF, DCTF/DCTFWeb, DARF ou Livro Caixa com evidência legível do regime.' }],
+  };
+}
+
 export async function montarEnquadramentoDados(
   empresaId: string,
   processar: boolean,
   empresa: any = null,
 ): Promise<{ dados: Record<string, any>; pendencias: Pendencia[] }> {
+  // Consulta primeiro o comprovante fiscal somente quando a Receita deixou a
+  // empresa não optante/sem regime efetivo. Optantes do Simples e MEI mantêm o
+  // caminho legado e não ganham uma exigência física indevida.
+  const regimePelaReceita = identificarRegimeCredito(empresa, {
+    regime_tributario: empresa?.regime_tributario,
+    opcao_simples: empresa?.opcao_simples,
+    opcao_mei: empresa?.opcao_mei,
+  });
+  if (regimePelaReceita === 'nao_optante_regime_a_confirmar' || regimePelaReceita === 'nao_identificado') {
+    const comprovacao = await resolverComprovacaoRegime(empresaId, processar);
+    if (comprovacao) return comprovacao;
+  }
   const docs = await listarDocumentosEmpresaPorTipos(empresaId, ['enquadramento_tributario_cnpj', 'simples_nacional']);
   if (!docs.length) {
     // O Enquadramento Tributário não é um documento físico -- a informação vem da
@@ -1852,23 +1950,18 @@ async function avaliarProntidaoIdentidadeCnpj(params: {
   else if (qsaTemGrave) addBloqueio('QSA tem divergências societárias relevantes.');
   else pontosPositivos.push('QSA conferido: CNPJ, razão social, capital, sócios e administrador.');
 
-  // O Enquadramento Tributário NÃO é um documento físico a ser anexado -- essa
-  // informação vem estritamente da consulta pública de CNPJ (Receita Federal),
-  // já sincronizada em `empresas.regime_tributario`/`opcao_simples`/`opcao_mei`
-  // (ver `montarCnpjDados`). Um documento comprobatório (ex: consulta do Simples
-  // Nacional) continua podendo ser anexado como reforço opcional -- e, se for
-  // anexado, ainda precisa ser lido e não pode contradizer os dados da Receita --
-  // mas a ausência dele nunca bloqueia a Fase 1.
+  // A consulta da Receita identifica a situação no Simples, mas "não optante"
+  // não identifica sozinha se o regime efetivo é Presumido, Real ou Arbitrado.
+  // Para esse caso a confirmação documental é pré-requisito de fluxo: ECF,
+  // DCTF/DCTFWeb, DARF pelo código de receita ou Livro Caixa precisa ser anexado
+  // e lido com sucesso antes de liberar Atos da Junta Comercial.
   const enquadramentoAnexado = params.enquadramentoDados?.anexado === true;
   const enquadramentoAnalisado = params.enquadramentoDados?.analisado === true;
   const enquadramentoTemGrave = params.enquadramentoPendencias.some((p) => p.severidade === 'alta');
   const regime = String(params.enquadramentoDados?.regime_tributario || params.empresa?.regime_tributario || '').trim();
   const situacaoSimples = String(params.enquadramentoDados?.situacao_simples || '').trim();
-  // Regime efetivo = o mesmo que o mapa documental usa para decidir quais
-  // documentos serão exigidos (PGDAS/DEFIS no Simples, ECF/ECD/DCTF no
-  // Presumido/Real, e assim por diante). Sem isso a tela dizia "Regime: Não
-  // Optante", que não é um regime -- e escondia que Lucro Presumido, Lucro
-  // Real e Arbitrado ainda estavam todos em aberto.
+  // Reutilizar o mesmo código do mapa documental evita que a ficha libere a
+  // etapa societária com uma classificação diferente da trilha documental.
   const regimeCodigo = identificarRegimeCredito(params.empresa, params.enquadramentoDados);
   const regimeRotulo = ROTULO_REGIME_CREDITO[regimeCodigo] || 'Regime ainda não identificado';
   const regimeAConfirmar = regimeCodigo === 'nao_optante_regime_a_confirmar' || regimeCodigo === 'nao_identificado';
@@ -1879,24 +1972,9 @@ async function avaliarProntidaoIdentidadeCnpj(params: {
     && (!enquadramentoAnexado || enquadramentoAnalisado);
   if (!enquadramentoIdentificado) addBloqueio('Regime tributário não identificado. Sincronize os dados de CNPJ (Receita Federal) da empresa.');
   else if (enquadramentoAnexado && !enquadramentoAnalisado) addBloqueio(params.enquadramentoDados?.erro_processamento || 'Documento de enquadramento anexado, mas a análise ainda não foi concluída.');
-  // Uma leitura automática de baixa confiança (ou não totalmente confirmada) do
-  // comprovante opcional de enquadramento não é uma divergência de dado -- o regime
-  // tributário em si já está identificado pela consulta de CNPJ acima. Por isso vira
-  // aviso de revisão (visível na ficha da empresa), não bloqueio da Fase 1: o time
-  // consegue revisar o comprovante depois, sem travar o anexo dos demais documentos.
+  else if (regimeCodigo === 'nao_optante_regime_a_confirmar') addBloqueio('Regime tributário a confirmar: anexe ECF, DCTF/DCTFWeb, DARF ou Livro Caixa para identificar se a empresa é Lucro Presumido, Lucro Real ou Arbitrado. Os Atos da Junta Comercial só serão solicitados depois dessa confirmação.');
   else if (enquadramentoTemGrave) addAviso('Enquadramento tributário: o comprovante anexado como reforço precisa de revisão humana (divergência ou baixa confiança na leitura automática).');
   else if (!regimeAConfirmar) pontosPositivos.push(`Enquadramento tributário identificado: ${regimeRotulo}.`);
-  // Fora do Simples, o regime efetivo ainda define quais documentos fiscais
-  // serão exigidos adiante (ECF/ECD/DCTF no Presumido e no Real; PGDAS/DEFIS
-  // só no Simples). Fica como aviso curto, não bloqueio: a Etapa 1 trata só de
-  // identidade do CNPJ -- ECF/DCTF são anexados bem mais adiante, no checklist
-  // de Documentação da Empresa, então o aviso desta etapa não deve instruir a
-  // anexar um documento que ainda não é o passo atual (só registrar o fato).
-  // O mapa documental (mapaDocumentalCreditoService) é quem de fato exige o
-  // comprovante na etapa fiscal certa.
-  if (regimeAConfirmar && situacaoSimples) {
-    addAviso('Regime tributário a confirmar: empresa não optante do Simples.');
-  }
 
   const textoEnquadramento = [regime, situacaoSimples, params.empresa?.porte, params.empresa?.natureza_juridica].filter(Boolean).join(' ');
   const ehMei = params.enquadramentoDados?.opcao_mei === true || params.empresa?.opcao_mei === true || /\bmei\b|microempreendedor individual|simei/i.test(textoEnquadramento);
@@ -1984,12 +2062,12 @@ async function avaliarProntidaoIdentidadeCnpj(params: {
       },
     },
   };
-  // O Enquadramento Tributário é reforço documental opcional (ver comentário acima) --
-  // sua própria consistência fica visível no card dele ("revisão necessária" quando for
-  // o caso), mas não integra o portão de avanço da Fase 1, que depende apenas dos dois
-  // documentos obrigatórios (Cartão CNPJ e QSA) e da ausência de bloqueios reais.
+  // Optantes do Simples e MEI seguem o caminho legado. Para uma empresa
+  // identificada como não optante, porém, Atos da Junta só pode ser liberado
+  // após a leitura bem-sucedida de um comprovante que declare o regime efetivo.
+  const regimeConfirmadoOuNaoAplicavel = regimeCodigo !== 'nao_optante_regime_a_confirmar';
   const tresDocumentosOk = cartaoConsistente && qsaConsistente;
-  const apto = situacaoAtiva && tresDocumentosOk && bloqueios.length === 0;
+  const apto = situacaoAtiva && tresDocumentosOk && bloqueios.length === 0 && regimeConfirmadoOuNaoAplicavel;
 
   return {
     etapa: 'identidade_cnpj', proxima_etapa: 'documentacao_societaria', apto_para_avancar: apto, botao_avancar_disponivel: apto,
@@ -2430,13 +2508,19 @@ export async function montarDossieCreditoEmpresa(empresaId: string, options: { p
       ? bloco.documentos.map((documento: any) => String(documento?.tipo_documento || '')).filter(Boolean)
       : []),
   );
-  const tiposComprovacaoRegime = new Set(['ecf', 'dctf', 'dctfweb', 'darf', 'livro_caixa']);
+  const tiposComprovacaoRegime = new Set(['ecf', 'recibo_ecf', 'dctf', 'dctfweb', 'mit', 'darf', 'livro_caixa']);
   const regimesDeclarados = new Set(['lucro presumido', 'lucro real', 'lucro arbitrado']);
   const regimeDeclaradoEmDocumento = blocos
     .flatMap((bloco: any) => Array.isArray(bloco.documentos) ? bloco.documentos : [])
     .filter((documento: any) => tiposComprovacaoRegime.has(String(documento?.tipo_documento || '')) && arquivoDocumentoTemConteudo(documento) && documento?.analisado === true && documento?.consistente === true)
-    .flatMap((documento: any) => Array.isArray(documento?.resultado_analise?.campos) ? documento.resultado_analise.campos : [])
-    .map((campo: any) => String(campo?.valor || '').trim().toLowerCase())
+    .flatMap((documento: any) => {
+      const resultado = documento?.resultado_analise || {};
+      const dados = resultado?.dados_extraidos && typeof resultado.dados_extraidos === 'object' ? resultado.dados_extraidos : {};
+      const comprovados = dados?.campos_comprovados && typeof dados.campos_comprovados === 'object' ? dados.campos_comprovados : {};
+      const evidencias = Array.isArray(resultado?.evidencias) ? resultado.evidencias : [];
+      return [dados.regime_tributario, comprovados.regime_tributario, resultado.regime_tributario, ...evidencias.filter((item: any) => item?.campo === 'regime_tributario').map((item: any) => item?.valor)];
+    })
+    .map((valor: any) => String(valor || '').trim().toLowerCase())
     .find((valor: string) => regimesDeclarados.has(valor));
   const regimeComprovado = Boolean(regimeDeclaradoEmDocumento);
   const enquadramentoParaMapa = regimeDeclaradoEmDocumento
@@ -3026,12 +3110,10 @@ const ANALISE_ESPECIALIZADA_POR_TIPO: Partial<Record<string, { tipo: TipoAnalise
   qsa: { tipo: 'qsa', promptCodigo: 'qsa_extract' },
   simples_nacional: { tipo: 'simples_nacional', promptCodigo: 'simples_extract' },
   enquadramento_tributario_cnpj: { tipo: 'simples_nacional', promptCodigo: 'simples_extract' },
-  // DARF de IRPJ: não declara o regime por extenso, mas o código de receita
-  // denuncia Presumido (2089/5993) ou Real (8998/3373) -- ver o guia de
-  // referência do usuário e detectarRegimeTributarioDeclarado em
-  // extracaoDocumentalLocal.ts. Mesmo pipeline do enquadramento/Simples porque
-  // o objetivo final é o mesmo: preencher regime_tributario em dados_extraidos.
-  darf: { tipo: 'simples_nacional', promptCodigo: 'simples_extract' },
+  // DARF de IRPJ: o código de receita denuncia Presumido (2089/5993) ou
+  // Real (8998/3373). O analisador catalogado preserva a evidência do código
+  // e aplica a mesma detecção conservadora usada nos demais comprovantes.
+  darf: { tipo: 'documento_generico', promptCodigo: 'darf_extract' },
   atos_junta_comercial: { tipo: 'atos_junta_comercial', promptCodigo: 'atos_junta_extract' },
   faturamento_12_meses: { tipo: 'faturamento_12_meses', promptCodigo: 'faturamento_12m_extract' },
   comprovante_faturamento: { tipo: 'faturamento_12_meses', promptCodigo: 'faturamento_12m_extract' },

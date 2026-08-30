@@ -102,7 +102,7 @@ describe('mapa documental de crédito', () => {
         codigo: 'nao_optante_regime_a_confirmar',
         prioridade: 'alta',
         status: 'pendente',
-        nao_bloqueia_etapa_1: true,
+        nao_bloqueia_etapa_1: false,
         tipos_documento_aceitos: expect.arrayContaining(['ecf', 'dctf', 'dctfweb', 'darf', 'livro_caixa']),
       }),
     ]);

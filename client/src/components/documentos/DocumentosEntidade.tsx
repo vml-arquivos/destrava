@@ -158,15 +158,14 @@ const slot = (titulo: string, tipoUpload: string, matchTipos?: string[], extra: 
 export const SECOES_DOCUMENTAIS: SecaoDocumento[] = [
   {
     titulo: "Identidade do CNPJ",
-    descricao: "Etapa 1: Cartão CNPJ e QSA são obrigatórios e cruzados com os dados da Receita Federal. O regime tributário (Enquadramento) vem da própria consulta de CNPJ -- não precisa de upload.",
+    descricao: "Etapa 1: Cartão CNPJ e QSA são obrigatórios e cruzados com os dados da Receita Federal. Para o Simples/MEI, o regime vem da consulta; para não optantes, ECF, DCTF/DCTFWeb, DARF ou Livro Caixa confirmam o regime antes dos Atos da Junta.",
     slots: [
       slot("Cartão CNPJ", "cartao_cnpj", [], { obrigatorio: true, descricao: "A IA/OCR identifica CNPJ, razão social, abertura, CNAE, natureza, porte e situação cadastral." }),
       slot("QSA (Quadro Societário)", "qsa", [], { obrigatorio: true, descricao: "Confere CNPJ, razão social, capital social, nomes dos sócios e identifica o Sócio-Administrador. Dados pessoais não são exigidos nesta etapa." }),
-      // Não é obrigatório: o regime tributário já vem da consulta pública de CNPJ
-      // (Receita Federal), sincronizada automaticamente no cadastro da empresa.
-      // O upload aqui é só um reforço documental opcional (ex: print do Simples
-      // Nacional), nunca um pré-requisito para avançar da Fase 1.
-      slot("Enquadramento tributário (opcional)", "enquadramento_tributario_cnpj", [], { descricao: "Regime tributário (Simples Nacional, Lucro Presumido, Lucro Real ou MEI) identificado pela consulta de CNPJ. Anexar um comprovante aqui é opcional -- reforça a análise, mas não é exigido." }),
+      // A consulta do CNPJ identifica a situação no Simples. Para empresas não
+      // optantes, o regime efetivo precisa ser comprovado nos slots fiscais da
+      // documentação da empresa antes de liberar Atos da Junta.
+      slot("Enquadramento tributário (consulta CNPJ)", "enquadramento_tributario_cnpj", [], { descricao: "A situação no Simples vem da consulta de CNPJ. Se a empresa não for optante, ECF, DCTF/DCTFWeb, DARF ou Livro Caixa deve confirmar o regime efetivo antes dos Atos da Junta." }),
     ],
   },
   {
@@ -203,8 +202,9 @@ export const SECOES_DOCUMENTAIS: SecaoDocumento[] = [
       slot("DEFIS / DASN-SIMEI", "defis", ["dasn_simei"], { descricao: "Declaração anual: DEFIS para optantes do Simples Nacional e DASN-SIMEI para MEI. Não se aplica a empresas não optantes." }),
       slot("Recibo de entrega da DEFIS / DASN-SIMEI", "recibo_defis", ["recibo_dasn_simei"], { descricao: "Recibo correspondente à DEFIS ou DASN-SIMEI anexada." }),
       slot("ECD e recibo", "ecd", ["recibo_ecd"], { descricao: "Escrituração Contábil Digital e recibo, quando a empresa estiver obrigada ou a operação exigir." }),
-      slot("DCTFWeb / MIT", "dctf", ["dctfweb", "mit"], { descricao: "Obrigações fiscais e comprovantes correspondentes, quando aplicável." }),
-      slot("DARF", "darf", [], { descricao: "Comprovante de arrecadação fiscal, quando aplicável." }),
+      slot("DCTFWeb / MIT", "dctf", ["dctfweb", "mit"], { descricao: "Obrigações fiscais e comprovantes correspondentes, quando aplicável ou necessários para confirmar o regime." }),
+      slot("DARF", "darf", [], { descricao: "Comprovante de arrecadação fiscal; o código de receita pode confirmar Lucro Presumido ou Lucro Real." }),
+      slot("Livro Caixa", "livro_caixa", [], { descricao: "Livro Caixa ou relatório equivalente; pode confirmar o regime efetivo quando a empresa não é optante do Simples." }),
       slot("EFD-Contribuições / EFD ICMS-IPI", "efd_contribuicoes", ["efd_icms_ipi", "efd"], { descricao: "Escrituração fiscal digital aplicável ao regime e à atividade." }),
       slot("eSocial / EFD-Reinf", "esocial", ["efd_reinf"], { descricao: "Obrigações trabalhistas e previdenciárias somente quando aplicáveis à empresa." }),
       slot("Faturamento bruto dos últimos 12 meses", "faturamento_12_meses", ["comprovante_faturamento", "declaracao_faturamento"], { descricao: "Documento opcional. Quando anexado, a IA confere meses, último mês fechado, data e modalidade das assinaturas, CNPJ, sócio-administrador e contador." }),
@@ -309,7 +309,7 @@ function grupoDaSecao(tituloSecao: string): string {
 const TIPOS_FORA_DO_CHECKLIST_CREDITO = new Set(["contrato_prestacao_servicos", "contrato_assessoria", "enquadramento_tributario_cpf"]);
 const TIPOS_COM_ANALISE_AUTOMATICA = new Set(["faturamento_12_meses", "comprovante_faturamento", "declaracao_faturamento", "comprovante_residencia"]);
 const TIPOS_FISCAIS_SIMPLIFICADOS = new Set(["pgdas", "pgdas_d", "pgmei", "das_mei", "ccmei", "recibo_pgdas", "recibo_pgmei", "defis", "dasn_simei", "recibo_defis", "recibo_dasn_simei", "relatorio_receitas_mei"]);
-const TIPOS_FISCAIS_ECF = new Set(["ecf", "recibo_ecf", "ecd", "recibo_ecd", "dctf", "dctfweb", "mit", "efd_contribuicoes", "efd_icms_ipi", "efd"]);
+const TIPOS_FISCAIS_ECF = new Set(["ecf", "recibo_ecf", "ecd", "recibo_ecd", "dctf", "dctfweb", "mit", "darf", "livro_caixa", "efd_contribuicoes", "efd_icms_ipi", "efd"]);
 
 // Documentos que, ao serem anexados, disparam automaticamente a análise da Etapa 2/3
 // (montarValidacaoSocietaria no backend) -- Atos da Junta é sempre o primeiro exigido
@@ -950,7 +950,8 @@ export default function DocumentosEntidade({
     });
     const regime = String(mapaCredito?.regime_identificado || "");
     const regimeSimples = regime === "simples_nacional" || regime === "mei";
-    const regimeEcf = regime === "nao_optante_simples" || regime === "lucro_presumido" || regime === "lucro_real" || regime === "imune_isenta";
+    const regimeAConfirmar = regime === "nao_optante_regime_a_confirmar";
+    const regimeEcf = regimeAConfirmar || regime === "nao_optante_simples" || regime === "lucro_presumido" || regime === "lucro_real" || regime === "imune_isenta";
     const slotCompativelComRegime = (documentoSlot: DocumentoSlot) => {
       if (!regime || regime === "nao_identificado") return true;
       const tipos = new Set(documentoSlot.matchTipos);
@@ -961,10 +962,12 @@ export default function DocumentosEntidade({
 
     const ordenados: DocumentoSlot[] = [];
     const vistos = new Set<string>();
+    const tiposConfirmacaoRegime = new Set(["ecf", "dctf", "darf", "livro_caixa"]);
     SECOES_DOCUMENTAIS.forEach((secao) => {
       secao.slots.forEach((documentoSlot) => {
         const visivel = slotCompativelComRegime(documentoSlot)
-          && (documentoSlot.matchTipos.some((tipo) => set.has(tipo)) || set.has(documentoSlot.tipoUpload));
+          && (documentoSlot.matchTipos.some((tipo) => set.has(tipo)) || set.has(documentoSlot.tipoUpload)
+            || (regimeAConfirmar && tiposConfirmacaoRegime.has(documentoSlot.tipoUpload)));
         if (visivel && !vistos.has(documentoSlot.tipoUpload)) {
           ordenados.push(documentoSlot);
           vistos.add(documentoSlot.tipoUpload);
@@ -1636,8 +1639,10 @@ export default function DocumentosEntidade({
             const temObrigatorios = secaoAtivaObj.slots.some((s) => s.obrigatorio);
             const liberarComplementares = societaria?.atos_junta_aprovados === true
               || societaria?.atos_dispensados_por_mei === true;
+            const regimeAConfirmar = mapaCredito?.regime_identificado === "nao_optante_regime_a_confirmar";
+            const tiposConfirmacaoRegime = new Set(["ecf", "dctf", "darf", "livro_caixa"]);
             const slotsVisiveis = temObrigatorios && !mostrarComplementares && !liberarComplementares
-              ? secaoAtivaObj.slots.filter((s) => s.obrigatorio)
+              ? secaoAtivaObj.slots.filter((s) => s.obrigatorio || (regimeAConfirmar && tiposConfirmacaoRegime.has(s.tipoUpload)))
               : secaoAtivaObj.slots;
             const ocultos = secaoAtivaObj.slots.length - slotsVisiveis.length;
             return (
@@ -1678,8 +1683,11 @@ export default function DocumentosEntidade({
                       regraOrdemConsulta.exige.includes(doc.tipo_documento)
                       && (!documentoSlot.porSocio || !socioVinculado || doc.socio_id === socioVinculado)
                     ));
-                    const motivoBloqueio = tipo === "atos_junta_comercial" && pipeline?.fase_2?.bloqueada
-                      ? "Conclua e aprove a Fase 1 antes de anexar os Atos da Junta."
+                    const destaqueConfirmacaoRegime = regimeAConfirmar && tiposConfirmacaoRegime.has(tipo);
+                    const motivoBloqueio = tipo === "atos_junta_comercial" && regimeAConfirmar
+                      ? "Confirme o regime tributário (ECF, DCTF/DCTFWeb, DARF ou Livro Caixa) antes de anexar os Atos da Junta."
+                      : tipo === "atos_junta_comercial" && pipeline?.fase_2?.bloqueada
+                        ? "Conclua e aprove a Fase 1 antes de anexar os Atos da Junta."
                       : ["contrato_social", "alteracao_contratual"].includes(tipo) && pipeline?.fase_3?.bloqueada
                         ? "Analise e aprove primeiro os Atos da Junta Comercial."
                         : ordemConsultaPendente
@@ -1702,7 +1710,7 @@ export default function DocumentosEntidade({
                           <div className="min-w-0">
                             <div className="flex items-center gap-1.5 flex-wrap">
                               <p className="text-xs font-bold text-muted-foreground leading-tight">{documentoSlot.titulo}</p>
-                              {documentoSlot.obrigatorio && !satisfeitoPorOutro && <span className="text-[9px] font-bold px-1.5 py-0.5 rounded-full bg-brand-navy text-primary-foreground shrink-0">OBRIGATÓRIO NA ETAPA</span>}
+                              {(documentoSlot.obrigatorio || destaqueConfirmacaoRegime) && !satisfeitoPorOutro && <span className="text-[9px] font-bold px-1.5 py-0.5 rounded-full bg-brand-navy text-primary-foreground shrink-0">OBRIGATÓRIO NA ETAPA</span>}
                               {(documentoSlot.descricao || tipo === "cartao_cnpj") && (
                                 <button
                                   type="button"

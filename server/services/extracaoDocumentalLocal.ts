@@ -15,7 +15,11 @@ export type TipoDocumentoLocal =
   | 'contrato_social_alteracao'
   | 'faturamento_12_meses'
   | 'comprovante_residencia'
-  | 'extrato_bancario';
+  | 'extrato_bancario'
+  | 'ecf'
+  | 'dctf_mit'
+  | 'darf'
+  | 'livro_caixa';
 
 export interface ExtracaoDocumentalLocalResult {
   tipo: TipoDocumentoLocal;
@@ -935,6 +939,29 @@ function parseAtosJunta(texto: string): { dados: Record<string, any>; confianca:
   };
 }
 
+export function parseComprovanteRegime(tipo: TipoDocumentoLocal, texto: string): { dados: Record<string, any>; confianca: number } {
+  const base = parseSimples(texto);
+  const normalizado = textoNormalizado(texto);
+  const marcadores: Record<string, RegExp> = {
+    ecf: /\becf\b|escrituracao contabil fiscal|escrituração contábil fiscal|sped\s+ecf/i,
+    dctf_mit: /\bdctf(?:web)?\b|mit\b|modulo de inclusao de tributos|módulo de inclusão de tributos/i,
+    darf: /\bdarf\b|documento de arrecadacao de receitas federais|documento de arrecadação de receitas federais/i,
+    livro_caixa: /livro[- ]caixa/i,
+  };
+  const marcadorDoTipo = marcadores[tipo]?.test(normalizado) === true;
+  const regimeDetectado = base.dados.regime_confirmado === true;
+  const documentoCompativel = marcadorDoTipo || regimeDetectado;
+  return {
+    dados: {
+      ...base.dados,
+      documento_compativel: documentoCompativel,
+      comprovante_regime: true,
+      tipo_comprovante_regime: tipo,
+    },
+    confianca: clamp(base.confianca + (marcadorDoTipo ? 0.15 : 0)),
+  };
+}
+
 export function analisarTextoDocumentoLocal(tipo: TipoDocumentoLocal, texto: string): { dados: Record<string, any>; confianca: number } {
   if (tipo === 'cartao_cnpj') return parseCartaoCnpj(texto);
   if (tipo === 'qsa') return parseQsa(texto);
@@ -943,6 +970,9 @@ export function analisarTextoDocumentoLocal(tipo: TipoDocumentoLocal, texto: str
   if (tipo === 'faturamento_12_meses') return parseFaturamento12Meses(texto);
   if (tipo === 'comprovante_residencia') return parseComprovanteResidencia(texto);
   if (tipo === 'extrato_bancario') return parseExtratoBancario(texto);
+  // ECF, DCTF/DCTFWeb, DARF e Livro Caixa compartilham a detecção
+  // conservadora de regime, mas preservam sua própria compatibilidade documental.
+  if (tipo === 'ecf' || tipo === 'dctf_mit' || tipo === 'darf' || tipo === 'livro_caixa') return parseComprovanteRegime(tipo, texto);
   return parseContratoSocialAlteracao(texto);
 }
 

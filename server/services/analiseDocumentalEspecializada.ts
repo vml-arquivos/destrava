@@ -10,7 +10,7 @@ import {
   onlyDigits,
   parseDate,
 } from '../utils/helpers';
-import { extrairDocumentoLocal, type TipoDocumentoLocal } from './extracaoDocumentalLocal';
+import { detectarRegimeTributarioDeclarado, extrairDocumentoLocal, type TipoDocumentoLocal } from './extracaoDocumentalLocal';
 import { resolveDocumentPath } from './documentStorage';
 import {
   validarComprovanteEnderecoExtraido,
@@ -1402,6 +1402,7 @@ function normalizarDocumentoCatalogado(extraidos: any, tipoDocumento: string): {
   alertas: AlertaDocumental[];
 } {
   const bruto = extraidos && typeof extraidos === 'object' ? extraidos : {};
+  const { __texto_local: textoLocal, ...brutoPersistivel } = bruto;
   const comprovados = bruto.campos_comprovados || bruto.campos_extraidos || bruto.dados || {};
   const camposInferidos = bruto.campos_inferidos && typeof bruto.campos_inferidos === 'object' ? bruto.campos_inferidos : {};
   const evidencias = (Array.isArray(bruto.evidencias) ? bruto.evidencias : []).map((evidencia: any) => ({
@@ -1422,23 +1423,49 @@ function normalizarDocumentoCatalogado(extraidos: any, tipoDocumento: string): {
   if (!evidencias.length && Object.keys(comprovados).length === 0) {
     alertas.push({ codigo: 'documento_catalogado_sem_evidencia', mensagem: 'Não foram encontrados campos comprovados nem evidências suficientes.', severidade: 'alta', recomendacao: 'Solicitar novo arquivo legível e encaminhar para revisão humana.' });
   }
-  return {
-    dados: {
-      ...bruto,
-      campos_comprovados: comprovados,
-      campos_inferidos: camposInferidos,
-      evidencias,
-      documento_compativel: bruto.documento_compativel !== false,
-      confianca,
-      tipo_documento: tipoDocumento,
-      competencia: bruto.competencia || { inicio: bruto.competencia_inicio || null, fim: bruto.competencia_fim || null },
-      validade: bruto.validade || { inicio: bruto.validade_inicio || null, fim: bruto.validade_fim || null },
-      separacao_comprovado_inferido: true,
-    },
+
+  const tiposComprovacaoRegime = new Set(['ecf', 'recibo_ecf', 'dctf', 'dctfweb', 'mit', 'darf', 'livro_caixa']);
+  const dadosRegime: Record<string, any> = {};
+  if (tiposComprovacaoRegime.has(tipoDocumento)) {
+    const textoParaRegime = [textoLocal, bruto.texto, bruto.ocr_texto, comprovados.texto, comprovados.regime_tributario, bruto.regime_tributario]
+      .filter((valor) => typeof valor === 'string' && valor.trim())
+      .join('\n');
+    const detectado = detectarRegimeTributarioDeclarado(textoParaRegime);
+    const regimeExplicito = [comprovados.regime_tributario, bruto.regime_tributario]
+      .map((valor) => String(valor || '').trim())
+      .find((valor) => /^(?:lucro\s+presumido|lucro\s+real|lucro\s+arbitrado)$/i.test(valor)) || null;
+    const regime = detectado.ambiguo ? null : regimeExplicito || detectado.regime;
+    if (detectado.ambiguo) {
+      alertas.push({ codigo: 'regime_tributario_ambiguo', mensagem: 'O documento apresenta mais de um regime tributário possível; a confirmação foi retida para revisão humana.', severidade: 'alta', recomendacao: 'Conferir a declaração efetiva no documento e anexar uma evidência inequívoca.' });
+    } else if (!regime) {
+      alertas.push({ codigo: 'regime_tributario_nao_identificado', mensagem: 'O documento foi lido, mas não identificou de forma inequívoca Lucro Presumido, Lucro Real ou Lucro Arbitrado.', severidade: 'alta', recomendacao: 'Anexar um comprovante legível que declare o regime tributário efetivo.' });
+    } else {
+      const regimeNormalizado = regime.replace(/\s+/g, ' ').trim();
+      dadosRegime.regime_tributario = regimeNormalizado;
+      dadosRegime.regime_confirmado = true;
+      dadosRegime.regime_a_confirmar = false;
+      if (!evidencias.some((evidencia: AnaliseDocumentalGenericaResult['evidencias'][number]) => evidencia.campo === 'regime_tributario')) {
+        const textoNormalizado = textoParaRegime.replace(/\s+/g, ' ').trim();
+        const indice = textoNormalizado.toLowerCase().indexOf(regimeNormalizado.toLowerCase());
+        evidencias.push({ campo: 'regime_tributario', valor: regimeNormalizado, pagina: null, trecho: indice >= 0 ? textoNormalizado.slice(Math.max(0, indice - 180), indice + regimeNormalizado.length + 180) : regimeNormalizado, confianca });
+      }
+    }
+  }
+
+  const dados = {
+    ...brutoPersistivel,
+    ...dadosRegime,
+    campos_comprovados: comprovados,
+    campos_inferidos: camposInferidos,
     evidencias,
-    camposInferidos,
-    alertas,
+    documento_compativel: bruto.documento_compativel !== false,
+    confianca,
+    tipo_documento: tipoDocumento,
+    competencia: bruto.competencia || { inicio: bruto.competencia_inicio || null, fim: bruto.competencia_fim || null },
+    validade: bruto.validade || { inicio: bruto.validade_inicio || null, fim: bruto.validade_fim || null },
+    separacao_comprovado_inferido: true,
   };
+  return { dados, evidencias, camposInferidos, alertas };
 }
 
 export class AnaliseDocumentalService {
@@ -1700,7 +1727,16 @@ export class AnaliseDocumentalService {
     const promptConfig = documentAnalysisConfig(tipoDocumento);
     const prompt = promptDocumentoCatalogado(tipoDocumento, catalogo.nome, catalogo.categoria, promptConfig?.promptCodigo || `catalogo_${tipoCanonico}`);
     const { documento } = await this.carregarContexto(empresaId, arquivoId);
-    const extraidos = await this.extrairHibrido(documento.caminho_arquivo!, prompt, documento.mime_type || 'application/pdf', 'contrato_social_alteracao', false);
+    const tipoLocal: TipoDocumentoLocal = tipoDocumento === 'ecf' || tipoDocumento === 'recibo_ecf'
+      ? 'ecf'
+      : ['dctf', 'dctfweb', 'mit'].includes(tipoDocumento)
+        ? 'dctf_mit'
+        : tipoDocumento === 'darf'
+          ? 'darf'
+          : tipoDocumento === 'livro_caixa'
+            ? 'livro_caixa'
+            : 'contrato_social_alteracao';
+    const extraidos = await this.extrairHibrido(documento.caminho_arquivo!, prompt, documento.mime_type || 'application/pdf', tipoLocal, tipoLocal !== 'contrato_social_alteracao');
     const normalizado = normalizarDocumentoCatalogado(extraidos, tipoDocumento);
     const resultadoBase = criarResultado('documento_generico', empresaId, arquivoId, normalizado.dados, normalizado.alertas, this.ultimoModeloUsado);
     return {
