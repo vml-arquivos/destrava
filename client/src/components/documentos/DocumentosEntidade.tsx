@@ -1725,24 +1725,27 @@ export default function DocumentosEntidade({
                     ));
                     const destaqueConfirmacaoRegime = regimeAConfirmar && tiposConfirmacaoRegime.has(tipo);
                     // Decisão de negócio (2026-08-30): a ordem CNPJ -> QSA -> Enquadramento ->
-                    // confirmação de regime -> Atos da Junta -> Contrato Social/Alteração é a
-                    // ordem RECOMENDADA de leitura, mas nunca pode impedir o anexo do arquivo.
-                    // O que está fora de ordem vira pendência visível (ícone de informação +
-                    // aviso), e o que fica de fato bloqueado é o dossiê completo para a
-                    // proposta de crédito (apto_para_avancar), não o upload em si. Por isso
-                    // este aviso não entra mais em `motivoBloqueio` -- só a ordem de consulta
-                    // cadastral (SCR -> CCS -> CCF), que é uma regra separada e já validada no
-                    // backend, continua desabilitando o campo.
+                    // confirmação de regime -> Atos da Junta -> Contrato Social/Alteração, e a
+                    // ordem de consulta cadastral SCR -> CCS -> CCF, são ordens RECOMENDADAS de
+                    // leitura, mas nunca podem impedir o anexo do arquivo -- upload é sempre
+                    // livre; a validação/análise é que continua rigorosa. O que está fora de
+                    // ordem vira pendência visível (ícone de informação + aviso), e o que fica
+                    // de fato bloqueado é o dossiê completo para a proposta de crédito
+                    // (apto_para_avancar) ou a conclusão da análise bancária, nunca o upload em
+                    // si. Antes desta correção, `motivoBloqueio` desabilitava o campo de anexo
+                    // quando SCR/CCS ainda não tinham sido anexados -- isso violava a mesma
+                    // regra já aplicada ao resto do pipeline (nenhum upload pode ser
+                    // tecnicamente bloqueado pela ordem de leitura).
                     const avisoOrdemRecomendada = tipo === "atos_junta_comercial" && regimeAConfirmar
                       ? "Ordem recomendada: confirme antes o regime tributário (ECF, DCTF/DCTFWeb, DARF ou Livro Caixa). Você já pode anexar os Atos da Junta se preferir; a pendência de regime continua até ser resolvida."
                       : tipo === "atos_junta_comercial" && pipeline?.fase_2?.bloqueada
                         ? "Ordem recomendada: conclua e aprove a Fase 1 antes dos Atos da Junta. O anexo está liberado, mas o dossiê só fica apto após a Fase 1."
                       : ["contrato_social", "alteracao_contratual"].includes(tipo) && pipeline?.fase_3?.bloqueada
                         ? "Ordem recomendada: analise e aprove primeiro os Atos da Junta Comercial. O anexo está liberado, mas o dossiê só fica apto depois disso."
+                      : ordemConsultaPendente
+                        ? `Ordem recomendada: anexe primeiro o Relatório ${regraOrdemConsulta.rotulo} (SCR → CCS → CCF). Você já pode anexar este documento se preferir; a análise bancária fica incompleta até a sequência ser resolvida.`
                         : null;
-                    const motivoBloqueio = ordemConsultaPendente
-                      ? `Anexe primeiro o Relatório ${regraOrdemConsulta.rotulo}. Ordem obrigatória: SCR → CCS → CCF.`
-                      : null;
+                    const motivoBloqueio: string | null = null;
                     const exigeNome = Boolean(documentoSlot.exigeNome);
                     // Regra de anulação (ex: CND RFB cobre CADIN e PGFN) -- se algum tipo
                     // que satisfaz este campo já foi anexado em outro lugar, não precisa

@@ -507,9 +507,11 @@ async function auditar(documentoId: string, acao: string, antes: any, depois: an
 // documento de `simples_nacional` (mesmo `promptCodigo` em
 // server/routes/documentacao.ts, ANALISE_ESPECIALIZADA_POR_TIPO). `darf`
 // entrou pelo mesmo motivo: o Guia de Análise de Crédito Corporativo indica
-// o código de receita do DARF (2089/5993=Presumido, 8998/3373=Real) como
-// forma de comprovar o regime tributário efetivo, e essa leitura usa o
-// mesmo motor de `analisarSimplesNacional`.
+// o código de receita do DARF (2089=Presumido, 5993/3373=Real,
+// 5625=Arbitrado -- catálogo corrigido em extracaoDocumentalLocal.ts; 8998
+// NÃO é confirmado na tabela oficial da RFB e nunca infere regime sozinho,
+// 2026-08-30) como forma de comprovar o regime tributário efetivo, e essa
+// leitura usa o mesmo motor de `analisarSimplesNacional`.
 const TIPOS_COM_ANALISE_AUTOMATICA = [
   'faturamento_12_meses', 'comprovante_faturamento', 'declaracao_faturamento', 'comprovante_residencia',
   'cartao_cnpj', 'qsa', 'simples_nacional', 'enquadramento_tributario_cnpj', 'darf',
@@ -760,7 +762,14 @@ router.post('/upload', auth, upload.single('file'), async (req: Request, res: Re
       }
       socioIdValidado = socioId;
     }
-    await assertOrdemConsultaCadastralPermitida(tipoDocumento, empresaIdPipeline || null, socioIdValidado);
+    // Decisão de negócio (2026-08-30): a ordem de consulta cadastral SCR -> CCS
+    // -> CCF passou a ser recomendada, não mais bloqueante -- mesma regra já
+    // aplicada ao resto do pipeline documental (nenhum upload pode ser
+    // tecnicamente impedido pela ordem de leitura; o que falta ou está fora de
+    // ordem vira pendência/aviso visível, nunca um 423 na hora de anexar).
+    // `assertOrdemConsultaCadastralPermitida` continua exportada e pode ser
+    // reaproveitada para relatar/classificar a pendência, só não é mais chamada
+    // aqui para impedir a gravação do arquivo.
     validarArquivo(file, tipoDocumento);
 
     const hash = crypto.createHash('sha256').update(file.buffer).digest('hex');

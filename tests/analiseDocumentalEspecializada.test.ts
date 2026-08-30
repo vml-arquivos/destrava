@@ -343,6 +343,81 @@ describe('AnaliseDocumentalService com dependências isoladas', () => {
 
     await expect(service.analisarSimplesNacional('empresa-1', 'doc-1')).rejects.toThrow('não pertence à empresa');
   });
+
+  // NOVA CAPACIDADE (2026-08-30, Missão de evolução do Acervo Documental):
+  // EFD-Contribuições (registros M400/M800 de PIS/COFINS) não tem leitura
+  // especializada de receita bruta implementada neste sistema. Antes desta
+  // correção, o documento era tratado pelo analisador genérico em silêncio
+  // total sobre essa limitação (ver CHANGELOG_CORRECOES.md, rodada 1). Agora
+  // o sistema nunca inventa uma fórmula de receita a partir dele e sinaliza
+  // explicitamente ANALISE_ESPECIALIZADA_PENDENTE.
+  describe('AnaliseDocumentalService.analisarDocumentoCatalogado -- EFD-Contribuições', () => {
+    it('nunca calcula receita bruta a partir de EFD-Contribuições -- fica marcado como análise especializada pendente', async () => {
+      const empresa = { id: 'empresa-1', cnpj: '12.345.678/0001-90', razao_social: 'Empresa Teste Ltda' };
+      const db = criarDbMock(empresa, [], { tipo_documento: 'efd_contribuicoes' });
+      const extrator = async () => ({
+        documento_compativel: true,
+        campos_extraidos: { competencia: '2026-06' },
+        confianca: 0.9,
+      });
+      const service = new AnaliseDocumentalService(db, extrator);
+
+      const resultado = await service.analisarDocumentoCatalogado('empresa-1', 'doc-1', 'efd_contribuicoes');
+
+      expect(resultado.dados_extraidos.status_analise).toBe('ANALISE_ESPECIALIZADA_PENDENTE');
+      expect(resultado.dados_extraidos.motivo_status_analise).toMatch(/M400\/M800/);
+      expect(resultado.alertas.some((a) => a.codigo === 'efd_contribuicoes_analise_especializada_pendente')).toBe(true);
+      expect(resultado.dados_extraidos.receita_bruta).toBeUndefined();
+      // O documento continua sendo aceito e arquivado normalmente -- a
+      // limitação é sobre a FÓRMULA, não sobre a compatibilidade do arquivo.
+      expect(resultado.dados_extraidos.documento_compativel).toBe(true);
+    });
+
+    it('o alias legado "efd" também é reconhecido como EFD-Contribuições (mesmo tipo canônico)', async () => {
+      const empresa = { id: 'empresa-1', cnpj: '12.345.678/0001-90' };
+      const db = criarDbMock(empresa, [], { tipo_documento: 'efd' });
+      const service = new AnaliseDocumentalService(db, async () => ({ documento_compativel: true }));
+
+      const resultado = await service.analisarDocumentoCatalogado('empresa-1', 'doc-1', 'efd');
+
+      expect(resultado.dados_extraidos.status_analise).toBe('ANALISE_ESPECIALIZADA_PENDENTE');
+    });
+
+    it('outros documentos catalogados não recebem o status pendente da EFD (sem regressão)', async () => {
+      const empresa = { id: 'empresa-1', cnpj: '12.345.678/0001-90' };
+      const db = criarDbMock(empresa, [], { tipo_documento: 'cndt' });
+      const service = new AnaliseDocumentalService(db, async () => ({ documento_compativel: true }));
+
+      const resultado = await service.analisarDocumentoCatalogado('empresa-1', 'doc-1', 'cndt');
+
+      expect(resultado.dados_extraidos.status_analise).toBeUndefined();
+    });
+  });
+
+  // CORREÇÃO (2026-08-30, auditoria de linguagem do prompt -- seção 43 da
+  // missão): o prompt enviado à IA para o analisador documental genérico
+  // dizia "analise exclusivamente o arquivo enviado COMO ${nome}", uma frase
+  // que sugere ao modelo que o arquivo JÁ É aquele tipo só por ter sido
+  // anexado nesse campo -- o mesmo viés que causou o bug P0 de identidade
+  // documental (parseComprovanteRegime). Este teste captura o prompt de
+  // verdade que seria enviado à IA e prova que essa frase foi removida e que
+  // a instrução de independência está presente.
+  it('o prompt do analisador genérico não presume a identidade do documento pelo nome do campo de upload (auditoria de linguagem, seção 43)', async () => {
+    const empresa = { id: 'empresa-1', cnpj: '12.345.678/0001-90' };
+    const db = criarDbMock(empresa, [], { tipo_documento: 'ecf' });
+    let promptCapturado = '';
+    const extrator = async (_path: string, prompt: string) => {
+      promptCapturado = prompt;
+      return { documento_compativel: true };
+    };
+    const service = new AnaliseDocumentalService(db, extrator);
+
+    await service.analisarDocumentoCatalogado('empresa-1', 'doc-1', 'ecf');
+
+    expect(promptCapturado).not.toMatch(/arquivo enviado como/i);
+    expect(promptCapturado).toMatch(/nunca uma prova do que o arquivo realmente/i);
+    expect(promptCapturado).toMatch(/nunca presuma/i);
+  });
 });
 
 // Bug relatado pelo usuário (zip 10): um extrato bancário real (SICOOB) anexado

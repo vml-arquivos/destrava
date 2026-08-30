@@ -1,12 +1,17 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-// Regra de negócio: ordem obrigatória de leitura das consultas cadastrais --
+// Regra de negócio: ordem RECOMENDADA de leitura das consultas cadastrais --
 // 1º SCR/Registrato, 2º CCS, 3º CCF -- tanto para CNPJ quanto para CPF (por sócio).
-// Antes desta correção os três campos eram totalmente independentes: nada no backend
-// impedia anexar o CCF sem nunca ter anexado o SCR ou o CCS (a frase "Sequência de
-// análise: SCR, CCS e CCF" era só um texto informativo na tela, sem nenhuma imposição
-// de código). Este teste cobre a validação `assertOrdemConsultaCadastralPermitida`,
-// usada dentro de POST /api/documentos/upload antes de gravar o arquivo.
+// Este teste cobre a função `assertOrdemConsultaCadastralPermitida` em si (ela
+// continua detectando corretamente quando a sequência está fora de ordem, e
+// pode ser reaproveitada para relatar pendência/aviso).
+//
+// Atualização (2026-08-30): a sequência SCR -> CCS -> CCF deixou de ser
+// bloqueante no upload -- mesma regra já aplicada ao resto do pipeline
+// documental (nenhum upload pode ser tecnicamente impedido pela ordem de
+// leitura; ver tests/uploadNaoBloqueadoPorOrdemConsultaCadastral.test.ts para
+// a prova de que POST /api/documentos/upload não usa mais esta função para
+// rejeitar o arquivo).
 
 const mocks = vi.hoisted(() => ({ poolQuery: vi.fn() }));
 

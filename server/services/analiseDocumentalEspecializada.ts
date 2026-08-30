@@ -1167,7 +1167,7 @@ Retorne apenas JSON válido, sem markdown, com este formato:
 A decisão da Etapa 1 usa SOMENTE: CNPJ, razão social, capital social, nomes dos sócios e identificação de quem é Sócio-Administrador. O campo "qualificacao" é apenas evidência interna para inferir "administrador" e não deve criar requisito ou divergência independente. Não extraia nem devolva CPF, RG, endereço, nacionalidade, estado civil, cônjuge, profissão, telefone, e-mail ou qualquer outro dado pessoal. Não extraia data de registro neste QSA; essa validação pertence à etapa societária seguinte. Não invente dados. Use null quando não houver evidência.`;
 }
 
-function promptSimples(): string {
+export function promptSimples(): string {
   return `Você é um auditor tributário brasileiro. Extraia os dados do comprovante de enquadramento tributário anexado (consulta do Simples Nacional, relatório de situação fiscal, ECF, DCTF, DARF ou equivalente).
 Responda SOMENTE JSON válido, sem markdown e sem comentários:
 {
@@ -1192,9 +1192,11 @@ REGRA CRÍTICA sobre "regime_tributario": este campo define qual documentação 
 - Se a empresa for optante do Simples, use "Simples Nacional"; se for optante do SIMEI/MEI, use "MEI / SIMEI".
 
 REGRA ESPECÍFICA PARA DARF: se o documento for um DARF, o regime é indicado pelo "código de receita" no campo próprio do documento (não confundir com outros números do documento, como CNPJ ou valor). Use exclusivamente esta tabela:
-- Código 2089 ou 5993 → "regime_tributario": "Lucro Presumido"
-- Código 8998 ou 3373 → "regime_tributario": "Lucro Real"
-- Qualquer outro código de receita, ou se o campo "código de receita" não estiver legível/visível → "regime_tributario": null (não adivinhe pelo valor do tributo ou pelo nome do tributo).`;
+- Código 2089 → "regime_tributario": "Lucro Presumido"
+- Código 5993 → "regime_tributario": "Lucro Real" (estimativa mensal)
+- Código 3373 → "regime_tributario": "Lucro Real" (apuração trimestral)
+- Código 5625 → "regime_tributario": "Lucro Arbitrado"
+- Código 8998, qualquer outro código de receita não listado acima, ou se o campo "código de receita" não estiver legível/visível → "regime_tributario": null (não adivinhe pelo valor do tributo ou pelo nome do tributo; o código 8998 NÃO está confirmado na tabela oficial de códigos de receita da RFB para IRPJ e deve ser tratado como não mapeado, exigindo revisão humana, nunca como Lucro Real presumido automaticamente).`;
 }
 
 function promptAtosJunta(): string {
@@ -1391,8 +1393,18 @@ function normalizarExtratoBancario(
   };
 }
 
+// CORREÇÃO (2026-08-30, auditoria de linguagem do prompt -- seção sobre
+// remover frases que enviesam o modelo a favor do slot de upload): a versão
+// anterior deste prompt dizia "analise exclusivamente o arquivo enviado
+// COMO ${nome}", o que sugere ao modelo que o arquivo JÁ É aquele tipo só
+// porque foi anexado nesse campo -- exatamente o viés que motivou o bug P0
+// de identidade documental corrigido em extracaoDocumentalLocal.ts
+// (parseComprovanteRegime). O nome do campo de upload é a INTENÇÃO de quem
+// anexou, nunca uma prova do conteúdo real do arquivo; o prompt agora deixa
+// isso explícito e pede para o tipo real ser identificado pelo conteúdo
+// primeiro, só então comparado ao tipo esperado.
 function promptDocumentoCatalogado(tipoDocumento: string, nome: string, categoria: string, promptCodigo: string): string {
-  return `Você é um analista documental de crédito empresarial. Analise exclusivamente o arquivo enviado como ${nome} (${tipoDocumento}), categoria ${categoria}. Retorne somente JSON válido e não tome decisão final de crédito. Separe rigorosamente campos_comprovados (valor, campo, página/trecho e confiança) de campos_inferidos; se algo não estiver legível, use null e registre pendencia. Identifique documento_compativel, competencia (inicio/fim), validade (inicio/fim), cnpj, cpf, razão social, nomes, valores financeiros, órgão emissor, número, situação, assinaturas e evidencias quando existirem. Nunca invente dados, não trate ausência de evidência como confirmação e indique revisao_humana_necessaria para divergência, baixa confiança ou documento incompatível. Prompt ${promptCodigo}.`;
+  return `Você é um analista documental de crédito empresarial. Um arquivo foi anexado no campo "${nome}" (${tipoDocumento}), categoria ${categoria} -- mas o nome desse campo é apenas a intenção de quem fez o upload, nunca uma prova do que o arquivo realmente é. Identifique o tipo do documento exclusivamente pelo conteúdo real do arquivo (título, cabeçalho, órgão emissor, campos preenchidos), de forma totalmente independente do nome do campo em que foi anexado -- nunca presuma que o documento é "${nome}" só porque foi anexado nesse campo. Só depois de identificar o tipo real do conteúdo, compare com o tipo esperado ("${nome}" / ${tipoDocumento}) para decidir documento_compativel: documento_compativel deve ser false sempre que o conteúdo real for de um tipo diferente do esperado, mesmo que os dois pertençam à mesma categoria (${categoria}) ou sirvam a propósitos relacionados. Retorne somente JSON válido e não tome decisão final de crédito. Separe rigorosamente campos_comprovados (valor, campo, página/trecho e confiança) de campos_inferidos; se algo não estiver legível, use null e registre pendencia. Identifique documento_compativel, competencia (inicio/fim), validade (inicio/fim), cnpj, cpf, razão social, nomes, valores financeiros, órgão emissor, número, situação, assinaturas e evidencias quando existirem. Nunca invente dados, não trate ausência de evidência como confirmação e indique revisao_humana_necessaria para divergência, baixa confiança ou documento incompatível. Prompt ${promptCodigo}.`;
 }
 
 function normalizarDocumentoCatalogado(extraidos: any, tipoDocumento: string): {
@@ -1437,6 +1449,20 @@ function normalizarDocumentoCatalogado(extraidos: any, tipoDocumento: string): {
     const regime = detectado.ambiguo ? null : regimeExplicito || detectado.regime;
     if (detectado.ambiguo) {
       alertas.push({ codigo: 'regime_tributario_ambiguo', mensagem: 'O documento apresenta mais de um regime tributário possível; a confirmação foi retida para revisão humana.', severidade: 'alta', recomendacao: 'Conferir a declaração efetiva no documento e anexar uma evidência inequívoca.' });
+    } else if (!regime && detectado.codigoReceitaNaoConfirmado) {
+      // CORREÇÃO (2026-08-30): reversão da decisão anterior de tratar o
+      // código de receita 8998 como "Lucro Real" por compatibilidade. O
+      // código não está confirmado na tabela oficial da RFB para IRPJ, então
+      // o sistema não infere mais regime nenhum a partir dele -- fica
+      // explicitamente sinalizado como CODIGO_NAO_MAPEADO/REVISAO_HUMANA, em
+      // vez de arriscar um regime errado (que puxaria a lista de documentos
+      // exigidos errada adiante).
+      alertas.push({
+        codigo: 'regime_tributario_codigo_nao_mapeado',
+        mensagem: `O código de receita ${detectado.codigoReceitaNaoConfirmado} identificado no DARF não está confirmado na tabela oficial de códigos de receita da RFB para IRPJ -- o regime tributário não pode ser inferido automaticamente a partir dele (CODIGO_NAO_MAPEADO).`,
+        severidade: 'alta',
+        recomendacao: 'Encaminhar para revisão humana (REVISAO_HUMANA) e anexar um comprovante legível (ECF, DCTFWeb/MIT ou Livro Caixa) que declare o regime tributário efetivo.',
+      });
     } else if (!regime) {
       alertas.push({ codigo: 'regime_tributario_nao_identificado', mensagem: 'O documento foi lido, mas não identificou de forma inequívoca Lucro Presumido, Lucro Real ou Lucro Arbitrado.', severidade: 'alta', recomendacao: 'Anexar um comprovante legível que declare o regime tributário efetivo.' });
     } else {
@@ -1452,9 +1478,34 @@ function normalizarDocumentoCatalogado(extraidos: any, tipoDocumento: string): {
     }
   }
 
+  // NOVA CAPACIDADE (2026-08-30): EFD-Contribuições (registros M400/M800 de
+  // apuração de PIS/COFINS, usados para declarar a receita bruta mensal fora
+  // do Simples Nacional) não tem, neste sistema, uma leitura especializada
+  // capaz de calcular a receita bruta com segurança a partir desses
+  // registros. Construir uma fórmula às pressas correria o mesmo risco que
+  // motivou a correção do catálogo de códigos de receita do DARF: uma conta
+  // sutilmente errada é pior do que nenhuma conta. Antes desta correção, o
+  // documento era tratado pelo analisador genérico em silêncio total sobre
+  // essa limitação (auditoria em CHANGELOG_CORRECOES.md, rodada 1) -- agora
+  // fica explicitamente sinalizado como ANALISE_ESPECIALIZADA_PENDENTE, para
+  // que a limitação seja visível em vez de escondida atrás de um documento
+  // "compatível" sem mais nenhuma informação.
+  const dadosEfd: Record<string, any> = {};
+  if (canonicalizeDocumentType(tipoDocumento) === 'efd_contribuicoes') {
+    dadosEfd.status_analise = 'ANALISE_ESPECIALIZADA_PENDENTE';
+    dadosEfd.motivo_status_analise = 'A leitura especializada dos registros M400/M800 da EFD-Contribuições (PIS/COFINS) ainda não foi implementada neste sistema. O documento foi recebido e arquivado como evidência, mas nenhuma receita bruta foi calculada ou inferida automaticamente a partir dele -- isso evita adivinhar uma fórmula sem confirmação técnica.';
+    alertas.push({
+      codigo: 'efd_contribuicoes_analise_especializada_pendente',
+      mensagem: 'Este documento (EFD-Contribuições) ainda não tem leitura especializada implementada; nenhuma receita bruta foi calculada automaticamente a partir dos registros M400/M800.',
+      severidade: 'media',
+      recomendacao: 'Usar outro comprovante de faturamento já suportado (ex.: extrato bancário, PGDAS, declaração de faturamento) enquanto a leitura especializada de M400/M800 não é implementada; este documento continua arquivado como evidência do dossiê.',
+    });
+  }
+
   const dados = {
     ...brutoPersistivel,
     ...dadosRegime,
+    ...dadosEfd,
     campos_comprovados: comprovados,
     campos_inferidos: camposInferidos,
     evidencias,

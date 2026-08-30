@@ -15,6 +15,9 @@ import { resolverRegrasDocumentais, type RegraResolvida } from '../services/regr
 import { upsertSocioEmpresa } from './socios_documentos';
 import { generateBrandedPdfBuffer } from '../services/brandedPdfLayout';
 import { construirSecoesAnaliseDocumento } from '../../shared/documentalPresentation';
+import { obterLinhaDoTempoRegime, obterRegimeVigenteEm } from '../services/regimeTributarioTemporalService';
+import { obterFaturamentoRolling12Meses, type CompetenciaMensal } from '../services/faturamentoRolling12MesesService';
+import { obterCoberturaPorEmpresa } from '../services/coberturaEvidenciaBureauService';
 
 const { Pool } = pkg;
 const pool = new Pool({
@@ -2783,6 +2786,75 @@ router.get('/empresa/:empresaId/mapa-documental', auth, async (req: Request, res
   }
 });
 
+// Linha do tempo do regime tributário (Missão de evolução do Acervo
+// Documental, seção 11): endpoint novo, só leitura, ADITIVO -- não substitui
+// nem altera o campo `empresas.regime_tributario` que o restante do sistema já
+// usa como "regime vigente". Devolve lista vazia quando nada foi registrado
+// ainda na tabela nova (empresas_regime_tributario_historico); nenhum erro é
+// esperado nesse caso, é apenas o estado inicial antes de qualquer gravação.
+router.get('/empresa/:empresaId/regime-tributario/linha-do-tempo', auth, async (req: Request, res: Response) => {
+  try {
+    const empresa = await getEmpresa(req.params.empresaId);
+    if (!empresa) { res.status(404).json({ error: 'Empresa não encontrada' }); return; }
+    const linhaDoTempo = await obterLinhaDoTempoRegime(pool, req.params.empresaId);
+    const vigente = await obterRegimeVigenteEm(pool, req.params.empresaId);
+    res.json({
+      empresa_id: req.params.empresaId,
+      regime_atual_cadastrado: empresa.regime_tributario || null,
+      regime_vigente_na_linha_do_tempo: vigente,
+      linha_do_tempo: linhaDoTempo,
+    });
+  } catch (err: any) {
+    console.error('[GET /api/documentacao/empresa/:empresaId/regime-tributario/linha-do-tempo]', err);
+    res.status(500).json({ error: 'Erro ao carregar a linha do tempo do regime tributário' });
+  }
+});
+
+// Faturamento em janela móvel de 12 meses, por competência (Missão de
+// evolução do Acervo Documental): endpoint novo, só leitura, ADITIVO -- não
+// substitui nem altera nenhum campo/metadado já existente sobre o documento
+// `faturamento_12_meses`. A janela é calculada a partir do último mês
+// fechado por padrão, mas aceita `?ano=YYYY&mes=MM` para consultar a janela
+// terminando em outra competência (ex.: auditoria de um mês passado).
+router.get('/empresa/:empresaId/faturamento/rolling-12-meses', auth, async (req: Request, res: Response) => {
+  try {
+    const empresa = await getEmpresa(req.params.empresaId);
+    if (!empresa) { res.status(404).json({ error: 'Empresa não encontrada' }); return; }
+
+    let referencia: CompetenciaMensal | undefined;
+    const anoQuery = req.query.ano != null ? Number(req.query.ano) : null;
+    const mesQuery = req.query.mes != null ? Number(req.query.mes) : null;
+    if (anoQuery && mesQuery && Number.isInteger(anoQuery) && Number.isInteger(mesQuery) && mesQuery >= 1 && mesQuery <= 12) {
+      referencia = { ano: anoQuery, mes: mesQuery };
+    }
+
+    const rolling = await obterFaturamentoRolling12Meses(pool, req.params.empresaId, referencia);
+    res.json({ empresa_id: req.params.empresaId, ...rolling });
+  } catch (err: any) {
+    console.error('[GET /api/documentacao/empresa/:empresaId/faturamento/rolling-12-meses]', err);
+    res.status(500).json({ error: 'Erro ao carregar o faturamento em janela móvel de 12 meses' });
+  }
+});
+
+// Cobertura de evidência entre bureaus (Missão de evolução do Acervo
+// Documental): endpoint novo, só leitura, ADITIVO -- não substitui nem altera
+// o upload por slot já existente (scr_cnpj, ccs_cnpj, ccf_cnpj etc.). Mostra,
+// por requisito (SCR/CCS/CCF/CENPROT/CADIN/PGFN/CND/CNDT/Situação
+// Fiscal/Serasa), a MELHOR evidência já registrada entre todos os documentos
+// não excluídos/recusados da empresa -- um único documento consolidado pode
+// aparecer respondendo por vários requisitos ao mesmo tempo.
+router.get('/empresa/:empresaId/cobertura-bureau', auth, async (req: Request, res: Response) => {
+  try {
+    const empresa = await getEmpresa(req.params.empresaId);
+    if (!empresa) { res.status(404).json({ error: 'Empresa não encontrada' }); return; }
+    const cobertura = await obterCoberturaPorEmpresa(pool, req.params.empresaId);
+    res.json({ empresa_id: req.params.empresaId, cobertura });
+  } catch (err: any) {
+    console.error('[GET /api/documentacao/empresa/:empresaId/cobertura-bureau]', err);
+    res.status(500).json({ error: 'Erro ao carregar a cobertura de evidência entre bureaus' });
+  }
+});
+
 router.get('/empresa/:empresaId/qsa', auth, async (req: Request, res: Response) => {
   try {
     const empresa = await getEmpresa(req.params.empresaId);
@@ -3110,9 +3182,15 @@ const ANALISE_ESPECIALIZADA_POR_TIPO: Partial<Record<string, { tipo: TipoAnalise
   qsa: { tipo: 'qsa', promptCodigo: 'qsa_extract' },
   simples_nacional: { tipo: 'simples_nacional', promptCodigo: 'simples_extract' },
   enquadramento_tributario_cnpj: { tipo: 'simples_nacional', promptCodigo: 'simples_extract' },
-  // DARF de IRPJ: o código de receita denuncia Presumido (2089/5993) ou
-  // Real (8998/3373). O analisador catalogado preserva a evidência do código
-  // e aplica a mesma detecção conservadora usada nos demais comprovantes.
+  // DARF de IRPJ: o código de receita denuncia Presumido (2089), Real
+  // (5993/3373) ou Arbitrado (5625) -- catálogo corrigido em
+  // extracaoDocumentalLocal.ts (2026-08-30: 5993 estava classificado como
+  // Presumido por engano). O código 8998 NÃO é confirmado na tabela oficial
+  // da RFB para IRPJ e nunca infere regime sozinho (2026-08-30, reversão de
+  // decisão anterior que o mantinha mapeado para Real "por compatibilidade")
+  // -- fica sinalizado para revisão humana. O analisador catalogado preserva
+  // a evidência do código e aplica a mesma detecção conservadora usada nos
+  // demais comprovantes.
   darf: { tipo: 'documento_generico', promptCodigo: 'darf_extract' },
   atos_junta_comercial: { tipo: 'atos_junta_comercial', promptCodigo: 'atos_junta_extract' },
   faturamento_12_meses: { tipo: 'faturamento_12_meses', promptCodigo: 'faturamento_12m_extract' },
