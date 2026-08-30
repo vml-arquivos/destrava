@@ -1,0 +1,2076 @@
+--- a/client/src/pages/Home.tsx	2026-08-30 01:28:11.951053950 +0000
++++ b/client/src/pages/Home.tsx	2026-08-30 01:28:26.112944463 +0000
+@@ -1,19 +1,12 @@
+-import { useMemo, useState } from "react";
+-import { Link } from "wouter";
+-import {
+-  MapPin,
+-  Search,
+-  ShieldCheck,
+-  UserRoundPlus,
+-  LogIn,
+-  Sparkles,
+-  SlidersHorizontal,
+-  Clock3,
+-} from "lucide-react";
++import Header from "@/components/Header";
++import Footer from "@/components/Footer";
++import HeroCarousel from "@/components/HeroCarousel";
++import { BannerDisplay } from "@/components/BannerDisplay";
++import SEO, { organizationStructuredData, localBusinessStructuredData, faqStructuredData } from "@/components/SEO";
++import BenefitCard from "@/components/BenefitCard";
+ import { Button } from "@/components/ui/button";
+ import { Input } from "@/components/ui/input";
+-import { Badge } from "@/components/ui/badge";
+-import { Card, CardContent } from "@/components/ui/card";
++import { Label } from "@/components/ui/label";
+ import {
+   Select,
+   SelectContent,
+@@ -21,419 +14,675 @@
+   SelectTrigger,
+   SelectValue,
+ } from "@/components/ui/select";
+-import { trpc } from "@/lib/trpc";
+-import Seo from "@/components/Seo";
+-
+-const cities = [
+-  "Todas as cidades",
+-  "São Paulo",
+-  "Rio de Janeiro",
+-  "Belo Horizonte",
+-  "Brasília",
+-  "Curitiba",
+-  "Salvador",
+-  "Recife",
+-];
+-const categories = [
+-  "Todas as categorias",
+-  "Acompanhante",
+-  "Modelo",
+-  "Trans",
+-  "Casal",
+-];
+-const attributes = [
+-  "Todos os atributos",
+-  "Com local",
+-  "Atendimento virtual",
+-  "Viagem",
+-  "Premium",
+-];
++import {
++  Accordion,
++  AccordionContent,
++  AccordionItem,
++  AccordionTrigger,
++} from "@/components/ui/accordion";
++import {
++  Users,
++  TrendingUp,
++  FileCheck,
++  Clock,
++  Shield,
++  HeadphonesIcon,
++  CheckCircle2,
++  MessageCircle,
++  Target,
++  Lightbulb,
++  ArrowRight,
++} from "lucide-react";
++import { useState, FormEvent } from "react";
++import { useLocation, Link } from "wouter";
++import FormSubmitError from "@/components/FormSubmitError";
++import { submitLead } from "@/lib/leads";
++import { formatCnpj, isValidCnpj } from "@/lib/brDocuments";
+ 
+ export default function Home() {
+-  const [search, setSearch] = useState("");
+-  const [city, setCity] = useState("Todas as cidades");
+-  const [category, setCategory] = useState("Todas as categorias");
+-  const [attribute, setAttribute] = useState("Todos os atributos");
+-  const input = useMemo(
+-    () => ({
+-      search: search || undefined,
+-      city: city.startsWith("Todas") ? undefined : city,
+-      category: category.startsWith("Todas") ? undefined : category,
+-      attribute: attribute.startsWith("Todos") ? undefined : attribute,
+-    }),
+-    [search, city, category, attribute]
+-  );
+-  const config = trpc.system.config.useQuery();
+-  const age = trpc.age.status.useQuery();
+-  const { data: profiles = [], isLoading } = trpc.profiles.list.useQuery(
+-    input,
++  const [, setLocation] = useLocation();
++  const [submitting, setSubmitting] = useState(false);
++  const [submitError, setSubmitError] = useState<string | null>(null);
++  const [formData, setFormData] = useState({
++    nome: "",
++    cnpj: "",
++    whatsapp: "",
++    email: "",
++    cidade: "",
++    estado: "",
++    faturamento: "",
++  });
++
++  const handleSubmit = async (e: FormEvent) => {
++    e.preventDefault();
++    if (!isValidCnpj(formData.cnpj)) {
++      setSubmitError("Informe um CNPJ válido para solicitar o contato.");
++      return;
++    }
++    setSubmitting(true);
++    setSubmitError(null);
++    try {
++      await submitLead({
++        nome: formData.nome,
++        telefone: formData.whatsapp,
++        email: formData.email,
++        empresa: null,
++        cpf_cnpj: formData.cnpj,
++        tipo_pessoa: "pj",
++        tipoPessoa: "pj",
++        cidade: formData.cidade,
++        estado: formData.estado,
++        finalidade: `Faturamento informado: ${formData.faturamento}`,
++        produto_interesse: "Assessoria de crédito empresarial",
++        origem: "landing_home",
++        pagina: "/",
++      });
++      setLocation("/sucesso?origem=home");
++    } catch (error) {
++      setSubmitError(
++        error instanceof Error
++          ? error.message
++          : "Não foi possível enviar seus dados. Tente novamente.",
++      );
++    } finally {
++      setSubmitting(false);
++    }
++  };
++
++  const handleChange = (field: string, value: string) => {
++    setFormData((prev) => ({ ...prev, [field]: value }));
++  };
++
++  const faqs = [
++    {
++      question: "Como funciona a assessoria empresarial da Destrava?",
++      answer: "Nossa atuação começa com o entendimento do cenário da sua empresa. A partir disso, conduzimos a jornada com análise, organização e acompanhamento próximo, para tornar o processo mais claro, seguro e menos desgastante para o empresário."
++    },
++    {
++      question: "Preciso saber exatamente qual solução minha empresa precisa?",
++      answer: "Não. Muitas empresas chegam até nós justamente buscando direção. A Destrava ajuda a dar clareza ao cenário e a organizar o caminho com base na necessidade real do negócio."
++    },
++    {
++      question: "A Destrava acompanha o processo do início ao fim?",
++      answer: "Sim. Nosso diferencial está justamente na condução completa da operação, com apoio consultivo e acompanhamento ao longo de toda a jornada."
++    },
++    {
++      question: "O processo é muito burocrático para o empresário?",
++      answer: "Nosso objetivo é exatamente reduzir essa carga. A Destrava organiza as etapas, orienta o que é necessário e conduz o processo para que o empresário tenha mais foco na empresa e menos desgaste operacional."
++    },
+     {
+-      enabled: Boolean(
+-        config.data?.publicAccessEnabled && age.data?.status === "approved"
+-      ),
++      question: "Como posso iniciar a análise da minha empresa?",
++      answer: "Você pode começar pelo botão principal da página e solicitar uma análise. A partir daí, nossa equipe entra em contato para entender o cenário e orientar os próximos passos."
+     }
+-  );
+-  const testMode = Boolean(config.data?.testMode);
+-  const publicOpen = Boolean(
+-    config.data?.publicAccessEnabled && age.data?.status === "approved"
+-  );
+-  const ownerPath = testMode ? "/cadastro-teste" : "/titular";
+-  const clearFilters = () => {
+-    setSearch("");
+-    setCity("Todas as cidades");
+-    setCategory("Todas as categorias");
+-    setAttribute("Todos os atributos");
++  ];
++
++  const structuredData = {
++    "@context": "https://schema.org",
++    "@graph": [
++      organizationStructuredData,
++      ...localBusinessStructuredData,
++      faqStructuredData(faqs)
++    ]
+   };
+ 
+   return (
+-    <div className="min-h-screen bg-[#222222] text-white">
+-      <Seo
+-        title="Só Models — Acompanhantes na sua cidade"
+-        description="Encontre acompanhantes por cidade, categoria, estilo e disponibilidade."
+-        path="/"
++    <div className="min-h-screen flex flex-col">
++      <SEO
++        title="Destrave o crédito da sua empresa | Destrava Crédito"
++        description="Destrave o crédito da sua empresa com assessoria especializada. Analisamos o cenário, avaliamos linhas compatíveis e orientamos a operação com clareza. Condições sujeitas à instituição financeira."
++        keywords="assessoria de crédito empresarial, consultoria de crédito, captação de recursos para empresas, destravar crédito, financiamento empresarial, Pronampe 2026, ProCred 360, crédito para MEI, crédito para microempresa, crédito para pequena empresa"
++        image="https://destravacredito.com/og-image.png"
++        structuredData={structuredData}
+       />
+-      <header className="sticky top-0 z-20 border-b border-white/10 bg-[#222222]/90 backdrop-blur">
+-        <div className="container flex items-center justify-between py-4">
+-          <Link href="/">
+-            <span className="brand-mark">
+-              Só <i>Models</i>
+-            </span>
+-          </Link>
+-          <nav className="hidden items-center gap-6 text-sm text-white/70 md:flex">
+-            <a href="#explorar">Explorar</a>
+-            <a href="#como-funciona">Como funciona</a>
+-            <a href="#seguranca">Segurança</a>
+-            <Link href={ownerPath}>Anuncie seu perfil</Link>
+-          </nav>
+-          <div className="flex items-center gap-2">
+-            <Link href="/login">
+-              <Button
+-                variant="outline"
+-                className="border-white/20 bg-transparent text-white"
++      <Header />
++
++      {/* HERO SECTION */}
++      <section className="relative bg-gradient-to-br from-[var(--color-caixa-blue)] via-[#002d8a] to-[var(--color-caixa-blue-dark)] text-primary-foreground pt-6 pb-10 md:pt-8 md:pb-14 overflow-hidden">
++        {/* Padrão de fundo sutil */}
++        <div className="absolute inset-0 bg-[url('data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iNjAiIGhlaWdodD0iNjAiIHhtbG5zPSJodHRwOi8vd3d3LnczLm9yZy8yMDAwL3N2ZyI+PGRlZnM+PHBhdHRlcm4gaWQ9ImdyaWQiIHdpZHRoPSI2MCIgaGVpZ2h0PSI2MCIgcGF0dGVyblVuaXRzPSJ1c2VyU3BhY2VPblVzZSI+PHBhdGggZD0iTSAxMCAwIEwgMCAwIDAgMTAiIGZpbGw9Im5vbmUiIHN0cm9rZT0id2hpdGUiIHN0cm9rZS1vcGFjaXR5PSIwLjA1IiBzdHJva2Utd2lkdGg9IjEiLz48L3BhdHRlcm4+PC9kZWZzPjxyZWN0IHdpZHRoPSIxMDAlIiBoZWlnaHQ9IjEwMCUiIGZpbGw9InVybCgjZ3JpZCkiLz48L3N2Zz4=')] opacity-30"></div>
++        {/* Gradiente decorativo */}
++        <div className="absolute top-0 right-0 w-1/2 h-full bg-gradient-to-l from-white/5 to-transparent pointer-events-none"></div>
++
++        <div className="container relative z-10">
++          <div className="grid md:grid-cols-2 gap-6 md:gap-10 items-start">
++            <div>
++               <h1 className="text-4xl md:text-5xl font-bold mb-5 leading-tight">
++                 Destrave o crédito da sua empresa com assessoria especializada em crédito bancário e governamental.
++               </h1>
++              <p className="text-xl md:text-2xl mb-4 text-primary-foreground/90 leading-relaxed">
++                A Destrava atua ao lado da sua empresa para identificar as melhores linhas de crédito, organizar a operação e conduzir todo o processo com mais segurança, estratégia e clareza.
++              </p>
++              <p className="text-base mb-8 text-primary-foreground/75 leading-relaxed">
++                Cuidamos da estruturação da demanda, do direcionamento correto e do acompanhamento da operação para que sua empresa avance com menos desgaste, mais previsibilidade e melhores condições de crédito.
++              </p>
++              <div className="flex flex-col sm:flex-row gap-4 mb-10">
++                 <Button
++                     asChild
++                     size="lg"
++                     className="bg-[var(--color-caixa-yellow)] hover:bg-warning text-foreground font-bold shadow-lg w-full sm:w-auto"
++                   >
++                     <Link href="/simular" data-cta-position="home-hero-primary">
++                       → Destrave seu crédito
++                     </Link>
++                   </Button>
++                <Button
++                  asChild
++                  variant="outline"
++                  size="lg"
++                  className="font-semibold bg-card/10 border-white/30 text-primary-foreground hover:bg-card/20 w-full sm:w-auto"
++                >
++                  <a
++                    href="https://wa.me/556135268355"
++                    target="_blank"
++                    rel="noopener noreferrer"
++                    data-cta-position="home-hero-whatsapp"
++                  >
++                    <MessageCircle className="mr-2 h-5 w-5" />
++                    Falar no WhatsApp
++                  </a>
++                </Button>
++              </div>
++
++              {/* Prova rápida */}
++              <div className="grid grid-cols-3 gap-4 pt-6 border-t border-white/20">
++                <div className="text-center">
++                  <p className="text-sm font-semibold text-[var(--color-caixa-yellow)]">Atendimento consultivo</p>
++                </div>
++                <div className="text-center border-x border-white/20">
++                  <p className="text-sm font-semibold text-[var(--color-caixa-yellow)]">Condução completa do processo</p>
++                </div>
++                <div className="text-center">
++                  <p className="text-sm font-semibold text-[var(--color-caixa-yellow)]">Sem custo antecipado</p>
++                </div>
++              </div>
++            </div>
++
++            <div className="flex flex-col items-center justify-center mt-6 md:mt-0 gap-5">
++              <svg
++                className="h-20 w-auto opacity-90"
++                viewBox="0 0 320 90"
++                fill="none"
++                xmlns="http://www.w3.org/2000/svg"
++                role="img"
++                aria-label="Ilustração de crescimento financeiro empresarial"
+               >
+-                <LogIn className="mr-2 h-4 w-4" />
+-                Entrar
+-              </Button>
+-            </Link>
++                <path d="M10 75 L70 45 L120 58 L180 20 L240 35 L310 8" stroke="#fbbf24" strokeWidth="4" strokeLinecap="round" strokeLinejoin="round" fill="none" />
++                <circle cx="70" cy="45" r="6" fill="#fbbf24" />
++                <circle cx="180" cy="20" r="6" fill="#fbbf24" />
++                <circle cx="310" cy="8" r="7" fill="#fbbf24" />
++                <path d="M296 8 L310 8 L310 22" stroke="#fbbf24" strokeWidth="4" strokeLinecap="round" strokeLinejoin="round" fill="none" />
++                <rect x="4" y="78" width="312" height="2" fill="white" fillOpacity="0.15" />
++              </svg>
++              <HeroCarousel />
++            </div>
+           </div>
+         </div>
+-      </header>
+-      <main>
+-        <section className="hero-section">
+-          <div className="container grid items-center gap-12 lg:grid-cols-2">
+-            <div className="hero-copy">
+-              <p className="eyebrow">ACOMPANHANTES NA SUA CIDADE</p>
+-              <h1 className="font-display text-5xl leading-[.94] tracking-tight md:text-7xl">
+-                Encontre acompanhantes para o momento que você deseja.
+-              </h1>
+-              <p className="hero-description mt-6 max-w-xl text-lg leading-8 text-white/65">
+-                Prazer, companhia, conversa ou uma experiência diferente:
+-                explore perfis na sua cidade e escolha com clareza, no seu
+-                ritmo.
+-              </p>
+-              <div className="hero-actions mt-8 flex flex-wrap items-center gap-4">
+-                <a href="#explorar">
+-                  <Button className="bg-[#ff4764] px-6 text-[#222222] hover:bg-[#ff765f]">
+-                    Ver acompanhantes agora <Search className="ml-2 h-4 w-4" />
+-                  </Button>
+-                </a>
+-              </div>
+-              <p className="hero-meta mt-4 text-xs uppercase tracking-[.16em] text-white/40">
+-                Para maiores de 18 anos • Busca por cidade • Informações
+-                públicas
+-              </p>
+-            </div>
+-            <figure className="hero-visual">
+-              <picture>
+-                <source
+-                  type="image/webp"
+-                  srcSet="/images/hero/so-models-hero-640.webp 640w, /images/hero/so-models-hero-1254.webp 1254w"
+-                  sizes="(max-width: 1023px) calc(100vw - 28px), min(46vw, 620px)"
+-                />
+-                <img
+-                  className="hero-visual-image"
+-                  src="/images/hero/so-models-hero.png"
+-                  alt="Cinco mulheres adultas em um lounge sofisticado"
+-                  width="1254"
+-                  height="1254"
+-                  loading="eager"
+-                  decoding="async"
+-                  fetchPriority="high"
+-                />
+-              </picture>
+-            </figure>
++      </section>
++
++      <BannerDisplay position="home_top" ariaLabel="Destaque principal" />
++
++      {/* BLOCO INSTITUCIONAL PRINCIPAL */}
++      <section className="py-20 bg-muted/30">
++        <div className="container">
++          <div className="max-w-4xl mx-auto text-center mb-12">
++            <h2 className="text-3xl md:text-4xl font-bold mb-6">
++              A solução que sua empresa precisa para obter crédito com clareza, honestidade e menos desgaste
++            </h2>
++            <p className="text-lg text-muted-foreground leading-relaxed">
++              A Destrava atua com assessoria empresarial para empresas que precisam de direção, organização e apoio real na busca por recursos. Mais do que apresentar caminhos, nossa atuação envolve entendimento do cenário, análise estratégica e condução completa do processo, reduzindo a carga operacional do empresário e dando mais segurança em cada etapa.
++            </p>
+           </div>
+-        </section>
+-        <section id="explorar" className="container pb-20">
+-          <div className="section-heading">
+-            <div>
+-              <p className="eyebrow">Explorar</p>
+-              <h2 className="font-display text-3xl md:text-4xl">
+-                Escolha quem combina com o seu momento
+-              </h2>
++
++          <div className="grid md:grid-cols-2 gap-8 mb-12">
++            <div className="bg-card p-8 rounded-lg border-2 border-border">
++              <h3 className="text-2xl font-bold mb-4">O que sua empresa encontra na Destrava</h3>
++              <ul className="space-y-3">
++                <li className="flex items-start gap-3">
++                  <CheckCircle2 className="h-6 w-6 text-primary flex-shrink-0 mt-0.5" />
++                  <span>Análise estratégica do cenário da empresa</span>
++                </li>
++                <li className="flex items-start gap-3">
++                  <CheckCircle2 className="h-6 w-6 text-primary flex-shrink-0 mt-0.5" />
++                  <span>Direcionamento mais claro para a necessidade do negócio</span>
++                </li>
++                <li className="flex items-start gap-3">
++                  <CheckCircle2 className="h-6 w-6 text-primary flex-shrink-0 mt-0.5" />
++                  <span>Condução completa do processo com apoio consultivo</span>
++                </li>
++                <li className="flex items-start gap-3">
++                  <CheckCircle2 className="h-6 w-6 text-primary flex-shrink-0 mt-0.5" />
++                  <span>Organização da jornada com menos peso para o empresário</span>
++                </li>
++                <li className="flex items-start gap-3">
++                  <CheckCircle2 className="h-6 w-6 text-primary flex-shrink-0 mt-0.5" />
++                  <span>Acompanhamento próximo do início ao avanço da operação</span>
++                </li>
++                <li className="flex items-start gap-3">
++                  <CheckCircle2 className="h-6 w-6 text-primary flex-shrink-0 mt-0.5" />
++                  <span>Soluções pensadas para a realidade e o momento da empresa</span>
++                </li>
++              </ul>
++              <p className="mt-6 text-sm text-muted-foreground italic">
++                Nosso papel é transformar um processo que costuma ser complexo em uma jornada mais clara, organizada e conduzida com método.
++              </p>
+             </div>
+-            <span className="text-sm text-white/45">
+-              {publicOpen
+-                ? isLoading
+-                  ? "Consultando…"
+-                  : `${profiles.length} perfil(is) encontrado(s)`
+-                : "Vitrine protegida"}
+-            </span>
+-          </div>
+-          {!publicOpen ? (
+-            <Card className="mt-6 border-[#ff4764]/25 bg-[#ff4764]/10">
+-              <CardContent className="flex gap-4 p-6">
+-                <ShieldCheck className="mt-1 h-6 w-6 shrink-0 text-[#ff4764]" />
++
++            <div className="bg-gradient-to-br from-primary to-[var(--color-caixa-blue-dark)] text-primary-foreground p-8 rounded-lg shadow-lg">
++              <h3 className="text-2xl font-bold mb-6">Por que empresas escolhem a Destrava</h3>
++              <p className="text-primary-foreground/80 mb-6">
++                Porque encontrar recursos para a empresa exige mais do que tentativa: exige análise, condução, organização e acompanhamento.
++              </p>
++              <div className="space-y-4">
+                 <div>
+-                  <h3 className="font-semibold">
+-                    A vitrine está temporariamente protegida
+-                  </h3>
+-                  <p className="mt-2 max-w-2xl text-sm leading-6 text-white/65">
+-                    O acesso público só é liberado quando a verificação de idade
+-                    e as configurações de lançamento estão prontas. Nenhuma
+-                    autodeclaração substitui uma verificação real.
+-                  </p>
+-                  <p className="mt-3 text-xs text-white/45">
+-                    O painel administrativo permanece disponível para
+-                    configuração e moderação.
+-                  </p>
+-                </div>
+-              </CardContent>
+-            </Card>
+-          ) : (
+-            <>
+-              <Card className="filter-card mt-6">
+-                <CardContent className="p-4 md:p-6">
+-                  <div className="grid gap-3 md:grid-cols-[1.4fr_1fr_1fr_1fr_auto]">
+-                    <div className="relative">
+-                      <Search className="absolute left-3 top-3 h-4 w-4 text-white/40" />
+-                      <Input
+-                        value={search}
+-                        onChange={event => setSearch(event.target.value)}
+-                        placeholder="Buscar por nome ou palavra-chave"
+-                        className="border-white/10 bg-white/5 pl-9 text-white placeholder:text-white/35"
+-                      />
+-                    </div>
+-                    <Select value={city} onValueChange={setCity}>
+-                      <SelectTrigger className="border-white/10 bg-white/5 text-white">
+-                        <MapPin className="mr-2 h-4 w-4 text-[#ff4764]" />
+-                        <SelectValue />
+-                      </SelectTrigger>
+-                      <SelectContent>
+-                        {cities.map(value => (
+-                          <SelectItem key={value} value={value}>
+-                            {value}
+-                          </SelectItem>
+-                        ))}
+-                      </SelectContent>
+-                    </Select>
+-                    <Select value={category} onValueChange={setCategory}>
+-                      <SelectTrigger className="border-white/10 bg-white/5 text-white">
+-                        <SelectValue />
+-                      </SelectTrigger>
+-                      <SelectContent>
+-                        {categories.map(value => (
+-                          <SelectItem key={value} value={value}>
+-                            {value}
+-                          </SelectItem>
+-                        ))}
+-                      </SelectContent>
+-                    </Select>
+-                    <Select value={attribute} onValueChange={setAttribute}>
+-                      <SelectTrigger className="border-white/10 bg-white/5 text-white">
+-                        <SelectValue />
+-                      </SelectTrigger>
+-                      <SelectContent>
+-                        {attributes.map(value => (
+-                          <SelectItem key={value} value={value}>
+-                            {value}
+-                          </SelectItem>
+-                        ))}
+-                      </SelectContent>
+-                    </Select>
+-                    <Button
+-                      type="button"
+-                      variant="outline"
+-                      onClick={clearFilters}
+-                      aria-label="Limpar filtros"
+-                      className="border-white/10 bg-white/5 text-white"
+-                    >
+-                      <SlidersHorizontal className="h-4 w-4" />
+-                    </Button>
+-                  </div>
+-                </CardContent>
+-              </Card>
+-              {profiles.length === 0 && !isLoading ? (
+-                <div className="empty-state">
+-                  <div className="empty-icon">
+-                    <Search className="h-7 w-7" />
+-                  </div>
+-                  <h3>Nenhum perfil encontrado com esses filtros</h3>
+-                  <p>Ajuste sua busca ou explore outra cidade.</p>
+-                  <Button
+-                    type="button"
+-                    onClick={clearFilters}
+-                    className="mt-5 bg-[#ff4764] text-[#222222]"
+-                  >
+-                    Limpar filtros
+-                  </Button>
++                  <p className="text-lg font-bold mb-1">Atendimento consultivo de verdade</p>
++                  <p className="text-primary-foreground/80 text-sm">Sua empresa é atendida com escuta, análise e direcionamento, sem respostas genéricas.</p>
++                </div>
++                <div className="border-t border-white/20 pt-4">
++                  <p className="text-lg font-bold mb-1">Condução completa do processo</p>
++                  <p className="text-primary-foreground/80 text-sm">A Destrava assume a parte pesada da jornada e organiza cada etapa para reduzir a carga operacional.</p>
++                </div>
++                <div className="border-t border-white/20 pt-4">
++                  <p className="text-lg font-bold mb-1">Mais clareza para decidir</p>
++                  <p className="text-primary-foreground/80 text-sm">Você entende melhor o caminho da sua empresa, com mais segurança, mais contexto e menos ruído.</p>
++                </div>
++                <div className="border-t border-white/20 pt-4">
++                  <p className="text-lg font-bold mb-1">Agilidade com organização</p>
++                  <p className="text-primary-foreground/80 text-sm">Um processo bem conduzido reduz retrabalho, evita perda de tempo e melhora a experiência do início ao fim.</p>
+                 </div>
+-              ) : (
+-                <div className="profile-grid">
+-                  {profiles.map(profile => (
+-                    <Link key={profile.id} href={`/perfil/${profile.slug}`}>
+-                      <Card className="profile-card">
+-                        <div
+-                          className="profile-image"
+-                          style={
+-                            profile.avatarUrl
+-                              ? { backgroundImage: `url(${profile.avatarUrl})` }
+-                              : undefined
+-                          }
+-                        >
+-                          <span className="profile-fallback">
+-                            {profile.stageName.slice(0, 1)}
+-                          </span>
+-                          <div className="absolute left-3 top-3 flex gap-2">
+-                            {profile.isFeatured && (
+-                              <Badge className="bg-[#ff4764] text-[#222222]">
+-                                Destaque
+-                              </Badge>
+-                            )}
+-                          </div>
+-                        </div>
+-                        <CardContent className="p-4">
+-                          <div className="flex items-start justify-between gap-3">
+-                            <div>
+-                              <h3 className="text-lg font-semibold">
+-                                {profile.stageName}
+-                                {profile.age ? (
+-                                  <span className="ml-2 text-sm font-normal text-white/45">
+-                                    {profile.age}
+-                                  </span>
+-                                ) : null}
+-                              </h3>
+-                              <p className="mt-1 text-sm text-white/50">
+-                                <MapPin className="mr-1 inline h-3.5 w-3.5" />
+-                                {profile.city}
+-                                {profile.region ? `, ${profile.region}` : ""}
+-                              </p>
+-                            </div>
+-                            <ShieldCheck className="h-5 w-5 text-[#ff4764]" />
+-                          </div>
+-                          <div className="mt-3 flex flex-wrap gap-1.5">
+-                            {profile.categories
+-                              .slice(0, 3)
+-                              .map((tag: string) => (
+-                                <Badge
+-                                  key={tag}
+-                                  variant="outline"
+-                                  className="border-white/15 text-white/60"
+-                                >
+-                                  {tag}
+-                                </Badge>
+-                              ))}
+-                          </div>
+-                          <p
+-                            className={`mt-4 text-xs uppercase tracking-[.12em] ${profile.isAvailableNow ? "text-[#ff9a8e]" : "text-white/40"}`}
+-                          >
+-                            <Clock3 className="mr-1 inline h-3.5 w-3.5" />
+-                            {profile.isAvailableNow
+-                              ? "Disponível agora"
+-                              : profile.availabilityLabel ||
+-                                "Consulte disponibilidade"}
+-                          </p>
+-                        </CardContent>
+-                      </Card>
+-                    </Link>
+-                  ))}
+-                </div>
+-              )}
+-            </>
+-          )}
+-        </section>
+-        <section
+-          id="como-funciona"
+-          className="border-t border-white/10 bg-[#292929]"
+-        >
+-          <div className="container py-16">
+-            <div className="max-w-2xl">
+-              <p className="eyebrow">Como funciona</p>
+-              <h2 className="font-display text-4xl">
+-                Uma vitrine direta, feita para escolher no seu ritmo.
+-              </h2>
+-            </div>
+-            <div className="mt-10 grid gap-8 md:grid-cols-3">
+-              <div>
+-                <span className="step-number">01</span>
+-                <h3 className="mt-4 text-lg font-semibold">
+-                  Explore por cidade
+-                </h3>
+-                <p className="mt-2 text-sm leading-6 text-white/55">
+-                  Use a busca para encontrar perfis, estilos e disponibilidades
+-                  que fazem sentido para você.
+-                </p>
+-              </div>
+-              <div>
+-                <span className="step-number">02</span>
+-                <h3 className="mt-4 text-lg font-semibold">Veja os detalhes</h3>
+-                <p className="mt-2 text-sm leading-6 text-white/55">
+-                  Abra o perfil individual para conhecer preferências, idiomas,
+-                  galeria e informações públicas.
+-                </p>
+-              </div>
+-              <div>
+-                <span className="step-number">03</span>
+-                <h3 className="mt-4 text-lg font-semibold">
+-                  Revise antes de decidir
+-                </h3>
+-                <p className="mt-2 text-sm leading-6 text-white/55">
+-                  Leia as informações públicas de cada perfil e entre em contato
+-                  somente quando se sentir seguro para decidir.
+-                </p>
+               </div>
+             </div>
+           </div>
+-        </section>
+-        <section id="seguranca" className="border-t border-white/10">
+-          <div className="container grid gap-8 py-16 md:grid-cols-3">
+-            <div>
+-              <Sparkles className="h-7 w-7 text-[#ff4764]" />
+-              <h3 className="mt-4 text-lg font-semibold">
+-                Escolha do seu jeito
+-              </h3>
+-              <p className="mt-2 text-sm leading-6 text-white/55">
+-                Explore fotos, estilos, preferências e informações para
+-                encontrar o perfil que mais combina com o seu momento.
++        </div>
++      </section>
++
++      {/* COMO FUNCIONA */}
++      <section id="como-funciona" className="py-20 scroll-mt-20">
++        <div className="container">
++          <div className="text-center mb-16">
++            <h2 className="text-3xl md:text-4xl font-bold mb-4">
++              Como funciona nossa assessoria
++            </h2>
++            <p className="text-lg text-muted-foreground max-w-2xl mx-auto">
++              Um processo pensado para simplificar a jornada da sua empresa e conduzir cada etapa com mais clareza.
++            </p>
++          </div>
++
++          <div className="grid md:grid-cols-4 gap-8">
++            <BenefitCard
++              icon={Lightbulb}
++              title="1. Entendimento do cenário da empresa"
++              description="Começamos entendendo o momento do negócio, a necessidade da empresa e o objetivo da operação."
++            />
++            <BenefitCard
++              icon={TrendingUp}
++              title="2. Análise estratégica do perfil"
++              description="Avaliamos o contexto com olhar técnico e consultivo para direcionar o caminho mais adequado."
++            />
++            <BenefitCard
++              icon={HeadphonesIcon}
++              title="3. Condução da operação"
++              description="A Destrava organiza e acompanha o processo, reduzindo a carga operacional sobre o empresário."
++            />
++            <BenefitCard
++              icon={CheckCircle2}
++              title="4. Acompanhamento até o avanço da solução"
++              description="Seguimos com proximidade, clareza e apoio em cada fase, para que a empresa tenha segurança ao longo da jornada."
++            />
++          </div>
++        </div>
++      </section>
++
++      {/* DIFERENCIAIS / BENEFÍCIOS */}
++      <section className="py-20 bg-muted/30">
++        <div className="container">
++          <div className="text-center mb-16">
++            <h2 className="text-3xl md:text-4xl font-bold mb-4">
++              Mais do que apoio financeiro: uma assessoria que organiza, conduz e facilita
++            </h2>
++          </div>
++
++          <div className="grid md:grid-cols-2 lg:grid-cols-4 gap-6">
++            <div className="bg-card p-6 rounded-lg border border-border text-center">
++              <div className="inline-flex items-center justify-center w-16 h-16 rounded-full bg-primary/10 mb-4">
++                <Users className="h-8 w-8 text-primary" />
++              </div>
++              <h3 className="text-xl font-bold mb-2">Menos peso para o empresário</h3>
++              <p className="text-muted-foreground text-sm">
++                A empresa não precisa carregar sozinha a complexidade do processo.
+               </p>
+             </div>
+-            <div>
+-              <MapPin className="h-7 w-7 text-[#ff4764]" />
+-              <h3 className="mt-4 text-lg font-semibold">
+-                Acompanhantes na sua cidade
+-              </h3>
+-              <p className="mt-2 text-sm leading-6 text-white/55">
+-                Use os filtros para encontrar opções por cidade, categoria e
+-                disponibilidade.
++
++            <div className="bg-card p-6 rounded-lg border border-border text-center">
++              <div className="inline-flex items-center justify-center w-16 h-16 rounded-full bg-primary/10 mb-4">
++                <Target className="h-8 w-8 text-primary" />
++              </div>
++              <h3 className="text-xl font-bold mb-2">Mais clareza em cada etapa</h3>
++              <p className="text-muted-foreground text-sm">
++                Você entende o caminho com mais segurança e menos incerteza.
+               </p>
+             </div>
+-            <div>
+-              <ShieldCheck className="h-7 w-7 text-[#ff4764]" />
+-              <h3 className="mt-4 text-lg font-semibold">
+-                Contatos sob controle
+-              </h3>
+-              <p className="mt-2 text-sm leading-6 text-white/55">
+-                Consulte os canais disponibilizados em cada perfil e preserve
+-                sempre a sua privacidade.
++
++            <div className="bg-card p-6 rounded-lg border border-border text-center">
++              <div className="inline-flex items-center justify-center w-16 h-16 rounded-full bg-primary/10 mb-4">
++                <HeadphonesIcon className="h-8 w-8 text-primary" />
++              </div>
++              <h3 className="text-xl font-bold mb-2">Acompanhamento próximo</h3>
++              <p className="text-muted-foreground text-sm">
++                Atuação consultiva com presença real ao longo da jornada.
++              </p>
++            </div>
++
++            <div className="bg-card p-6 rounded-lg border border-border text-center">
++              <div className="inline-flex items-center justify-center w-16 h-16 rounded-full bg-primary/10 mb-4">
++                <FileCheck className="h-8 w-8 text-primary" />
++              </div>
++              <h3 className="text-xl font-bold mb-2">Processo mais organizado</h3>
++              <p className="text-muted-foreground text-sm">
++                Mais método, menos improviso e mais fluidez para a empresa avançar.
+               </p>
+             </div>
+           </div>
+-        </section>
+-      </main>
+-      <footer className="container flex flex-col gap-3 border-t border-white/10 py-8 text-sm text-white/40 md:flex-row md:justify-between">
+-        <span>© 2026 Só Models</span>
+-        <span>Conteúdo para maiores de 18 anos. Use com responsabilidade.</span>
+-      </footer>
++        </div>
++      </section>
++
++      <BannerDisplay position="home_middle" ariaLabel="Soluções em destaque" />
++
++      {/* LINHAS DE CRÉDITO */}
++      <section className="py-20 bg-muted/30">
++        <div className="container">
++          <div className="text-center mb-12">
++            <h2 className="text-3xl md:text-4xl font-bold mb-4">Linhas de Crédito Disponíveis</h2>
++            <p className="text-lg text-muted-foreground max-w-2xl mx-auto">
++              Trabalhamos com as principais linhas de crédito do mercado. Conheça cada programa e descubra qual é o ideal para sua empresa.
++            </p>
++          </div>
++          <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6">
++            {[
++              {
++                logo: "/logo-pronampe.webp",
++                title: "PRONAMPE",
++                desc: "Programa federal para MEI, micro e pequenas empresas, sujeito às regras vigentes e à análise da instituição financeira.",
++                href: "/pronampe",
++                badge: "Mais popular",
++                badgeColor: "bg-success/20 text-success",
++              },
++              {
++                logo: "/logo-procred360.webp",
++                title: "ProCred 360",
++                desc: "Linha para MEI e microempresas, com elegibilidade e limites vinculados às regras vigentes e ao faturamento.",
++                href: "/procred360",
++                badge: "Programa Acredita",
++                badgeColor: "bg-primary/20 text-primary",
++              },
++              {
++                logo: "/logo-caixa.png",
++                title: "Giro CAIXA Fácil",
++                desc: "Modalidade para capital de giro, com limite, taxa, CET e prazo definidos na proposta conforme análise da CAIXA.",
++                href: "/giro-caixa-facil",
++                badge: "Capital de giro",
++                badgeColor: "bg-warning/20 text-warning",
++              },
++              {
++                logo: "/logo-bndes-fgi.jpg",
++                title: "PEAC FGI",
++                desc: "Programa de garantia do BNDES para apoiar operações empresariais elegíveis, sujeitas à análise da instituição financeira.",
++                href: "/peac-fgi",
++                badge: "Grandes volumes",
++                badgeColor: "bg-primary/20 text-primary",
++              },
++              {
++                logo: "/logo-fco.webp",
++                title: "FCO",
++                desc: "Financiamento do Fundo Constitucional do Centro-Oeste para empresas e produtores rurais de GO, MT, MS e DF.",
++                href: "/fco",
++                badge: "Centro-Oeste",
++                badgeColor: "bg-primary/20 text-primary",
++              },
++              {
++                logo: "/logo-fampe.webp",
++                title: "FAMPE",
++                desc: "Fundo do Sebrae que complementa as garantias exigidas pelos bancos, facilitando o acesso ao crédito para pequenos negócios.",
++                href: "/fampe",
++                badge: "Sebrae",
++                badgeColor: "bg-warning/20 text-warning",
++              },
++            ].map((linha) => (
++              <div key={linha.title} className="bg-card rounded-xl border border-border p-6 flex flex-col hover:shadow-md transition-shadow">
++                <div className="flex items-start justify-between mb-4">
++                  <div className="h-12 w-24 flex items-center">
++                    <img
++                      src={linha.logo}
++                      alt={linha.title}
++                      loading="lazy"
++                      decoding="async"
++                      width="96"
++                      height="48"
++                      className="max-h-12 max-w-full object-contain"
++                    />
++                  </div>
++                  <span className={`text-xs font-semibold px-2 py-1 rounded-full ${linha.badgeColor}`}>{linha.badge}</span>
++                </div>
++                <h3 className="text-lg font-bold mb-2">{linha.title}</h3>
++                <p className="text-muted-foreground text-sm flex-1 mb-4">{linha.desc}</p>
++                <Link href={linha.href} className="inline-flex items-center gap-1 text-primary font-semibold text-sm hover:underline">
++                  Saiba mais <ArrowRight className="h-4 w-4" />
++                </Link>
++              </div>
++            ))}
++          </div>
++        </div>
++      </section>
++
++      {/* EXPECTATIVAS DO ATENDIMENTO */}
++      <section className="py-20">
++        <div className="container">
++          <div className="text-center mb-16">
++            <h2 className="text-3xl md:text-4xl font-bold mb-4">
++              O que você pode esperar da assessoria
++            </h2>
++            <p className="text-lg text-muted-foreground">
++              Um processo consultivo, sem promessas de aprovação e com clareza sobre documentos, custos e próximos passos.
++            </p>
++          </div>
++
++          <div className="grid md:grid-cols-3 gap-8">
++            {[
++              { icon: FileCheck, title: "Documentação organizada", text: "Checklist objetivo para reduzir pendências antes do encaminhamento." },
++              { icon: Shield, title: "Condições transparentes", text: "Taxa, CET, prazo e garantias devem ser confirmados na proposta da instituição." },
++              { icon: HeadphonesIcon, title: "Acompanhamento consultivo", text: "Orientação durante as etapas, respeitando a análise e a decisão da instituição financeira." },
++            ].map((item) => (
++              <div key={item.title} className="rounded-2xl border border-border bg-card p-7 shadow-sm">
++                <item.icon className="h-9 w-9 text-primary" aria-hidden="true" />
++                <h3 className="mt-5 text-xl font-bold">{item.title}</h3>
++                <p className="mt-3 leading-relaxed text-muted-foreground">{item.text}</p>
++              </div>
++            ))}
++          </div>
++        </div>
++      </section>
++
++      {/* FAQ */}
++      <section className="py-20 bg-muted/30">
++        <div className="container">
++          <div className="max-w-3xl mx-auto">
++            <div className="text-center mb-12">
++              <h2 className="text-3xl md:text-4xl font-bold mb-4">
++                Perguntas frequentes
++              </h2>
++              <p className="text-lg text-muted-foreground">
++                Esclareça as principais dúvidas sobre nossa assessoria empresarial e o início da sua jornada com a Destrava.
++              </p>
++            </div>
++
++            <Accordion type="single" collapsible className="space-y-4">
++              {faqs.map((faq, index) => (
++                <AccordionItem
++                  key={index}
++                  value={`item-${index + 1}`}
++                  className="bg-card border border-border rounded-lg px-6"
++                >
++                  <AccordionTrigger className="text-left font-semibold hover:no-underline">
++                    {faq.question}
++                  </AccordionTrigger>
++                  <AccordionContent className="text-muted-foreground">
++                    {faq.answer}
++                  </AccordionContent>
++                </AccordionItem>
++              ))}
++            </Accordion>
++          </div>
++        </div>
++      </section>
++
++      {/* FORMULÁRIO — SOLICITAR CONTATO */}
++      <section id="simulacao" className="py-20 scroll-mt-20">
++        <div className="container">
++          <div className="max-w-2xl mx-auto">
++            <div className="text-center mb-12">
++              <p className="text-sm font-semibold uppercase tracking-wider text-primary mb-3">Solicite uma consultoria</p>
++              <h2 className="text-3xl md:text-4xl font-bold mb-4">
++                Fale com nossa equipe e entenda o melhor caminho para sua empresa
++              </h2>
++              <p className="text-lg text-muted-foreground">
++                Preencha o formulário e solicite o contato da nossa equipe. Vamos entender o seu momento e orientar os próximos passos com mais clareza e segurança.
++              </p>
++            </div>
++
++            <form
++              onSubmit={handleSubmit}
++              className="bg-card p-8 rounded-lg border-2 border-border shadow-lg space-y-6"
++            >
++              <div className="mb-2">
++                <h3 className="text-xl font-bold mb-1">Solicite o contato da nossa equipe</h3>
++                <p className="text-sm text-muted-foreground">Informe seus dados e nossa equipe entrará em contato para entender sua necessidade e apresentar a melhor orientação.</p>
++              </div>
++              <div className="space-y-2">
++                <Label htmlFor="nome">Nome Completo *</Label>
++                <Input
++                  id="nome"
++                  type="text"
++                  required
++                  value={formData.nome}
++                  onChange={(e) => handleChange("nome", e.target.value)}
++                  placeholder="Seu nome completo"
++                />
++              </div>
++
++              <div className="space-y-2">
++                <Label htmlFor="cnpj">CNPJ / MEI *</Label>
++                <Input
++                  id="cnpj"
++                  type="text"
++                  required
++                  value={formData.cnpj}
++                  onChange={(e) => handleChange("cnpj", formatCnpj(e.target.value))}
++                  placeholder="00.000.000/0000-00"
++                  inputMode="numeric"
++                  autoComplete="off"
++                />
++              </div>
++
++              <div className="grid md:grid-cols-2 gap-4">
++                <div className="space-y-2">
++                  <Label htmlFor="whatsapp">WhatsApp *</Label>
++                  <Input
++                    id="whatsapp"
++                    type="tel"
++                    required
++                    value={formData.whatsapp}
++                    onChange={(e) => handleChange("whatsapp", e.target.value)}
++                    placeholder="(61) 9 9999-9999"
++                  />
++                </div>
++
++                <div className="space-y-2">
++                  <Label htmlFor="email">E-mail *</Label>
++                  <Input
++                    id="email"
++                    type="email"
++                    required
++                    value={formData.email}
++                    onChange={(e) => handleChange("email", e.target.value)}
++                    placeholder="seu@email.com"
++                  />
++                </div>
++              </div>
++
++              <div className="grid md:grid-cols-2 gap-4">
++                <div className="space-y-2">
++                  <Label htmlFor="cidade">Cidade *</Label>
++                  <Input
++                    id="cidade"
++                    type="text"
++                    required
++                    value={formData.cidade}
++                    onChange={(e) => handleChange("cidade", e.target.value)}
++                    placeholder="Sua cidade"
++                  />
++                </div>
++
++                <div className="space-y-2">
++                  <Label htmlFor="estado">Estado *</Label>
++                  <Input
++                    id="estado"
++                    type="text"
++                    required
++                    value={formData.estado}
++                    onChange={(e) => handleChange("estado", e.target.value)}
++                    placeholder="SP"
++                    maxLength={2}
++                  />
++                </div>
++              </div>
++
++              <div className="space-y-2">
++                <Label htmlFor="faturamento">Faturamento Mensal Aproximado *</Label>
++                <Select
++                  value={formData.faturamento}
++                  onValueChange={(value) => handleChange("faturamento", value)}
++                  required
++                >
++                  <SelectTrigger id="faturamento">
++                    <SelectValue placeholder="Selecione uma faixa" />
++                  </SelectTrigger>
++                  <SelectContent>
++                    <SelectItem value="ate-5k">Até R$ 5.000</SelectItem>
++                    <SelectItem value="5k-10k">R$ 5.000 - R$ 10.000</SelectItem>
++                    <SelectItem value="10k-20k">R$ 10.000 - R$ 20.000</SelectItem>
++                    <SelectItem value="20k-50k">R$ 20.000 - R$ 50.000</SelectItem>
++                    <SelectItem value="50k-100k">R$ 50.000 - R$ 100.000</SelectItem>
++                    <SelectItem value="acima-100k">Acima de R$ 100.000</SelectItem>
++                  </SelectContent>
++                </Select>
++              </div>
++
++              <FormSubmitError message={submitError} />
++
++              <Button
++                type="submit"
++                size="lg"
++                className="w-full font-semibold"
++                disabled={submitting}
++                aria-busy={submitting}
++              >
++                {submitting ? "Enviando com segurança..." : "→ Solicitar contato"}
++              </Button>
++
++              <p className="text-xs text-muted-foreground text-center">
++                Ao enviar seus dados, você concorda com nossa{" "}
++                <a href="/politica-privacidade" className="underline">
++                  Política de Privacidade
++                </a>
++                . Suas informações são tratadas com confidencialidade e utilizadas apenas para contato da nossa equipe.
++              </p>
++            </form>
++          </div>
++        </div>
++      </section>
++
++      <BannerDisplay position="home_bottom" ariaLabel="Conteúdo recomendado" />
++
++      <Footer />
+     </div>
+   );
+ }
+--- a/client/src/index.css	2026-08-30 01:28:11.949556776 +0000
++++ b/client/src/index.css	2026-08-30 01:28:26.115271670 +0000
+@@ -1,664 +1,354 @@
+-@import url("https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&family=Space+Mono:wght@400;700&display=swap");
+ @import "tailwindcss";
+ @import "tw-animate-css";
+ 
+-:root {
+-  --background: #222222;
+-  --foreground: #f5f5f0;
+-  --card: #292929;
+-  --card-foreground: #f5f5f0;
+-  --primary: #ff4764;
+-  --primary-foreground: #1e1e1e;
+-  --secondary: #383838;
+-  --muted: #a9a9a3;
+-  --muted-foreground: #8d8d88;
+-  --accent: #ff765f;
+-  --border: rgba(245, 245, 240, 0.14);
+-  --ring: rgba(255, 71, 100, 0.55);
+-  --radius: 1rem;
+-}
++@custom-variant dark (&:is(.dark *));
+ 
+-* {
+-  box-sizing: border-box;
+-}
+-html {
+-  scroll-behavior: smooth;
+-  background: var(--background);
+-}
+-body {
+-  margin: 0;
+-  min-width: 320px;
+-  color: var(--foreground);
+-  background:
+-    radial-gradient(
+-      circle at 12% 0%,
+-      rgba(255, 71, 100, 0.08),
+-      transparent 28rem
+-    ),
+-    radial-gradient(
+-      circle at 90% 18%,
+-      rgba(255, 118, 95, 0.06),
+-      transparent 24rem
+-    ),
+-    #222222;
+-  font-family: "Manrope", ui-sans-serif, system-ui, sans-serif;
+-  -webkit-font-smoothing: antialiased;
+-  text-rendering: optimizeLegibility;
+-}
+-body::selection {
+-  color: #222;
+-  background: #ff9a8d;
+-}
+-button,
+-input,
+-textarea,
+-select {
+-  font: inherit;
+-}
+-a {
+-  color: inherit;
+-}
+-button {
+-  cursor: pointer;
++@theme inline {
++  /* Fontes */
++  --font-family-display: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
++  --font-family-sans: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
++  
++  /* Identidade Destrava: um único azul de marca nos dois temas */
++  --color-caixa-blue: #0b4f9c;
++  --color-caixa-blue-dark: #073565;
++  --color-caixa-yellow: #f2c94c;
++  --color-caixa-gray: #f4f7fb;
++  /* Acentos de interface inspirados nas referências, usados apenas por função */
++  --color-brand-navy: #0d1733;
++  --color-brand-violet: #6c72ff;
++  --color-brand-cyan: #2aa9e8;
++  --color-brand-orange: #f97316;
++  --color-brand-green: #9bdc5a;
++  
++  --radius-sm: calc(var(--radius) - 4px);
++  --radius-md: calc(var(--radius) - 2px);
++  --radius-lg: var(--radius);
++  --radius-xl: calc(var(--radius) + 4px);
++  --color-background: var(--background);
++  --color-foreground: var(--foreground);
++  --color-card: var(--card);
++  --color-card-foreground: var(--card-foreground);
++  --color-popover: var(--popover);
++  --color-popover-foreground: var(--popover-foreground);
++  --color-primary: var(--primary);
++  --color-primary-foreground: var(--primary-foreground);
++  --color-secondary: var(--secondary);
++  --color-secondary-foreground: var(--secondary-foreground);
++  --color-muted: var(--muted);
++  --color-muted-foreground: var(--muted-foreground);
++  --color-accent: var(--accent);
++  --color-accent-foreground: var(--accent-foreground);
++  --color-destructive: var(--destructive);
++  --color-destructive-foreground: var(--destructive-foreground);
++  --color-success: var(--success);
++  --color-success-foreground: var(--success-foreground);
++  --color-warning: var(--warning);
++  --color-warning-foreground: var(--warning-foreground);
++  --color-medium: var(--medium);
++  --color-medium-foreground: var(--medium-foreground);
++  --color-border: var(--border);
++  --color-input: var(--input);
++  --color-ring: var(--ring);
++  --color-chart-1: var(--chart-1);
++  --color-chart-2: var(--chart-2);
++  --color-chart-3: var(--chart-3);
++  --color-chart-4: var(--chart-4);
++  --color-chart-5: var(--chart-5);
++  --color-sidebar: var(--sidebar);
++  --color-sidebar-foreground: var(--sidebar-foreground);
++  --color-sidebar-primary: var(--sidebar-primary);
++  --color-sidebar-primary-foreground: var(--sidebar-primary-foreground);
++  --color-sidebar-accent: var(--sidebar-accent);
++  --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
++  --color-sidebar-border: var(--sidebar-border);
++  --color-sidebar-ring: var(--sidebar-ring);
++  --color-surface-elevated: var(--surface-elevated);
++  --color-surface-subtle: var(--surface-subtle);
++  --color-surface-inverse: var(--surface-inverse);
++  --color-overlay: var(--overlay);
++  --color-text-strong: var(--text-strong);
+ }
+ 
+-.container {
+-  width: min(1280px, calc(100% - 48px));
+-  margin-inline: auto;
+-}
+-.font-display {
+-  font-family: "Manrope", ui-sans-serif, sans-serif;
+-  font-weight: 500;
+-  letter-spacing: -0.065em;
+-}
+-.brand-mark {
+-  display: inline-flex;
+-  align-items: baseline;
+-  gap: 0.18em;
+-  color: #fff;
+-  font-size: 1.15rem;
+-  font-weight: 800;
+-  letter-spacing: -0.06em;
+-}
+-.brand-mark i {
+-  color: #ff4764;
+-  font-style: normal;
+-  font-weight: 500;
+-}
+-.eyebrow {
+-  margin: 0 0 0.9rem;
+-  color: #ff765f;
+-  font-family: "Space Mono", monospace;
+-  font-size: 0.68rem;
+-  font-weight: 700;
+-  letter-spacing: 0.17em;
+-  text-transform: uppercase;
++:root {
++  /* Tema claro: superfície limpa e contraste AA/AAA para texto e controles */
++  --primary: var(--color-caixa-blue);
++  --primary-foreground: #ffffff;
++  --secondary: #f2c94c;
++  --secondary-foreground: #1f2937;
++  --accent: #e8743b;
++  --accent-foreground: #1f2937;
++  
++  --radius: 0.75rem;
++  --background: #f8fafc;
++  --foreground: #172033;
++  --card: #ffffff;
++  --card-foreground: #172033;
++  --popover: #ffffff;
++  --popover-foreground: #172033;
++  --muted: #eef3f9;
++  --muted-foreground: #526176;
++  --destructive: #b42318;
++  --destructive-foreground: #ffffff;
++  --success: #15803d;
++  --success-foreground: #ffffff;
++  --warning: #b45309;
++  --warning-foreground: #ffffff;
++  --medium: #a16207;
++  --medium-foreground: #ffffff;
++  --border: #d7e0eb;
++  --input: #c6d2e0;
++  --ring: var(--color-caixa-blue);
++  
++  --chart-1: var(--color-caixa-blue);
++  --chart-2: #15803d;
++  --chart-3: #e8743b;
++  --chart-4: #7c3aed;
++  --chart-5: #0891b2;
++  
++  --sidebar: #ffffff;
++  --sidebar-foreground: #172033;
++  --sidebar-primary: var(--color-caixa-blue);
++  --sidebar-primary-foreground: #ffffff;
++  --sidebar-accent: #eaf1f8;
++  --sidebar-accent-foreground: #17345b;
++  --sidebar-border: #d7e0eb;
++  --sidebar-ring: var(--color-caixa-blue);
++  --surface-elevated: #ffffff;
++  --surface-subtle: #f2f6fb;
++  --surface-inverse: #0d1733;
++  --overlay: rgba(13, 23, 51, 0.48);
++  --text-strong: #0f1e38;
+ }
+ 
+-.hero-section {
+-  position: relative;
+-  display: grid;
+-  min-height: 720px;
+-  align-items: center;
+-  overflow: hidden;
+-  background:
+-    linear-gradient(rgba(255, 255, 255, 0.035) 1px, transparent 1px),
+-    linear-gradient(90deg, rgba(255, 255, 255, 0.035) 1px, transparent 1px),
+-    radial-gradient(
+-      circle at 76% 36%,
+-      rgba(255, 71, 100, 0.17),
+-      transparent 20rem
+-    ),
+-    #222;
+-  background-size:
+-    72px 72px,
+-    72px 72px,
+-    auto,
+-    auto;
+-}
+-.hero-section::before {
+-  content: "";
+-  position: absolute;
+-  width: min(55vw, 760px);
+-  height: min(55vw, 760px);
+-  right: -14%;
+-  top: 2%;
+-  border: 1px solid rgba(255, 118, 95, 0.32);
+-  border-radius: 49% 51% 62% 38% / 44% 41% 59% 56%;
+-  transform: rotate(18deg);
+-  animation: drift 16s ease-in-out infinite alternate;
+-}
+-.hero-section::after {
+-  content: "";
+-  position: absolute;
+-  inset: auto 0 0;
+-  height: 1px;
+-  background: linear-gradient(
+-    90deg,
+-    transparent,
+-    rgba(255, 71, 100, 0.8),
+-    transparent
+-  );
+-}
+-.hero-section > .container {
+-  position: relative;
+-  z-index: 1;
+-}
+-.hero-section h1 {
+-  max-width: 620px;
+-  color: #f5f5f0;
+-  font-size: clamp(3.25rem, 4.6vw, 5rem);
+-  font-weight: 500;
+-  line-height: 0.93;
+-}
+-.hero-section h1 span {
+-  color: #ff4764;
+-}
+-.hero-section p {
+-  max-width: 620px;
+-  color: rgba(245, 245, 240, 0.62);
+-}
+-.hero-copy {
+-  min-width: 0;
+-}
+-.hero-visual {
+-  position: relative;
+-  isolation: isolate;
+-  width: min(100%, 620px);
+-  aspect-ratio: 1;
+-  justify-self: end;
+-  margin: 0;
+-  overflow: visible;
+-  background: transparent;
+-}
+-.hero-visual::before {
+-  content: "";
+-  position: absolute;
+-  z-index: -1;
+-  inset: 8% 3%;
+-  border-radius: 50%;
+-  background: radial-gradient(
+-    circle at 68% 43%,
+-    rgba(255, 71, 100, 0.15),
+-    rgba(255, 118, 95, 0.055) 42%,
+-    transparent 72%
+-  );
+-  filter: blur(42px);
+-}
+-.hero-visual::after {
+-  content: "";
+-  position: absolute;
+-  z-index: 2;
+-  inset: 0;
+-  pointer-events: none;
+-  background:
+-    radial-gradient(
+-      ellipse 49% 51% at 61% 48%,
+-      transparent 46%,
+-      rgba(34, 34, 34, 0.12) 72%,
+-      rgba(34, 34, 34, 0.46) 100%
+-    ),
+-    linear-gradient(
+-      90deg,
+-      rgba(34, 34, 34, 0.9) 0%,
+-      rgba(34, 34, 34, 0.28) 13%,
+-      transparent 30%,
+-      transparent 82%,
+-      rgba(34, 34, 34, 0.52) 100%
+-    ),
+-    linear-gradient(
+-      180deg,
+-      rgba(34, 34, 34, 0.46) 0%,
+-      transparent 19%,
+-      transparent 76%,
+-      rgba(34, 34, 34, 0.72) 100%
+-    );
+-}
+-.hero-visual picture {
+-  position: relative;
+-  z-index: 1;
+-  display: block;
+-  width: 100%;
+-  height: 100%;
+-  -webkit-mask-image: radial-gradient(
+-    ellipse 92% 88% at 59% 49%,
+-    #000 57%,
+-    rgba(0, 0, 0, 0.92) 69%,
+-    rgba(0, 0, 0, 0.38) 88%,
+-    transparent 100%
+-  );
+-  mask-image: radial-gradient(
+-    ellipse 92% 88% at 59% 49%,
+-    #000 57%,
+-    rgba(0, 0, 0, 0.92) 69%,
+-    rgba(0, 0, 0, 0.38) 88%,
+-    transparent 100%
+-  );
+-}
+-.hero-visual-image {
+-  display: block;
+-  width: 100%;
+-  height: 100%;
+-  object-fit: cover;
+-  object-position: center;
+-  filter: brightness(0.94) contrast(0.96) saturate(0.9);
++.dark {
++  /* Dashdark X-inspired dark canvas, while keeping the same brand blue */
++  --primary: var(--color-caixa-blue);
++  --primary-foreground: #ffffff;
++  --sidebar-primary: var(--color-caixa-blue);
++  --sidebar-primary-foreground: #ffffff;
++  --background: #101935;
++  --foreground: #f8fafc;
++  --card: #080f25;
++  --card-foreground: #f8fafc;
++  --popover: #080f25;
++  --popover-foreground: #f8fafc;
++  --secondary: #212c4d;
++  --secondary-foreground: #e6ecff;
++  --muted: #202b4a;
++  --muted-foreground: #c2cbe0;
++  --accent: #6c72ff;
++  --accent-foreground: #050817;
++  --destructive: #f07882;
++  --destructive-foreground: #2b0b0f;
++  --success: #12a466;
++  --success-foreground: #ffffff;
++  --warning: #f2a65a;
++  --warning-foreground: #111a38;
++  --medium: #eab308;
++  --medium-foreground: #111a38;
++  --border: rgba(226, 232, 240, 0.18);
++  --input: rgba(226, 232, 240, 0.24);
++  --ring: #8ab4ff;
++  --chart-1: var(--color-caixa-blue);
++  --chart-2: #6c72ff;
++  --chart-3: #12a466;
++  --chart-4: #e8743b;
++  --chart-5: #c2414d;
++  --sidebar: #080f25;
++  --sidebar-foreground: #f8fafc;
++  --sidebar-accent: #212c4d;
++  --sidebar-accent-foreground: #ffffff;
++  --sidebar-border: rgba(226, 232, 240, 0.18);
++  --sidebar-ring: #8ab4ff;
++  --surface-elevated: #111c3b;
++  --surface-subtle: #151f42;
++  --surface-inverse: #f8fafc;
++  --overlay: rgba(3, 8, 24, 0.72);
++  --text-strong: #ffffff;
+ }
+ 
+-@keyframes drift {
+-  from {
+-    transform: rotate(18deg) translate3d(0, 0, 0);
+-  }
+-  to {
+-    transform: rotate(24deg) translate3d(-2%, 3%, 0);
+-  }
+-}
+-@keyframes float {
+-  from {
+-    transform: translateY(0);
+-  }
+-  to {
+-    transform: translateY(-10px);
++@layer base {
++  * {
++    @apply border-border outline-ring/50;
++  }
++  body {
++    @apply bg-background text-foreground;
++    font-family: var(--font-family-sans);
++  }
++  h1, h2, h3, h4, h5, h6 {
++    font-family: var(--font-family-display);
++    font-weight: 700;
++  }
++  button:not(:disabled),
++  [role="button"]:not([aria-disabled="true"]),
++  [type="button"]:not(:disabled),
++  [type="submit"]:not(:disabled),
++  [type="reset"]:not(:disabled),
++  a[href],
++  select:not(:disabled),
++  input[type="checkbox"]:not(:disabled),
++  input[type="radio"]:not(:disabled) {
++    @apply cursor-pointer;
+   }
+ }
+ 
+-.hero-orbit {
+-  position: relative;
+-  display: grid;
+-  min-height: 430px;
+-  place-items: center;
+-}
+-.orbit-ring {
+-  position: absolute;
+-  border: 1px solid rgba(255, 118, 95, 0.4);
+-  border-radius: 999px;
+-  transform: rotate(-25deg);
+-}
+-.ring-one {
+-  width: 350px;
+-  height: 500px;
+-}
+-.ring-two {
+-  width: 520px;
+-  height: 340px;
+-  transform: rotate(32deg);
+-  border-color: rgba(245, 245, 240, 0.14);
+-}
+-.orbit-card {
+-  position: relative;
+-  z-index: 1;
+-  display: flex;
+-  max-width: 290px;
+-  align-items: center;
+-  gap: 0.85rem;
+-  padding: 1.2rem;
+-  border: 1px solid rgba(245, 245, 240, 0.2);
+-  border-radius: 1rem;
+-  background: rgba(34, 34, 34, 0.78);
+-  box-shadow: 0 30px 100px rgba(0, 0, 0, 0.34);
+-  color: rgba(245, 245, 240, 0.78);
+-  font-size: 0.86rem;
+-  line-height: 1.45;
+-  backdrop-filter: blur(18px);
+-  animation: float 5s ease-in-out infinite alternate;
+-}
++@layer components {
++  /**
++   * Custom container utility that centers content and adds responsive padding.
++   *
++   * This overrides Tailwind's default container behavior to:
++   * - Auto-center content (mx-auto)
++   * - Add responsive horizontal padding
++   * - Set max-width for large screens
++   *
++   * Usage: <div className="container">...</div>
++   *
++   * For custom widths, use max-w-* utilities directly:
++   * <div className="max-w-6xl mx-auto px-4">...</div>
++   */
++  .container {
++    width: 100%;
++    margin-left: auto;
++    margin-right: auto;
++    padding-left: 1rem; /* 16px - mobile padding */
++    padding-right: 1rem;
++  }
+ 
+-.section-heading {
+-  display: flex;
+-  align-items: end;
+-  justify-content: space-between;
+-  gap: 1rem;
+-  padding: 6.5rem 0 1.8rem;
+-}
+-.section-heading h2 {
+-  margin: 0;
+-  font-size: clamp(2rem, 4vw, 3.8rem);
+-  font-weight: 500;
+-  line-height: 0.98;
+-}
+-.filter-card {
+-  border: 1px solid rgba(245, 245, 240, 0.12);
+-  border-radius: 1.2rem;
+-  background: rgba(245, 245, 240, 0.045);
+-  box-shadow: 0 28px 80px rgba(0, 0, 0, 0.18);
+-  backdrop-filter: blur(14px);
+-}
+-.profile-grid {
+-  display: grid;
+-  grid-template-columns: repeat(4, minmax(0, 1fr));
+-  gap: 1.1rem;
+-}
+-.profile-grid > a:nth-child(3n) {
+-  transform: translateY(2.25rem);
+-}
+-.profile-card {
+-  overflow: hidden;
+-  border: 1px solid rgba(245, 245, 240, 0.12);
+-  border-radius: 1rem;
+-  background: #292929;
+-  box-shadow: 0 18px 45px rgba(0, 0, 0, 0.16);
+-  transition:
+-    transform 0.35s cubic-bezier(0.2, 0.7, 0.2, 1),
+-    border-color 0.35s ease,
+-    box-shadow 0.35s ease;
+-}
+-.profile-grid > a:hover .profile-card {
+-  transform: translateY(-9px);
+-  border-color: rgba(255, 71, 100, 0.62);
+-  box-shadow: 0 28px 70px rgba(0, 0, 0, 0.32);
+-}
+-.profile-image {
+-  position: relative;
+-  display: grid;
+-  min-height: 280px;
+-  place-items: center;
+-  overflow: hidden;
+-  background:
+-    radial-gradient(
+-      circle at 30% 20%,
+-      rgba(255, 118, 95, 0.42),
+-      transparent 35%
+-    ),
+-    linear-gradient(145deg, #4a2638, #262626);
+-  background-position: center 18%;
+-  background-size: cover;
+-}
+-.profile-image::after {
+-  content: "";
+-  position: absolute;
+-  inset: 0;
+-  background: linear-gradient(180deg, transparent 45%, rgba(0, 0, 0, 0.42));
+-  opacity: 0.7;
+-  transition: opacity 0.35s ease;
+-}
+-.profile-card:hover .profile-image::after {
+-  opacity: 0.42;
+-}
+-.profile-fallback {
+-  position: relative;
+-  z-index: 1;
+-  color: rgba(245, 245, 240, 0.86);
+-  font-size: 4rem;
+-  font-weight: 500;
+-  letter-spacing: -0.08em;
+-}
+-.empty-state {
+-  margin: 2rem 0 0;
+-  padding: 5rem 1.5rem;
+-  border: 1px dashed rgba(255, 118, 95, 0.42);
+-  border-radius: 1.25rem;
+-  text-align: center;
+-  background: rgba(255, 71, 100, 0.045);
+-}
+-.empty-state h3 {
+-  margin-top: 1rem;
+-  font-size: 1.8rem;
+-  font-weight: 500;
+-  letter-spacing: -0.04em;
+-}
+-.empty-state p {
+-  max-width: 480px;
+-  margin: 0.75rem auto 0;
+-  color: rgba(245, 245, 240, 0.53);
+-  line-height: 1.6;
+-}
+-.empty-icon {
+-  width: 56px;
+-  height: 56px;
+-  margin: auto;
+-  display: grid;
+-  place-items: center;
+-  border-radius: 50%;
+-  background: rgba(255, 71, 100, 0.14);
+-  color: #ff765f;
+-}
+-.detail-cover {
+-  min-height: 560px;
+-  display: grid;
+-  place-items: center;
+-  border-radius: 1.5rem;
+-  background:
+-    radial-gradient(
+-      circle at 30% 20%,
+-      rgba(255, 118, 95, 0.35),
+-      transparent 35%
+-    ),
+-    linear-gradient(145deg, #4a2638, #262626);
+-  background-position: center;
+-  background-size: cover;
+-}
+-.detail-cover span {
+-  color: rgba(245, 245, 240, 0.84);
+-  font-size: 8rem;
+-  font-weight: 500;
+-  letter-spacing: -0.1em;
+-}
+-.media-grid {
+-  display: grid;
+-  grid-template-columns: repeat(4, 1fr);
+-  gap: 0.75rem;
+-}
+-.media-photo {
+-  aspect-ratio: 1;
+-  border-radius: 0.9rem;
+-  background: linear-gradient(145deg, #4a2638, #262626);
+-  background-position: center;
+-  background-size: cover;
+-}
+-.video-tile {
+-  aspect-ratio: 16/9;
+-  display: grid;
+-  place-items: center;
+-  border-radius: 0.75rem;
+-  background:
+-    radial-gradient(circle, rgba(255, 118, 95, 0.28), transparent), #292929;
+-  color: #ff765f;
+-}
+-.video-player {
+-  width: 100%;
+-  aspect-ratio: 16/9;
+-  border-radius: 0.75rem;
+-  background: #151515;
+-  object-fit: cover;
+-}
+-.empty-inline {
+-  padding: 2rem;
+-  border: 1px dashed rgba(245, 245, 240, 0.16);
+-  border-radius: 0.9rem;
+-  background: rgba(245, 245, 240, 0.035);
+-  color: rgba(245, 245, 240, 0.48);
+-  text-align: center;
+-}
+-.field-hint {
+-  display: block;
+-  color: rgba(245, 245, 240, 0.42);
+-  font-family: "Space Mono", monospace;
+-  font-size: 0.7rem;
+-  font-weight: 400;
+-}
++  .flex {
++    min-height: 0;
++    min-width: 0;
++  }
+ 
+-/* Harmonize shadcn primitives with the editorial surface. */
+-input,
+-textarea,
+-[role="combobox"] {
+-  border-radius: 0.65rem;
+-}
+-input:focus-visible,
+-textarea:focus-visible,
+-button:focus-visible,
+-[role="combobox"]:focus-visible {
+-  outline: 2px solid var(--ring);
+-  outline-offset: 3px;
+-}
++  @media (min-width: 640px) {
++    .container {
++      padding-left: 1.5rem; /* 24px - tablet padding */
++      padding-right: 1.5rem;
++    }
++  }
+ 
+-@media (prefers-reduced-motion: reduce) {
+-  *,
+-  *::before,
+-  *::after {
+-    scroll-behavior: auto !important;
+-    animation-duration: 0.001ms !important;
+-    transition-duration: 0.001ms !important;
++  @media (min-width: 1024px) {
++    .container {
++      padding-left: 2rem; /* 32px - desktop padding */
++      padding-right: 2rem;
++      max-width: 1280px; /* Standard content width */
++    }
+   }
+ }
+-@media (max-width: 1023px) {
+-  .hero-section {
+-    min-height: auto;
+-    padding: 3rem 0 5.5rem;
+-  }
+-  .hero-section > .container {
+-    gap: 2.75rem;
+-  }
+-  .hero-section::before {
+-    right: -35%;
+-  }
+-  .hero-visual {
+-    order: -1;
+-    width: min(100%, 680px);
+-    justify-self: center;
++@layer components {
++  .destrava-shell {
++    --dt-blue: var(--color-caixa-blue);
++    --dt-blue-dark: var(--color-caixa-blue-dark);
++    --dt-surface: color-mix(in srgb, var(--card) 92%, transparent);
++    --dt-border: color-mix(in srgb, var(--border) 72%, transparent);
++    color: var(--foreground);
+   }
+-}
+-@media (max-width: 1000px) {
+-  .profile-grid {
+-    grid-template-columns: repeat(2, minmax(0, 1fr));
++
++  .destrava-page {
++    background:
++      radial-gradient(circle at 22% 0%, color-mix(in srgb, var(--primary) 10%, transparent), transparent 28%),
++      linear-gradient(180deg, var(--background) 0%, color-mix(in srgb, var(--background) 88%, var(--card)) 100%);
++    color: var(--foreground);
+   }
+-  .profile-grid > a:nth-child(3n) {
+-    transform: none;
++
++  .destrava-page > div:not(.emp-page) {
++    min-height: 100%;
+   }
+-}
+-@media (max-width: 600px) {
+-  .container {
+-    width: min(100% - 28px, 1280px);
++
++  .destrava-page h1 {
++    letter-spacing: -0.03em;
+   }
+-  .profile-grid {
+-    grid-template-columns: 1fr;
++
++  .destrava-page h2,
++  .destrava-page h3 {
++    letter-spacing: -0.02em;
+   }
+-  .media-grid {
+-    grid-template-columns: repeat(2, 1fr);
++
++  .destrava-page input:not([type="checkbox"]):not([type="radio"]),
++  .destrava-page select,
++  .destrava-page textarea {
++    border-radius: 0.95rem;
++    border-color: var(--input);
++    background-color: color-mix(in srgb, var(--card) 95%, transparent);
++    color: var(--foreground);
++    box-shadow: 0 1px 2px color-mix(in srgb, var(--foreground) 8%, transparent);
++    transition: border-color .18s ease, box-shadow .18s ease, background-color .18s ease;
+   }
+-  .section-heading {
+-    align-items: start;
+-    flex-direction: column;
+-    padding-top: 4.5rem;
++
++  .destrava-page input:not([type="checkbox"]):not([type="radio"]):focus,
++  .destrava-page select:focus,
++  .destrava-page textarea:focus {
++    border-color: var(--ring);
++    box-shadow: 0 0 0 4px color-mix(in srgb, var(--ring) 18%, transparent);
++    outline: none;
+   }
+-  .detail-cover {
+-    min-height: 380px;
++
++  .destrava-page table {
++    border-collapse: separate;
++    border-spacing: 0;
+   }
+-  .hero-section {
+-    min-height: 0;
+-    padding: 0;
++
++  .destrava-page thead th {
++    background: var(--muted);
++    color: var(--muted-foreground);
++    font-size: 0.74rem;
++    letter-spacing: 0.08em;
++    text-transform: uppercase;
++    font-weight: 800;
+   }
+-  .hero-section > .container {
+-    display: grid;
+-    height: clamp(500px, calc(100svh - 69px), 720px);
+-    grid-template-columns: minmax(0, 1fr);
+-    grid-template-rows: minmax(0, 1fr);
+-    gap: 0;
+-    align-items: stretch;
+-  }
+-  .hero-section::before {
+-    display: none;
+-  }
+-  .hero-copy,
+-  .hero-visual {
+-    grid-area: 1 / 1;
+-  }
+-  .hero-copy {
+-    z-index: 4;
+-    display: flex;
+-    min-width: 0;
+-    height: 100%;
+-    flex-direction: column;
+-    align-self: stretch;
+-    padding: clamp(1rem, 3svh, 1.65rem) 0 1rem;
+-  }
+-  .hero-copy .eyebrow {
+-    margin-bottom: 0.55rem;
+-    color: #ff9a8d;
+-    text-shadow: 0 2px 18px rgba(0, 0, 0, 0.92);
+-  }
+-  .hero-section h1 {
+-    max-width: 100%;
+-    font-size: clamp(2.25rem, 10.8vw, 3.15rem);
+-    line-height: 0.98;
+-    letter-spacing: -0.055em;
+-    text-wrap: balance;
+-    text-shadow: 0 3px 24px rgba(0, 0, 0, 0.95);
+-  }
+-  .hero-description {
+-    max-width: 31ch !important;
+-    margin-top: 0.85rem !important;
+-    color: rgba(255, 255, 255, 0.78) !important;
+-    font-size: 0.88rem !important;
+-    line-height: 1.45 !important;
+-    text-shadow: 0 2px 14px rgba(0, 0, 0, 0.95);
++
++  .destrava-page tbody tr {
++    transition: background-color .18s ease, box-shadow .18s ease;
+   }
+-  .hero-actions {
+-    margin-top: auto !important;
++
++  .destrava-page tbody tr:hover {
++    background: color-mix(in srgb, var(--muted) 72%, transparent);
+   }
+-  .hero-actions a,
+-  .hero-actions button {
+-    width: 100%;
++
++  .destrava-page .recharts-wrapper,
++  .destrava-page .recharts-surface {
++    overflow: visible;
+   }
+-  .hero-meta {
+-    max-width: none !important;
+-    margin-top: 0.7rem !important;
+-    color: rgba(255, 255, 255, 0.72) !important;
+-    font-size: 0.58rem !important;
+-    line-height: 1.45;
+-    text-shadow: 0 2px 12px rgba(0, 0, 0, 0.95);
+-  }
+-  .hero-visual {
+-    order: initial;
+-    width: calc(100% + 28px);
+-    height: 100%;
+-    aspect-ratio: auto;
+-    justify-self: stretch;
+-    margin-left: -14px;
+-    overflow: hidden;
++
++  .destrava-page .recharts-cartesian-axis-tick-value,
++  .destrava-page .recharts-default-legend,
++  .destrava-page .recharts-legend-item-text {
++    fill: var(--muted-foreground);
++    color: var(--muted-foreground);
+   }
+-  .hero-visual::before {
+-    display: none;
++
++  .destrava-page button,
++  .destrava-page a[role="button"] {
++    transition: transform .18s ease, box-shadow .18s ease, background-color .18s ease, border-color .18s ease, color .18s ease;
+   }
+-  .hero-visual::after {
+-    background:
+-      linear-gradient(
+-        180deg,
+-        rgba(18, 18, 18, 0.94) 0%,
+-        rgba(24, 24, 24, 0.72) 20%,
+-        rgba(24, 24, 24, 0.08) 45%,
+-        rgba(24, 24, 24, 0.08) 66%,
+-        rgba(18, 18, 18, 0.88) 100%
+-      ),
+-      linear-gradient(
+-        90deg,
+-        rgba(20, 20, 20, 0.56) 0%,
+-        transparent 58%,
+-        rgba(20, 20, 20, 0.12) 100%
+-      );
+-  }
+-  .hero-visual picture {
+-    -webkit-mask-image: none;
+-    mask-image: none;
+-  }
+-  .hero-visual-image {
+-    transform: none;
+-    object-position: 63% 48%;
+-    filter: brightness(0.9) contrast(0.98) saturate(0.92);
++
++  .destrava-page button:hover,
++  .destrava-page a[role="button"]:hover {
++    transform: translateY(-1px);
+   }
+-  .profile-image {
+-    min-height: 0;
+-    aspect-ratio: 3 / 4;
+-    background-position: center top;
++
++  .destrava-nav-scroll::-webkit-scrollbar,
++  .destrava-page *::-webkit-scrollbar {
++    width: 8px;
++    height: 8px;
+   }
+-  .hero-orbit {
+-    min-height: 300px;
+-    transform: scale(0.78);
++
++  .destrava-nav-scroll::-webkit-scrollbar-track,
++  .destrava-page *::-webkit-scrollbar-track {
++    background: transparent;
+   }
+-}
+-@media (max-width: 600px) and (max-height: 650px) {
+-  .hero-description {
+-    display: none;
++
++  .destrava-nav-scroll::-webkit-scrollbar-thumb,
++  .destrava-page *::-webkit-scrollbar-thumb {
++    background: color-mix(in srgb, var(--muted-foreground) 42%, transparent);
++    border-radius: 999px;
++    border: 2px solid transparent;
++    background-clip: padding-box;
+   }
+-  .hero-section h1 {
+-    font-size: clamp(2.05rem, 10vw, 2.8rem);
++
++  .destrava-nav-scroll::-webkit-scrollbar-thumb:hover,
++  .destrava-page *::-webkit-scrollbar-thumb:hover {
++    background: color-mix(in srgb, var(--muted-foreground) 55%, transparent);
++    border: 2px solid transparent;
++    background-clip: padding-box;
+   }
+ }
