@@ -33,18 +33,24 @@ FROM build-deps AS builder
 
 COPY . .
 
-# Coolify supplies a checked-out repository, but the slim builder image does
-# not contain the git binary. Read the detached HEAD/ref files directly and
-# stamp the exact commit into an artifact consumed by the runtime.
+# Coolify's build context does not reliably preserve .git metadata (observed
+# in production: .git/HEAD absent from this stage even though .dockerignore
+# never excludes it). BUILD_COMMIT is best-effort: server/index.ts already
+# falls back to "unknown" for anything that isn't a 40-hex-char sha (see
+# resolveDestravaRelease), so the build must never hard-fail over this --
+# a missing/invalid stamp here is a no-op at runtime, not an outage.
 RUN set -eu; \
-    commit="$(cat .git/HEAD)"; \
-    case "$commit" in \
-      ref:\ *) ref="${commit#ref: }"; commit="$(cat ".git/$ref")" ;; \
-    esac; \
-    if [ "${#commit}" -ne 40 ] || [ -n "$(printf '%s' "$commit" | tr -d '0123456789abcdefABCDEF')" ]; then \
-      echo "Invalid Git commit stamp in .git/HEAD" >&2; exit 1; \
+    commit="unknown"; \
+    if [ -f .git/HEAD ]; then \
+      commit="$(cat .git/HEAD)"; \
+      case "$commit" in \
+        ref:\ *) ref="${commit#ref: }"; [ -f ".git/$ref" ] && commit="$(cat ".git/$ref")" ;; \
+      esac; \
     fi; \
-    printf '%s\\n' "$commit" > /app/BUILD_COMMIT
+    if [ "${#commit}" -ne 40 ] || [ -n "$(printf '%s' "$commit" | tr -d '0123456789abcdefABCDEF')" ]; then \
+      commit="unknown"; \
+    fi; \
+    printf '%s\n' "$commit" > /app/BUILD_COMMIT
 
 ENV NODE_OPTIONS=--max-old-space-size=4096
 
