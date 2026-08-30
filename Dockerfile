@@ -33,6 +33,11 @@ FROM build-deps AS builder
 
 COPY . .
 
+# The Coolify build context is a checked-out repository. Stamp the exact commit
+# into an artifact consumed by the runtime; never rely on a manually maintained
+# release string that can drift from origin/main.
+RUN git rev-parse HEAD > /app/BUILD_COMMIT
+
 ENV NODE_OPTIONS=--max-old-space-size=4096
 
 RUN set -eu; \
@@ -49,7 +54,7 @@ RUN mkdir -p dist/assets && cp -r server/assets/. dist/assets/
 FROM node:22.17.0-slim AS runner
 
 LABEL org.opencontainers.image.title="Destrava Crédito" \
-      org.opencontainers.image.version="fix66-destinatarios-ranking-nexus-20260810"
+      org.opencontainers.image.version="runtime-release"
 
 USER root
 ENV DEBIAN_FRONTEND=noninteractive
@@ -95,10 +100,13 @@ COPY --from=prod-deps --chown=node:node /app/node_modules ./node_modules
 COPY --from=builder --chown=node:node /app/package.json ./package.json
 COPY --from=builder --chown=node:node /app/dist ./dist
 COPY --from=builder --chown=node:node /app/scripts ./scripts
+COPY --from=builder --chown=node:node /app/BUILD_COMMIT ./BUILD_COMMIT
 
 ENV NODE_ENV=production
 ENV PORT=4000
-ENV DESTRAVA_RELEASE=fix66-destinatarios-ranking-nexus-20260810
+# Keep an explicit env override for operators, but default to the build artifact
+# generated from the exact Git checkout used by Coolify.
+ENV DESTRAVA_RELEASE=
 ENV DATA_DIR=/var/data/destrava
 ENV REQUIRE_PERSISTENT_STORAGE=true
 ENV PERSISTENT_STORAGE_CONFIGURED=false

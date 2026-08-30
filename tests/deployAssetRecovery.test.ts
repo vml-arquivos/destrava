@@ -15,7 +15,10 @@ describe("recuperação segura de assets entre deploys", () => {
     expect(server).toContain('app.get("/version"');
     expect(server).toContain('"https://static.cloudflareinsights.com"');
     expect(server).toContain('"https://cloudflareinsights.com"');
-    expect(dockerfile).toContain("DESTRAVA_RELEASE=fix66-destinatarios-ranking-nexus-20260810");
+    expect(server).toContain('BUILD_COMMIT');
+    expect(dockerfile).toContain("RUN git rev-parse HEAD > /app/BUILD_COMMIT");
+    expect(dockerfile).toContain("COPY --from=builder --chown=node:node /app/BUILD_COMMIT ./BUILD_COMMIT");
+    expect(dockerfile).not.toContain("DESTRAVA_RELEASE=fix66-destinatarios-ranking-nexus-20260810");
   });
 
   it("só recupera um chunk ausente depois de tentar o arquivo real", () => {

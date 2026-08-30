@@ -18,8 +18,7 @@ logs/
 .env.local
 .env.*.local
 
-# Git
-.git/
+# Git metadata is read during the builder stage to stamp the exact commit.
 .gitignore
 
 # Editor e OS

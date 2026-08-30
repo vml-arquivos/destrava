@@ -100,7 +100,24 @@ const { Pool } = pkg;
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
-const DESTRAVA_RELEASE = process.env.DESTRAVA_RELEASE || "fix66-destinatarios-ranking-nexus-20260810";
+
+function resolveDestravaRelease(): string {
+  const configured = process.env.DESTRAVA_RELEASE?.trim();
+  if (configured) return configured;
+
+  try {
+    // Docker builder writes this from `git rev-parse HEAD`; the runtime image
+    // receives only the small artifact, not the repository or its credentials.
+    const stamped = fs.readFileSync(path.join(__dirname, "..", "BUILD_COMMIT"), "utf8").trim();
+    if (/^[0-9a-f]{40}$/i.test(stamped)) return stamped;
+  } catch {
+    // Local development and legacy images may not contain the stamp.
+  }
+
+  return "unknown";
+}
+
+const DESTRAVA_RELEASE = resolveDestravaRelease();
 
 // Quando um navegador/CDN mantém um index.html antigo, ele pode pedir um chunk
 // Vite que já não existe no container novo. Este módulo é servido somente para
