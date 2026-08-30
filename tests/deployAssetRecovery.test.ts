@@ -16,7 +16,7 @@ describe("recuperação segura de assets entre deploys", () => {
     expect(server).toContain('"https://static.cloudflareinsights.com"');
     expect(server).toContain('"https://cloudflareinsights.com"');
     expect(server).toContain('BUILD_COMMIT');
-    expect(dockerfile).toContain("RUN git rev-parse HEAD > /app/BUILD_COMMIT");
+    expect(dockerfile).toContain('commit="$(cat .git/HEAD)"');
     expect(dockerfile).toContain("COPY --from=builder --chown=node:node /app/BUILD_COMMIT ./BUILD_COMMIT");
     expect(dockerfile).not.toContain("DESTRAVA_RELEASE=fix66-destinatarios-ranking-nexus-20260810");
   });

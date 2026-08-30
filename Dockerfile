@@ -33,10 +33,18 @@ FROM build-deps AS builder
 
 COPY . .
 
-# The Coolify build context is a checked-out repository. Stamp the exact commit
-# into an artifact consumed by the runtime; never rely on a manually maintained
-# release string that can drift from origin/main.
-RUN git rev-parse HEAD > /app/BUILD_COMMIT
+# Coolify supplies a checked-out repository, but the slim builder image does
+# not contain the git binary. Read the detached HEAD/ref files directly and
+# stamp the exact commit into an artifact consumed by the runtime.
+RUN set -eu; \
+    commit="$(cat .git/HEAD)"; \
+    case "$commit" in \
+      ref:\ *) ref="${commit#ref: }"; commit="$(cat ".git/$ref")" ;; \
+    esac; \
+    if [ "${#commit}" -ne 40 ] || [ -n "$(printf '%s' "$commit" | tr -d '0123456789abcdefABCDEF')" ]; then \
+      echo "Invalid Git commit stamp in .git/HEAD" >&2; exit 1; \
+    fi; \
+    printf '%s\\n' "$commit" > /app/BUILD_COMMIT
 
 ENV NODE_OPTIONS=--max-old-space-size=4096
 

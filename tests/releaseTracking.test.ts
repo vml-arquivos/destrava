@@ -12,7 +12,8 @@ describe("rastreabilidade do commit publicado", () => {
   it("grava o SHA do checkout no builder e o copia para o runtime", () => {
     const dockerfile = read("Dockerfile");
 
-    expect(dockerfile).toContain("RUN git rev-parse HEAD > /app/BUILD_COMMIT");
+    expect(dockerfile).toContain('commit="$(cat .git/HEAD)"');
+    expect(dockerfile).toContain("printf '%s\\\\n' \"$commit\" > /app/BUILD_COMMIT");
     expect(dockerfile).toContain("COPY --from=builder --chown=node:node /app/BUILD_COMMIT ./BUILD_COMMIT");
     expect(dockerfile).not.toContain("DESTRAVA_RELEASE=fix66-destinatarios-ranking-nexus-20260810");
   });
