@@ -11,7 +11,6 @@ import {
   resolveDocumentPath,
   saveDocumentBuffer,
 } from '../services/documentStorage';
-import { DocumentPipelineStatus, assertUploadAllowed } from '../services/documentPipelineService';
 import { analiseDocumentalService } from '../services/analiseDocumentalEspecializada';
 import { analisarCnpjReceitaCartaoEmpresa } from '../services/analiseCnpjReceitaCartao';
 import { TIPOS_DOCUMENTO as TIPOS_DOCUMENTO_CATALOGO, getDocumentCatalogEntry, isKnownDocumentType } from '../../shared/documentTypes';
@@ -71,41 +70,19 @@ const upload = multer({
   limits: { fileSize: 25 * 1024 * 1024 },
 });
 
-async function getPipelineStatusForUpload(empresaId: string): Promise<DocumentPipelineStatus> {
-  // O bloco 'enquadramento_tributario' é reforço documental opcional (o regime tributário
-  // já vem da consulta de CNPJ/Receita Federal, sincronizada em `empresas.regime_tributario`)
-  // -- ver o mesmo tratamento em server/routes/documentacao.ts, avaliarProntidaoIdentidadeCnpj.
-  // Uma leitura de baixa confiança ou pendente de revisão desse comprovante opcional não pode
-  // travar o anexo dos documentos obrigatórios da Fase 2 (Atos da Junta/Contrato Social).
-  const BLOCOS_OBRIGATORIOS_FASE_1 = ['cnpj_receita', 'qsa_quadro_societario'];
-  const phase1 = await pool.query(
-    `SELECT COUNT(DISTINCT b.codigo)::int AS total
-       FROM public.documentacao_entidade_blocos eb
-       JOIN public.documentacao_blocos b ON b.id = eb.bloco_id
-      WHERE eb.empresa_id = $1
-        AND b.codigo = ANY($2::text[])
-        AND eb.status = 'validado'
-        AND eb.completo = true
-        AND eb.validado = true`,
-    [empresaId, BLOCOS_OBRIGATORIOS_FASE_1],
-  ).catch(() => ({ rows: [{ total: 0 }] } as any));
-  if (Number(phase1.rows[0]?.total || 0) !== BLOCOS_OBRIGATORIOS_FASE_1.length) return DocumentPipelineStatus.PHASE_1_PENDING;
-
-  const junta = await pool.query(
-    `SELECT 1
-       FROM public.documentos_arquivos d
-       JOIN public.documentos_extracoes_ia x ON x.arquivo_id = d.id
-      WHERE d.empresa_id = $1
-        AND d.tipo_documento = 'atos_junta_comercial'
-        AND d.status NOT IN ('excluido', 'recusado')
-        AND x.prompt_codigo = 'atos_junta_extract'
-        AND x.status = 'concluido'
-      LIMIT 1`,
-    [empresaId],
-  ).catch(() => ({ rows: [] } as any));
-  if (!junta.rows.length) return DocumentPipelineStatus.PHASE_2_JUNTA_PENDING;
-  return DocumentPipelineStatus.PHASE_3_CONTRACT_PENDING;
-}
+// Decisão de negócio (2026-08-30): o upload de um documento NUNCA pode ser
+// tecnicamente bloqueado pela ordem/fase do pipeline (CNPJ -> QSA -> Enquadramento
+// -> confirmação de regime -> Atos da Junta -> Contrato Social/Alteração). O que
+// falta ou está fora de ordem vira PENDÊNCIA visível (painel de pendências /
+// checklist do dossiê) e continua impedindo o dossiê de ficar "apto para
+// avançar" para a proposta de crédito -- mas o anexo do arquivo em si fica
+// sempre liberado, mesmo fora de ordem. Por isso a função que calculava a fase
+// do pipeline só para VETAR o upload (`getPipelineStatusForUpload` +
+// `assertUploadAllowed`, chamada logo abaixo até esta mudança) foi removida
+// deste ponto. `assertUploadAllowed`/`DocumentPipelineStatus` continuam
+// existindo e testados em `server/services/documentPipelineService.ts` (podem
+// ser reaproveitados para classificar/relatar status), só não são mais usados
+// para impedir a gravação do arquivo.
 
 // Ordem obrigatória de leitura das consultas cadastrais: 1º SCR/Registrato, 2º CCS,
 // 3º CCF -- tanto para CNPJ quanto para CPF (por sócio). Antes disso os três campos
@@ -769,14 +746,9 @@ router.post('/upload', auth, upload.single('file'), async (req: Request, res: Re
     assertAllowedRelation(entidadeTipo, tipoDocumento, req.body);
     const refs = await validarEntidade(entidadeTipo, entidadeId, req.body);
     const empresaIdPipeline = String((refs as any).empresa_id || req.body.empresa_id || '').trim();
-    if (
-      entidadeTipo === 'empresa'
-      && empresaIdPipeline
-      && ['atos_junta_comercial', 'contrato_social', 'alteracao_contratual'].includes(tipoDocumento)
-    ) {
-      const pipelineStatus = await getPipelineStatusForUpload(empresaIdPipeline);
-      assertUploadAllowed(pipelineStatus, tipoDocumento);
-    }
+    // Upload de Atos da Junta/Contrato Social/Alteração nunca é bloqueado pela
+    // fase do pipeline -- ver nota acima de getPipelineStatusForUpload. O que
+    // falta vira pendência visível no dossiê, não impedimento de anexar.
     let socioIdValidado: string | null = null;
     if (req.body.socio_id) {
       const socioId = String(req.body.socio_id).trim();

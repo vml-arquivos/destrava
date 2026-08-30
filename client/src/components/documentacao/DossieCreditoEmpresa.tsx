@@ -614,6 +614,57 @@ function AnaliseCnpjCard({ analise }: { analise: AnaliseCnpjEmpresa | null }) {
   );
 }
 
+// Indicador compacto de pendência: em vez da caixa "O que precisa ser
+// resolvido"/"Avisos" ficar sempre aberta ocupando espaço fixo no topo da
+// tela, agora é um selo pequeno ("Ação necessária" / "Avisos") que só expande
+// o conteúdo dentro de um popover ao clique -- pedido explícito do usuário.
+// Mesmo padrão de estado local (useState) que StatusAnaliseSlot já usa em
+// DocumentosEntidade.tsx para o toggle "Dados da análise".
+function IndicadorPendencia({
+  rotulo,
+  tom,
+  titulo,
+  itens,
+}: {
+  rotulo: string;
+  tom: "destructive" | "warning";
+  titulo: string;
+  itens: string[];
+}) {
+  const [aberto, setAberto] = useState(false);
+  if (!itens.length) return null;
+  const classesBotao = tom === "destructive"
+    ? "border-destructive/30 bg-destructive/10 text-destructive"
+    : "border-warning/30 bg-warning/10 text-warning";
+  const classesTitulo = tom === "destructive" ? "text-destructive" : "text-warning";
+  const classesItem = tom === "destructive" ? "text-destructive" : "text-warning";
+  return (
+    <div className="relative">
+      <button
+        type="button"
+        onClick={() => setAberto((v) => !v)}
+        className={`inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-[10px] font-black ${classesBotao}`}
+      >
+        <AlertTriangle className="h-3 w-3 shrink-0" />
+        {rotulo} ({itens.length})
+      </button>
+      {aberto && (
+        <div className="absolute left-0 top-full z-20 mt-1.5 w-72 max-w-[90vw] rounded-xl border border-border bg-card p-3 shadow-lg">
+          <div className="flex items-center justify-between gap-2">
+            <p className={`text-[11px] font-black ${classesTitulo}`}>{titulo}</p>
+            <button type="button" onClick={() => setAberto(false)} className="text-[10px] text-muted-foreground hover:text-foreground">Fechar</button>
+          </div>
+          <div className="mt-1.5 space-y-1">
+            {itens.slice(0, 8).map((item, index) => (
+              <p key={index} className={`text-[11px] leading-relaxed ${classesItem}`}>• {item}</p>
+            ))}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
 // Exportado -- é o mesmo cartão usado aqui na Etapa 1 do laudo completo, e
 // agora também direto no Acervo Documental (DocumentosEntidade.tsx), pra que
 // a análise "Cartão CNPJ + QSA + Enquadramento" mostre o resultado na mesma
@@ -715,32 +766,27 @@ export function ProntidaoIdentidadeCard({
         )}
       </div>
 
-      {/* O que está acontecendo e o que resolve -- só aparece quando existe algo
-          de fato pendente; nada de caixa vazia dizendo que está tudo certo. */}
-      {(bloqueios.length > 0 || inconsistentes.length > 0) && (
-        <div className="mt-3 rounded-xl border border-border bg-card p-3">
-          <p className="text-[11px] font-black text-destructive">O que precisa ser resolvido</p>
-          <div className="mt-1.5 space-y-1">
-            {bloqueios.slice(0, 8).map((item, index) => (
-              <p key={`bloqueio-${index}`} className="text-[11px] leading-relaxed text-destructive">• {item}</p>
-            ))}
-            {inconsistentes
-              .filter((item) => item.diagnostico)
-              .map((item, index) => (
-                <p key={`doc-${index}`} className="text-[11px] leading-relaxed text-destructive">• {item.nome}: {item.diagnostico}</p>
-              ))}
-          </div>
-        </div>
-      )}
-
-      {avisos.length > 0 && (
-        <div className="mt-2 rounded-xl border border-warning/20 bg-card p-3">
-          <p className="text-[11px] font-black text-warning">Avisos</p>
-          <div className="mt-1.5 space-y-1">
-            {avisos.slice(0, 6).map((item, index) => (
-              <p key={index} className="text-[11px] leading-relaxed text-warning">• {item}</p>
-            ))}
-          </div>
+      {/* O que está acontecendo e o que resolve -- agora como indicador compacto
+          que só expande ao clique (popover), em vez de caixa sempre aberta
+          ocupando espaço fixo no topo da tela. Só aparece quando existe algo
+          de fato pendente; nada de selo vazio dizendo que está tudo certo. */}
+      {(bloqueios.length > 0 || inconsistentes.length > 0 || avisos.length > 0) && (
+        <div className="mt-3 flex flex-wrap items-center gap-2">
+          <IndicadorPendencia
+            rotulo="Ação necessária"
+            tom="destructive"
+            titulo="O que precisa ser resolvido"
+            itens={[
+              ...bloqueios.slice(0, 8),
+              ...inconsistentes.filter((item) => item.diagnostico).map((item) => `${item.nome}: ${item.diagnostico}`),
+            ]}
+          />
+          <IndicadorPendencia
+            rotulo="Avisos"
+            tom="warning"
+            titulo="Avisos"
+            itens={avisos.slice(0, 6)}
+          />
         </div>
       )}
     </section>

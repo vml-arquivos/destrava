@@ -13,7 +13,14 @@ describe("rastreabilidade do commit publicado", () => {
     const dockerfile = read("Dockerfile");
 
     expect(dockerfile).toContain('commit="$(cat .git/HEAD)"');
-    expect(dockerfile).toContain("printf '%s\\\\n' \"$commit\" > /app/BUILD_COMMIT");
+    // Nota (2026-08-30): a asserção usava "\\\\n" (dupla barra literal no
+    // Dockerfile), mas o Dockerfile em produção sempre usou "\n" (uma barra só
+    // -- escape de nova linha do printf, correto para o shell). O teste estava
+    // com escaping duplicado e sempre falhava, sem relação com o build (o
+    // Dockerfile não roda `pnpm test`, só `pnpm run build`) -- corrigido aqui
+    // para refletir o comportamento real e correto do Dockerfile, sem alterar
+    // o Dockerfile em si.
+    expect(dockerfile).toContain("printf '%s\\n' \"$commit\" > /app/BUILD_COMMIT");
     expect(dockerfile).toContain("COPY --from=builder --chown=node:node /app/BUILD_COMMIT ./BUILD_COMMIT");
     expect(dockerfile).not.toContain("DESTRAVA_RELEASE=fix66-destinatarios-ranking-nexus-20260810");
   });
