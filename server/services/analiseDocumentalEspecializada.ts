@@ -1038,7 +1038,7 @@ function normalizarDadosQsa(dados: any): Record<string, any> {
   };
 }
 
-function normalizarDadosSimples(dados: any): Record<string, any> {
+export function normalizarDadosSimples(dados: any): Record<string, any> {
   return {
     ...dados,
     cnpj: dados?.cnpj ? String(dados.cnpj).trim() : null,
@@ -1049,7 +1049,7 @@ function normalizarDadosSimples(dados: any): Record<string, any> {
         ? 'MEI / SIMEI'
         : normalizarSituacaoSimples(dados?.situacao_simples) === 'optante'
           ? 'Simples Nacional'
-          : dados?.situacao_simples ? String(dados.situacao_simples).trim() : null,
+          : null,
     opcao_mei: normalizarBooleano(dados?.opcao_mei),
     data_opcao_simples: parseDate(dados?.data_opcao_simples),
     data_exclusao_simples: parseDate(dados?.data_exclusao_simples),
@@ -1168,19 +1168,28 @@ A decisão da Etapa 1 usa SOMENTE: CNPJ, razão social, capital social, nomes do
 }
 
 function promptSimples(): string {
-  return `Você é um auditor tributário brasileiro. Extraia os dados do comprovante/consulta do Simples Nacional anexado.
+  return `Você é um auditor tributário brasileiro. Extraia os dados do comprovante de enquadramento tributário anexado (consulta do Simples Nacional, relatório de situação fiscal, ECF, DCTF ou equivalente).
 Responda SOMENTE JSON válido, sem markdown e sem comentários:
 {
   "documento_compativel": true,
   "cnpj": "00.000.000/0000-00 ou null",
   "situacao_simples": "Optante|Não Optante|Excluído|null",
+  "regime_tributario": "Simples Nacional|MEI / SIMEI|Lucro Presumido|Lucro Real|Lucro Arbitrado|Imune ou isenta|null",
   "data_opcao_simples": "YYYY-MM-DD ou null",
   "data_exclusao_simples": "YYYY-MM-DD ou null",
   "agendamento_exclusao": false,
   "motivo_exclusao": "texto ou null",
   "confianca": 0.0
 }
-Não invente dados. Diferencie exclusão já efetivada de agendamento de exclusão. Use null quando a informação não estiver visível. Confianca deve estar entre 0 e 1.`;
+Não invente dados. Diferencie exclusão já efetivada de agendamento de exclusão. Use null quando a informação não estiver visível. Confianca deve estar entre 0 e 1.
+
+REGRA CRÍTICA sobre "regime_tributario": este campo define qual documentação será exigida da empresa, então um regime errado é mais grave do que um regime em branco.
+- "Não Optante" NÃO é um regime tributário. Uma empresa fora do Simples pode ser Lucro Presumido, Lucro Real ou Arbitrado, e cada um exige documentos diferentes.
+- Só preencha "regime_tributario" com o regime que estiver AFIRMADO no documento (ex: "FORMA DE TRIBUTAÇÃO: LUCRO PRESUMIDO", "Regime de apuração: Lucro Real").
+- Se o documento apenas informar que a empresa não é optante do Simples, sem dizer qual é o regime, devolva "regime_tributario": null.
+- Se o documento NEGAR um regime ("não optou pelo lucro presumido"), não use esse regime.
+- Se o documento citar mais de um regime como opções de uma lista, devolva null.
+- Se a empresa for optante do Simples, use "Simples Nacional"; se for optante do SIMEI/MEI, use "MEI / SIMEI".`;
 }
 
 function promptAtosJunta(): string {
