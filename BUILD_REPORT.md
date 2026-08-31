@@ -1,4 +1,4 @@
-# Relatório de Build — 31/08/2026 (atualizado, Rodada 4 — bug real reportado em produção)
+# Relatório de Build — 31/08/2026 (atualizado, Rodada 6 — Enquadramento Tributário duplicado no relatório)
 
 ## 1. Instalação de dependências
 `pnpm install --frozen-lockfile` -- concluída sem erros, lockfile respeitado (nenhuma dependência adicionada ou removida em nenhuma rodada desta sessão).
@@ -7,10 +7,10 @@
 `npx tsc --noEmit` -- concluído sem nenhum erro, executado novamente após CADA arquivo alterado nesta rodada (não só uma vez no final).
 
 ## 3. Suíte de testes
-`npx vitest run` -- 78 arquivos / 724 testes, todos passando (ver `TEST_REPORT.md` para a progressão completa entre as quatro rodadas desta sessão).
+`npx vitest run` -- 79 arquivos / 727 testes, todos passando (ver `TEST_REPORT.md` para a progressão completa entre as seis rodadas desta sessão).
 
 ## 4. Build de produção
-`pnpm run build` -- concluído com sucesso (executado e confirmado novamente após a conclusão de cada mudança desta rodada: alerta de situação da certidão CND/CPEND/PGFN/CADIN e remoção do banner "Ordem recomendada" SCR→CCS→CCF no frontend).
+`pnpm run build` -- concluído com sucesso (executado e confirmado novamente após a conclusão da mudança desta rodada: correção do regex de deduplicação em `chaveDocumentoRelatorio`, `server/routes/documentacao.ts`).
 
 Orçamento de bundle (checagem automática do próprio projeto):
 - JavaScript inicial: 98.7 kB gzip (limite 130 kB) -- OK

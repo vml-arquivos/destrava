@@ -1,11 +1,11 @@
-# Relatório de Testes — 31/08/2026 (atualizado, Rodada 4 — bug real reportado em produção)
+# Relatório de Testes — 31/08/2026 (atualizado, Rodada 6 — Enquadramento Tributário duplicado no relatório)
 
 ## Resultado final
 
 ```
-Test Files  78 passed (78)
-     Tests  724 passed (724)
-  Duration  28.84s
+Test Files  79 passed (79)
+     Tests  727 passed (727)
+  Duration  29.53s
 ```
 
 Progressão dentro desta sessão, sempre crescendo, nunca encolhendo:
@@ -16,7 +16,18 @@ Progressão dentro desta sessão, sempre crescendo, nunca encolhendo:
 | Rodada 1 (`...-corrigido-20260830.zip`) | 71 | 656 | 3 bugs P0 + auditoria EFD |
 | Rodada 2 (`...-corrigido-20260830-v2.zip`) | 73 | 670 | Linha do tempo do regime tributário |
 | Rodada 3 (`...-corrigido-final-20260830.zip`) | 78 | 716 | Ver seção "Rodada 3" abaixo |
-| Rodada 4 (esta entrega) | 78 (nenhum arquivo novo) | 724 | +8 testes em `tests/analiseDocumentalEspecializada.test.ts` -- situação da certidão CND/CPEND/PGFN/CADIN |
+| Rodada 4 (`...-corrigido-final-20260831.zip`) | 78 | 724 | +8 testes -- situação da certidão CND/CPEND/PGFN/CADIN |
+| Rodada 5 (`...-corrigido-final-20260831-v2.zip`) | 78 (nenhum arquivo novo) | 725 | +1 teste em `tests/documentacaoAnaliseEspecializada.integration.test.ts` -- reprocessamento de laudo já concluído |
+| Rodada 6 (esta entrega) | 79 (+1 arquivo novo) | 727 | +2 testes -- Enquadramento Tributário duplicado no relatório consolidado |
+
+## Testes novos ou alterados na Rodada 6 (2 testes: 1 arquivo novo)
+
+- `tests/relatorioDocumentalEnquadramentoTributarioDuplicado.test.ts` (novo, 2 testes): reproduz o bug real reportado ("porque no relatorio gerado tem dois enquadramento tributario com as mesmas informações") -- dois arquivos ativos no mesmo bloco, um catalogado como `enquadramento_tributario_cnpj` e outro como `simples_nacional` (os dois tipos que o catálogo documental e `vincularDocumentosAutomaticos` tratam como a mesma família/bloco, com a mesma análise especializada `simples_extract`), com a mesma leitura -- prova que o relatório consolida em UMA única entrada, não duas. Segundo teste prova que dois documentos genuinamente diferentes (Enquadramento Tributário + QSA) continuam aparecendo como duas entradas distintas, sem regressão.
+
+## Testes novos ou alterados na Rodada 5 (1 teste: 1 arquivo alterado, 0 arquivos novos)
+
+- `tests/documentacaoAnaliseEspecializada.integration.test.ts`: +1 teste -- prova que `POST /api/documentacao/ia/documentos/:id/extrair` dispara `analisarDocumentoCatalogado` de novo mesmo quando já existe um laudo `concluido` persistido (ex.: um ECF lido pelo motor antigo, antes da correção de identidade documental) -- a causa raiz de "já fiz o deploy e a leitura continua errada": nenhum documento já analisado é relido automaticamente só porque o código mudou.
+- `client/src/components/documentos/DocumentosEntidade.tsx` (botão "Reanalisar" novo por arquivo, para todos os documentos catalogados genéricos): sem teste de renderização dedicado (mesma situação já registrada na Rodada 4 para a remoção do banner -- este repositório não tem testes de DOM para este componente).
 
 ## Testes novos ou alterados na Rodada 4 (8 testes: 1 arquivo alterado, 0 arquivos novos)
 

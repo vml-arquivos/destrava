@@ -655,6 +655,20 @@ export default function DocumentosEntidade({
   const [selecionados, setSelecionados] = useState<Record<string, boolean>>({});
   const [exportando, setExportando] = useState(false);
   const [modalExportacao, setModalExportacao] = useState(false);
+  // CORREÇÃO (2026-08-31, bug real reportado em produção): um documento já
+  // analisado (ex.: o PGDAS anexado no slot de ECF, competência 12/2025)
+  // continuava mostrando o resultado ANTIGO da leitura mesmo depois do
+  // deploy de um motor de análise corrigido -- `enriquecerDocumentosAcervoComAnalise`
+  // (server/routes/documentacao.ts) só LÊ o laudo já persistido em
+  // `documentos_extracoes_ia`, nunca reprocessa sozinho. O endpoint
+  // `POST /api/documentacao/ia/documentos/:id/extrair` já sabia forçar uma
+  // nova leitura (usado hoje só pelo botão "Reanalisar" da continuidade
+  // societária), mas não existia nenhum jeito de disparar isso para os
+  // demais documentos catalogados (ECF, DCTF, CADIN, CND, PGFN etc.) --
+  // então a única forma de corrigir um laudo antigo era excluir e reanexar
+  // o arquivo. Este estado controla o botão "Reanalisar" novo, por arquivo,
+  // que resolve isso sem precisar reanexar nada.
+  const [reanalisandoId, setReanalisandoId] = useState<string | null>(null);
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   const [previewDoc, setPreviewDoc] = useState<DocumentoArquivo | null>(null);
   const [secaoAtiva, setSecaoAtiva] = useState<string | null>(secaoInicial);
@@ -1232,6 +1246,33 @@ export default function DocumentosEntidade({
       await carregar();
     } catch (err: any) {
       toast.error(err?.message || "Erro ao validar documento.");
+    }
+  }
+
+  // CORREÇÃO (2026-08-31): força uma nova leitura de um documento JÁ
+  // anexado e já analisado -- necessário sempre que o motor de análise for
+  // corrigido/atualizado depois que o arquivo já tinha sido lido pela
+  // versão antiga (o laudo antigo, errado, nunca se atualiza sozinho). O
+  // processamento roda em segundo plano no servidor (`setImmediate`), então
+  // aguarda alguns segundos antes de recarregar a lista para dar tempo do
+  // novo resultado ser persistido; se ainda não tiver terminado, o
+  // resultado antigo aparece por mais alguns segundos até o usuário abrir
+  // "Dados da análise" de novo ou recarregar a página.
+  async function reanalisar(doc: DocumentoArquivo) {
+    setReanalisandoId(doc.id);
+    try {
+      await apiFetch(`/api/documentacao/ia/documentos/${doc.id}/extrair`, { method: "POST", body: JSON.stringify({}) });
+      toast.success("Nova leitura solicitada. Atualizando em instantes...");
+      setTimeout(() => { void carregar(); }, 4000);
+    } catch (err: any) {
+      const mensagem = String(err?.message || "");
+      if (/ainda não implementado/i.test(mensagem)) {
+        toast.info("Este tipo de documento não tem reprocessamento automático disponível ainda.");
+      } else {
+        toast.error(mensagem || "Erro ao solicitar nova leitura do documento.");
+      }
+    } finally {
+      setReanalisandoId((prev) => (prev === doc.id ? null : prev));
     }
   }
 
@@ -1904,6 +1945,17 @@ export default function DocumentosEntidade({
                                   <div className="flex items-center gap-0.5 shrink-0">
                                     <button type="button" title="Visualizar" onClick={() => visualizar(doc)} className="p-1 rounded-md hover:bg-primary/10 text-primary"><Eye className="w-3 h-3" /></button>
                                     <button type="button" title="Baixar" onClick={() => baixar(doc)} className="p-1 rounded-md hover:bg-muted text-muted-foreground"><Download className="w-3 h-3" /></button>
+                                    {temResultadoInline && (
+                                      <button
+                                        type="button"
+                                        title="Forçar nova leitura deste documento (use depois de corrigir o arquivo, ou depois de uma atualização do motor de análise)"
+                                        onClick={() => void reanalisar(doc)}
+                                        disabled={reanalisandoId === doc.id}
+                                        className="p-1 rounded-md hover:bg-primary/10 text-primary disabled:opacity-50"
+                                      >
+                                        <RefreshCw className={`w-3 h-3 ${reanalisandoId === doc.id ? "animate-spin" : ""}`} />
+                                      </button>
+                                    )}
                                     {permitirValidar && (
                                       <button type="button" onClick={() => validar(doc.id, !doc.validado)} title={doc.validado ? "Reabrir" : "Validar"} className={`p-1 rounded-md text-[10px] font-bold ${doc.validado ? "hover:bg-warning/10 text-warning" : "hover:bg-success/10 text-success"}`}>
                                         {doc.validado ? "↩" : "✓"}

@@ -137,15 +137,31 @@ function documentoTemAnalise(documento: any, inicial = false, blocoStatus?: stri
     || Boolean(laudoErro);
 }
 
+// CORREÇÃO (2026-08-31, bug real reportado em produção -- "Enquadramento
+// Tributário" aparecia duas vezes, com os mesmos dados, no relatório
+// consolidado): o catálogo documental (`shared/documentTypes.ts`) e a regra
+// de vínculo automático a blocos (`vincularDocumentosAutomaticos`, mais
+// abaixo) tratam `enquadramento_tributario_cnpj` E `simples_nacional` como o
+// MESMO documento/família ("bloco: enquadramento_tributario"; mesma análise
+// especializada, `simples_extract`) -- uma empresa pode ter o arquivo
+// catalogado com qualquer um dos dois `tipo_documento`. Mas esta função só
+// reconhecia a variante com ESPAÇO ("simples nacional"); o valor real
+// gravado no banco é `simples_nacional`, com underscore -- então um arquivo
+// com esse tipo nunca batia no regex, caía na chave genérica
+// `${codigo}:${nome}` (diferente da chave 'enquadramento_tributario' do
+// outro tipo) e sobrevivia à deduplicação como um SEGUNDO card, mostrando a
+// mesma leitura (mesmo motor de análise) do card já existente. Corrigido
+// aceitando os dois separadores; reproduzido e coberto por teste dedicado
+// (ver tests/relatorioDocumentalEnquadramentoTributarioDuplicado.test.ts).
 function chaveDocumentoRelatorio(documento: any): string {
   const codigoOriginal = normalizeText(String(documento?.codigo || documento?.tipo_documento || 'documento'));
   const nome = normalizeText(String(documento?.nome || documento?.nome_original || documento?.nome_arquivo || 'documento'));
   const tipo = normalizeText(String(documento?.tipo_documento || ''));
   const texto = `${codigoOriginal} ${tipo} ${nome}`;
-  const inicial = /cartao|cnpj|qsa|quadro societ|enquadramento|simples nacional|optante/.test(texto);
+  const inicial = /cartao|cnpj|qsa|quadro societ|enquadramento|simples[ _]nacional|optante/.test(texto);
   if (/atos junta|junta comercial/.test(texto)) return 'atos_junta_comercial';
   if (inicial && /qsa|quadro societ/.test(texto)) return 'qsa';
-  if (inicial && /enquadramento|simples nacional|optante/.test(texto)) return 'enquadramento_tributario';
+  if (inicial && /enquadramento|simples[ _]nacional|optante/.test(texto)) return 'enquadramento_tributario';
   if (inicial && /cartao|cnpj/.test(`${codigoOriginal} ${tipo} ${nome}`)) return 'cartao_cnpj';
   return `${codigoOriginal}:${nome}`;
 }

@@ -1,4 +1,4 @@
-# Relatório de Regressão — 31/08/2026 (atualizado, Rodada 4 — bug real reportado em produção)
+# Relatório de Regressão — 31/08/2026 (atualizado, Rodada 6 — Enquadramento Tributário duplicado no relatório)
 
 Verificação item a item pedida na missão original (Rodada 1), reconfirmada nesta rodada. "OK" significa: suíte completa de testes passando, comportamento não alterado por nenhuma das correções cumulativas das quatro rodadas desta sessão, e -- para os itens diretamente relacionados -- teste de regressão dedicado.
 
@@ -24,10 +24,12 @@ Verificação item a item pedida na missão original (Rodada 1), reconfirmada ne
 | Faturamento rolling 12 meses | Capacidade nova (Rodada 3) | Infraestrutura completa e testada (janela calculada, soma, meses faltantes, consolidação cross-regime); não conectada a nenhum fluxo de gravação automática ainda -- ver `PENDENCIAS_REAIS.md`. |
 | Regularidade (CND/CPEND/PGFN/CADIN) | OK, com correção nova (Rodada 4) | Um documento real de CADIN "incluído" (empresa com pendência ativa) estava sendo aceito sem nenhum alerta de mérito. `situacao_certidao` agora é exigido no prompt da IA para essa categoria e vira alerta crítico/revisão humana quando não for claramente negativo. 8 testes novos; documentos fora dessa categoria (ex.: ECF) confirmadamente não recebem o campo novo. |
 | Banner "Ordem recomendada" (SCR→CCS→CCF) | Removido a pedido do usuário (Rodada 4) | Só o aviso visual foi removido; o upload nunca foi bloqueado por essa ordem em nenhuma rodada (`tests/uploadNaoBloqueadoPorOrdemConsultaCadastral.test.ts`, sem alteração, continua passando). Os outros dois avisos "Ordem recomendada" do mesmo componente (sobre etapas do pipeline, não sobre tipos de documento) não foram tocados -- não foram evidenciados nos prints nem pedidos explicitamente. |
+| Reprocessamento de documento já analisado (botão "Reanalisar" genérico) | Novo, corrigido (Rodada 5) | Causa raiz real de "já fiz o deploy e a leitura continua errada": um laudo já `concluido` nunca era relido automaticamente após deploy de uma correção do motor. O endpoint `POST /api/documentacao/ia/documentos/:id/extrair` já suportava forçar reprocessamento (mesmo sobre um laudo `concluido`, confirmado por teste novo), mas não havia botão para os documentos catalogados genéricos (ECF, DCTF, CND, CADIN, PGFN etc.) -- só para a continuidade societária. Nenhum comportamento existente foi alterado: o botão novo só adiciona uma chamada explícita, opt-in, por arquivo. |
+| Enquadramento Tributário duplicado no relatório consolidado | Novo, corrigido (Rodada 6) | Bug real reportado com PDF/prints: duas entradas "ENQ. TRIB.pdf" idênticas na seção "Documentos anexados e analisados". Causa raiz: o regex de deduplicação (`chaveDocumentoRelatorio`) só reconhecia a variante "simples nacional" com espaço; o `tipo_documento` real gravado no banco é `simples_nacional`, com underscore, então um arquivo com esse tipo nunca era agrupado com `enquadramento_tributario_cnpj` (mesmo bloco, mesma análise) e sobrevivia como card espelhado. Corrigido aceitando os dois separadores; 2 testes novos (`tests/relatorioDocumentalEnquadramentoTributarioDuplicado.test.ts`) provam a consolidação em 1 entrada E que dois documentos genuinamente diferentes continuam separados. Nenhum arquivo do acervo é alterado, movido ou excluído -- a correção é só de apresentação no relatório. |
 
-## Checklist de critérios de aprovação da missão (seção 59, Rodada 1) + itens da auditoria independente (Rodadas 3 e 4)
+## Checklist de critérios de aprovação da missão (seção 59, Rodada 1) + itens da auditoria independente (Rodadas 3, 4 e 5)
 
-- Nenhum teste falhou: confirmado (724/724, ver `TEST_REPORT.md`).
+- Nenhum teste falhou: confirmado (725/725, ver `TEST_REPORT.md`).
 - Build não falhou: confirmado (ver `BUILD_REPORT.md`).
 - Migrations testadas: 100 (Rodada 2), 101 e 102 (Rodada 3) -- todas idempotentes, todas aditivas, nenhuma aplicada automaticamente por `npm run migrate` (aplicação contra a VPS é manual, fora desta entrega). Ver `MIGRATION_SAFETY_REPORT.md`.
 - PGDAS ainda pode validar como ECF: corrigido e testado desde a Rodada 1 (`tests/regimeComprovante.test.ts`).

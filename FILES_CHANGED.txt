@@ -1,4 +1,4 @@
-Arquivos alterados nesta entrega, cumulativos das quatro rodadas desta sessão
+Arquivos alterados nesta entrega, cumulativos das seis rodadas desta sessão
 (30-31/08/2026), em relação ao repositório original antes de qualquer correção.
 Lista gerada por `diff -rq` contra uma cópia pristina do repositório original
 (ver TEST_REPORT.md / BUILD_REPORT.md para os comandos de verificação).
@@ -12,6 +12,7 @@ server/routes/documentos.ts
 server/services/analiseDocumentalEspecializada.ts
 server/services/extracaoDocumentalLocal.ts
 tests/analiseDocumentalEspecializada.test.ts
+tests/documentacaoAnaliseEspecializada.integration.test.ts
 tests/ordemConsultaCadastral.test.ts
 tests/regimeComprovante.test.ts
 tests/regimeTributarioConsistencia.test.ts
@@ -35,6 +36,7 @@ tests/faturamentoRolling12MesesRoute.test.ts
 tests/coberturaEvidenciaBureauService.test.ts
 tests/coberturaEvidenciaBureauRoute.test.ts
 tests/catalogoDarfConsistencia.test.ts
+tests/relatorioDocumentalEnquadramentoTributarioDuplicado.test.ts
 
 Arquivos NOVOS -- relatórios e documentação da entrega:
 
@@ -54,4 +56,4 @@ Arquivo de entrega anterior (mantido, não alterado nesta sessão):
 
 DIAGNOSTICO_MASTER_PROMPT_CREDITO.md
 
-Total: 10 arquivos alterados + 6 arquivos novos de código/migration + 8 arquivos novos de teste + 11 arquivos novos de documentação = 35 arquivos.
+Total: 11 arquivos alterados + 6 arquivos novos de código/migration + 9 arquivos novos de teste + 11 arquivos novos de documentação = 37 arquivos.
