@@ -354,6 +354,26 @@ export function construirSecoesAnaliseDocumento(resultado: any = {}, documento: 
   if (diagnosticoFactual && diagnosticoFactual !== conclusao) {
     secoes.push({ id: "diagnostico_factual", titulo: "Diagnóstico objetivo do documento", texto: diagnosticoFactual });
   }
+  // CORREÇÃO (2026-08-31, "tem que deixar claro"): o backend já calcula
+  // alertas específicos e legíveis (ex.: "isto é um PGDAS-D do Simples
+  // Nacional, não um ECF -- anexe o documento correto") em
+  // `normalizarDocumentoCatalogado`, mas para documentos catalogados
+  // genéricos (fora do fluxo societário/QSA) essas mensagens nunca viravam
+  // uma seção visível -- só apareciam nos metadados brutos do laudo. Isso
+  // reproduzia, num componente novo, o mesmo problema já corrigido antes no
+  // Acervo Documental: o dado certo existia, mas não chegava à tela. Seção
+  // sempre visível (nunca `colapsavel`) para os alertas de maior severidade;
+  // alertas de severidade baixa/média continuam disponíveis só nos metadados,
+  // sem competir por atenção com o que realmente precisa de ação.
+  const alertasCriticos = (Array.isArray(resultado?.alertas) ? resultado.alertas : [])
+    .filter((alerta: any) => alerta && texto(alerta.mensagem) && (alerta.severidade === "alta" || alerta.severidade === "critica"));
+  if (alertasCriticos.length) {
+    secoes.push({
+      id: "alertas",
+      titulo: "Alertas da leitura automática",
+      itens: alertasCriticos.map((alerta: any) => alerta.recomendacao ? `${texto(alerta.mensagem)} — ${texto(alerta.recomendacao)}` : texto(alerta.mensagem)),
+    });
+  }
   const campos = Array.isArray(resultado?.campos)
     ? resultado.campos.map((campo: any) => ({ label: texto(campo?.label) || "Campo", valor: texto(campo?.valor) })).filter((campo: DocumentoAnaliseCampo) => campo.valor)
     : [];

@@ -1,12 +1,20 @@
-# Relatório de Testes — 31/08/2026 (atualizado, Rodada 6 — Enquadramento Tributário duplicado no relatório)
+# Relatório de Testes — 31/08/2026 (atualizado, Rodada 7 — causa raiz definitiva do PGDAS no slot de ECF)
 
 ## Resultado final
 
 ```
-Test Files  79 passed (79)
-     Tests  727 passed (727)
-  Duration  29.53s
+Test Files  81 passed (81)
+     Tests  738 passed (738)
+  Duration  28.36s
 ```
+
+## Testes novos ou alterados na Rodada 7 (2 testes: 1 arquivo novo + 2 fixtures sintéticos)
+
+- `tests/analiseDocumentalPgdasNoSlotDeEcfNaoDeveSerLaundered.test.ts` (novo, 2 testes): exercita `AnaliseDocumentalService.analisarDocumentoCatalogado` de ponta a ponta -- extração local de verdade (`pdftotext` sobre um PDF sintético) combinada com uma resposta MOCADA da IA que diz, erradamente, `documento_compativel: true` (o bug histórico). Primeiro teste prova que o resultado final ignora essa resposta da IA (`documento_compativel: false`, `modelo_ia` começando com `local:`), que a IA NUNCA chega a ser chamada (`generateContent` não invocado), e que as duas mensagens de alerta (`documento_catalogado_incompativel` e `documento_catalogado_tipo_incompativel`) mencionam explicitamente "Simples Nacional", "PGDAS" e "Optante". Segundo teste prova que um ECF de verdade continua sendo aceito normalmente, sem nenhum alerta de incompatibilidade -- sem regressão.
+- **Prova de causa raiz por reversão temporária** (não faz parte da suíte entregue): comentando a correção em `extrairHibrido`, o primeiro teste passou a falhar exatamente como o bug relatado (`documento_compativel` volta a `true`, herdado da resposta mocada da IA, e `modelo_ia` vira `gemini-2.5-flash` em vez de `local:...`) -- restaurada a correção, os dois testes voltam a passar. Prova de que o teste cobre a causa raiz, não só o sintoma.
+- Os dois fixtures (`tests/fixtures/pgdas-recibo-sintetico.pdf`, `tests/fixtures/ecf-sintetico.pdf`) são PDFs sintéticos gerados nesta rodada com CNPJ e razão social FICTÍCIOS (`11.222.333/0001-44`, "Empresa Fictícia de Testes Ltda") -- os marcadores textuais foram conferidos diretamente contra `parseComprovanteRegime`/`classificarDocumentoDeterministico` antes de escrever o teste (mesmos tipos detectados e mesma decisão de compatibilidade que o documento real do caso), sem carregar nenhum dado real de cliente no repositório.
+
+**Nota sobre a numeração herdada:** entre a Rodada 6 (79 arquivos / 727 testes, documentado abaixo) e o início desta Rodada 7, a base do repositório já continha 1 arquivo de teste novo e não documentado (`tests/p0LaudosBackfill.test.ts`, 9 testes) -- ver `PENDENCIAS_REAIS.md`, item 12, sobre a lacuna de documentação. Por isso o total logo antes desta rodada era 80 arquivos / 736 testes, não 79/727; esta rodada soma +1 arquivo / +2 testes sobre esse estado real herdado.
 
 Progressão dentro desta sessão, sempre crescendo, nunca encolhendo:
 
@@ -18,7 +26,9 @@ Progressão dentro desta sessão, sempre crescendo, nunca encolhendo:
 | Rodada 3 (`...-corrigido-final-20260830.zip`) | 78 | 716 | Ver seção "Rodada 3" abaixo |
 | Rodada 4 (`...-corrigido-final-20260831.zip`) | 78 | 724 | +8 testes -- situação da certidão CND/CPEND/PGFN/CADIN |
 | Rodada 5 (`...-corrigido-final-20260831-v2.zip`) | 78 (nenhum arquivo novo) | 725 | +1 teste em `tests/documentacaoAnaliseEspecializada.integration.test.ts` -- reprocessamento de laudo já concluído |
-| Rodada 6 (esta entrega) | 79 (+1 arquivo novo) | 727 | +2 testes -- Enquadramento Tributário duplicado no relatório consolidado |
+| Rodada 6 (`...-corrigido-final-20260831-v3.zip`) | 79 (+1 arquivo novo) | 727 | +2 testes -- Enquadramento Tributário duplicado no relatório consolidado |
+| Entre a Rodada 6 e esta entrega (não documentado antes -- ver PENDENCIAS_REAIS.md item 12) | 80 (+1 arquivo) | 736 | +9 testes -- `tests/p0LaudosBackfill.test.ts` (classificador central + versionamento de laudos) |
+| Rodada 7 (esta entrega) | 81 (+1 arquivo novo) | 738 | +2 testes -- causa raiz definitiva do PGDAS no slot de ECF (`extrairHibrido` não propagava texto local para o classificador central fora do QSA) |
 
 ## Testes novos ou alterados na Rodada 6 (2 testes: 1 arquivo novo)
 

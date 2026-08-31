@@ -24,6 +24,20 @@ import { detectarRequisitosCobertosPeloTexto, detectarStatusCertidaoDebitos, reg
 
 const { Pool } = pkg;
 
+// CORREÇÃO (2026-08-31, bug real reportado em produção -- caso ZR CONSTRUCOES,
+// CNPJ 49.366.887/0001-25: PGDAS-D anexado no slot de ECF, com o Enquadramento
+// Tributário da própria empresa já lido como "Não Optante" pelo Simples, ou
+// seja, um regime diferente do que o PGDAS antigo comprova): os únicos tipos
+// cujo `documento_compativel` da extração LOCAL vem de um classificador
+// determinístico (`detectarTipoComprovanteRegime`/`TipoComprovanteRegime`, em
+// extracaoDocumentalLocal.ts) -- não de uma heurística aproximada nem de uma
+// segunda opinião da IA. Mantido em sincronia com `TipoComprovanteRegime`
+// (hoje: ecf, pgdas_d, dctf_mit, darf, ecd, livro_caixa). Usado por
+// `extrairHibrido` para decidir quando um "false" da leitura local pode ser
+// usado diretamente, sem esperar confirmação da IA (ver comentário no local
+// de uso).
+const TIPOS_COMPROVANTE_REGIME_DETERMINISTICO = new Set<TipoDocumentoLocal>(['ecf', 'pgdas_d', 'dctf_mit', 'darf', 'ecd', 'livro_caixa']);
+
 export type SeveridadeDocumental = 'baixa' | 'media' | 'alta' | 'critica';
 export type TipoAnaliseDocumental =
   | 'qsa'
@@ -1448,7 +1462,23 @@ function normalizarDocumentoCatalogado(extraidos: any, tipoDocumento: string): {
   }));
   const alertas: AlertaDocumental[] = [];
   if (bruto.documento_compativel === false) {
-    alertas.push({ codigo: 'documento_catalogado_incompativel', mensagem: `O arquivo não foi reconhecido como ${documentLabel(tipoDocumento)}.`, severidade: 'alta', recomendacao: 'Reclassificar o arquivo ou anexar o documento solicitado.' });
+    // CORREÇÃO (2026-08-31, "tem que deixar claro que essa empresa não é mais
+    // optante do simples"): a mensagem genérica ("não foi reconhecido como
+    // X") é tecnicamente correta mas não diz ao usuário humano O QUE o
+    // documento realmente é nem por que ele está desatualizado. Quando os
+    // próprios dados lidos do arquivo (situação no Simples, regime
+    // tributário, opção MEI) indicam um comprovante do Simples Nacional, a
+    // mensagem passa a afirmar isso explicitamente e recomenda os documentos
+    // corretos para o regime vigente -- em vez de deixar a pessoa adivinhar.
+    const situacaoSimplesLida = String(bruto.situacao_simples ?? comprovados.situacao_simples ?? '').trim();
+    const regimeLido = String(bruto.regime_tributario ?? comprovados.regime_tributario ?? '').trim();
+    const pareceComprovanteSimples = /^(optante|excluido)/i.test(situacaoSimplesLida)
+      || /simples\s+nacional|mei\s*\/?\s*simei/i.test(regimeLido)
+      || bruto.opcao_mei === true;
+    const mensagem = pareceComprovanteSimples
+      ? `O arquivo não foi reconhecido como ${documentLabel(tipoDocumento)}. Os dados lidos${situacaoSimplesLida ? ` (Situação no Simples Nacional: ${situacaoSimplesLida})` : ''} indicam um comprovante do SIMPLES NACIONAL (ex.: PGDAS/PGMEI) -- não serve como comprovação do regime tributário atual exigida neste campo, mesmo que a empresa já tenha sido optante no passado. Anexe o ECF, DCTF/DCTFWeb, DARF ou Livro Caixa correspondente ao regime tributário vigente da empresa.`
+      : `O arquivo não foi reconhecido como ${documentLabel(tipoDocumento)}.`;
+    alertas.push({ codigo: 'documento_catalogado_incompativel', mensagem, severidade: 'alta', recomendacao: 'Reclassificar o arquivo ou anexar o documento solicitado.' });
   }
   const confianca = normalizarConfianca(bruto.confianca ?? bruto.nivel_confianca);
   if (confianca !== null && confianca < 0.72) {
@@ -1516,9 +1546,19 @@ function normalizarDocumentoCatalogado(extraidos: any, tipoDocumento: string): {
   ]);
   if (tiposCriticos.has(tipoDocumento)) {
     if (classificacao.identidade_status === 'INCOMPATIVEL') {
+      // CORREÇÃO (2026-08-31, "tem que deixar claro que essa empresa não é
+      // mais optante do simples"): quando o classificador central detecta que
+      // o conteúdo real é um PGDAS-D (ou o recibo dele) -- ou seja, prova do
+      // Simples Nacional -- em vez de um comprovante do regime atual, a
+      // mensagem passa a dizer isso em português claro, não só os códigos
+      // internos do classificador (PGDAS_D/RECIBO_PGDAS).
+      const detectadoEhPgdas = classificacao.tipo_detectado === 'PGDAS_D' || classificacao.tipo_detectado === 'RECIBO_PGDAS';
+      const explicacaoPgdas = detectadoEhPgdas
+        ? ` O conteúdo lido corresponde a um comprovante do SIMPLES NACIONAL (${classificacao.tipo_detectado === 'PGDAS_D' ? 'PGDAS-D' : 'recibo de entrega do PGDAS-D'}), não ao regime tributário atual da empresa. Anexe este arquivo no campo de PGDAS/PGMEI e reserve este campo para o comprovante do regime vigente (ECF, DCTFWeb/MIT, DARF ou Livro Caixa).`
+        : '';
       alertas.push({
         codigo: 'documento_catalogado_tipo_incompativel',
-        mensagem: `Documento incompatível. Esperado ${classificacao.tipo_esperado}; detectado ${classificacao.tipo_detectado}.`,
+        mensagem: `Documento incompatível. Esperado ${classificacao.tipo_esperado}; detectado ${classificacao.tipo_detectado}.${explicacaoPgdas}`,
         severidade: 'alta',
         recomendacao: 'Preservar o arquivo no slot original e anexar o documento correto para o requisito.',
       });
@@ -1817,7 +1857,26 @@ export class AnaliseDocumentalService {
     let local: Awaited<ReturnType<typeof extrairDocumentoLocal>> | null = null;
     try {
       local = await extrairDocumentoLocal(resolvedPath, mimeType, tipo);
-      if (local.legivel && local.confianca >= threshold && local.dados?.documento_compativel !== false) {
+      // CORREÇÃO (2026-08-31, bug real reportado em produção 3 vezes seguidas
+      // para o mesmo caso -- ver comentário em TIPOS_COMPROVANTE_REGIME_DETERMINISTICO):
+      // a condição anterior só usava o resultado local diretamente quando ele
+      // NÃO apontasse incompatibilidade -- ou seja, exatamente quando o
+      // classificador determinístico mais precisava ser ouvido (encontrou um
+      // documento do tipo errado, ex.: PGDAS no slot de ECF), o código descartava
+      // esse achado e pedia uma segunda opinião à IA. Como a IA é não
+      // determinística e `normalizarDocumentoCatalogado` assume
+      // `documento_compativel: true` quando o campo vem ausente da resposta,
+      // isso apagava sistematicamente o "false" correto. Para os 4 tipos com
+      // classificador 100% determinístico, um "false" local agora é decisivo,
+      // igual a um "true" -- sem rodada extra pela IA. Para os demais tipos com
+      // extração local (QSA, Atos da Junta, Cartão CNPJ etc.), cujo
+      // `documento_compativel` vem de heurísticas mais aproximadas, o
+      // comportamento de pedir a segunda opinião da IA continua idêntico ao de
+      // antes desta correção.
+      const classificacaoLocalEDeterministica = TIPOS_COMPROVANTE_REGIME_DETERMINISTICO.has(tipo);
+      const confiavelParaUsoDireto = local.legivel && local.confianca >= threshold
+        && (classificacaoLocalEDeterministica || local.dados?.documento_compativel !== false);
+      if (confiavelParaUsoDireto) {
         this.ultimoModeloUsado = `local:${local.mecanismo}-v1`;
         this.ultimaFonteExtracao = 'local';
         return {
@@ -1834,7 +1893,19 @@ export class AnaliseDocumentalService {
 
     try {
       const resultadoIa = await this.extrairComIA(arquivoPath, prompt, mimeType);
-      return tipo === 'qsa' && local?.texto
+      // CORREÇÃO (2026-08-31): antes, o texto local só era propagado para a IA
+      // quando `tipo === 'qsa'`, mesmo quando a extração local tinha texto de
+      // sobra para os demais tipos críticos (ECF, DCTF/MIT, DARF, Livro Caixa,
+      // e qualquer outro tipo com extração local). Sem esse texto,
+      // `classificarResultadoPersistido` (o classificador central,
+      // `classificadorDocumentalCentral.ts`) nunca recebia conteúdo real para
+      // analisar neste ramo -- ficava com `NAO_IDENTIFICADO` em vez de
+      // `INCOMPATIVEL`, mesmo já existindo texto extraído localmente que
+      // provaria a incompatibilidade. Propagar sempre que houver texto local
+      // não muda em nada o resultado da IA em si -- só garante que a camada de
+      // classificação determinística por trás dela tenha o texto real para
+      // trabalhar.
+      return local?.texto
         ? { ...resultadoIa, __texto_local: local.texto }
         : resultadoIa;
     } catch (error: any) {

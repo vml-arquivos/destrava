@@ -22,6 +22,7 @@ function classesSecao(secao: DocumentoAnaliseSecao, estado: DocumentoEstadoVisua
     return "border-warning/20 bg-warning/10";
   }
   if (secao.id === "diagnostico_factual") return "border-primary/20 bg-primary/10";
+  if (secao.id === "alertas") return "border-destructive/20 bg-destructive/10";
   if (secao.id === "resumo_alteracao") return "border-primary/20 bg-primary/10";
   if (secao.id === "transacoes") return "border-primary/20 bg-primary/10";
   if (secao.id === "qsa_nomes") return "border-primary/20 bg-primary/10";
@@ -40,6 +41,7 @@ function classesTitulo(secao: DocumentoAnaliseSecao, estado: DocumentoEstadoVisu
     return "text-warning";
   }
   if (secao.id === "diagnostico_factual") return "text-primary";
+  if (secao.id === "alertas") return "text-destructive";
   if (secao.id === "resumo_alteracao") return "text-primary";
   if (secao.id === "transacoes") return "text-primary";
   if (secao.id === "qsa_nomes") return "text-primary";

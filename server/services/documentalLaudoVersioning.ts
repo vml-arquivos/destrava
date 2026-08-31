@@ -2,7 +2,17 @@ import crypto from 'node:crypto';
 
 export const CLASSIFIER_VERSION = '2026.09.01';
 export const EXTRACTOR_VERSION = 'local-2026.09.01';
-export const RULE_VERSION = 'rules-2026.09.01';
+// CORREÇÃO (2026-08-31, caso real ZR CONSTRUCOES -- PGDAS aceito no slot de
+// ECF): bump obrigatório sempre que `extrairHibrido`/`normalizarDocumentoCatalogado`
+// mudam como um documento é classificado. Sem este bump, um laudo já
+// persistido com o bug antigo (`documento_compativel` calculado sem o texto
+// local real) continuaria sendo servido como "ATIVO" para sempre -- nenhum
+// deploy de código, sozinho, muda um registro já gravado no banco. Com o
+// bump, `decidirVersaoLaudo` marca esses laudos como REANALISE_NECESSARIA na
+// própria leitura (`buscarAnaliseEspecializadaPersistida`), e
+// `scripts/backfill-laudos.ts` (`npm run backfill:laudos -- enqueue-and-run`)
+// os reprocessa em lote depois do deploy.
+export const RULE_VERSION = 'rules-2026.09.01.1';
 export const PROMPT_VERSION = 'prompt-1.0.0';
 export const SCHEMA_VERSION = 'laudo-103';
 

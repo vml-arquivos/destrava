@@ -1,7 +1,22 @@
-Arquivos alterados nesta entrega, cumulativos das seis rodadas desta sessão
+Arquivos alterados nesta entrega, cumulativos das rodadas 1-6 desta sessão
 (30-31/08/2026), em relação ao repositório original antes de qualquer correção.
 Lista gerada por `diff -rq` contra uma cópia pristina do repositório original
 (ver TEST_REPORT.md / BUILD_REPORT.md para os comandos de verificação).
+
+AVISO sobre a Rodada 7 (ver seção dedicada no final deste arquivo): a cópia do
+repositório usada como base para a Rodada 7 já continha, além do que está
+listado abaixo, três peças novas -- `server/services/classificadorDocumentalCentral.ts`,
+`server/services/documentalLaudoVersioning.ts`, `server/services/backfillLaudosService.ts`,
+`scripts/backfill-laudos.ts`, `db/migrations/103_laudos_versionamento_backfill.sql`
+e `tests/p0LaudosBackfill.test.ts` -- que NUNCA foram documentadas em nenhuma
+rodada deste arquivo nem do CHANGELOG_CORRECOES.md antes de agora. Sem acesso a
+uma cópia pristina do repositório anterior a essas adições (a baseline original
+desta sessão foi descartada em uma limpeza anterior), a lista abaixo, herdada
+das Rodadas 1-6, não pôde ser re-certificada contra o estado atual do
+repositório -- ela é reproduzida como estava documentada até a Rodada 6. A
+seção "Rodada 7" ao final lista, com certeza total (porque cada uma dessas
+mudanças foi feita nesta própria sessão, arquivo por arquivo), exatamente o
+que foi alterado ou criado nesta entrega.
 
 Arquivos existentes ALTERADOS:
 
@@ -56,4 +71,32 @@ Arquivo de entrega anterior (mantido, não alterado nesta sessão):
 
 DIAGNOSTICO_MASTER_PROMPT_CREDITO.md
 
-Total: 11 arquivos alterados + 6 arquivos novos de código/migration + 9 arquivos novos de teste + 11 arquivos novos de documentação = 37 arquivos.
+Total (Rodadas 1-6, conforme documentado até a Rodada 6): 11 arquivos alterados + 6 arquivos novos de código/migration + 9 arquivos novos de teste + 11 arquivos novos de documentação = 37 arquivos.
+
+======================================================================
+Rodada 7 (esta entrega) -- causa raiz definitiva do PGDAS no slot de ECF
+======================================================================
+
+Arquivos existentes ALTERADOS nesta rodada:
+
+server/services/documentalLaudoVersioning.ts        (bump de RULE_VERSION)
+server/services/analiseDocumentalEspecializada.ts   (extrairHibrido + alertas)
+shared/documentalPresentation.ts                    (seção "Alertas da leitura automática")
+client/src/components/documentos/ResultadoAnaliseDocumento.tsx (estilo da seção nova)
+CHANGELOG_CORRECOES.md
+ROLLBACK_PLAN.md
+PENDENCIAS_REAIS.md
+TEST_REPORT.md
+BUILD_REPORT.md
+FILES_CHANGED.txt (este arquivo)
+SHA256SUMS.txt
+
+Arquivos NOVOS -- teste e fixtures sintéticos (nenhum dado real de cliente;
+ver comentário no topo do teste):
+
+tests/analiseDocumentalPgdasNoSlotDeEcfNaoDeveSerLaundered.test.ts
+tests/fixtures/pgdas-recibo-sintetico.pdf
+tests/fixtures/ecf-sintetico.pdf
+
+Total desta rodada: 4 arquivos de código alterados + 6 arquivos de documentação
+alterados + 1 arquivo de teste novo + 2 fixtures sintéticos novos = 13 arquivos.
