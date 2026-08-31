@@ -127,8 +127,12 @@ describe("construirSecoesAnaliseDocumento", () => {
       "validacoes",
     ]);
     expect(secoes.find((secao) => secao.id === "diagnostico_factual")?.colapsavel).toBe(true);
+    // CORREÇÃO (2026-08-31, print real: "PAULO BOLSONI BALDI - 49-Sócio-
+    // Administrador — Sócio-Administrador"): quando a qualificação lida do
+    // documento já diz "Sócio-Administrador", o sufixo derivado de
+    // `administrador: true` não repete mais a mesma informação.
     expect(secoes.find((secao) => secao.id === "qsa_nomes")?.itens).toEqual([
-      "Jonnathas Rodrigues Pires — Sócio-Administrador — Sócio-Administrador",
+      "Jonnathas Rodrigues Pires — Sócio-Administrador",
     ]);
     expect(JSON.stringify(secoes)).toContain("Jonnathas Rodrigues Pires");
     expect(JSON.stringify(secoes)).toContain("Sócios lidos no QSA");

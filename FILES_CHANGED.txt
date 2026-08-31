@@ -269,3 +269,36 @@ tests/acervoDocumentalFalhaRealVsAguardando.test.ts
 Total desta rodada: 3 arquivos de código alterados + 2 arquivos de teste
 alterados + 6 arquivos de documentação alterados + 2 arquivos de teste novos
 = 13 arquivos.
+
+======================================================================
+Rodada 14 (esta entrega) -- limpeza visual e correção de duplicações no
+Acervo Documental, para qualquer tipo/porte/enquadramento de empresa: nome
+de sócio duplicado no QSA; dois avisos idênticos sobre Atos da Junta não
+anexado; "4 avisos" duplicados sobre a mesma pendência do Enquadramento
+Tributário; código interno do motor de extração exposto cru em "Fonte da
+leitura"
+======================================================================
+
+Arquivos existentes ALTERADOS nesta rodada:
+
+shared/documentalPresentation.ts                    (formatarSocio: sufixo não duplica a qualificação já lida)
+server/routes/documentacao.ts                       (bloqueio de Atos da Junta deduplicado; aviso de Enquadramento deduplicado; formatarFonteLeituraAmigavel)
+tests/documentalPresentation.test.ts                (expectativa corrigida -- não codifica mais a duplicação como "correta")
+CHANGELOG_CORRECOES.md
+ROLLBACK_PLAN.md
+PENDENCIAS_REAIS.md
+TEST_REPORT.md
+BUILD_REPORT.md
+FILES_CHANGED.txt (este arquivo)
+SHA256SUMS.txt
+
+Arquivos NOVOS -- teste (nenhum dado real de cliente; nomes, CNPJs e valores
+são fictícios, no mesmo padrão das rodadas anteriores):
+
+tests/validacaoSocietariaBloqueiosSemDuplicidade.test.ts
+tests/avisosEnquadramentoTributarioSemDuplicidade.test.ts
+tests/fonteDaLeituraAmigavel.test.ts
+
+Total desta rodada: 2 arquivos de código alterados + 1 arquivo de teste
+alterado + 6 arquivos de documentação alterados + 3 arquivos de teste novos
+= 12 arquivos.

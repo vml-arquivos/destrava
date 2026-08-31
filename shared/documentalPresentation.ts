@@ -71,13 +71,32 @@ function normalizarSocios(value: unknown): any[] {
     .filter((socio: any) => socio.nome && socio.nome !== "Nome não identificado no documento");
 }
 
+// Usada só para decidir se o sufixo derivado (abaixo) repetiria uma
+// informação que a qualificação bruta do documento já deixa explícita --
+// ignora acentuação, caixa e pontuação/hífen (o QSA da Receita costuma trazer
+// "49-Sócio-Administrador", com hífen, não espaço) para comparar por palavras.
+function normalizarQualificacaoParaComparacao(value: string): string {
+  return normalizar(value).replace(/[^a-z0-9]+/g, " ").trim();
+}
+
+// CORREÇÃO (2026-08-31, pedido explícito do usuário -- print real mostrando
+// "PAULO BOLSONI BALDI - 49-Sócio-Administrador — Sócio-Administrador": a
+// qualificação lida literalmente do documento ("49-Sócio-Administrador") já
+// informa que a pessoa é Sócio-Administrador, e o sufixo derivado de
+// `administrador` repetia a mesma informação logo em seguida, com outra
+// pontuação -- um "monte de texto desnecessário" duplicado visível no
+// relatório. O sufixo só é adicionado quando a qualificação bruta AINDA NÃO
+// deixa claro isso por si só (ex.: qualificação genérica "Sócio"/"Sócia", que
+// não diz se a pessoa administra ou não a empresa) -- nesse caso o sufixo
+// continua agregando informação real e não é suprimido.
 function formatarSocio(socio: any): string {
   const nome = nomeSocio(socio);
   const quotas = numero(socio?.quotas);
   const percentual = numero(socio?.percentual);
   const qualificacao = texto(socio?.qualificacao);
+  const qualificacaoNormalizada = normalizarQualificacaoParaComparacao(qualificacao);
   const administrador = socio?.administrador === true
-    ? " — Sócio-Administrador"
+    ? (qualificacaoNormalizada.includes("socio administrador") ? "" : " — Sócio-Administrador")
     : socio?.administrador === false
       ? " — Sócio"
       : "";

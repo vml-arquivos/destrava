@@ -1,12 +1,22 @@
-# Relatório de Testes — 31/08/2026 (atualizado, Rodada 13 — diagnóstico e correção de falsos-positivos no Acervo Documental de uma empresa real)
+# Relatório de Testes — 31/08/2026 (atualizado, Rodada 14 — limpeza visual e deduplicação de avisos no Acervo Documental)
 
 ## Resultado final
 
 ```
-Test Files  86 passed (86)
-     Tests  773 passed (773)
+Test Files  89 passed (89)
+     Tests  778 passed (778)
   Duration  ~40-46s
 ```
+
+## Testes novos ou alterados na Rodada 14 (5 testes: 3 arquivos novos + 1 arquivo alterado)
+
+- `tests/documentalPresentation.test.ts` (expectativa atualizada, mesma contagem): o teste "recupera nomes do QSA quando existem apenas em dados_extraidos" tinha como esperado o texto duplicado `"Jonnathas Rodrigues Pires — Sócio-Administrador — Sócio-Administrador"` -- passa a esperar `"Jonnathas Rodrigues Pires — Sócio-Administrador"` (sem duplicação), refletindo a correção de `formatarSocio`. O outro teste QSA do mesmo arquivo (qualificação genérica "Sócio"/"Sócia") continua esperando o sufixo completo, sem regressão -- a correção só suprime o sufixo quando ele repetiria uma informação que a qualificação bruta já deixa explícita.
+- `tests/validacaoSocietariaBloqueiosSemDuplicidade.test.ts` (novo, 1 teste): prova, com `montarValidacaoSocietaria` diretamente (mockando `pg`), que quando nenhum Ato da Junta foi anexado, aparece só UM bloqueio sobre isso -- não dois.
+- `tests/avisosEnquadramentoTributarioSemDuplicidade.test.ts` (novo, 1 teste): prova, com `avaliarProntidaoIdentidadeCnpj` diretamente (mockando `pg` e o serviço de análise de CNPJ), que uma pendência grave do Enquadramento Tributário com mensagem própria gera só UM aviso (a mensagem específica) -- não também o resumo genérico.
+- `tests/fonteDaLeituraAmigavel.test.ts` (novo, 3 testes): prova, com `montarResultadoDetalhadoRelatorio` diretamente, que o campo "Fonte da leitura" traduz `"local:tesseract-v1-parcial"` para "Leitura automática local (parcial) — recomenda-se revisão", `"local:regex-v1"` para "Leitura automática local (OCR)" e um modelo Gemini para "Leitura automática por IA" -- nenhum código interno do motor de extração chega mais cru à tela.
+- **Prova de causa raiz por reversão temporária, quatro vezes (uma por correção):** (1) revertendo `formatarSocio` para sempre acrescentar o sufixo, o teste de QSA voltou a esperar (e a receber) o texto duplicado -- falha exatamente como o print real da empresa "PAULO BOLSONI BALDI"; (2) revertendo a checagem `atosAnexado &&` em `montarValidacaoSocietaria`, o novo teste falhou (`expected 1, got 2` bloqueios) -- os dois avisos idênticos sobre Atos da Junta reapareceram; (3) revertendo o branch de `enquadramentoTemGrave` em `avaliarProntidaoIdentidadeCnpj` para a forma de uma linha, o novo teste falhou (`expected 1, got 2` avisos) -- reproduzindo exatamente o "4 avisos" do print real da empresa "B1 SAUDE E ESTETICA"; (4) revertendo `formatarFonteLeituraAmigavel` para não ser chamada, os 3 testes do novo arquivo falharam mostrando os códigos internos crus (`"local:tesseract-v1-parcial"`, `"local:regex-v1"`, `"gemini-2.5-flash"`). Restauradas as quatro correções, todos os testes voltam a passar.
+- `montarValidacaoSocietaria` e `avaliarProntidaoIdentidadeCnpj` (`server/routes/documentacao.ts`) foram exportadas nesta rodada, mesmo padrão já usado para `enriquecerDocumentosAcervoComAnalise` (Rodada 13), apenas para permitir teste unitário direto -- nenhuma mudança de comportamento para os chamadores existentes.
+- **Sem teste de renderização dedicado** (telas do Acervo Documental/`DocumentosEntidade.tsx`, `DossieCreditoEmpresa.tsx`): mesma situação já registrada em rodadas anteriores -- este repositório não tem testes de DOM para esses componentes. As quatro correções desta rodada são inteiramente de backend/lógica compartilhada (apresentação de dados e montagem de avisos/bloqueios).
 
 ## Testes novos ou alterados na Rodada 13 (7 testes: 2 arquivos novos + 2 arquivos alterados)
 
@@ -79,7 +89,8 @@ Progressão dentro desta sessão, sempre crescendo, nunca encolhendo:
 | Rodada 10 | 83 (+1 arquivo novo) | 752 | +12 testes -- visibilidade de slots fiscais em empresa que mudou de regime tributário (`slotCompativelComRegimeTributario`, novo) + molde do histórico de regime anexado ao dossiê (`montarHistoricoRegimeTributarioParaMapa`, +2 em `mapaDocumentalCredito.test.ts`) |
 | Rodada 11 | 83 (nenhum arquivo novo) | 762 | +10 testes -- janela de 12 meses na exceção de transição de regime tributário (`transicaoDeRegimeRecente` + `regime_vigente_desde`); nenhum teste dedicado para a remoção de "Dados da análise" (sem testes de DOM neste componente) |
 | Rodada 12 | 84 (+1 arquivo novo) | 766 | +4 testes -- terceiro botão "Outro" (tipo `comprovante_regime_outro`, identidade flexível + regime explícito exigido); nenhum teste dedicado para a remoção do selo "Avisos" nem para o botão em si (sem testes de DOM nesses componentes) |
-| Rodada 13 (esta entrega) | 86 (+2 arquivos novos) | 773 | +7 testes -- QSA de Empresário Individual (`qsa_nao_aplicavel`, +2 em 2 arquivos), "Status da leitura" não vem mais de flag manual sem laudo real (+3, novo), diagnóstico de falha real vs. "ainda não processado" no Acervo Documental (+2, novo) |
+| Rodada 13 | 86 (+2 arquivos novos) | 773 | +7 testes -- QSA de Empresário Individual (`qsa_nao_aplicavel`, +2 em 2 arquivos), "Status da leitura" não vem mais de flag manual sem laudo real (+3, novo), diagnóstico de falha real vs. "ainda não processado" no Acervo Documental (+2, novo) |
+| Rodada 14 (esta entrega) | 89 (+3 arquivos novos) | 778 | +5 testes -- nome de sócio duplicado no QSA (`formatarSocio`, expectativa corrigida), dois avisos idênticos de Atos da Junta não anexado (+1, novo), "4 avisos" duplicados do Enquadramento Tributário (+1, novo), "Fonte da leitura" traduzida em vez de código interno cru (+3, novo) |
 
 ## Testes novos ou alterados na Rodada 6 (2 testes: 1 arquivo novo)
 

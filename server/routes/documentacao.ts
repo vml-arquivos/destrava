@@ -208,6 +208,30 @@ function formatarConfiancaRelatorio(value: unknown): string | null {
   return `${Math.round(Math.max(0, Math.min(1, fracao)) * 100)}%`;
 }
 
+// CORREÇÃO (2026-08-31, pedido explícito do usuário -- print real mostrando
+// "Fonte da leitura: local:tesseract-v1-parcial" na tela, um código interno do
+// motor de extração, não uma informação que ajuda o usuário a decidir nada):
+// o valor bruto vem de `analise?.modelo_ia`/`fonte_extracao` internos (ver
+// `ultimoModeloUsado`/`ultimaFonteExtracao` em analiseDocumentalEspecializada.ts)
+// e nunca foi pensado para aparecer na tela -- é um detalhe de implementação
+// (qual motor OCR/IA leu o arquivo). Esta função traduz os códigos conhecidos
+// para uma frase curta em português; um valor desconhecido continua sendo
+// mostrado (nunca esconde a informação), só que sem o prefixo/sufixo técnico
+// quando reconhecível.
+function formatarFonteLeituraAmigavel(valorBruto: unknown): string | null {
+  const valor = valorResultadoRelatorio(valorBruto);
+  if (!valor) return null;
+  const normalizado = valor.toLowerCase();
+  if (/^local:.*-parcial$/.test(normalizado)) return 'Leitura automática local (parcial) — recomenda-se revisão';
+  if (normalizado.startsWith('local:') || normalizado === 'local_deterministica' || normalizado.includes('tesseract') || normalizado.includes('ocr_local')) {
+    return 'Leitura automática local (OCR)';
+  }
+  if (normalizado.includes('gemini') || normalizado === 'gemini_document_ocr') return 'Leitura automática por IA';
+  if (normalizado === 'documento_comprobatorio_regime') return 'Documento anexado pelo usuário';
+  if (normalizado === 'consulta_cnpj_receita') return 'Consulta à Receita Federal';
+  return valor;
+}
+
 function valorResultadoRelatorio(value: unknown): string | null {
   if (value === null || value === undefined || value === '') return null;
   if (Array.isArray(value)) return value.filter(Boolean).map((item) => typeof item === 'object' ? item.nome || item.label || item.valor || null : String(item)).filter(Boolean).join(', ') || null;
@@ -350,7 +374,7 @@ export function montarResultadoDetalhadoRelatorio(documento: any, analiseEspecia
     adicionarCampo('Data de exclusão do Simples', dados?.data_exclusao_simples);
     adicionarCampo('Motivo da exclusão do Simples', dados?.motivo_exclusao);
   }
-  adicionarCampo('Fonte da leitura', documento?.fonte || documento?.fonte_extracao || documento?.origem || analise?.modelo_ia);
+  adicionarCampo('Fonte da leitura', formatarFonteLeituraAmigavel(documento?.fonte || documento?.fonte_extracao || documento?.origem || analise?.modelo_ia));
   adicionarCampo('Confiança da leitura', formatarConfiancaRelatorio(documento?.confianca ?? documento?.nivel_confianca ?? analise?.nivel_confianca));
   adicionarCampo('Status da leitura', documento?.status_leitura || analise?.status || (temLeituraAutomatica ? documento?.status : null));
   if (dados?.periodo_analisado) adicionarCampo('Período analisado', dados.periodo_analisado);
@@ -2082,7 +2106,12 @@ async function vincularDocumentosAutomaticos(empresaId: string) {
 //      documental; a ausência de Atos da Junta é tratada na Etapa 2.
 // Isso alimenta o botão/CTA "Avançar para a próxima etapa" no relatório.
 // ─────────────────────────────────────────────────────────────────────────
-async function avaliarProntidaoIdentidadeCnpj(params: {
+// Exportada (2026-08-31) apenas para permitir teste unitário direto da
+// deduplicação de avisos do Enquadramento Tributário -- ver
+// tests/avisosEnquadramentoTributarioSemDuplicidade.test.ts. Continua sendo
+// chamada internamente do mesmo jeito; exportar não muda seu comportamento
+// para os chamadores existentes.
+export async function avaliarProntidaoIdentidadeCnpj(params: {
   empresaId: string;
   empresa: any;
   docsCartao: any[];
@@ -2173,7 +2202,26 @@ async function avaliarProntidaoIdentidadeCnpj(params: {
   if (!enquadramentoIdentificado) addBloqueio('Regime tributário não identificado. Sincronize os dados de CNPJ (Receita Federal) da empresa.');
   else if (enquadramentoAnexado && !enquadramentoAnalisado) addBloqueio(params.enquadramentoDados?.erro_processamento || 'Documento de enquadramento anexado, mas a análise ainda não foi concluída.');
   else if (regimeCodigo === 'nao_optante_regime_a_confirmar') addBloqueio('Regime tributário a confirmar: anexe ECF, DCTF/DCTFWeb, DARF ou Livro Caixa ou, caso não tenha nenhum desses, outro documento que comprove o regime tributário da empresa, para identificar se a empresa é Lucro Presumido, Lucro Real ou Arbitrado. Os Atos da Junta Comercial só serão solicitados depois dessa confirmação.');
-  else if (enquadramentoTemGrave) addAviso('Enquadramento tributário: o comprovante anexado como reforço precisa de revisão humana (divergência ou baixa confiança na leitura automática).');
+  else if (enquadramentoTemGrave) {
+    // CORREÇÃO (2026-08-31, pedido explícito do usuário -- print real
+    // mostrando "Etapa 1 validada... 4 avisos", quase todos sobre o mesmo
+    // Enquadramento Tributário, "tire esse monte de texto e informação
+    // desnecessária"): este resumo genérico ("precisa de revisão humana", sem
+    // dizer o motivo) não acrescentava nenhuma informação nova -- toda
+    // pendência de severidade alta do Enquadramento também é adicionada, com
+    // a mensagem ESPECÍFICA e real do motivo (o que efetivamente diverge ou
+    // qual a causa da baixa confiança), pelo loop de
+    // `params.enquadramentoPendencias` logo abaixo. As duas coexistiam sempre
+    // que havia uma pendência grave, duplicando o mesmo aviso com textos
+    // diferentes. O resumo genérico só volta a aparecer no caso defensivo
+    // (não observado em produção) de uma pendência grave sem mensagem própria
+    // -- para nunca deixar o usuário sem nenhum aviso quando algo está
+    // pendente.
+    const temPendenciaGraveComMensagem = params.enquadramentoPendencias.some((p) => p.severidade === 'alta' && p.mensagem);
+    if (!temPendenciaGraveComMensagem) {
+      addAviso('Enquadramento tributário: o comprovante anexado como reforço precisa de revisão humana (divergência ou baixa confiança na leitura automática).');
+    }
+  }
   else if (!regimeAConfirmar) pontosPositivos.push(`Enquadramento tributário identificado: ${regimeRotulo}.`);
 
   const textoEnquadramento = [regime, situacaoSimples, params.empresa?.porte, params.empresa?.natureza_juridica].filter(Boolean).join(' ');
@@ -2280,7 +2328,12 @@ async function avaliarProntidaoIdentidadeCnpj(params: {
   };
 }
 
-async function montarValidacaoSocietaria(
+// Exportada (2026-08-31) apenas para permitir teste unitário direto da
+// deduplicação de bloqueios do Atos da Junta -- ver
+// tests/validacaoSocietariaBloqueiosSemDuplicidade.test.ts. Continua sendo
+// chamada internamente do mesmo jeito; exportar não muda seu comportamento
+// para os chamadores existentes.
+export async function montarValidacaoSocietaria(
   empresaId: string,
   processar: boolean,
   contexto: { empresa?: any; enquadramentoDados?: Record<string, any> } = {},
@@ -2405,7 +2458,20 @@ async function montarValidacaoSocietaria(
   if (!docsContrato.length && !empresaMei) bloqueios.unshift('Contrato Social ou Alteração Contratual ainda não anexado.');
   if (!atosAnexado && !empresaMei) bloqueios.unshift('Nenhum Ato da Junta foi localizado. A empresa pode ter registro em outro órgão; a inclusão de documentos permanece liberada, mas a validação exige revisão humana.');
   if (atosAnexado && !atos && !empresaMei) bloqueios.unshift('Os Atos da Junta anexados estão vazios ou sem conteúdo legível; nenhum foi considerado analisado.');
-  if (cadeia.possivel_registro_em_outro_orgao && !empresaMei) bloqueios.push('Nenhum ato registrado foi identificado. A empresa pode estar registrada em outro tipo de órgão; mantenha a inclusão documental liberada e encaminhe para revisão humana.');
+  // CORREÇÃO (2026-08-31, pedido explícito do usuário -- print real mostrando
+  // dois avisos quase idênticos sobre Atos da Junta ao mesmo tempo, "tire esse
+  // monte de texto e informação desnecessária"): `cadeia.possivel_registro_em_
+  // outro_orgao` (calcularCadeiaComprovacaoSocietaria) é `true` sempre que o
+  // histórico está vazio -- inclusive quando isso só significa "nada foi
+  // anexado ainda", o mesmo caso já coberto, com o mesmo texto, pelo aviso
+  // `!atosAnexado` duas linhas acima. Sem a checagem `atosAnexado` abaixo, os
+  // dois avisos apareciam juntos para TODA empresa nesta etapa de onboarding,
+  // sempre que nada tivesse sido anexado ainda -- uma duplicação universal, não
+  // um caso específico. Este aviso agora só aparece como um sinal ADICIONAL e
+  // genuinamente diferente: algo FOI anexado e analisado, mas mesmo assim
+  // nenhum registro histórico foi identificado (o cenário real da Rodada 13,
+  // de um documento "Esta empresa não possui documentos registrados").
+  if (atosAnexado && cadeia.possivel_registro_em_outro_orgao && !empresaMei) bloqueios.push('Nenhum ato registrado foi identificado. A empresa pode estar registrada em outro tipo de órgão; mantenha a inclusão documental liberada e encaminhe para revisão humana.');
   if (atos && !atosDados?.analisado) bloqueios.push(atosDados?.diagnostico || 'A leitura dos Atos da Junta ainda não foi concluída.');
   for (const item of cadeia.registros_faltantes || []) {
     bloqueios.push(`Anexar o contrato/alteração registrado em ${item.data}${item.numero ? ` (arquivamento ${item.numero})` : ''} para completar a comprovação mínima de 12 meses.`);
