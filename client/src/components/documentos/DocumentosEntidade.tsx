@@ -265,16 +265,15 @@ export const SECOES_DOCUMENTAIS: SecaoDocumento[] = [
   },
 ];
 
-// Espelha server/routes/documentos.ts (ORDEM_CONSULTA_CADASTRAL) -- ordem obrigatória
-// de leitura das consultas cadastrais: 1º SCR/Registrato, 2º CCS, 3º CCF, tanto para
-// CNPJ quanto para CPF (por sócio). O backend é a fonte de verdade e barra o upload de
-// qualquer forma; isto aqui só evita deixar o usuário anexar e só depois ver o erro.
-const ORDEM_CONSULTA_CADASTRAL: Record<string, { exige: string[]; rotulo: string }> = {
-  ccs_cnpj: { exige: ["rating_bacen_cnpj", "scr_cnpj"], rotulo: "SCR/Registrato (CNPJ)" },
-  ccf_cnpj: { exige: ["ccs_cnpj"], rotulo: "CCS (CNPJ)" },
-  ccs_cpf: { exige: ["rating_bacen_cpf", "scr_cpf"], rotulo: "SCR/Registrato (CPF)" },
-  ccf_cpf: { exige: ["ccs_cpf"], rotulo: "CCS (CPF)" },
-};
+// CORREÇÃO (2026-08-31, pedido explícito do usuário em produção): o aviso
+// informativo "Ordem recomendada: anexe primeiro o Relatório SCR/Registrato
+// (CNPJ)... (SCR → CCS → CCF)" foi removido da tela por instrução direta --
+// o usuário reportou que esse tipo de recomendação não deve mais aparecer.
+// A ordem SCR -> CCS -> CCF nunca bloqueou o upload (ver
+// tests/uploadNaoBloqueadoPorOrdemConsultaCadastral.test.ts, que continua
+// válido: o backend nunca recusou o anexo por causa da ordem) -- só o AVISO
+// visual é que foi removido aqui. `ORDEM_CONSULTA_CADASTRAL` (o mapa que
+// alimentava esse aviso) foi removido junto por ficar sem nenhum uso.
 
 const TODOS_SLOTS = SECOES_DOCUMENTAIS.flatMap((secao) => secao.slots);
 const TIPO_PARA_SLOT = new Map<string, DocumentoSlot>();
@@ -1718,11 +1717,6 @@ export default function DocumentosEntidade({
                       ? socios.filter((socio) => docsTipoTodos.some((doc) => doc.socio_id === socio.id)).length
                       : 0;
                     const uploading = uploadingTipo === chaveSlot;
-                    const regraOrdemConsulta = ORDEM_CONSULTA_CADASTRAL[tipo];
-                    const ordemConsultaPendente = regraOrdemConsulta && !docs.some((doc) => (
-                      regraOrdemConsulta.exige.includes(doc.tipo_documento)
-                      && (!documentoSlot.porSocio || !socioVinculado || doc.socio_id === socioVinculado)
-                    ));
                     const destaqueConfirmacaoRegime = regimeAConfirmar && tiposConfirmacaoRegime.has(tipo);
                     // Decisão de negócio (2026-08-30): a ordem CNPJ -> QSA -> Enquadramento ->
                     // confirmação de regime -> Atos da Junta -> Contrato Social/Alteração, e a
@@ -1742,8 +1736,6 @@ export default function DocumentosEntidade({
                         ? "Ordem recomendada: conclua e aprove a Fase 1 antes dos Atos da Junta. O anexo está liberado, mas o dossiê só fica apto após a Fase 1."
                       : ["contrato_social", "alteracao_contratual"].includes(tipo) && pipeline?.fase_3?.bloqueada
                         ? "Ordem recomendada: analise e aprove primeiro os Atos da Junta Comercial. O anexo está liberado, mas o dossiê só fica apto depois disso."
-                      : ordemConsultaPendente
-                        ? `Ordem recomendada: anexe primeiro o Relatório ${regraOrdemConsulta.rotulo} (SCR → CCS → CCF). Você já pode anexar este documento se preferir; a análise bancária fica incompleta até a sequência ser resolvida.`
                         : null;
                     const motivoBloqueio: string | null = null;
                     const exigeNome = Boolean(documentoSlot.exigeNome);
