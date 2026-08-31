@@ -780,7 +780,18 @@ export function ProntidaoIdentidadeCard({
           de fato pendente; nada de selo vazio dizendo que está tudo certo.
           `acaoRegime` (anexar ECF/DCTF) fica na mesma linha, à direita, no
           lugar que antes ficava em branco. */}
-      {(bloqueios.length > 0 || inconsistentes.length > 0 || avisos.length > 0 || acaoRegime) && (
+      {/* CORREÇÃO (2026-08-31, rodada 12, pedido explícito do usuário --
+          marcação numa captura de tela com "anexar documentos" ao lado dos
+          selos "Ação necessária"/"Avisos"): "não precisa dos... a pendência e
+          avisos, né só na pendência, já está ótimo, já é o aviso". O selo
+          "Ação necessária" já cumpre o papel de aviso desta etapa; um selo
+          "Avisos" separado ao lado dele duplicava a mesma função com uma
+          segunda caixa quase sempre vazia ou redundante. Removido apenas
+          aqui (Etapa 1 pendente) -- o resumo de avisos que já aparece no
+          cartão "Etapa 1 validada" (abaixo, ramo `apto`) não foi tocado, por
+          ser uma tela diferente, não mencionada nem mostrada nas capturas do
+          usuário. */}
+      {(bloqueios.length > 0 || inconsistentes.length > 0 || acaoRegime) && (
         <div className="mt-3 flex flex-wrap items-center justify-between gap-2">
           <div className="flex flex-wrap items-center gap-2">
             {(bloqueios.length > 0 || inconsistentes.length > 0) && (
@@ -792,14 +803,6 @@ export function ProntidaoIdentidadeCard({
                   ...bloqueios.slice(0, 8),
                   ...inconsistentes.filter((item) => item.diagnostico).map((item) => `${item.nome}: ${item.diagnostico}`),
                 ]}
-              />
-            )}
-            {avisos.length > 0 && (
-              <IndicadorPendencia
-                rotulo="Avisos"
-                tom="warning"
-                titulo="Avisos"
-                itens={avisos.slice(0, 6)}
               />
             )}
           </div>

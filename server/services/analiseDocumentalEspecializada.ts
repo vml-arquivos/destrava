@@ -1526,9 +1526,16 @@ function normalizarDocumentoCatalogado(extraidos: any, tipoDocumento: string): {
     alertas.push({ codigo: 'documento_catalogado_sem_evidencia', mensagem: 'Não foram encontrados campos comprovados nem evidências suficientes.', severidade: 'alta', recomendacao: 'Solicitar novo arquivo legível e encaminhar para revisão humana.' });
   }
 
+  // 'comprovante_regime_outro' (rodada 12): o campo genérico "Outro" da
+  // pendência de regime tributário -- aceita qualquer documento, mas só
+  // confirma o regime quando ele estiver EXPLICITAMENTE declarado no texto,
+  // exatamente pela mesma checagem usada para ECF/DCTF/DARF/Livro Caixa
+  // abaixo. Pedido explícito do usuário: "o outro vai ter que estar
+  // exatamente explícito qual o regime tributário".
   const tiposComprovacaoRegime = new Set([
     'ecf', 'recibo_ecf', 'pgdas', 'pgdas_d', 'recibo_pgdas',
     'dctf', 'dctfweb', 'mit', 'darf', 'ecd', 'recibo_ecd', 'livro_caixa',
+    'comprovante_regime_outro',
   ]);
   const dadosRegime: Record<string, any> = {};
   if (tiposComprovacaoRegime.has(tipoDocumento)) {
@@ -1571,12 +1578,38 @@ function normalizarDocumentoCatalogado(extraidos: any, tipoDocumento: string): {
     }
   }
 
-  const classificacao = classificarResultadoPersistido({
-    tipoEsperado: tipoDocumento,
-    resultado: { ...brutoPersistivel, campos_comprovados: comprovados },
-    texto: textoLocal,
-    competencia: bruto.competencia || { inicio: bruto.competencia_inicio || null, fim: bruto.competencia_fim || null },
-  });
+  // 'comprovante_regime_outro' (rodada 12) é, por definição, um campo sem
+  // identidade/formato fixo esperado -- ao contrário de ECF/DCTF/DARF/Livro
+  // Caixa, não existe um único "tipo detectado" correto para comparar.
+  // Submeter esse tipo ao classificador central de identidade (feito para
+  // comparar um tipo esperado fixo contra um tipo detectado dentre um
+  // conjunto fechado de formulários oficiais) faria QUALQUER documento aceito
+  // aqui ser marcado erroneamente como "incompatível", porque o tipo esperado
+  // ('comprovante_regime_outro') nunca é igual a nenhum tipo detectado desse
+  // conjunto fechado. A identidade documental não é o requisito deste campo
+  // -- o requisito único e não negociável é o regime tributário estar
+  // EXPLICITAMENTE declarado no texto, já garantido de forma totalmente
+  // independente desta classificação pela checagem de `tiposComprovacaoRegime`
+  // acima (`regimeFoiComprovado`, usada em `satisfazRequisito` mais abaixo).
+  const identidadeFlexivel = tipoDocumento === 'comprovante_regime_outro';
+  const classificacao: ClassificacaoDocumentalResult = identidadeFlexivel
+    ? {
+        tipo_esperado: tipoDocumento,
+        tipo_detectado: tipoDocumento as unknown as ClassificacaoDocumentalResult['tipo_detectado'],
+        satisfaz_requisito: true,
+        identidade_status: 'IDENTIFICADO',
+        temporalidade_status: 'ATUAL',
+        cobertura_status: 'SATISFAZ',
+        confianca: 1,
+        evidencias: [],
+        motivo: 'Campo de identidade flexível: qualquer documento é aceito, desde que o regime tributário esteja explicitamente declarado no texto.',
+      }
+    : classificarResultadoPersistido({
+        tipoEsperado: tipoDocumento,
+        resultado: { ...brutoPersistivel, campos_comprovados: comprovados },
+        texto: textoLocal,
+        competencia: bruto.competencia || { inicio: bruto.competencia_inicio || null, fim: bruto.competencia_fim || null },
+      });
   if (tiposCriticos.has(tipoDocumento)) {
     if (classificacao.identidade_status === 'INCOMPATIVEL' || brutoIncompativel) {
       // CORREÇÃO (2026-08-31, "não é mais aceitável falha... não ler um outro
@@ -2107,7 +2140,18 @@ export class AnaliseDocumentalService {
               ? 'ecd'
               : tipoDocumento === 'livro_caixa'
                 ? 'livro_caixa'
-                : 'contrato_social_alteracao';
+                // 'comprovante_regime_outro' (rodada 12) não tem um formato
+                // fixo esperado como ECF/DCTF/DARF/Livro Caixa, então não
+                // pode usar `parseComprovanteRegime` (que exige um marcador
+                // textual específico de um desses quatro tipos). O parser de
+                // 'simples_nacional' já é o detector determinístico local de
+                // regime tributário mais genérico do sistema -- identifica
+                // Simples/MEI e também lê Presumido/Real/Arbitrado via
+                // `detectarRegimeTributarioDeclarado` -- sem exigir que o
+                // documento seja de um formulário oficial específico.
+                : tipoDocumento === 'comprovante_regime_outro'
+                  ? 'simples_nacional'
+                  : 'contrato_social_alteracao';
     const extraidos = await this.extrairHibrido(documento.caminho_arquivo!, prompt, documento.mime_type || 'application/pdf', tipoLocal, tipoLocal !== 'contrato_social_alteracao');
     const normalizado = normalizarDocumentoCatalogado(extraidos, tipoDocumento);
     const resultadoBase = criarResultado('documento_generico', empresaId, arquivoId, normalizado.dados, normalizado.alertas, this.ultimoModeloUsado);

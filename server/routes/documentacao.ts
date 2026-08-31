@@ -2131,7 +2131,7 @@ async function avaliarProntidaoIdentidadeCnpj(params: {
     && (!enquadramentoAnexado || enquadramentoAnalisado);
   if (!enquadramentoIdentificado) addBloqueio('Regime tributário não identificado. Sincronize os dados de CNPJ (Receita Federal) da empresa.');
   else if (enquadramentoAnexado && !enquadramentoAnalisado) addBloqueio(params.enquadramentoDados?.erro_processamento || 'Documento de enquadramento anexado, mas a análise ainda não foi concluída.');
-  else if (regimeCodigo === 'nao_optante_regime_a_confirmar') addBloqueio('Regime tributário a confirmar: anexe ECF, DCTF/DCTFWeb, DARF ou Livro Caixa para identificar se a empresa é Lucro Presumido, Lucro Real ou Arbitrado. Os Atos da Junta Comercial só serão solicitados depois dessa confirmação.');
+  else if (regimeCodigo === 'nao_optante_regime_a_confirmar') addBloqueio('Regime tributário a confirmar: anexe ECF, DCTF/DCTFWeb, DARF ou Livro Caixa ou, caso não tenha nenhum desses, outro documento que comprove o regime tributário da empresa, para identificar se a empresa é Lucro Presumido, Lucro Real ou Arbitrado. Os Atos da Junta Comercial só serão solicitados depois dessa confirmação.');
   else if (enquadramentoTemGrave) addAviso('Enquadramento tributário: o comprovante anexado como reforço precisa de revisão humana (divergência ou baixa confiança na leitura automática).');
   else if (!regimeAConfirmar) pontosPositivos.push(`Enquadramento tributário identificado: ${regimeRotulo}.`);
 
@@ -2667,7 +2667,11 @@ export async function montarDossieCreditoEmpresa(empresaId: string, options: { p
       ? bloco.documentos.map((documento: any) => String(documento?.tipo_documento || '')).filter(Boolean)
       : []),
   );
-  const tiposComprovacaoRegime = new Set(['ecf', 'recibo_ecf', 'dctf', 'dctfweb', 'mit', 'darf', 'livro_caixa']);
+  // Rodada 12: 'comprovante_regime_outro' é o terceiro botão de upload rápido
+  // ("Outro") da pendência de regime tributário, ao lado de ECF e DCTF -- ver
+  // blocoPendenciaRegime em DocumentosEntidade.tsx e o mesmo conjunto em
+  // analiseDocumentalEspecializada.ts.
+  const tiposComprovacaoRegime = new Set(['ecf', 'recibo_ecf', 'dctf', 'dctfweb', 'mit', 'darf', 'livro_caixa', 'comprovante_regime_outro']);
   const regimesDeclarados = new Set(['lucro presumido', 'lucro real', 'lucro arbitrado']);
   const regimeDeclaradoEmDocumento = blocos
     .flatMap((bloco: any) => Array.isArray(bloco.documentos) ? bloco.documentos : [])

@@ -203,3 +203,35 @@ Nenhum arquivo novo nesta rodada.
 
 Total desta rodada: 3 arquivos de código alterados + 2 arquivos de teste
 alterados + 6 arquivos de documentação alterados = 11 arquivos.
+
+======================================================================
+Rodada 12 (esta entrega) -- selo "Avisos" removido da Etapa 1 pendente;
+popover de pendência de regime reescrito para instruir a ação; terceiro
+botão "Outro" (tipo comprovante_regime_outro) para qualquer documento que
+comprove explicitamente o regime tributário
+======================================================================
+
+Arquivos existentes ALTERADOS nesta rodada:
+
+shared/documentTypes.ts                             (catálogo: novo tipo comprovante_regime_outro)
+server/services/analiseDocumentalEspecializada.ts   (identidade flexível + tiposComprovacaoRegime + tipoLocal do novo tipo)
+server/services/mapaDocumentalCreditoService.ts     (descricao/acao/tipos_documento_aceitos da pendência)
+server/routes/documentacao.ts                       (tiposComprovacaoRegime local + texto do bloqueio da Etapa 1)
+client/src/components/documentos/DocumentosEntidade.tsx (botão "Outro" + texto padrão do popover)
+client/src/components/documentacao/DossieCreditoEmpresa.tsx (selo "Avisos" removido da Etapa 1 pendente)
+CHANGELOG_CORRECOES.md
+ROLLBACK_PLAN.md
+PENDENCIAS_REAIS.md
+TEST_REPORT.md
+BUILD_REPORT.md
+FILES_CHANGED.txt (este arquivo)
+SHA256SUMS.txt
+
+Arquivos NOVOS -- teste e fixture sintético (nenhum dado real de cliente):
+
+tests/comprovanteRegimeOutroExplicito.test.ts
+tests/fixtures/documento-sem-regime-sintetico.pdf
+
+Total desta rodada: 6 arquivos de código alterados + 6 arquivos de
+documentação alterados + 1 arquivo de teste novo + 1 fixture sintético novo
+= 14 arquivos.

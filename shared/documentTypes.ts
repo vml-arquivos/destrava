@@ -146,6 +146,16 @@ export const DOCUMENT_TYPE_CATALOG = [
   entry('dctfweb', 'DCTFWeb', 'fiscal', 'empresa', { analise: 'dctf_mit', promptCodigo: 'dctf_mit_extract', tipoExigencia: 'obrigacao_legal' }),
   entry('mit', 'MIT / módulo de inclusão de tributos', 'fiscal', 'empresa', { analise: 'dctf_mit', promptCodigo: 'dctf_mit_extract' }),
   entry('darf', 'DARF', 'fiscal', 'empresa', { analise: 'darf', promptCodigo: 'darf_extract', tipoExigencia: 'obrigacao_legal' }),
+  // Rodada 12 (31/08/2026, pedido explícito do usuário): campo de upload
+  // genérico para quando a empresa não tem ECF, DCTF/DCTFWeb, DARF nem Livro
+  // Caixa para comprovar o regime tributário efetivo -- aceita qualquer OUTRO
+  // documento, desde que o regime tributário esteja explicitamente declarado
+  // no texto (ver `tiposComprovacaoRegime` em analiseDocumentalEspecializada.ts).
+  // Ao contrário de ECF/DCTF/DARF/Livro Caixa, este campo não tem uma
+  // identidade/formato fixo esperado -- por isso não entra na lista de
+  // `tiposCriticos` daquele arquivo (mesmo tratamento do campo "outros" já
+  // existente no catálogo, um pouco abaixo).
+  entry('comprovante_regime_outro', 'Outro comprovante do regime tributário', 'fiscal', 'empresa', { analise: 'comprovante_regime_outro', promptCodigo: 'comprovante_regime_outro_extract' }),
   entry('efd_contribuicoes', 'EFD-Contribuições', 'fiscal', 'empresa', { analise: 'efd', promptCodigo: 'efd_extract' }),
   entry('efd_icms_ipi', 'EFD ICMS/IPI', 'fiscal', 'empresa', { analise: 'efd', promptCodigo: 'efd_extract' }),
   entry('esocial', 'eSocial', 'trabalhista', 'empresa', { analise: 'esocial', promptCodigo: 'esocial_extract' }),

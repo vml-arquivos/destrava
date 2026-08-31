@@ -1327,6 +1327,7 @@ export default function DocumentosEntidade({
     const emAnalise = pendencia?.status === "em_analise";
     const chaveEcf = chaveContextoSlot("ecf", null);
     const chaveDctf = chaveContextoSlot("dctf", null);
+    const chaveOutro = chaveContextoSlot("comprovante_regime_outro", null);
     return (
       <div className="flex flex-wrap items-center gap-2">
         <div className="relative">
@@ -1346,7 +1347,7 @@ export default function DocumentosEntidade({
               <p className="mt-1.5 text-[11px] leading-relaxed text-muted-foreground">
                 {emAnalise
                   ? "O documento foi anexado e aguarda leitura para identificar o regime efetivo."
-                  : pendencia?.descricao || "A empresa não é optante do Simples. Anexe ECF ou DCTF para confirmar o regime efetivo (Lucro Presumido, Real ou Arbitrado)."}
+                  : pendencia?.descricao || "Anexar os documentos solicitados (ECF, DCTF/DCTFWeb, DARF ou Livro Caixa) ou, caso não tenha nenhum desses, anexe outro documento que comprove o regime tributário da empresa -- com o regime tributário indicado de forma explícita."}
               </p>
             </div>
           )}
@@ -1360,6 +1361,18 @@ export default function DocumentosEntidade({
             <label className={`h-7 inline-flex items-center justify-center gap-1 text-[10px] font-bold px-2.5 rounded-lg transition-colors shrink-0 ${uploadingTipo === chaveDctf ? "bg-border text-primary-foreground cursor-not-allowed" : "bg-primary text-primary-foreground cursor-pointer hover:bg-primary/90"}`}>
               {uploadingTipo === chaveDctf ? <Loader2 className="w-3 h-3 animate-spin" /> : <Upload className="w-3 h-3" />} DCTF
               <input type="file" accept=".pdf,.jpg,.jpeg,.png,.webp,.xlsx,.csv,.docx" className="hidden" disabled={uploadingTipo === chaveDctf} onChange={(e) => { const file = e.target.files?.[0]; if (file) void enviar("dctf", file); e.currentTarget.value = ""; }} />
+            </label>
+            {/* Terceiro botão genérico (rodada 12, pedido explícito do
+                usuário): "abra mais um campo... pra que possa ter outro...
+                documento que fale com o regime tributário exato da empresa"
+                -- sem nomear um tipo específico ("não precisa colocar nome").
+                Aceita qualquer documento; só resolve a pendência quando o
+                regime tributário estiver explicitamente declarado no texto
+                (ver tiposComprovacaoRegime em analiseDocumentalEspecializada.ts
+                e em routes/documentacao.ts). */}
+            <label title="Qualquer outro documento que comprove o regime tributário da empresa, com o regime tributário indicado de forma explícita." className={`h-7 inline-flex items-center justify-center gap-1 text-[10px] font-bold px-2.5 rounded-lg transition-colors shrink-0 ${uploadingTipo === chaveOutro ? "bg-border text-primary-foreground cursor-not-allowed" : "bg-primary text-primary-foreground cursor-pointer hover:bg-primary/90"}`}>
+              {uploadingTipo === chaveOutro ? <Loader2 className="w-3 h-3 animate-spin" /> : <Upload className="w-3 h-3" />} Outro
+              <input type="file" accept=".pdf,.jpg,.jpeg,.png,.webp,.xlsx,.csv,.docx" className="hidden" disabled={uploadingTipo === chaveOutro} onChange={(e) => { const file = e.target.files?.[0]; if (file) void enviar("comprovante_regime_outro", file); e.currentTarget.value = ""; }} />
             </label>
           </>
         )}

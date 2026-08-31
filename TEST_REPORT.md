@@ -1,12 +1,22 @@
-# Relatório de Testes — 31/08/2026 (atualizado, Rodada 11 — "Dados da análise" direto para incompatível + janela de 12 meses na transição de regime)
+# Relatório de Testes — 31/08/2026 (atualizado, Rodada 12 — selo "Avisos" removido, popover reescrito, terceiro botão "Outro" para comprovação do regime tributário)
 
 ## Resultado final
 
 ```
-Test Files  83 passed (83)
-     Tests  762 passed (762)
-  Duration  ~29-43s
+Test Files  84 passed (84)
+     Tests  766 passed (766)
+  Duration  ~40-46s
 ```
+
+## Testes novos ou alterados na Rodada 12 (4 testes: 1 arquivo novo + 1 fixture sintético novo)
+
+- `tests/comprovanteRegimeOutroExplicito.test.ts` (novo, 4 testes) -- exercita `AnaliseDocumentalService.analisarDocumentoCatalogado` de ponta a ponta para o novo tipo `comprovante_regime_outro` (o terceiro botão "Outro" do popover de pendência de regime tributário):
+  1. Um documento cujo CONTEÚDO bate com o marcador textual de ECF (fixture `ecf-sintetico.pdf`, reaproveitado da Rodada 7), mas anexado como `comprovante_regime_outro`, é aceito sem ser marcado "incompatível" (`identidade_status: 'IDENTIFICADO'`, nenhum alerta de incompatibilidade) e confirma corretamente o regime lido no texto ("Lucro Presumido") -- prova a necessidade da "identidade flexível".
+  2. O mesmo arquivo, processado como `'ecf'` e como `'comprovante_regime_outro'`, produz `status`/`revisao_humana_necessaria`/`regime_confirmado`/`regime_tributario` idênticos -- prova que não há tratamento especial além da identidade flexível (a checagem de regime explícito é a mesma, sem duplicação de lógica).
+  3. Um documento que só declara "Optante pelo Simples Nacional" (fixture `pgdas-recibo-sintetico.pdf`, reaproveitado da Rodada 7) é lido corretamente como tal, mas o regime lido (`'Simples Nacional'`) nunca é confundido com uma confirmação de Presumido/Real/Arbitrado -- as únicas que justificam a pendência de "não optante" (`regimesDeclarados`, `server/routes/documentacao.ts`).
+  4. Um documento sem qualquer menção a regime tributário (fixture nova `documento-sem-regime-sintetico.pdf`, um contrato de prestação de serviços fictício) nunca fica "satisfeito" silenciosamente: `satisfaz_requisito: false`, `cobertura_status: 'NAO_SATISFAZ'`, alerta `regime_tributario_nao_identificado` presente. A extração local sozinha tem confiança baixa para este documento (nenhum campo fiscal para casar) e o fluxo real escalaria para a IA -- mocada de forma determinística (`mockGeminiJson`, sem `regime_tributario` na resposta) para o teste não depender de rede.
+- **Prova de causa raiz por reversão temporária, duas vezes:** (a) desligando a identidade flexível (`identidadeFlexivel = false && ...`), o teste 1 falhou exatamente como o risco descrito (`identidade_status` volta a `'INCOMPATIVEL'`); (b) removendo `'comprovante_regime_outro'` de `tiposComprovacaoRegime` (`analiseDocumentalEspecializada.ts`), o teste 4 falhou (`regime_tributario_nao_identificado` deixa de aparecer). Restauradas as duas correções, os 4 testes voltam a passar. **Nota honesta sobre a segunda reversão**: ela reproduziu um lapso real cometido durante o desenvolvimento desta própria rodada (a remoção temporária feita para a primeira prova por reversão não tinha sido restaurada antes de escrever os testes seguintes) -- foi o próprio teste 4, ao falhar de forma inesperada numa execução normal (não numa reversão deliberada), que revelou o lapso antes da entrega. Fica registrado aqui porque é exatamente o tipo de coisa que a prova por reversão sistemática existe para capturar, incluindo lapsos do próprio processo de correção.
+- **Sem teste de renderização dedicado para a remoção do selo "Avisos"** (`DossieCreditoEmpresa.tsx`) nem para o novo botão "Outro" (`DocumentosEntidade.tsx`): mesma situação já registrada em rodadas anteriores -- este repositório não tem testes de DOM para esses componentes. A cobertura relevante fica na camada de dados/regras que alimenta a tela (testada acima) e na verificação visual manual antes da entrega.
 
 ## Testes novos ou alterados na Rodada 11 (10 testes: 2 arquivos alterados, 0 arquivos novos)
 
@@ -58,7 +68,8 @@ Progressão dentro desta sessão, sempre crescendo, nunca encolhendo:
 | Rodada 8 | 82 (+1 arquivo novo) | 740 | +2 testes -- selo visual/conclusão explícita para documento incompatível (0 testes líquidos a mais no arquivo de alertas -- reescrito, mesma contagem) |
 | Rodada 9 | 82 (nenhum arquivo novo) | 740 | 0 testes líquidos -- `tests/documentacaoConclusaoIncompatibilidade.test.ts` reescrito (mesma contagem, 2 testes) para provar o corte total de seções em documento incompatível |
 | Rodada 10 | 83 (+1 arquivo novo) | 752 | +12 testes -- visibilidade de slots fiscais em empresa que mudou de regime tributário (`slotCompativelComRegimeTributario`, novo) + molde do histórico de regime anexado ao dossiê (`montarHistoricoRegimeTributarioParaMapa`, +2 em `mapaDocumentalCredito.test.ts`) |
-| Rodada 11 (esta entrega) | 83 (nenhum arquivo novo) | 762 | +10 testes -- janela de 12 meses na exceção de transição de regime tributário (`transicaoDeRegimeRecente` + `regime_vigente_desde`); nenhum teste dedicado para a remoção de "Dados da análise" (sem testes de DOM neste componente) |
+| Rodada 11 | 83 (nenhum arquivo novo) | 762 | +10 testes -- janela de 12 meses na exceção de transição de regime tributário (`transicaoDeRegimeRecente` + `regime_vigente_desde`); nenhum teste dedicado para a remoção de "Dados da análise" (sem testes de DOM neste componente) |
+| Rodada 12 (esta entrega) | 84 (+1 arquivo novo) | 766 | +4 testes -- terceiro botão "Outro" (tipo `comprovante_regime_outro`, identidade flexível + regime explícito exigido); nenhum teste dedicado para a remoção do selo "Avisos" nem para o botão em si (sem testes de DOM nesses componentes) |
 
 ## Testes novos ou alterados na Rodada 6 (2 testes: 1 arquivo novo)
 

@@ -598,14 +598,24 @@ export function gerarMapaDocumentalCredito(params: {
 
   const descricaoRegime = ROTULO_REGIME_CREDITO;
   const regimeAConfirmar = (regime === 'nao_optante_regime_a_confirmar' || regime === 'nao_identificado') && params.regimeComprovado !== true;
+  // Rodada 12 (31/08/2026, pedido explícito do usuário): a descrição desta
+  // pendência é o texto que aparece no popover clicável de "Pendência" no
+  // Acervo Documental (ver blocoPendenciaRegime em DocumentosEntidade.tsx) --
+  // agora instrui diretamente a anexar os documentos solicitados ou, na
+  // ausência deles, qualquer outro documento que comprove o regime, em vez de
+  // só explicar por que a pendência existe. "Outro" é um terceiro botão de
+  // upload rápido (ao lado de ECF e DCTF) que aceita qualquer documento, mas
+  // só resolve a pendência quando o regime tributário estiver explicitamente
+  // declarado no texto (ver `tiposComprovacaoRegime` em
+  // analiseDocumentalEspecializada.ts e em routes/documentacao.ts).
   const pendencias: PendenciaMapaDocumental[] = regimeAConfirmar ? [{
     codigo: 'nao_optante_regime_a_confirmar',
     titulo: 'Comprovação do regime tributário não optante',
-    descricao: 'A Receita informa “não optante”, mas isso não distingue Presumido, Real, Arbitrado ou Livro Caixa.',
-    acao: 'Anexar ECF, DCTF/DCTFWeb, DARF ou Livro Caixa para confirmar.',
+    descricao: 'Anexar os documentos solicitados (ECF, DCTF/DCTFWeb, DARF ou Livro Caixa) ou, caso não tenha nenhum desses, anexe outro documento que comprove o regime tributário da empresa -- com o regime tributário indicado de forma explícita.',
+    acao: 'Anexar ECF, DCTF/DCTFWeb, DARF ou Livro Caixa ou, na ausência desses, outro documento que comprove o regime tributário.',
     status: 'pendente',
     prioridade: 'alta',
-    tipos_documento_aceitos: ['ecf', 'dctf', 'dctfweb', 'darf', 'livro_caixa'],
+    tipos_documento_aceitos: ['ecf', 'dctf', 'dctfweb', 'darf', 'livro_caixa', 'comprovante_regime_outro'],
     nao_bloqueia_etapa_1: false,
   }] : [];
 
