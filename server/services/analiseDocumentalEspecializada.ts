@@ -1441,6 +1441,32 @@ function promptDocumentoCatalogado(tipoDocumento: string, nome: string, categori
   return `Você é um analista documental de crédito empresarial. Um arquivo foi anexado no campo "${nome}" (${tipoDocumento}), categoria ${categoria} -- mas o nome desse campo é apenas a intenção de quem fez o upload, nunca uma prova do que o arquivo realmente é. Identifique o tipo do documento exclusivamente pelo conteúdo real do arquivo (título, cabeçalho, órgão emissor, campos preenchidos), de forma totalmente independente do nome do campo em que foi anexado -- nunca presuma que o documento é "${nome}" só porque foi anexado nesse campo. Só depois de identificar o tipo real do conteúdo, compare com o tipo esperado ("${nome}" / ${tipoDocumento}) para decidir documento_compativel: documento_compativel deve ser false sempre que o conteúdo real for de um tipo diferente do esperado, mesmo que os dois pertençam à mesma categoria (${categoria}) ou sirvam a propósitos relacionados. Retorne somente JSON válido e não tome decisão final de crédito. Separe rigorosamente campos_comprovados (valor, campo, página/trecho e confiança) de campos_inferidos; se algo não estiver legível, use null e registre pendencia. Identifique documento_compativel, competencia (inicio/fim), validade (inicio/fim), cnpj, cpf, razão social, nomes, valores financeiros, órgão emissor, número, situação, assinaturas e evidencias quando existirem.${exigenciaSituacaoCertidao} Nunca invente dados, não trate ausência de evidência como confirmação e indique revisao_humana_necessaria para divergência, baixa confiança ou documento incompatível. Prompt ${promptCodigo}.`;
 }
 
+// CORREÇÃO (2026-08-31, "não é mais aceitável falha... tire esse texto
+// enorme, não precisa dessa explicação"): rótulo curto, em português, do tipo
+// de documento REALMENTE detectado no conteúdo -- usado para compor um alerta
+// mínimo (é ou não é o documento esperado + o que o documento diz), em vez do
+// texto longo anterior. Cobre tanto os códigos internos do classificador
+// central (`classificadorDocumentalCentral.ts`, em maiúsculas) quanto os do
+// classificador determinístico de comprovante de regime
+// (`extracaoDocumentalLocal.ts`, em minúsculas).
+const ROTULOS_TIPO_DETECTADO: Record<string, string> = {
+  ECF: 'ECF', ecf: 'ECF',
+  RECIBO_ECF: 'Recibo de ECF', recibo_ecf: 'Recibo de ECF',
+  PGDAS_D: 'PGDAS-D (Simples Nacional)', pgdas_d: 'PGDAS-D (Simples Nacional)',
+  RECIBO_PGDAS: 'Recibo de PGDAS-D (Simples Nacional)', recibo_pgdas: 'Recibo de PGDAS-D (Simples Nacional)',
+  DCTFWEB_MIT: 'DCTFWeb/MIT', dctf_mit: 'DCTFWeb/MIT',
+  DARF: 'DARF', darf: 'DARF',
+  ECD: 'ECD', ecd: 'ECD',
+  LIVRO_CAIXA: 'Livro Caixa', livro_caixa: 'Livro Caixa',
+  CND: 'CND', CPEND: 'CPEND', CADIN: 'CADIN', PGFN: 'PGFN', CENPROT: 'CENPROT',
+  SITUACAO_FISCAL: 'Situação Fiscal', SCR: 'SCR', CCS: 'CCS', CCF: 'CCF', SERASA: 'SERASA',
+};
+function descreverTipoDetectadoResumido(tipoDetectado: unknown): string | null {
+  const chave = String(tipoDetectado || '').trim();
+  if (!chave || chave === 'DOCUMENTO_NAO_IDENTIFICADO') return null;
+  return ROTULOS_TIPO_DETECTADO[chave] || null;
+}
+
 function normalizarDocumentoCatalogado(extraidos: any, tipoDocumento: string): {
   dados: Record<string, any>;
   evidencias: AnaliseDocumentalGenericaResult['evidencias'];
@@ -1461,24 +1487,36 @@ function normalizarDocumentoCatalogado(extraidos: any, tipoDocumento: string): {
     confianca: normalizarConfianca(evidencia?.confianca),
   }));
   const alertas: AlertaDocumental[] = [];
-  if (bruto.documento_compativel === false) {
-    // CORREÇÃO (2026-08-31, "tem que deixar claro que essa empresa não é mais
-    // optante do simples"): a mensagem genérica ("não foi reconhecido como
-    // X") é tecnicamente correta mas não diz ao usuário humano O QUE o
-    // documento realmente é nem por que ele está desatualizado. Quando os
-    // próprios dados lidos do arquivo (situação no Simples, regime
-    // tributário, opção MEI) indicam um comprovante do Simples Nacional, a
-    // mensagem passa a afirmar isso explicitamente e recomenda os documentos
-    // corretos para o regime vigente -- em vez de deixar a pessoa adivinhar.
-    const situacaoSimplesLida = String(bruto.situacao_simples ?? comprovados.situacao_simples ?? '').trim();
-    const regimeLido = String(bruto.regime_tributario ?? comprovados.regime_tributario ?? '').trim();
-    const pareceComprovanteSimples = /^(optante|excluido)/i.test(situacaoSimplesLida)
-      || /simples\s+nacional|mei\s*\/?\s*simei/i.test(regimeLido)
-      || bruto.opcao_mei === true;
-    const mensagem = pareceComprovanteSimples
-      ? `O arquivo não foi reconhecido como ${documentLabel(tipoDocumento)}. Os dados lidos${situacaoSimplesLida ? ` (Situação no Simples Nacional: ${situacaoSimplesLida})` : ''} indicam um comprovante do SIMPLES NACIONAL (ex.: PGDAS/PGMEI) -- não serve como comprovação do regime tributário atual exigida neste campo, mesmo que a empresa já tenha sido optante no passado. Anexe o ECF, DCTF/DCTFWeb, DARF ou Livro Caixa correspondente ao regime tributário vigente da empresa.`
-      : `O arquivo não foi reconhecido como ${documentLabel(tipoDocumento)}.`;
-    alertas.push({ codigo: 'documento_catalogado_incompativel', mensagem, severidade: 'alta', recomendacao: 'Reclassificar o arquivo ou anexar o documento solicitado.' });
+  // Conjunto de tipos com classificação central (`classificadorDocumentalCentral.ts`)
+  // -- movido para antes do bloco de `documento_compativel` (era declarado só
+  // mais abaixo) porque agora os dois sinais de incompatibilidade (o local/IA
+  // aqui e o classificador central mais adiante) são consolidados num ÚNICO
+  // alerta para esses tipos, em vez de dois alertas quase idênticos ("duplicidade"
+  // relatada pelo usuário: o mesmo problema descrito duas vezes, com palavras
+  // diferentes).
+  const tiposCriticos = new Set([
+    'ecf', 'recibo_ecf', 'pgdas', 'pgdas_d', 'recibo_pgdas', 'dctf', 'dctfweb', 'mit', 'darf', 'ecd', 'recibo_ecd', 'livro_caixa',
+    'cnd', 'cnd_cnpj', 'cnd_cpf', 'cnd_cpend', 'cadin_cnpj', 'cadin_cpf', 'pgfn_cnpj', 'pgfn_cpf',
+    'cenprot_cnpj', 'cenprot_cpf', 'situacao_fiscal_cnpj', 'situacao_fiscal_cpf',
+  ]);
+  // Dados lidos do próprio arquivo (independente de ele ser ou não o
+  // documento esperado) -- usados para responder à segunda pergunta exigida
+  // pelo usuário ("o que o documento diz": enquadramento/regime/tipo de
+  // empresa), tanto no alerta genérico abaixo quanto no alerta consolidado
+  // mais adiante (bloco `tiposCriticos`).
+  const situacaoSimplesLida = String(bruto.situacao_simples ?? comprovados.situacao_simples ?? '').trim();
+  const regimeLido = String(bruto.regime_tributario ?? comprovados.regime_tributario ?? '').trim();
+  const enquadramentoLido = bruto.opcao_mei === true
+    ? 'MEI/SIMEI'
+    : regimeLido || (situacaoSimplesLida ? `Simples Nacional (${situacaoSimplesLida})` : null);
+  const brutoIncompativel = bruto.documento_compativel === false;
+  if (brutoIncompativel && !tiposCriticos.has(tipoDocumento)) {
+    // CORREÇÃO (2026-08-31, "não é mais aceitável falha... tire esse texto
+    // enorme, não precisa dessa explicação"): a única informação exigida é
+    // (1) que o documento não é o esperado e (2) o que ele diz sobre
+    // enquadramento/regime -- nada de explicação longa ou recomendação.
+    const mensagem = `Documento incorreto para "${documentLabel(tipoDocumento)}" -- não validado.${enquadramentoLido ? ` Enquadramento indicado no arquivo: ${enquadramentoLido}.` : ''}`;
+    alertas.push({ codigo: 'documento_catalogado_incompativel', mensagem, severidade: 'alta' });
   }
   const confianca = normalizarConfianca(bruto.confianca ?? bruto.nivel_confianca);
   if (confianca !== null && confianca < 0.72) {
@@ -1539,28 +1577,27 @@ function normalizarDocumentoCatalogado(extraidos: any, tipoDocumento: string): {
     texto: textoLocal,
     competencia: bruto.competencia || { inicio: bruto.competencia_inicio || null, fim: bruto.competencia_fim || null },
   });
-  const tiposCriticos = new Set([
-    'ecf', 'recibo_ecf', 'pgdas', 'pgdas_d', 'recibo_pgdas', 'dctf', 'dctfweb', 'mit', 'darf', 'ecd', 'recibo_ecd', 'livro_caixa',
-    'cnd', 'cnd_cnpj', 'cnd_cpf', 'cnd_cpend', 'cadin_cnpj', 'cadin_cpf', 'pgfn_cnpj', 'pgfn_cpf',
-    'cenprot_cnpj', 'cenprot_cpf', 'situacao_fiscal_cnpj', 'situacao_fiscal_cpf',
-  ]);
   if (tiposCriticos.has(tipoDocumento)) {
-    if (classificacao.identidade_status === 'INCOMPATIVEL') {
-      // CORREÇÃO (2026-08-31, "tem que deixar claro que essa empresa não é
-      // mais optante do simples"): quando o classificador central detecta que
-      // o conteúdo real é um PGDAS-D (ou o recibo dele) -- ou seja, prova do
-      // Simples Nacional -- em vez de um comprovante do regime atual, a
-      // mensagem passa a dizer isso em português claro, não só os códigos
-      // internos do classificador (PGDAS_D/RECIBO_PGDAS).
-      const detectadoEhPgdas = classificacao.tipo_detectado === 'PGDAS_D' || classificacao.tipo_detectado === 'RECIBO_PGDAS';
-      const explicacaoPgdas = detectadoEhPgdas
-        ? ` O conteúdo lido corresponde a um comprovante do SIMPLES NACIONAL (${classificacao.tipo_detectado === 'PGDAS_D' ? 'PGDAS-D' : 'recibo de entrega do PGDAS-D'}), não ao regime tributário atual da empresa. Anexe este arquivo no campo de PGDAS/PGMEI e reserve este campo para o comprovante do regime vigente (ECF, DCTFWeb/MIT, DARF ou Livro Caixa).`
-        : '';
+    if (classificacao.identidade_status === 'INCOMPATIVEL' || brutoIncompativel) {
+      // CORREÇÃO (2026-08-31, "não é mais aceitável falha... não ler um outro
+      // documento junto com duplicidade"): antes, este bloco e o bloco de
+      // `bruto.documento_compativel === false` acima podiam gerar DOIS alertas
+      // quase idênticos para o mesmo problema (ex.: um PGDAS-D no slot do ECF
+      // disparava tanto "documento_catalogado_incompativel" quanto
+      // "documento_catalogado_tipo_incompativel", cada um com um texto
+      // diferente para a mesma causa). Agora, para os tipos críticos, os dois
+      // sinais (classificador central e classificador determinístico
+      // local/IA) resultam em UM ÚNICO alerta, com o texto mínimo exigido:
+      // só (1) se é ou não o documento esperado e (2) o que o documento em si
+      // afirma sobre enquadramento/regime -- nada de explicação longa.
+      const tipoDetectadoLabel = descreverTipoDetectadoResumido(classificacao.tipo_detectado)
+        || descreverTipoDetectadoResumido(bruto.tipo_detectado)
+        || null;
+      const mensagem = `Documento incorreto para "${documentLabel(tipoDocumento)}"${tipoDetectadoLabel ? ` -- conteúdo identificado: ${tipoDetectadoLabel}` : ''}. Não validado.${enquadramentoLido ? ` Enquadramento indicado no arquivo: ${enquadramentoLido}.` : ''}`;
       alertas.push({
         codigo: 'documento_catalogado_tipo_incompativel',
-        mensagem: `Documento incompatível. Esperado ${classificacao.tipo_esperado}; detectado ${classificacao.tipo_detectado}.${explicacaoPgdas}`,
+        mensagem,
         severidade: 'alta',
-        recomendacao: 'Preservar o arquivo no slot original e anexar o documento correto para o requisito.',
       });
     } else if (classificacao.identidade_status === 'NAO_IDENTIFICADO') {
       alertas.push({

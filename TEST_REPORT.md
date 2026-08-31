@@ -1,12 +1,19 @@
-# Relatório de Testes — 31/08/2026 (atualizado, Rodada 7 — causa raiz definitiva do PGDAS no slot de ECF)
+# Relatório de Testes — 31/08/2026 (atualizado, Rodada 8 — mensagem mínima, fim da duplicidade de alertas, selo visual correto)
 
 ## Resultado final
 
 ```
-Test Files  81 passed (81)
-     Tests  738 passed (738)
-  Duration  28.36s
+Test Files  82 passed (82)
+     Tests  740 passed (740)
+  Duration  ~29s
 ```
+
+## Testes novos ou alterados na Rodada 8 (4 testes: 1 arquivo novo + 1 arquivo alterado)
+
+- `tests/documentacaoConclusaoIncompatibilidade.test.ts` (novo, 2 testes): exercita `montarRelatorioDocumental` de ponta a ponta com um laudo persistido mocado (`documento_compativel: false`, `identidade_status: 'INCOMPATIVEL'`) e alimenta o `resultado_analise` resultante em `estadoVisualDocumento`/`rotuloEstadoDocumento` (`shared/documentalPresentation.ts`). Primeiro teste prova que a conclusão passa a dizer "Documento incorreto... NÃO validado" (não mais o texto genérico) e que o selo visual passa a ser "Documento incompatível" (não mais "Revisão necessária"). Segundo teste prova que um documento realmente consistente continua com a conclusão de sucesso e o selo "Requisito satisfeito" -- sem regressão.
+- **Prova de causa raiz por reversão temporária**: revertendo `dados_extraidos: dados` e o ramo `identidadeIncompativel` em `montarResultadoDetalhadoRelatorio` (`server/routes/documentacao.ts`), o primeiro teste falhou exatamente como o bug relatado (`conclusao` volta a ser "Leitura concluída com observações ou necessidade de revisão.") -- restaurada a correção, os dois testes voltam a passar.
+- `tests/analiseDocumentalPgdasNoSlotDeEcfNaoDeveSerLaundered.test.ts` (atualizado, 2 testes -- mesma contagem, expectativas reescritas): antes esperava DOIS alertas (`documento_catalogado_incompativel` E `documento_catalogado_tipo_incompativel`) com mensagens longas; agora prova que existe um ÚNICO alerta consolidado (`documento_catalogado_tipo_incompativel`; o outro código explicitamente ausente), com mensagem mínima (menos de 200 caracteres, sem `recomendacao`), ainda mencionando "Simples Nacional"/"PGDAS-D"/"não validado". Segundo teste (ECF de verdade, sem regressão) inalterado.
+- **Prova de causa raiz por reversão temporária**: revertendo a condição de exclusão dos tipos críticos no primeiro alerta (voltando a `if (brutoIncompativel)`, sem a checagem `!tiposCriticos.has(...)`), o teste voltou a falhar (o alerta genérico reaparece junto do alerta do classificador central) -- restaurada a correção, o teste volta a passar.
 
 ## Testes novos ou alterados na Rodada 7 (2 testes: 1 arquivo novo + 2 fixtures sintéticos)
 
@@ -28,7 +35,8 @@ Progressão dentro desta sessão, sempre crescendo, nunca encolhendo:
 | Rodada 5 (`...-corrigido-final-20260831-v2.zip`) | 78 (nenhum arquivo novo) | 725 | +1 teste em `tests/documentacaoAnaliseEspecializada.integration.test.ts` -- reprocessamento de laudo já concluído |
 | Rodada 6 (`...-corrigido-final-20260831-v3.zip`) | 79 (+1 arquivo novo) | 727 | +2 testes -- Enquadramento Tributário duplicado no relatório consolidado |
 | Entre a Rodada 6 e esta entrega (não documentado antes -- ver PENDENCIAS_REAIS.md item 12) | 80 (+1 arquivo) | 736 | +9 testes -- `tests/p0LaudosBackfill.test.ts` (classificador central + versionamento de laudos) |
-| Rodada 7 (esta entrega) | 81 (+1 arquivo novo) | 738 | +2 testes -- causa raiz definitiva do PGDAS no slot de ECF (`extrairHibrido` não propagava texto local para o classificador central fora do QSA) |
+| Rodada 7 | 81 (+1 arquivo novo) | 738 | +2 testes -- causa raiz definitiva do PGDAS no slot de ECF (`extrairHibrido` não propagava texto local para o classificador central fora do QSA) |
+| Rodada 8 (esta entrega) | 82 (+1 arquivo novo) | 740 | +2 testes -- selo visual/conclusão explícita para documento incompatível (0 testes líquidos a mais no arquivo de alertas -- reescrito, mesma contagem) |
 
 ## Testes novos ou alterados na Rodada 6 (2 testes: 1 arquivo novo)
 

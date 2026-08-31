@@ -26,6 +26,17 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 // para provar que o resultado final da leitura local prevalece e a IA nem
 // chega a ser consultada.
 //
+// ATUALIZAÇÃO (2026-08-31, feedback do usuário sobre a Rodada 7: "tire esse
+// texto enorme... não ler um outro documento junto com duplicidade"): os dois
+// alertas que antes existiam para este caso (um genérico e outro do
+// classificador central, quase repetindo a mesma explicação longa) foram
+// consolidados num ÚNICO alerta (`documento_catalogado_tipo_incompativel`)
+// com o texto mínimo exigido: só (1) se é ou não o documento esperado e (2) o
+// que o próprio documento afirma sobre enquadramento/regime tributário -- sem
+// explicação longa nem recomendação. As expectativas abaixo foram atualizadas
+// para o novo formato; a garantia de causa raiz (a IA nunca é consultada e o
+// resultado final não é "lavado" por ela) continua sendo a mesma.
+//
 // Os dois PDFs usados são SINTÉTICOS, gerados para este teste com CNPJ e
 // razão social FICTÍCIOS (11.222.333/0001-44, "Empresa Fictícia de Testes
 // Ltda") -- nenhum dado real de cliente é incluído neste repositório. Os
@@ -115,16 +126,18 @@ describe('AnaliseDocumentalService.analisarDocumentoCatalogado -- PGDAS no slot 
     expect(resultado.modelo_ia).toMatch(/^local:/);
     expect(generateContent).not.toHaveBeenCalled();
 
-    const alertaLegado = resultado.alertas.find((a: any) => a.codigo === 'documento_catalogado_incompativel');
-    expect(alertaLegado).toBeTruthy();
-    expect(alertaLegado!.mensagem).toMatch(/simples nacional/i);
-    expect(alertaLegado!.mensagem).toMatch(/pgdas/i);
-    expect(alertaLegado!.mensagem).toMatch(/optante/i);
-
-    const alertaClassificacao = resultado.alertas.find((a: any) => a.codigo === 'documento_catalogado_tipo_incompativel');
-    expect(alertaClassificacao).toBeTruthy();
-    expect(alertaClassificacao!.mensagem).toMatch(/simples nacional/i);
-    expect(alertaClassificacao!.mensagem).toMatch(/pgdas-d/i);
+    // Um ÚNICO alerta consolidado -- não mais dois alertas quase idênticos
+    // ("duplicidade" relatada pelo usuário) -- com o texto mínimo: é ou não é
+    // o documento esperado, e o que o documento diz (enquadramento/regime).
+    expect(resultado.alertas.some((a: any) => a.codigo === 'documento_catalogado_incompativel')).toBe(false);
+    const alerta = resultado.alertas.find((a: any) => a.codigo === 'documento_catalogado_tipo_incompativel');
+    expect(alerta).toBeTruthy();
+    expect(alerta!.mensagem).toMatch(/simples nacional/i);
+    expect(alerta!.mensagem).toMatch(/pgdas-d/i);
+    expect(alerta!.mensagem).toMatch(/n[ãa]o validado/i);
+    // Mensagem mínima: sem a explicação longa/recomendação que existia antes.
+    expect(alerta!.mensagem.length).toBeLessThan(200);
+    expect(alerta!.recomendacao).toBeFalsy();
   });
 
   it('um ECF de verdade continua sendo aceito normalmente (sem regressão)', async () => {

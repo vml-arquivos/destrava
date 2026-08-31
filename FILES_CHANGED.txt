@@ -100,3 +100,28 @@ tests/fixtures/ecf-sintetico.pdf
 
 Total desta rodada: 4 arquivos de código alterados + 6 arquivos de documentação
 alterados + 1 arquivo de teste novo + 2 fixtures sintéticos novos = 13 arquivos.
+
+======================================================================
+Rodada 8 (esta entrega) -- mensagem mínima, fim da duplicidade de alertas,
+selo visual correto (feedback do usuário sobre a própria tela da Rodada 7)
+======================================================================
+
+Arquivos existentes ALTERADOS nesta rodada:
+
+server/services/analiseDocumentalEspecializada.ts   (mensagens mínimas + consolidação dos 2 alertas em 1)
+server/routes/documentacao.ts                       (propaga dados_extraidos; conclusão explícita "não validado")
+tests/analiseDocumentalPgdasNoSlotDeEcfNaoDeveSerLaundered.test.ts (expectativas reescritas para 1 alerta mínimo)
+CHANGELOG_CORRECOES.md
+ROLLBACK_PLAN.md
+TEST_REPORT.md
+BUILD_REPORT.md
+FILES_CHANGED.txt (este arquivo)
+SHA256SUMS.txt
+
+Arquivos NOVOS -- teste:
+
+tests/documentacaoConclusaoIncompatibilidade.test.ts
+
+Total desta rodada: 2 arquivos de código alterados + 1 arquivo de teste
+alterado + 6 arquivos de documentação alterados + 1 arquivo de teste novo
+= 10 arquivos.

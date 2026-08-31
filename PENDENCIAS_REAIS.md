@@ -1,4 +1,6 @@
-# Pendências Reais — 31/08/2026 (Rodada 7 — causa raiz definitiva do PGDAS no slot de ECF)
+# Pendências Reais — 31/08/2026 (atualizado, Rodada 8 — mensagem mínima, fim da duplicidade de alertas, selo visual correto)
+
+**Nota sobre a Rodada 8:** as três críticas do usuário sobre a tela gerada pela Rodada 7 (texto do alerta longo demais, dois alertas duplicados para o mesmo problema, selo "Revisão necessária" em vez de "Documento incompatível") foram todas implementadas nesta rodada -- ver `CHANGELOG_CORRECOES.md`. O item 13 abaixo (visibilidade condicional dos campos por regime tributário) continua pendente, sem alteração desde a Rodada 7 -- não fazia parte do pedido mais recente do usuário.
 
 Lista honesta do que a missão pediu e NÃO foi implementado nesta sessão, com a razão concreta de cada omissão. Nada aqui está descartado por "fora de escopo" sem justificativa -- cada item abaixo é trabalho real, mapeado, que exige mais que uma correção cirúrgica para ser feito com segurança.
 

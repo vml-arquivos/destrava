@@ -216,7 +216,12 @@ function valorResultadoRelatorio(value: unknown): string | null {
   return String(value);
 }
 
-function montarResultadoDetalhadoRelatorio(documento: any, analiseEspecializada: any = null) {
+// Exportada (2026-08-31) apenas para permitir teste unitário direto e
+// determinístico da conclusão/propagação de identidade documental -- ver
+// tests/documentacaoConclusaoIncompatibilidade.test.ts. A função continua
+// sendo uma função pura (sem acesso a banco), então exportá-la não expõe
+// nenhum estado nem muda seu comportamento para os chamadores existentes.
+export function montarResultadoDetalhadoRelatorio(documento: any, analiseEspecializada: any = null) {
   const laudo = documento?.resultado_validacao?.analise_regra_documental;
   const laudoErro = documento?.resultado_validacao?.analise_regra_documental_erro;
   const analiseNormalizada = analiseEspecializada?.resultado_analise || analiseEspecializada || null;
@@ -370,14 +375,33 @@ function montarResultadoDetalhadoRelatorio(documento: any, analiseEspecializada:
     || documento?.consistente === true
     || Boolean(laudo)
     || Boolean(analiseEspecializada);
+  // CORREÇÃO (2026-08-31, "não é mais aceitável que um documento fique no
+  // local de outro documento... como um documento validado, como lido"): até
+  // aqui, um documento incompatível com o slot (ex.: PGDAS-D no lugar do ECF)
+  // recebia a mesma conclusão genérica de "necessidade de revisão" que
+  // qualquer outro motivo de revisão (baixa confiança, campo ambíguo, etc.) --
+  // nunca dizia que o arquivo NÃO é o documento esperado nem que não foi
+  // validado para este campo. `dados` já traz `documento_compativel` e
+  // `identidade_status` (calculados em `normalizarDocumentoCatalogado`,
+  // server/services/analiseDocumentalEspecializada.ts); agora a conclusão
+  // deste campo passa a dizer isso explicitamente, sem ambiguidade.
+  const identidadeIncompativel = dados?.documento_compativel === false || dados?.identidade_status === 'INCOMPATIVEL';
   const resultado = documento?.analisado === false || !temEvidenciaDeAnalise
     ? 'Aguardando leitura documental.'
-    : documento?.consistente === true
-      ? 'Leitura concluída; documento considerado consistente.'
-      : 'Leitura concluída com observações ou necessidade de revisão.';
+    : identidadeIncompativel
+      ? 'Documento incorreto para este campo -- NÃO validado. Anexe o documento correto.'
+      : documento?.consistente === true
+        ? 'Leitura concluída; documento considerado consistente.'
+        : 'Leitura concluída com observações ou necessidade de revisão.';
 
   return {
     conclusao: resultado,
+    // Propaga a identidade/compatibilidade calculada pelo serviço de análise
+    // para a camada visual (`estadoVisualDocumento`, shared/documentalPresentation.ts),
+    // que já sabia checar estes campos mas nunca os recebia daqui -- por isso
+    // o selo ficava em "Revisão necessária" (genérico) em vez de "Documento
+    // incompatível" mesmo com o laudo já sinalizando a incompatibilidade.
+    dados_extraidos: dados,
     diagnostico: diagnosticoFactual || observacoesUnicas[0] || null,
     diagnostico_factual: diagnosticoFactual,
     tipo_documento: documento?.tipo_documento || null,
