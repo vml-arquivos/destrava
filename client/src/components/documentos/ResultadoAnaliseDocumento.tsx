@@ -1,6 +1,12 @@
 import { useState } from "react";
 import { Info } from "lucide-react";
-import { construirSecoesAnaliseDocumento, type DocumentoAnaliseSecao } from "@shared/documentalPresentation";
+import {
+  construirSecoesAnaliseDocumento,
+  estadoVisualDocumento,
+  rotuloEstadoDocumento,
+  type DocumentoAnaliseSecao,
+  type DocumentoEstadoVisual,
+} from "@shared/documentalPresentation";
 
 type ResultadoAnaliseDocumentoProps = {
   resultado: any;
@@ -8,8 +14,13 @@ type ResultadoAnaliseDocumentoProps = {
   compacto?: boolean;
 };
 
-function classesSecao(secao: DocumentoAnaliseSecao): string {
-  if (secao.id === "resultado") return "border-success/20 bg-success/10";
+function classesSecao(secao: DocumentoAnaliseSecao, estado: DocumentoEstadoVisual): string {
+  if (secao.id === "resultado") {
+    if (estado === "aprovado") return "border-success/20 bg-success/10";
+    if (estado === "incompativel") return "border-destructive/20 bg-destructive/10";
+    if (estado === "reanalisar") return "border-destructive/20 bg-destructive/10";
+    return "border-warning/20 bg-warning/10";
+  }
   if (secao.id === "diagnostico_factual") return "border-primary/20 bg-primary/10";
   if (secao.id === "resumo_alteracao") return "border-primary/20 bg-primary/10";
   if (secao.id === "transacoes") return "border-primary/20 bg-primary/10";
@@ -22,8 +33,12 @@ function classesSecao(secao: DocumentoAnaliseSecao): string {
   return "border-border bg-muted";
 }
 
-function classesTitulo(secao: DocumentoAnaliseSecao): string {
-  if (secao.id === "resultado") return "text-success";
+function classesTitulo(secao: DocumentoAnaliseSecao, estado: DocumentoEstadoVisual): string {
+  if (secao.id === "resultado") {
+    if (estado === "aprovado") return "text-success";
+    if (estado === "incompativel" || estado === "reanalisar") return "text-destructive";
+    return "text-warning";
+  }
   if (secao.id === "diagnostico_factual") return "text-primary";
   if (secao.id === "resumo_alteracao") return "text-primary";
   if (secao.id === "transacoes") return "text-primary";
@@ -66,6 +81,7 @@ function BlocoSecao({ secao, texto }: { secao: DocumentoAnaliseSecao; texto: str
 export function ResultadoAnaliseDocumento({ resultado, documento, compacto = false }: ResultadoAnaliseDocumentoProps) {
   const [detalhesAbertos, setDetalhesAbertos] = useState(false);
   const todasSecoes = construirSecoesAnaliseDocumento(resultado, documento);
+  const estado = estadoVisualDocumento(resultado, documento);
   const espacamento = compacto ? "mt-1.5" : "mt-2";
   const texto = compacto ? "text-[9px]" : "text-[10px]";
   const titulo = compacto ? "text-[8px]" : "text-[9px]";
@@ -82,8 +98,11 @@ export function ResultadoAnaliseDocumento({ resultado, documento, compacto = fal
   return (
     <div className="space-y-1.5">
       {principais.map((secao) => (
-        <div key={secao.id} className={`${espacamento} rounded-lg border p-2 ${classesSecao(secao)}`}>
-          <p className={`${titulo} font-black uppercase ${classesTitulo(secao)}`}>{secao.titulo}</p>
+        <div key={secao.id} className={`${espacamento} rounded-lg border p-2 ${classesSecao(secao, estado)}`}>
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <p className={`${titulo} font-black uppercase ${classesTitulo(secao, estado)}`}>{secao.titulo}</p>
+            {secao.id === "resultado" && <span className={`${titulo} rounded-full border px-2 py-0.5 font-black uppercase ${estado === "aprovado" ? "border-success/20 bg-success/10 text-success" : estado === "incompativel" || estado === "reanalisar" ? "border-destructive/20 bg-destructive/10 text-destructive" : "border-warning/20 bg-warning/10 text-warning"}`}>{rotuloEstadoDocumento(estado)}</span>}
+          </div>
           <BlocoSecao secao={secao} texto={texto} />
         </div>
       ))}
@@ -102,8 +121,8 @@ export function ResultadoAnaliseDocumento({ resultado, documento, compacto = fal
           {detalhesAbertos && (
             <div className="mt-1.5 space-y-1.5">
               {detalhes.map((secao) => (
-                <div key={secao.id} className={`rounded-lg border p-2 ${classesSecao(secao)}`}>
-                  <p className={`${titulo} font-black uppercase ${classesTitulo(secao)}`}>{secao.titulo}</p>
+                <div key={secao.id} className={`rounded-lg border p-2 ${classesSecao(secao, estado)}`}>
+                  <p className={`${titulo} font-black uppercase ${classesTitulo(secao, estado)}`}>{secao.titulo}</p>
                   <BlocoSecao secao={secao} texto={texto} />
                 </div>
               ))}

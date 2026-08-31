@@ -179,6 +179,9 @@ export interface Inteligencia360Result {
   rating_interno?: ResultadoRatingInterno;
   elegibilidade_credito?: Array<{ programa_codigo: string; programa_nome: string; elegivel: boolean; status: 'elegivel' | 'nao_elegivel' | 'pendente'; requisitos: Array<{ requisito: string; atendido: boolean | null; evidencia: string | null }>; limitacoes: string[] }>;
   plano_adequacao_credito?: Array<{ prioridade: 'alta' | 'media' | 'baixa'; titulo: string; descricao: string; impacto: string; acao: string; evidencia: Record<string, unknown> }>;
+  linha_tempo_regime?: any[];
+  faturamento_rolling_12?: any | null;
+  cobertura_evidencia_bureau?: any[];
 }
 
 export interface AlertaDocumental360 {
@@ -1147,6 +1150,10 @@ export function calcularInteligencia360(params: {
   falhaConsultaDocumental?: boolean;
   // Última análise Receita + Cartão CNPJ, usada apenas no portão inicial.
   analiseCnpj?: any | null;
+  // Evidências P0 opcionais, carregadas pelo endpoint quando as migrations 100–102 existem.
+  linhaTempoRegime?: any[];
+  faturamentoRolling12?: any | null;
+  coberturaEvidenciaBureau?: any[];
 }): Inteligencia360Result {
   const { empresa, socios, documentos, simulacoes, contratos, historico, followups } = params;
   const acompanhamentoAtivo = params.acompanhamentoAtivo ?? null;
@@ -1154,6 +1161,9 @@ export function calcularInteligencia360(params: {
   const eventosRotina = safeArray<any>(params.eventosRotina);
   const analisesDocumentais = safeArray<any>(params.analisesDocumentais);
   const falhaConsultaDocumental = params.falhaConsultaDocumental === true;
+  const linha_tempo_regime = safeArray<any>(params.linhaTempoRegime);
+  const faturamento_rolling_12 = params.faturamentoRolling12 ?? null;
+  const cobertura_evidencia_bureau = safeArray<any>(params.coberturaEvidenciaBureau);
   const consistencia_documental_avancada = consolidarConsistenciaDocumental(analisesDocumentais);
   const etapa_identidade_documental = consolidarEtapaIdentidadeDocumental({
     empresa,
@@ -1383,5 +1393,8 @@ export function calcularInteligencia360(params: {
     rating_interno,
     elegibilidade_credito,
     plano_adequacao_credito,
+    linha_tempo_regime,
+    faturamento_rolling_12,
+    cobertura_evidencia_bureau,
   };
 }

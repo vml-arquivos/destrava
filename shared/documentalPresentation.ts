@@ -362,3 +362,62 @@ export function construirSecoesAnaliseDocumento(resultado: any = {}, documento: 
   if (validacoesRealizadas.length) secoes.push({ id: "validacoes", titulo: "Checklist técnico de validação", itens: validacoesRealizadas, colapsavel: true });
   return adicionarConfiancaLeitura(secoes, resultado, documento);
 }
+
+
+export type DocumentoEstadoVisual = "aprovado" | "revisao" | "incompativel" | "reanalisar" | "aguardando";
+
+function statusVisualNormalizado(value: unknown): string {
+  return normalizar(value).replace(/[ -]+/g, "_");
+}
+
+/**
+ * A camada visual nunca transforma um laudo explicitamente incompatível,
+ * stale, superseded, em reanálise ou com requisito não satisfeito em sucesso.
+ * A ausência de um marcador negativo só é aprovada quando o próprio laudo
+ * está concluído; ausência de laudo permanece aguardando.
+ */
+export function estadoVisualDocumento(resultado: any = {}, documento: any = {}): DocumentoEstadoVisual {
+  const lifecycle = statusVisualNormalizado(resultado?.analysis_status || documento?.analysis_status);
+  if (["stale", "superseded", "reanalise_necessaria", "reanalise", "reanalisar_necessario", "reanalisar_necessaria"].includes(lifecycle)) {
+    return "reanalisar";
+  }
+
+  const dadosExtraidos = resultado?.dados_extraidos && typeof resultado.dados_extraidos === "object" ? resultado.dados_extraidos : {};
+  const classificacao = resultado?.classificacao || resultado?.classificacao_documental || resultado?.classificacao_central || dadosExtraidos?.classificacao || {};
+  const identidade = statusVisualNormalizado(
+    classificacao?.identidade_status || resultado?.identidade_status || dadosExtraidos?.identidade_status || resultado?.tipo_status,
+  );
+  const tipoEsperado = statusVisualNormalizado(classificacao?.tipo_esperado || resultado?.tipo_esperado || dadosExtraidos?.tipo_esperado);
+  const tipoDetectado = statusVisualNormalizado(classificacao?.tipo_detectado || resultado?.tipo_detectado || dadosExtraidos?.tipo_detectado);
+  if (resultado?.documento_compativel === false || dadosExtraidos?.documento_compativel === false || classificacao?.documento_compativel === false || identidade === "incompativel" || (tipoEsperado && tipoDetectado && tipoEsperado !== tipoDetectado)) {
+    return "incompativel";
+  }
+  if (resultado?.satisfaz_requisito === false || dadosExtraidos?.satisfaz_requisito === false || classificacao?.satisfaz_requisito === false || resultado?.cobertura_status === "NAO_SATISFAZ" || dadosExtraidos?.cobertura_status === "NAO_SATISFAZ" || classificacao?.cobertura_status === "NAO_SATISFAZ") {
+    return "revisao";
+  }
+
+  const status = statusVisualNormalizado(resultado?.status || dadosExtraidos?.status || documento?.status);
+  const conclusao = statusVisualNormalizado(resultado?.conclusao || documento?.observacao);
+  if (resultado?.revisao_humana_necessaria === true || dadosExtraidos?.revisao_humana_necessaria === true || documento?.exige_revisao_humana === true || ["revisao_humana", "falhou", "recusado", "pendente_validacao", "aguardando_analise"].includes(status)) {
+    return "revisao";
+  }
+  if (documento?.analisado === false || ["aguardando", "aguardando_analise", "anexo_recebido"].includes(status) || /aguardando|pendente/.test(conclusao)) {
+    return "aguardando";
+  }
+
+  if (documento?.consistente === false) return "revisao";
+  if (documento?.consistente === true || status === "concluido" || status === "validado" || /consistente|satisfeito|aprovado/.test(conclusao)) {
+    return "aprovado";
+  }
+  return "revisao";
+}
+
+export function rotuloEstadoDocumento(estado: DocumentoEstadoVisual): string {
+  switch (estado) {
+    case "aprovado": return "Requisito satisfeito";
+    case "incompativel": return "Documento incompatível";
+    case "reanalisar": return "Reanálise necessária";
+    case "aguardando": return "Aguardando análise";
+    case "revisao": return "Revisão necessária";
+  }
+}

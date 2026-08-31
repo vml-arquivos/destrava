@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { construirSecoesAnaliseDocumento } from "@shared/documentalPresentation";
+import { construirSecoesAnaliseDocumento, estadoVisualDocumento } from "@shared/documentalPresentation";
 
 // Reprojetado a pedido do usuário (relatório documental "poluído", com uma
 // seção dizendo "validado" e, logo abaixo, um checklist técnico dizendo "não
@@ -217,5 +217,14 @@ describe("construirSecoesAnaliseDocumento", () => {
     const campos = secoes.flatMap((secao) => secao.campos || []);
     expect(campos.filter((campo) => campo.label === "Confiança da leitura")).toHaveLength(1);
     expect(campos).toContainEqual({ label: "Confiança da leitura", valor: "87%" });
+  });
+
+  it("não pinta de verde documento incompatível, stale, não satisfeito ou sem análise", () => {
+    expect(estadoVisualDocumento({ documento_compativel: false, satisfaz_requisito: false }, { consistente: true })).toBe("incompativel");
+    expect(estadoVisualDocumento({ analysis_status: "REANALISE_NECESSARIA", conclusao: "Leitura concluída; documento considerado consistente." }, { consistente: true })).toBe("reanalisar");
+    expect(estadoVisualDocumento({ satisfaz_requisito: false, identidade_status: "IDENTIFICADO" }, { consistente: true })).toBe("revisao");
+    expect(estadoVisualDocumento({ dados_extraidos: { tipo_esperado: "ECF", tipo_detectado: "PGDAS_D", documento_compativel: false, satisfaz_requisito: false } }, { consistente: true })).toBe("incompativel");
+    expect(estadoVisualDocumento({}, { analisado: false, consistente: true })).toBe("aguardando");
+    expect(estadoVisualDocumento({ status: "concluido", satisfaz_requisito: true }, { consistente: true })).toBe("aprovado");
   });
 });

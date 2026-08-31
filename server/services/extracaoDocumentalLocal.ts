@@ -17,8 +17,10 @@ export type TipoDocumentoLocal =
   | 'comprovante_residencia'
   | 'extrato_bancario'
   | 'ecf'
+  | 'pgdas_d'
   | 'dctf_mit'
   | 'darf'
+  | 'ecd'
   | 'livro_caixa';
 
 export interface ExtracaoDocumentalLocalResult {
@@ -943,14 +945,16 @@ export function parseComprovanteRegime(tipo: TipoDocumentoLocal, texto: string):
   const base = parseSimples(texto);
   const normalizado = textoNormalizado(texto);
   const marcadores: Record<string, RegExp> = {
-    ecf: /\becf\b|escrituracao contabil fiscal|escrituração contábil fiscal|sped\s+ecf/i,
+    ecf: /(?:recibo.{0,80})?\becf\b|escrituracao contabil fiscal|escrituração contábil fiscal|sped\s+ecf/i,
+    pgdas_d: /(?:recibo.{0,80})?pgdas[- ]?d|programa gerador do documento de arrecadacao do simples/i,
     dctf_mit: /\bdctf(?:web)?\b|mit\b|modulo de inclusao de tributos|módulo de inclusão de tributos/i,
     darf: /\bdarf\b|documento de arrecadacao de receitas federais|documento de arrecadação de receitas federais/i,
+    ecd: /(?:recibo.{0,80})?\becd\b|escrituracao contabil digital|escrituração contábil digital|sped\s+contabil/i,
     livro_caixa: /livro[- ]caixa/i,
   };
   const marcadorDoTipo = marcadores[tipo]?.test(normalizado) === true;
   const regimeDetectado = base.dados.regime_confirmado === true;
-  const documentoCompativel = marcadorDoTipo || regimeDetectado;
+  const documentoCompativel = marcadorDoTipo && regimeDetectado;
   return {
     dados: {
       ...base.dados,
@@ -972,7 +976,7 @@ export function analisarTextoDocumentoLocal(tipo: TipoDocumentoLocal, texto: str
   if (tipo === 'extrato_bancario') return parseExtratoBancario(texto);
   // ECF, DCTF/DCTFWeb, DARF e Livro Caixa compartilham a detecção
   // conservadora de regime, mas preservam sua própria compatibilidade documental.
-  if (tipo === 'ecf' || tipo === 'dctf_mit' || tipo === 'darf' || tipo === 'livro_caixa') return parseComprovanteRegime(tipo, texto);
+  if (tipo === 'ecf' || tipo === 'pgdas_d' || tipo === 'dctf_mit' || tipo === 'darf' || tipo === 'ecd' || tipo === 'livro_caixa') return parseComprovanteRegime(tipo, texto);
   return parseContratoSocialAlteracao(texto);
 }
 

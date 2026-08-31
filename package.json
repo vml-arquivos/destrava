@@ -19,6 +19,7 @@
     "test:watch": "vitest",
     "test:coverage": "vitest run --coverage",
     "migrate:nexus-catalog": "node scripts/migrate-nexus-catalog.mjs",
+    "backfill:laudos": "node --import tsx scripts/backfill-laudos.ts",
     "prerender": "node scripts/prerender.mjs"
   },
   "dependencies": {

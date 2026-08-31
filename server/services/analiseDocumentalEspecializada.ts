@@ -17,6 +17,10 @@ import {
   validarFaturamentoExtraido,
 } from './regrasDocumentaisCredito';
 import { canonicalizeDocumentType, documentAnalysisConfig, documentLabel, getDocumentCatalogEntry } from '../../shared/documentTypes';
+import { classificarResultadoPersistido, type ClassificacaoDocumentalResult } from './classificadorDocumentalCentral';
+import { registrarPeriodoRegime } from './regimeTributarioTemporalService';
+import { registrarFaturamentoCompetencia } from './faturamentoRolling12MesesService';
+import { detectarRequisitosCobertosPeloTexto, detectarStatusCertidaoDebitos, registrarCoberturaEvidencia } from './coberturaEvidenciaBureauService';
 
 const { Pool } = pkg;
 
@@ -1400,6 +1404,8 @@ function normalizarDocumentoCatalogado(extraidos: any, tipoDocumento: string): {
   evidencias: AnaliseDocumentalGenericaResult['evidencias'];
   camposInferidos: Record<string, unknown>;
   alertas: AlertaDocumental[];
+  classificacao?: ClassificacaoDocumentalResult;
+  textoFonte: string | null;
 } {
   const bruto = extraidos && typeof extraidos === 'object' ? extraidos : {};
   const { __texto_local: textoLocal, ...brutoPersistivel } = bruto;
@@ -1424,7 +1430,10 @@ function normalizarDocumentoCatalogado(extraidos: any, tipoDocumento: string): {
     alertas.push({ codigo: 'documento_catalogado_sem_evidencia', mensagem: 'Não foram encontrados campos comprovados nem evidências suficientes.', severidade: 'alta', recomendacao: 'Solicitar novo arquivo legível e encaminhar para revisão humana.' });
   }
 
-  const tiposComprovacaoRegime = new Set(['ecf', 'recibo_ecf', 'dctf', 'dctfweb', 'mit', 'darf', 'livro_caixa']);
+  const tiposComprovacaoRegime = new Set([
+    'ecf', 'recibo_ecf', 'pgdas', 'pgdas_d', 'recibo_pgdas',
+    'dctf', 'dctfweb', 'mit', 'darf', 'ecd', 'recibo_ecd', 'livro_caixa',
+  ]);
   const dadosRegime: Record<string, any> = {};
   if (tiposComprovacaoRegime.has(tipoDocumento)) {
     const textoParaRegime = [textoLocal, bruto.texto, bruto.ocr_texto, comprovados.texto, comprovados.regime_tributario, bruto.regime_tributario]
@@ -1433,7 +1442,7 @@ function normalizarDocumentoCatalogado(extraidos: any, tipoDocumento: string): {
     const detectado = detectarRegimeTributarioDeclarado(textoParaRegime);
     const regimeExplicito = [comprovados.regime_tributario, bruto.regime_tributario]
       .map((valor) => String(valor || '').trim())
-      .find((valor) => /^(?:lucro\s+presumido|lucro\s+real|lucro\s+arbitrado)$/i.test(valor)) || null;
+      .find((valor) => /^(?:mei\s*\/\s*simei|simples\s+nacional|lucro\s+presumido|lucro\s+real|lucro\s+arbitrado|imune\s+ou\s+isenta)$/i.test(valor)) || null;
     const regime = detectado.ambiguo ? null : regimeExplicito || detectado.regime;
     if (detectado.ambiguo) {
       alertas.push({ codigo: 'regime_tributario_ambiguo', mensagem: 'O documento apresenta mais de um regime tributário possível; a confirmação foi retida para revisão humana.', severidade: 'alta', recomendacao: 'Conferir a declaração efetiva no documento e anexar uma evidência inequívoca.' });
@@ -1452,20 +1461,156 @@ function normalizarDocumentoCatalogado(extraidos: any, tipoDocumento: string): {
     }
   }
 
+  const classificacao = classificarResultadoPersistido({
+    tipoEsperado: tipoDocumento,
+    resultado: { ...brutoPersistivel, campos_comprovados: comprovados },
+    texto: textoLocal,
+    competencia: bruto.competencia || { inicio: bruto.competencia_inicio || null, fim: bruto.competencia_fim || null },
+  });
+  const tiposCriticos = new Set([
+    'ecf', 'recibo_ecf', 'pgdas', 'pgdas_d', 'recibo_pgdas', 'dctf', 'dctfweb', 'mit', 'darf', 'ecd', 'recibo_ecd', 'livro_caixa',
+    'cnd', 'cnd_cnpj', 'cnd_cpf', 'cnd_cpend', 'cadin_cnpj', 'cadin_cpf', 'pgfn_cnpj', 'pgfn_cpf',
+    'cenprot_cnpj', 'cenprot_cpf', 'situacao_fiscal_cnpj', 'situacao_fiscal_cpf',
+  ]);
+  if (tiposCriticos.has(tipoDocumento)) {
+    if (classificacao.identidade_status === 'INCOMPATIVEL') {
+      alertas.push({
+        codigo: 'documento_catalogado_tipo_incompativel',
+        mensagem: `Documento incompatível. Esperado ${classificacao.tipo_esperado}; detectado ${classificacao.tipo_detectado}.`,
+        severidade: 'alta',
+        recomendacao: 'Preservar o arquivo no slot original e anexar o documento correto para o requisito.',
+      });
+    } else if (classificacao.identidade_status === 'NAO_IDENTIFICADO') {
+      alertas.push({
+        codigo: 'documento_catalogado_tipo_nao_identificado',
+        mensagem: 'A identidade do documento não pôde ser comprovada pelo texto disponível.',
+        severidade: 'alta',
+        recomendacao: 'Encaminhar para revisão humana; ausência de evidência não satisfaz o requisito.',
+      });
+    }
+  }
+
+  const regimeFoiComprovado = !tiposComprovacaoRegime.has(tipoDocumento) || dadosRegime.regime_confirmado === true;
+  const satisfazRequisito = classificacao.satisfaz_requisito && regimeFoiComprovado;
   const dados = {
     ...brutoPersistivel,
     ...dadosRegime,
     campos_comprovados: comprovados,
     campos_inferidos: camposInferidos,
     evidencias,
-    documento_compativel: bruto.documento_compativel !== false,
+    documento_compativel: tiposCriticos.has(tipoDocumento)
+      ? bruto.documento_compativel !== false && satisfazRequisito
+      : bruto.documento_compativel !== false,
     confianca,
     tipo_documento: tipoDocumento,
     competencia: bruto.competencia || { inicio: bruto.competencia_inicio || null, fim: bruto.competencia_fim || null },
     validade: bruto.validade || { inicio: bruto.validade_inicio || null, fim: bruto.validade_fim || null },
     separacao_comprovado_inferido: true,
+    tipo_esperado: classificacao.tipo_esperado,
+    tipo_detectado: classificacao.tipo_detectado,
+    satisfaz_requisito: satisfazRequisito,
+    identidade_status: classificacao.identidade_status,
+    temporalidade_status: classificacao.temporalidade_status,
+    cobertura_status: classificacao.cobertura_status,
+    classificacao_motivo: classificacao.motivo,
   };
-  return { dados, evidencias, camposInferidos, alertas };
+  return { dados, evidencias, camposInferidos, alertas, classificacao, textoFonte: textoLocal || null };
+}
+
+function competenciaInicio(value: unknown): string | null {
+  const texto = String(value || '').trim();
+  if (/^\d{4}-\d{2}$/.test(texto)) return `${texto}-01`;
+  if (/^\d{4}-\d{2}-\d{2}/.test(texto)) return texto.slice(0, 10);
+  const br = texto.match(/^(\d{2})\/(\d{2})\/(\d{4})$/);
+  return br ? `${br[3]}-${br[2]}-${br[1]}` : null;
+}
+
+function competenciaFim(value: unknown): string | null {
+  const inicio = competenciaInicio(value);
+  if (!inicio) return null;
+  if (!/^\d{4}-\d{2}-01$/.test(inicio)) return inicio;
+  const data = new Date(`${inicio}T12:00:00.000Z`);
+  data.setUTCMonth(data.getUTCMonth() + 1, 0);
+  return data.toISOString().slice(0, 10);
+}
+
+function extrairCompetenciasComValor(dados: Record<string, any>): Array<{ ano: number; mes: number; valor: number }> {
+  const candidatos = [dados.competencias_mensais, dados.faturamento_mensal, dados.competencias, dados.meses].find(Array.isArray) || [];
+  return candidatos.flatMap((item: any) => {
+    const competencia = String(item?.competencia || item?.mes_referencia || '').trim();
+    const match = competencia.match(/^(20\d{2})[-\/]([01]?\d)$/);
+    const ano = Number(item?.ano || match?.[1]);
+    const mes = Number(item?.mes || match?.[2]);
+    const valor = Number(item?.valor ?? item?.faturamento ?? item?.receita_bruta);
+    return Number.isInteger(ano) && ano >= 2000 && Number.isInteger(mes) && mes >= 1 && mes <= 12 && Number.isFinite(valor) && valor >= 0
+      ? [{ ano, mes, valor }]
+      : [];
+  });
+}
+
+async function persistirEvidenciasP0(
+  db: Queryable,
+  empresaId: string,
+  arquivoId: string,
+  tipoDocumento: string,
+  dados: Record<string, any>,
+  evidencias: AnaliseDocumentalGenericaResult['evidencias'],
+  textoFonte: string | null,
+): Promise<void> {
+  const confianca = typeof dados.confianca === 'number' ? dados.confianca : null;
+  const fonte = String(dados.fonte_extracao || 'documento_ia').slice(0, 120);
+  const inicio = competenciaInicio(dados.competencia?.inicio || dados.competencia_inicio || dados.ano_calendario);
+  const fim = competenciaFim(dados.competencia?.fim || dados.competencia_fim || inicio);
+
+  if (dados.regime_confirmado === true && dados.regime_tributario) {
+    await registrarPeriodoRegime(db, {
+      empresaId,
+      regime: String(dados.regime_tributario),
+      dataEvidenciaInicio: inicio || new Date().toISOString().slice(0, 10),
+      dataEvidenciaFim: fim,
+      fonte,
+      confianca,
+      documentoEvidenciaId: arquivoId,
+      observacao: `Regime extraído de ${tipoDocumento}.`,
+    });
+  }
+
+  for (const competencia of extrairCompetenciasComValor(dados)) {
+    await registrarFaturamentoCompetencia(db, {
+      empresaId,
+      ano: competencia.ano,
+      mes: competencia.mes,
+      valor: competencia.valor,
+      fonte,
+      documentoId: arquivoId,
+      regimeNoPeriodo: dados.regime_tributario || null,
+      confianca,
+      observacao: `Competência extraída de ${tipoDocumento}.`,
+    });
+  }
+
+  const texto = [
+    textoFonte,
+    ...evidencias.map((evidencia) => `${evidencia.campo}: ${String(evidencia.valor ?? '')} ${evidencia.trecho || ''}`),
+  ].filter(Boolean).join('\n');
+  const requisitos = detectarRequisitosCobertosPeloTexto(texto);
+  if (!requisitos.length) return;
+  const statusCertidao = detectarStatusCertidaoDebitos(texto);
+  const statusExplicito = String(dados.status_bureau || dados.status || dados.situacao || dados.resultado || '').toLowerCase();
+  const bureauSatisfeito = /regular|nada\s+consta|sem\s+restri[cç][aã]o|adimplente|inexist[eê]ncia\s+de\s+restri[cç][aã]o/.test(statusExplicito);
+  for (const requirementCode of requisitos) {
+    const status = ['CND_FEDERAL', 'CNDT'].includes(requirementCode)
+      ? statusCertidao || 'PENDENTE'
+      : bureauSatisfeito ? 'SATISFEITO' : 'PENDENTE';
+    await registrarCoberturaEvidencia(db, {
+      documentoId: arquivoId,
+      requirementCode,
+      coverageStatus: status,
+      confidence: confianca,
+      sourceSection: tipoDocumento,
+      extractedValue: { fonte, tipo_documento: tipoDocumento },
+    });
+  }
 }
 
 export class AnaliseDocumentalService {
@@ -1565,7 +1710,7 @@ export class AnaliseDocumentalService {
           confianca: local.confianca,
           fonte_extracao: 'local_deterministica',
           mecanismo_extracao: local.mecanismo,
-          ...(tipo === 'qsa' ? { __texto_local: local.texto } : {}),
+          ...(local.texto ? { __texto_local: local.texto } : {}),
         };
       }
     } catch (error: any) {
@@ -1598,7 +1743,7 @@ export class AnaliseDocumentalService {
           confianca: local!.confianca,
           fonte_extracao: 'local_deterministica',
           mecanismo_extracao: local!.mecanismo,
-          ...(tipo === 'qsa' ? { __texto_local: local!.texto } : {}),
+          ...(local?.texto ? { __texto_local: local.texto } : {}),
           extracao_parcial: true,
           motivo_extracao_parcial: local!.motivo || error?.message || 'Extração local abaixo do limiar de confiança.',
         };
@@ -1727,18 +1872,24 @@ export class AnaliseDocumentalService {
     const promptConfig = documentAnalysisConfig(tipoDocumento);
     const prompt = promptDocumentoCatalogado(tipoDocumento, catalogo.nome, catalogo.categoria, promptConfig?.promptCodigo || `catalogo_${tipoCanonico}`);
     const { documento } = await this.carregarContexto(empresaId, arquivoId);
-    const tipoLocal: TipoDocumentoLocal = tipoDocumento === 'ecf' || tipoDocumento === 'recibo_ecf'
+      const tipoLocal: TipoDocumentoLocal = tipoDocumento === 'ecf' || tipoDocumento === 'recibo_ecf'
       ? 'ecf'
-      : ['dctf', 'dctfweb', 'mit'].includes(tipoDocumento)
-        ? 'dctf_mit'
-        : tipoDocumento === 'darf'
-          ? 'darf'
-          : tipoDocumento === 'livro_caixa'
-            ? 'livro_caixa'
-            : 'contrato_social_alteracao';
+      : ['pgdas', 'pgdas_d', 'recibo_pgdas'].includes(tipoDocumento)
+        ? 'pgdas_d'
+        : ['dctf', 'dctfweb', 'mit'].includes(tipoDocumento)
+          ? 'dctf_mit'
+          : tipoDocumento === 'darf'
+            ? 'darf'
+            : ['ecd', 'recibo_ecd'].includes(tipoDocumento)
+              ? 'ecd'
+              : tipoDocumento === 'livro_caixa'
+                ? 'livro_caixa'
+                : 'contrato_social_alteracao';
     const extraidos = await this.extrairHibrido(documento.caminho_arquivo!, prompt, documento.mime_type || 'application/pdf', tipoLocal, tipoLocal !== 'contrato_social_alteracao');
     const normalizado = normalizarDocumentoCatalogado(extraidos, tipoDocumento);
     const resultadoBase = criarResultado('documento_generico', empresaId, arquivoId, normalizado.dados, normalizado.alertas, this.ultimoModeloUsado);
+    await persistirEvidenciasP0(this.db, empresaId, arquivoId, tipoDocumento, normalizado.dados, normalizado.evidencias, normalizado.textoFonte)
+      .catch((error: any) => console.warn('[P0] Evidências temporais/rolling/bureau indisponíveis; laudo preservado:', error?.message || error));
     return {
       ...resultadoBase,
       tipo_analise: 'documento_generico',

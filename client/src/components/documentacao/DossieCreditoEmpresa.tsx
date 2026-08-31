@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { apiFetch } from "@/lib/api";
 import { ResultadoAnaliseDocumento } from "../documentos/ResultadoAnaliseDocumento";
+import { estadoVisualDocumento, rotuloEstadoDocumento } from "@shared/documentalPresentation";
 import { toast } from "sonner";
 import {
   AlertTriangle,
@@ -853,12 +854,18 @@ function DocumentacaoSocietariaCard({
               validacoes: documentoDados.validacoes || documentoDados.validacoes_realizadas || [],
               observacoes: documentoDados.observacoes || [],
             };
+            const estadoVisual = estadoVisualDocumento(resultado, documentoDados);
+            const classeEstado = estadoVisual === "aprovado"
+              ? "bg-success/20 text-success"
+              : estadoVisual === "incompativel" || estadoVisual === "reanalisar"
+                ? "bg-destructive/20 text-destructive"
+                : "bg-warning/20 text-warning";
             return (
               <div key={`${documento.nome}-${documentoIndex}`} className="mt-3 rounded-xl border border-primary/20 bg-primary/10/50 p-3">
                 <div className="flex flex-wrap items-center justify-between gap-2">
                   <p className="text-[11px] font-extrabold text-foreground">{documento.nome || "Contrato/alteração"}</p>
-                  <span className={`rounded-full px-2 py-0.5 text-[9px] font-extrabold ${documento.consistente ? "bg-success/20 text-success" : "bg-warning/20 text-warning"}`}>
-                    {documento.consistente ? "Leitura consistente" : documento.revisao_humana_necessaria ? "Revisão humana" : "Com ressalvas"}
+                  <span className={`rounded-full px-2 py-0.5 text-[9px] font-extrabold ${classeEstado}`}>
+                    {rotuloEstadoDocumento(estadoVisual)}
                   </span>
                 </div>
                 <ResultadoAnaliseDocumento resultado={resultado} documento={documento} compacto />

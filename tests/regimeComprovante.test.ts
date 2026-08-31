@@ -16,12 +16,12 @@ describe('comprovantes de regime tributário não optante', () => {
     });
   });
 
-  it('preserva o tipo do comprovante e só o considera compatível quando há marcador ou regime lido', () => {
+  it('preserva o tipo do comprovante e só o considera compatível quando há marcador e regime lido', () => {
     const ecf = parseComprovanteRegime('ecf', 'ECF - Escrituração Contábil Fiscal\\nRegime tributário: Lucro Presumido');
     expect(ecf.dados).toMatchObject({ comprovante_regime: true, tipo_comprovante_regime: 'ecf', documento_compativel: true, regime_tributario: 'Lucro Presumido' });
 
     const livroCaixa = parseComprovanteRegime('livro_caixa', 'Livro Caixa\\nmovimentação mensal sem regime declarado');
-    expect(livroCaixa.dados).toMatchObject({ comprovante_regime: true, tipo_comprovante_regime: 'livro_caixa', documento_compativel: true });
+    expect(livroCaixa.dados).toMatchObject({ comprovante_regime: true, tipo_comprovante_regime: 'livro_caixa', documento_compativel: false });
     expect(livroCaixa.dados.regime_confirmado).toBe(false);
 
     const outro = parseComprovanteRegime('ecf', 'Contrato social sem informação fiscal');

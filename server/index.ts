@@ -74,6 +74,9 @@ import { calcularEsteiraCredito } from "./services/esteiraCreditoService";
 import { consolidarHistorico360 } from "./services/historicoClienteService";
 import { normalizeNexusTaskEvent } from "./services/nexusTaskHistoryService";
 import { calcularInteligenciaAcompanhamentoBancario } from "./services/inteligenciaAcompanhamentoBancarioService";
+import { obterLinhaDoTempoRegime } from "./services/regimeTributarioTemporalService";
+import { obterFaturamentoRolling12Meses } from "./services/faturamentoRolling12MesesService";
+import { obterCoberturaPorEmpresa } from "./services/coberturaEvidenciaBureauService";
 import { normalizarPeriodoMensal, normalizarMetas, percentualAtingimento, arredondarMoeda, agruparForecast, agruparMetricasVendas } from "./services/crmSalesMetrics";
 import {
   enviarPendenciaNexus,
@@ -6809,6 +6812,26 @@ async function startServer() {
         console.warn("[Inteligência 360] Análise CNPJ indisponível; fluxo preservado:", error?.message || error);
       }
 
+      // Evidências P0 opcionais: ausência das tabelas em instalações antigas não quebra o 360.
+      let linhaTempoRegime: any[] = [];
+      let faturamentoRolling12: any | null = null;
+      let coberturaEvidenciaBureau: any[] = [];
+      try {
+        linhaTempoRegime = await obterLinhaDoTempoRegime(pool, empresaId);
+      } catch (error: any) {
+        if (error?.code !== '42P01') console.warn('[Inteligência 360] Linha temporal indisponível:', error?.message || error);
+      }
+      try {
+        faturamentoRolling12 = await obterFaturamentoRolling12Meses(pool, empresaId);
+      } catch (error: any) {
+        if (error?.code !== '42P01') console.warn('[Inteligência 360] Rolling 12 indisponível:', error?.message || error);
+      }
+      try {
+        coberturaEvidenciaBureau = await obterCoberturaPorEmpresa(pool, empresaId);
+      } catch (error: any) {
+        if (error?.code !== '42P01') console.warn('[Inteligência 360] Cobertura bureau indisponível:', error?.message || error);
+      }
+
       // Calcular inteligência 360
       const resultado = calcularInteligencia360({
         empresa,
@@ -6824,6 +6847,9 @@ async function startServer() {
         analisesDocumentais: analisesDocumentaisResult.analises,
         falhaConsultaDocumental: analisesDocumentaisResult.falhaConsulta,
         analiseCnpj,
+        linhaTempoRegime,
+        faturamentoRolling12,
+        coberturaEvidenciaBureau,
       });
 
       res.json(resultado);

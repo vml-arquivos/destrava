@@ -14,7 +14,21 @@ import { DOCUMENT_TYPE_CATALOG, canonicalizeDocumentType, documentAnalysisConfig
 import { resolverRegrasDocumentais, type RegraResolvida } from '../services/regrasDocumentaisCredito';
 import { upsertSocioEmpresa } from './socios_documentos';
 import { generateBrandedPdfBuffer } from '../services/brandedPdfLayout';
-import { construirSecoesAnaliseDocumento } from '../../shared/documentalPresentation';
+import {
+  construirSecoesAnaliseDocumento,
+  estadoVisualDocumento,
+  rotuloEstadoDocumento,
+} from '../../shared/documentalPresentation';
+import {
+  CLASSIFIER_VERSION,
+  EXTRACTOR_VERSION,
+  RULE_VERSION,
+  SCHEMA_VERSION,
+  PROMPT_VERSION,
+  calcularAssinaturaAnalise,
+  decidirVersaoLaudo,
+  type AnalysisLifecycleStatus,
+} from '../services/documentalLaudoVersioning';
 
 const { Pool } = pkg;
 const pool = new Pool({
@@ -339,7 +353,7 @@ function montarResultadoDetalhadoRelatorio(documento: any, analiseEspecializada:
     || Boolean(analiseEspecializada);
   const resultado = documento?.analisado === false || !temEvidenciaDeAnalise
     ? 'Aguardando leitura documental.'
-    : documento?.consistente === true || analise?.status === 'concluido'
+    : documento?.consistente === true
       ? 'Leitura concluída; documento considerado consistente.'
       : 'Leitura concluída com observações ou necessidade de revisão.';
 
@@ -395,19 +409,26 @@ async function enriquecerDocumentosAcervoComAnalise(blocos: any[]): Promise<any[
     const laudo = documento?.resultado_validacao?.analise_regra_documental;
     const laudoErro = documento?.resultado_validacao?.analise_regra_documental_erro;
     const conteudoValido = arquivoDocumentoTemConteudo(documento);
-    const possuiLaudo = Boolean(laudo) || Boolean(laudoErro) || Boolean(analiseEspecializada);
+    const lifecycleStatus = String(analiseEspecializada?.analysis_status || '').toUpperCase();
+    const laudoStale = ['STALE', 'SUPERSEDED', 'REANALISE_NECESSARIA'].includes(lifecycleStatus)
+      || analiseEspecializada?.reprocessamento_necessario === true;
+    const possuiLaudo = !laudoStale && (Boolean(laudo) || Boolean(laudoErro) || Boolean(analiseEspecializada));
     const analisado = conteudoValido && possuiLaudo;
-    const especializadaConsistente = Boolean(analiseEspecializada?.consistente)
-      || analiseEspecializada?.status === 'concluido';
+    const especializadaConsistente = !laudoStale && (Boolean(analiseEspecializada?.consistente)
+      || analiseEspecializada?.status === 'concluido');
     const consistente = analiseEspecializada
       ? especializadaConsistente
-      : Boolean(laudo) && documento?.exige_revisao_humana !== true && documento?.consistente !== false;
+      : !laudoStale && Boolean(laudo) && documento?.exige_revisao_humana !== true && documento?.consistente !== false;
     const resultadoAnalise = montarResultadoDetalhadoRelatorio({
       ...documento,
       analisado,
       consistente,
     }, analiseEspecializada);
-    if (!analisado) {
+    if (laudoStale) {
+      (resultadoAnalise as any).status = 'REANALISE_NECESSARIA';
+      resultadoAnalise.conclusao = 'Laudo antigo ou superseded; reanálise necessária antes de considerar o documento válido.';
+      resultadoAnalise.diagnostico = analiseEspecializada?.mensagem_status || 'A versão do motor mudou ou a assinatura do arquivo não confere. O laudo histórico foi preservado e não satisfaz o requisito atual.';
+    } else if (!analisado) {
       resultadoAnalise.conclusao = 'Anexo recebido, aguardando análise documental.';
       if (!resultadoAnalise.diagnostico) {
         resultadoAnalise.diagnostico = 'O arquivo foi anexado, mas ainda não existe laudo concluído para este documento.';
@@ -417,6 +438,7 @@ async function enriquecerDocumentosAcervoComAnalise(blocos: any[]): Promise<any[
       ...documento,
       analisado,
       consistente,
+      laudo_stale: laudoStale,
       resultado_analise: resultadoAnalise,
     };
   }));
@@ -511,7 +533,19 @@ export async function montarRelatorioDocumental(dossie: any) {
     // ausência dela deve esconder uma leitura que a IA de fato concluiu bem.
     // Sem análise especializada para o tipo do documento (ex.: certidões,
     // garantias), o comportamento anterior é preservado.
-    const analiseEspecializadaIndicaConsistente = Boolean(analiseEspecializada?.consistente) || analiseEspecializada?.status === 'concluido';
+    const dadosEspecializados = analiseEspecializada?.dados_extraidos && typeof analiseEspecializada.dados_extraidos === 'object'
+      ? analiseEspecializada.dados_extraidos
+      : {};
+    const classificacaoEspecializada = analiseEspecializada?.classificacao || dadosEspecializados?.classificacao || {};
+    const classificacaoNegativa = analiseEspecializada?.documento_compativel === false
+      || dadosEspecializados?.documento_compativel === false
+      || analiseEspecializada?.satisfaz_requisito === false
+      || dadosEspecializados?.satisfaz_requisito === false
+      || analiseEspecializada?.identidade_status === 'INCOMPATIVEL'
+      || dadosEspecializados?.identidade_status === 'INCOMPATIVEL'
+      || classificacaoEspecializada?.identidade_status === 'INCOMPATIVEL';
+    const analiseEspecializadaIndicaConsistente = !classificacaoNegativa
+      && (Boolean(analiseEspecializada?.consistente) || analiseEspecializada?.status === 'concluido');
     const consistente = inicial
       ? documento.consistente === true
       : analiseEspecializada
@@ -776,9 +810,11 @@ function gerarHtmlRelatorioDocumental(relatorio: any): string {
   // atrás de um botão de informações -- no PDF impresso elas nem entram: o
   // relatório fica só com o resultado e os dados essenciais de cada
   // documento, sem o texto de apoio inflando as páginas.
-  const secoesAnaliseHtml = (resultado: any, documento: any) => construirSecoesAnaliseDocumento(resultado, documento).filter((secao: any) => !secao.colapsavel).map((secao: any) => {
+  const secoesAnaliseHtml = (resultado: any, documento: any) => {
+    const estado = estadoVisualDocumento(resultado, documento);
+    return construirSecoesAnaliseDocumento(resultado, documento).filter((secao: any) => !secao.colapsavel).map((secao: any) => {
     const classe = secao.id === 'resultado'
-      ? 'result'
+      ? estado === 'aprovado' ? 'result' : estado === 'incompativel' || estado === 'reanalisar' ? 'alerts' : 'notes'
       : secao.id === 'diagnostico_factual'
         ? 'facts'
         : secao.id === 'evidencias' || secao.id === 'observacoes'
@@ -791,10 +827,16 @@ function gerarHtmlRelatorioDocumental(relatorio: any): string {
       ? `<div class="fields">${secao.campos.map((campo: any) => `<div class="field"><span>${escapeHtmlRelatorio(campo.label)}</span><strong>${escapeHtmlRelatorio(campo.valor)}</strong></div>`).join('')}</div>`
       : '';
     return `<div class="${classe}"><b>${escapeHtmlRelatorio(secao.titulo)}</b>${secao.texto ? `<p>${escapeHtmlRelatorio(secao.texto)}</p>` : ''}${itens}${campos}</div>`;
-  }).join('');
+    }).join('');
+  };
   const analisadosHtml = analisados.length ? analisados.map((documento: any) => {
     const resultado = documento.resultado_analise || {};
-    return `<article class="doc analyzed"><div class="doc-head"><div><strong>${escapeHtmlRelatorio(documento.nome)}</strong><small>${escapeHtmlRelatorio(documento.bloco)}${documento.criado_em ? ` · ${escapeHtmlRelatorio(dataRelatorio(documento.criado_em))}` : ''}</small></div><span class="pill green">${escapeHtmlRelatorio(documento.status || 'Analisado')}</span></div>${secoesAnaliseHtml(resultado, documento)}</article>`;
+    const estado = estadoVisualDocumento(resultado, documento);
+    const aprovado = estado === 'aprovado';
+    const bloqueado = estado === 'incompativel' || estado === 'reanalisar';
+    const classeDocumento = aprovado ? 'analyzed' : bloqueado ? 'blocked' : 'needs-review';
+    const classePill = aprovado ? 'green' : bloqueado ? 'red' : 'orange';
+    return `<article class="doc ${classeDocumento}"><div class="doc-head"><div><strong>${escapeHtmlRelatorio(documento.nome)}</strong><small>${escapeHtmlRelatorio(documento.bloco)}${documento.criado_em ? ` · ${escapeHtmlRelatorio(dataRelatorio(documento.criado_em))}` : ''}</small></div><span class="pill ${classePill}">${escapeHtmlRelatorio(rotuloEstadoDocumento(estado))}</span></div>${secoesAnaliseHtml(resultado, documento)}</article>`;
   }).join('') : `<div class="success">Nenhum documento analisado foi encontrado no acervo.</div>`;
   const pendentesAnaliseHtml = pendentesAnalise.length ? pendentesAnalise.map((documento: any) => {
     const resultado = documento.resultado_analise || {};
@@ -811,7 +853,7 @@ function gerarHtmlRelatorioDocumental(relatorio: any): string {
   const etapasHtml = etapas.length ? `<table><thead><tr><th>Etapa</th><th>Situação</th><th>Documentos faltantes</th></tr></thead><tbody>${etapas.map((etapa: any) => `<tr><td>${escapeHtmlRelatorio(`${etapa.numero || ''} — ${etapa.titulo || 'Etapa documental'}`)}</td><td>${etapa.bloqueada ? 'Aguardando etapa anterior' : 'Disponível para análise'}</td><td>${escapeHtmlRelatorio(etapa.documentos_faltantes)}</td></tr>`).join('')}</tbody></table>` : `<p class="empty">As próximas etapas ainda não foram calculadas.</p>`;
 
   return `<!doctype html><html lang="pt-BR"><head><meta charset="utf-8"/><title>Relatório documental — ${escapeHtmlRelatorio(empresa.razao_social || empresa.nome_fantasia || 'Empresa')}</title><style>
-  @page { size: A4; margin: 38mm 22mm 28mm; } * { box-sizing: border-box; } body { margin: 0; font-family: Arial, sans-serif; color: #172033; font-size: 9pt; line-height: 1.4; } h1 { color: #123b78; font-size: 20pt; margin: 0 0 4px; } h2 { color: #123b78; font-size: 13pt; margin: 22px 0 9px; border-bottom: 1px solid #d9e2ef; padding-bottom: 5px; page-break-after: avoid; } p { margin: 5px 0; } .subtitle { color: #64748b; font-size: 9pt; } .identity { background: #f1f7ff; border: 1px solid #cbdcf4; border-radius: 8px; padding: 12px; margin: 15px 0; } .meta { display: grid; grid-template-columns: 1.6fr 1fr 1fr; gap: 10px; margin-top: 8px; } .meta span, .card span, .field span { display: block; color: #64748b; font-size: 7.5pt; text-transform: uppercase; letter-spacing: .04em; } .meta strong { display: block; margin-top: 2px; } .cards { display: grid; grid-template-columns: repeat(5, 1fr); gap: 7px; margin: 12px 0 15px; } .card { border: 1px solid #d9e2ef; border-radius: 7px; padding: 8px; min-height: 53px; } .card strong { display: block; margin-top: 4px; font-size: 9.2pt; color: #123b78; } .legend { display: grid; grid-template-columns: repeat(3, 1fr); gap: 7px; margin: 10px 0 15px; } .legend div { border: 1px solid #d9e2ef; border-radius: 7px; padding: 8px; font-size: 8pt; } .green { color: #047857; } .orange { color: #c2410c; } .amber { color: #b45309; } table { width: 100%; border-collapse: collapse; margin: 5px 0 12px; page-break-inside: auto; } th { background: #123b78; color: #fff; text-align: left; font-size: 7.8pt; padding: 6px; } td { border-bottom: 1px solid #e5eaf1; vertical-align: top; padding: 6px; font-size: 8pt; } tr:nth-child(even) td { background: #f8fafc; } small { display: block; color: #64748b; font-size: 7.5pt; margin-top: 3px; } .doc, .stage { border: 1px solid #d9e2ef; border-radius: 8px; padding: 9px; margin: 7px 0; page-break-inside: auto; } .doc.compact { padding: 6px 10px; margin: 4px 0; page-break-inside: avoid; } .analyzed { border-left: 4px solid #10b981; } .waiting { border-left: 4px solid #f97316; } .missing { border-left: 4px solid #f59e0b; } .doc-head { display: flex; justify-content: space-between; gap: 12px; align-items: flex-start; } .doc-head > div { flex: 1; } .pill { display: inline-block; border-radius: 999px; padding: 3px 7px; font-size: 7.5pt; font-weight: bold; white-space: nowrap; } .pill.green { background: #d1fae5; } .pill.orange { background: #ffedd5; } .pill.amber { background: #fef3c7; } .pill.purple { background: #ede9fe; color: #6d28d9; } .result, .positive, .notes, .alerts, .facts { margin-top: 7px; padding: 7px; border-radius: 6px; } .result { background: #ecfdf5; border: 1px solid #bbf7d0; } .positive { background: #f0fdf4; border: 1px solid #bbf7d0; color: #166534; } .notes { background: #f8fafc; border: 1px solid #e2e8f0; } .facts { background: #eff6ff; border: 1px solid #bfdbfe; } .alerts { background: #fff7ed; border: 1px solid #fed7aa; color: #9a3412; } .fields { display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px; margin-top: 7px; } .field { background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 5px; padding: 6px; } .field strong { display: block; margin-top: 2px; overflow-wrap: anywhere; } ul { margin: 5px 0 3px; padding-left: 17px; } li { margin: 3px 0; } .success { background: #ecfdf5; border: 1px solid #a7f3d0; color: #047857; padding: 10px; border-radius: 7px; } .empty { color: #64748b; font-style: italic; padding: 4px 0; } .footer-note { margin-top: 18px; color: #64748b; font-size: 7.5pt; border-top: 1px solid #e5eaf1; padding-top: 8px; }
+  @page { size: A4; margin: 38mm 22mm 28mm; } * { box-sizing: border-box; } body { margin: 0; font-family: Arial, sans-serif; color: #172033; font-size: 9pt; line-height: 1.4; } h1 { color: #123b78; font-size: 20pt; margin: 0 0 4px; } h2 { color: #123b78; font-size: 13pt; margin: 22px 0 9px; border-bottom: 1px solid #d9e2ef; padding-bottom: 5px; page-break-after: avoid; } p { margin: 5px 0; } .subtitle { color: #64748b; font-size: 9pt; } .identity { background: #f1f7ff; border: 1px solid #cbdcf4; border-radius: 8px; padding: 12px; margin: 15px 0; } .meta { display: grid; grid-template-columns: 1.6fr 1fr 1fr; gap: 10px; margin-top: 8px; } .meta span, .card span, .field span { display: block; color: #64748b; font-size: 7.5pt; text-transform: uppercase; letter-spacing: .04em; } .meta strong { display: block; margin-top: 2px; } .cards { display: grid; grid-template-columns: repeat(5, 1fr); gap: 7px; margin: 12px 0 15px; } .card { border: 1px solid #d9e2ef; border-radius: 7px; padding: 8px; min-height: 53px; } .card strong { display: block; margin-top: 4px; font-size: 9.2pt; color: #123b78; } .legend { display: grid; grid-template-columns: repeat(3, 1fr); gap: 7px; margin: 10px 0 15px; } .legend div { border: 1px solid #d9e2ef; border-radius: 7px; padding: 8px; font-size: 8pt; } .green { color: #047857; } .orange { color: #c2410c; } .amber { color: #b45309; } table { width: 100%; border-collapse: collapse; margin: 5px 0 12px; page-break-inside: auto; } th { background: #123b78; color: #fff; text-align: left; font-size: 7.8pt; padding: 6px; } td { border-bottom: 1px solid #e5eaf1; vertical-align: top; padding: 6px; font-size: 8pt; } tr:nth-child(even) td { background: #f8fafc; } small { display: block; color: #64748b; font-size: 7.5pt; margin-top: 3px; } .doc, .stage { border: 1px solid #d9e2ef; border-radius: 8px; padding: 9px; margin: 7px 0; page-break-inside: auto; } .doc.compact { padding: 6px 10px; margin: 4px 0; page-break-inside: avoid; } .analyzed { border-left: 4px solid #10b981; } .needs-review { border-left: 4px solid #f59e0b; } .blocked { border-left: 4px solid #dc2626; } .waiting { border-left: 4px solid #f97316; } .missing { border-left: 4px solid #f59e0b; } .doc-head { display: flex; justify-content: space-between; gap: 12px; align-items: flex-start; } .doc-head > div { flex: 1; } .pill { display: inline-block; border-radius: 999px; padding: 3px 7px; font-size: 7.5pt; font-weight: bold; white-space: nowrap; } .pill.green { background: #d1fae5; } .pill.orange { background: #ffedd5; } .pill.red { background: #fee2e2; color: #991b1b; } .pill.amber { background: #fef3c7; } .pill.purple { background: #ede9fe; color: #6d28d9; } .result, .positive, .notes, .alerts, .facts { margin-top: 7px; padding: 7px; border-radius: 6px; } .result { background: #ecfdf5; border: 1px solid #bbf7d0; } .positive { background: #f0fdf4; border: 1px solid #bbf7d0; color: #166534; } .notes { background: #f8fafc; border: 1px solid #e2e8f0; } .facts { background: #eff6ff; border: 1px solid #bfdbfe; } .alerts { background: #fff7ed; border: 1px solid #fed7aa; color: #9a3412; } .fields { display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px; margin-top: 7px; } .field { background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 5px; padding: 6px; } .field strong { display: block; margin-top: 2px; overflow-wrap: anywhere; } ul { margin: 5px 0 3px; padding-left: 17px; } li { margin: 3px 0; } .success { background: #ecfdf5; border: 1px solid #a7f3d0; color: #047857; padding: 10px; border-radius: 7px; } .empty { color: #64748b; font-style: italic; padding: 4px 0; } .footer-note { margin-top: 18px; color: #64748b; font-size: 7.5pt; border-top: 1px solid #e5eaf1; padding-top: 8px; }
   </style></head><body><h1>Relatório de análise documental</h1><p class="subtitle">Estado consolidado do acervo, das análises realizadas e dos documentos necessários para a próxima etapa.</p><div class="identity"><strong>${escapeHtmlRelatorio(empresa.razao_social || empresa.nome_fantasia || 'Empresa não identificada')}</strong><div class="meta"><div><span>CNPJ</span><strong>${escapeHtmlRelatorio(empresa.cnpj)}</strong></div><div><span>Regime tributário</span><strong>${escapeHtmlRelatorio(relatorio.regime?.descricao)}</strong></div><div><span>Relatório gerado em</span><strong>${escapeHtmlRelatorio(dataRelatorio(relatorio.gerado_em))}</strong></div></div></div><div class="cards">${cardsHtml}</div><div class="legend"><div><b class="green">Anexados e analisados</b><br/>Arquivo localizado com leitura ou validação concluída.</div><div><b class="orange">Aguardando análise</b><br/>Arquivo recebido, mas ainda não considerado validado.</div><div><b class="amber">Faltantes</b><br/>Documento que ainda precisa ser anexado.</div></div><h2>Resumo executivo</h2><p>${escapeHtmlRelatorio(relatorio.proxima_acao)}</p><h2>1. Documentos anexados e analisados</h2>${analisadosHtml}<h2>2. Documentos anexados e aguardando análise</h2>${pendentesAnaliseHtml}<h2>3. Documentos ainda faltantes para anexar</h2>${faltantesHtml}<h2>4. Resultados consolidados por etapa</h2>${resultadosHtml}<h2>5. Observações e anotações gerais</h2>${listaOuVazio(anotacoes, 'Nenhuma observação adicional registrada.')}<h2>6. Blocos e pendências operacionais</h2>${blocosHtml}${pendenciasHtml}<h2>7. Próximas etapas</h2>${etapasHtml}<p class="footer-note">Este relatório é uma fotografia do dossiê no momento da geração. Após anexar novos documentos, gere novamente o relatório para atualizar o estado da empresa.</p></body></html>`;
 }
 
@@ -1207,13 +1249,19 @@ async function buscarAnaliseEspecializadaPersistida(
   promptCodigo: string,
 ): Promise<AnaliseDocumentalResult | null> {
   if (!(await tableExists('documentos_extracoes_ia'))) return null;
+  const versaoPrompt = versaoPromptDocumental(promptCodigo);
+  const temVersionamento = await columnExists('documentos_extracoes_ia', 'analysis_signature');
+  const selectVersionado = temVersionamento
+    ? ', e.id, e.analysis_signature, e.classifier_version, e.extractor_version, e.rule_version, e.schema_version, e.analysis_status, e.stale_at, e.satisfaz_requisito'
+    : ', e.id';
   const { rows } = await pool.query(
-    `SELECT resultado, status, prompt_versao
-       FROM public.documentos_extracoes_ia
-      WHERE arquivo_id = $1
-        AND prompt_codigo = $2
-        AND status IN ('concluido', 'revisao_humana')
-      ORDER BY processado_em DESC NULLS LAST, atualizado_em DESC, criado_em DESC
+    `SELECT e.resultado, e.status, e.prompt_versao${selectVersionado}, d.hash_arquivo
+       FROM public.documentos_extracoes_ia e
+       LEFT JOIN public.documentos_arquivos d ON d.id = e.arquivo_id
+      WHERE e.arquivo_id = $1
+        AND e.prompt_codigo = $2
+        AND e.status IN ('concluido', 'revisao_humana')
+      ORDER BY e.processado_em DESC NULLS LAST, e.atualizado_em DESC, e.criado_em DESC
       LIMIT 1`,
     [arquivoId, promptCodigo],
   );
@@ -1221,11 +1269,71 @@ async function buscarAnaliseEspecializadaPersistida(
   const resultado = row?.resultado;
   if (!resultado || typeof resultado !== 'object' || !resultado.tipo_analise) return null;
 
-  // Laudos concluídos de versões anteriores continuam sendo evidência histórica
-  // válida para o relatório. A versão do prompt é usada no fluxo de reprocessamento
-  // para decidir quando uma nova análise deve ser criada, não para esconder análises
-  // já persistidas do usuário.
-  return resultado as AnaliseDocumentalResult;
+  const assinaturaEsperada = calcularAssinaturaAnalise({
+    arquivoId,
+    arquivoHash: row?.hash_arquivo || null,
+    promptCodigo,
+    promptVersao: versaoPrompt,
+    classifierVersion: CLASSIFIER_VERSION,
+    extractorVersion: EXTRACTOR_VERSION,
+    ruleVersion: RULE_VERSION,
+    schemaVersion: SCHEMA_VERSION,
+  });
+  // Antes da migration 103 não existem colunas de ciclo de vida para provar
+  // que um laudo legado é stale. Nesse caso de schema antigo, preservamos o
+  // comportamento operacional anterior; depois que as colunas existem, a
+  // decisão abaixo é obrigatoriamente estrita e valores ausentes/divergentes
+  // tornam o laudo inelegível até o reprocessamento.
+  const decision = temVersionamento
+    ? decidirVersaoLaudo(row, {
+        arquivoId,
+        arquivoHash: row?.hash_arquivo || null,
+        promptCodigo,
+        promptVersao: versaoPrompt,
+        classifierVersion: CLASSIFIER_VERSION,
+        extractorVersion: EXTRACTOR_VERSION,
+        ruleVersion: RULE_VERSION,
+        schemaVersion: SCHEMA_VERSION,
+      })
+    : { expectedSignature: assinaturaEsperada, isCurrent: true, lifecycleStatus: 'ATIVO' as AnalysisLifecycleStatus, shouldReprocess: false };
+
+  if (!decision.isCurrent) {
+    if (temVersionamento && row?.id) {
+      void pool.query(
+        `UPDATE public.documentos_extracoes_ia
+            SET analysis_status = 'REANALISE_NECESSARIA',
+                stale_at = COALESCE(stale_at, NOW()),
+                satisfaz_requisito = FALSE
+          WHERE id = $1`,
+        [row.id],
+      ).catch((error: any) => console.warn('[Dossiê] Não foi possível marcar laudo stale:', error?.message || error));
+    }
+    return {
+      ...(resultado as AnaliseDocumentalResult),
+      status: 'revisao_humana',
+      analysis_status: 'REANALISE_NECESSARIA',
+      analysis_signature: row?.analysis_signature || null,
+      classifier_version: row?.classifier_version || null,
+      extractor_version: row?.extractor_version || null,
+      rule_version: row?.rule_version || null,
+      schema_version: row?.schema_version || null,
+      stale_at: row?.stale_at || new Date().toISOString(),
+      satisfaz_requisito: false,
+      reprocessamento_necessario: true,
+      mensagem_status: 'Laudo antigo ou sem assinatura atual; não satisfaz requisito até o reprocessamento.',
+    } as AnaliseDocumentalResult;
+  }
+
+  return {
+    ...(resultado as AnaliseDocumentalResult),
+    analysis_status: 'ATIVO',
+    analysis_signature: row?.analysis_signature || decision.expectedSignature,
+    classifier_version: row?.classifier_version || CLASSIFIER_VERSION,
+    extractor_version: row?.extractor_version || EXTRACTOR_VERSION,
+    rule_version: row?.rule_version || RULE_VERSION,
+    schema_version: row?.schema_version || SCHEMA_VERSION,
+    satisfaz_requisito: row?.satisfaz_requisito ?? (resultado as any).satisfaz_requisito,
+  } as AnaliseDocumentalResult;
 }
 
 async function buscarFalhaAnaliseEspecializada(
@@ -3138,7 +3246,10 @@ async function persistirMetadadosExtracaoCatalogada(extracaoId: string, resultad
             validade_inicio = $6,
             validade_fim = $7,
             fonte_extracao = $8,
-            regra_versao = '2026.08.29'
+            regra_versao = $9,
+            extractor_version = $10,
+            rule_version = $11,
+            schema_version = $12
       WHERE id = $1`,
     [
       extracaoId,
@@ -3149,8 +3260,32 @@ async function persistirMetadadosExtracaoCatalogada(extracaoId: string, resultad
       resultado.validade?.inicio || null,
       resultado.validade?.fim || null,
       resultado.dados_extraidos?.fonte_extracao || null,
+      RULE_VERSION,
+      EXTRACTOR_VERSION,
+      RULE_VERSION,
+      SCHEMA_VERSION,
     ],
   ).catch((error: any) => console.warn('[AnaliseDocumentalEspecializada] Metadados 098 indisponíveis; resultado legado preservado:', error?.message || error));
+}
+
+async function assinaturaAtualDoArquivo(arquivoId: string, promptCodigo: string, promptVersao: string): Promise<string> {
+  let hashArquivo: string | null = null;
+  try {
+    const { rows } = await pool.query('SELECT hash_arquivo FROM public.documentos_arquivos WHERE id = $1 LIMIT 1', [arquivoId]);
+    hashArquivo = rows[0]?.hash_arquivo || null;
+  } catch {
+    // Bases antigas ou fixtures sem a coluna continuam usando o fallback estável do ID.
+  }
+  return calcularAssinaturaAnalise({
+    arquivoId,
+    arquivoHash: hashArquivo,
+    promptCodigo,
+    promptVersao: promptVersao || PROMPT_VERSION,
+    classifierVersion: CLASSIFIER_VERSION,
+    extractorVersion: EXTRACTOR_VERSION,
+    ruleVersion: RULE_VERSION,
+    schemaVersion: SCHEMA_VERSION,
+  });
 }
 
 async function executarAnaliseDocumentalEspecializada(params: {
@@ -3162,10 +3297,21 @@ async function executarAnaliseDocumentalEspecializada(params: {
 }) {
   const { extracaoId, empresaId, arquivoId, tipo, tipoDocumento } = params;
   try {
+    const versionado = await columnExists('documentos_extracoes_ia', 'analysis_signature');
+    const metadataResult = await pool.query(
+      'SELECT prompt_codigo, prompt_versao FROM public.documentos_extracoes_ia WHERE id = $1 LIMIT 1',
+      [extracaoId],
+    );
+    const promptCodigoAtual = String(metadataResult.rows[0]?.prompt_codigo || tipoDocumento || tipo);
+    const promptVersaoAtual = String(metadataResult.rows[0]?.prompt_versao || versaoPromptDocumental(promptCodigoAtual));
     await pool.query(
-      `UPDATE public.documentos_extracoes_ia
-          SET status = 'processando', erros = '[]'::jsonb
-        WHERE id = $1`,
+      versionado
+        ? `UPDATE public.documentos_extracoes_ia
+              SET status = 'processando', analysis_status = 'REANALISE_NECESSARIA', erros = '[]'::jsonb
+            WHERE id = $1`
+        : `UPDATE public.documentos_extracoes_ia
+              SET status = 'processando', erros = '[]'::jsonb
+            WHERE id = $1`,
       [extracaoId],
     );
 
@@ -3178,41 +3324,107 @@ async function executarAnaliseDocumentalEspecializada(params: {
     else if (tipo === 'documento_generico' && tipoDocumento) resultado = await analiseDocumentalService.analisarDocumentoCatalogado(empresaId, arquivoId, tipoDocumento);
     else throw new Error(`Tipo de análise documental sem executor: ${tipo}`);
 
+    const satisfazRequisito = resultado?.dados_extraidos?.satisfaz_requisito === true;
+    const assinatura = versionado
+      ? await assinaturaAtualDoArquivo(arquivoId, promptCodigoAtual, promptVersaoAtual)
+      : null;
     await pool.query(
-      `UPDATE public.documentos_extracoes_ia
-          SET status = $2,
-              modelo = $3,
-              campos_extraidos = $4::jsonb,
-              resultado = $5::jsonb,
-              nivel_confianca = $6,
-              pendencias = $7::jsonb,
-              erros = '[]'::jsonb,
-              processado_em = NOW()
-        WHERE id = $1`,
-      [
-        extracaoId,
-        resultado.status,
-        resultado.modelo_ia,
-        JSON.stringify(resultado.dados_extraidos || {}),
-        JSON.stringify(resultado),
-        resultado.nivel_confianca,
-        JSON.stringify(resultado.alertas || []),
-      ],
+      versionado
+        ? `UPDATE public.documentos_extracoes_ia
+              SET status = $2,
+                  modelo = $3,
+                  campos_extraidos = $4::jsonb,
+                  resultado = $5::jsonb,
+                  nivel_confianca = $6,
+                  pendencias = $7::jsonb,
+                  erros = '[]'::jsonb,
+                  processado_em = NOW(),
+                  analysis_signature = $8,
+                  classifier_version = $9,
+                  extractor_version = $10,
+                  rule_version = $11,
+                  schema_version = $12,
+                  analysis_status = 'ATIVO',
+                  tipo_esperado = $13,
+                  tipo_detectado = $14,
+                  identidade_status = $15,
+                  temporalidade_status = $16,
+                  cobertura_status = $17,
+                  satisfaz_requisito = $18,
+                  stale_at = NULL,
+                  superseded_at = NULL,
+                  last_error_at = NULL,
+                  next_retry_at = NULL
+            WHERE id = $1`
+        : `UPDATE public.documentos_extracoes_ia
+              SET status = $2,
+                  modelo = $3,
+                  campos_extraidos = $4::jsonb,
+                  resultado = $5::jsonb,
+                  nivel_confianca = $6,
+                  pendencias = $7::jsonb,
+                  erros = '[]'::jsonb,
+                  processado_em = NOW()
+            WHERE id = $1`,
+      versionado
+        ? [
+            extracaoId,
+            resultado.status,
+            resultado.modelo_ia,
+            JSON.stringify(resultado.dados_extraidos || {}),
+            JSON.stringify(resultado),
+            resultado.nivel_confianca,
+            JSON.stringify(resultado.alertas || []),
+            assinatura,
+            CLASSIFIER_VERSION,
+            EXTRACTOR_VERSION,
+            RULE_VERSION,
+            SCHEMA_VERSION,
+            resultado.dados_extraidos?.tipo_esperado || tipoDocumento || tipo,
+            resultado.dados_extraidos?.tipo_detectado || null,
+            resultado.dados_extraidos?.identidade_status || null,
+            resultado.dados_extraidos?.temporalidade_status || null,
+            resultado.dados_extraidos?.cobertura_status || null,
+            satisfazRequisito,
+          ]
+        : [
+            extracaoId,
+            resultado.status,
+            resultado.modelo_ia,
+            JSON.stringify(resultado.dados_extraidos || {}),
+            JSON.stringify(resultado),
+            resultado.nivel_confianca,
+            JSON.stringify(resultado.alertas || []),
+          ],
     );
     await persistirMetadadosExtracaoCatalogada(extracaoId, resultado);
   } catch (error: any) {
     console.warn('[AnaliseDocumentalEspecializada] Falha controlada na análise:', tipo, arquivoId, error?.message || error);
+    const mensagemFalha = String(error?.message || 'Falha não identificada').slice(0, 1200);
+    const versionadoFalha = await columnExists('documentos_extracoes_ia', 'analysis_signature').catch(() => false);
     await pool.query(
-      `UPDATE public.documentos_extracoes_ia
-          SET status = 'falhou',
-              resultado = $2::jsonb,
-              erros = $3::jsonb,
-              processado_em = NOW()
-        WHERE id = $1`,
+      versionadoFalha
+        ? `UPDATE public.documentos_extracoes_ia
+              SET status = 'falhou',
+                  analysis_status = 'REANALISE_NECESSARIA',
+                  satisfaz_requisito = FALSE,
+                  resultado = $2::jsonb,
+                  erros = $3::jsonb,
+                  last_error_at = NOW(),
+                  retry_count = COALESCE(retry_count, 0) + 1,
+                  next_retry_at = NOW() + INTERVAL '5 minutes',
+                  processado_em = NOW()
+            WHERE id = $1`
+        : `UPDATE public.documentos_extracoes_ia
+              SET status = 'falhou',
+                  resultado = $2::jsonb,
+                  erros = $3::jsonb,
+                  processado_em = NOW()
+            WHERE id = $1`,
       [
         extracaoId,
-        JSON.stringify({ tipo_analise: tipo, empresa_id: empresaId, arquivo_id: arquivoId, status: 'falhou' }),
-        JSON.stringify([{ codigo: 'analise_documental_falhou', mensagem: String(error?.message || 'Falha não identificada') }]),
+        JSON.stringify({ tipo_analise: tipo, empresa_id: empresaId, arquivo_id: arquivoId, status: 'falhou', analysis_status: 'REANALISE_NECESSARIA' }),
+        JSON.stringify([{ codigo: 'analise_documental_falhou', mensagem: mensagemFalha }]),
       ],
     ).catch((updateError: any) => {
       console.warn('[AnaliseDocumentalEspecializada] Não foi possível registrar a falha da extração:', updateError?.message || updateError);
@@ -3230,6 +3442,28 @@ async function registrarExtracaoEspecializada(params: {
   try {
     await client.query('BEGIN');
     await client.query('SELECT pg_advisory_xact_lock(hashtext($1))', [`documento-ia:${params.arquivoId}:${params.promptCodigo}`]);
+    const versaoEsperada = params.promptVersao || versaoPromptDocumental(params.promptCodigo);
+    const versionado = await columnExists('documentos_extracoes_ia', 'analysis_signature');
+    let hashArquivo: string | null = null;
+    try {
+      const documentoHash = await client.query(
+        'SELECT hash_arquivo FROM public.documentos_arquivos WHERE id = $1 LIMIT 1',
+        [params.arquivoId],
+      );
+      hashArquivo = documentoHash.rows[0]?.hash_arquivo || null;
+    } catch {
+      // Compatibilidade com bases anteriores à coluna hash_arquivo.
+    }
+    const expectedSignature = calcularAssinaturaAnalise({
+      arquivoId: params.arquivoId,
+      arquivoHash: hashArquivo,
+      promptCodigo: params.promptCodigo,
+      promptVersao: versaoEsperada || PROMPT_VERSION,
+      classifierVersion: CLASSIFIER_VERSION,
+      extractorVersion: EXTRACTOR_VERSION,
+      ruleVersion: RULE_VERSION,
+      schemaVersion: SCHEMA_VERSION,
+    });
     const existente = await client.query(
       `SELECT *
          FROM public.documentos_extracoes_ia
@@ -3242,44 +3476,60 @@ async function registrarExtracaoEspecializada(params: {
     let extracao: any;
     let deveProcessar = true;
     if (existente.rows[0]) {
-      const statusAtual = String(existente.rows[0].status || '');
-      const atualizadoEm = new Date(existente.rows[0].atualizado_em || existente.rows[0].criado_em || 0).getTime();
-      const versaoEsperada = params.promptVersao || versaoPromptDocumental(params.promptCodigo);
-      const versaoAtual = String(existente.rows[0].prompt_versao || '');
-      const mesmaVersao = versaoAtual === versaoEsperada;
+      const atual = existente.rows[0];
+      const statusAtual = String(atual.status || '');
+      const atualizadoEm = new Date(atual.atualizado_em || atual.criado_em || 0).getTime();
+      const mesmaVersao = String(atual.prompt_versao || '') === versaoEsperada;
       const pendenteRecente = statusAtual === 'pendente'
         && Number.isFinite(atualizadoEm)
         && Date.now() - atualizadoEm < 5 * 60 * 1000;
       const emAndamento = mesmaVersao && (statusAtual === 'processando' || pendenteRecente);
-      deveProcessar = !emAndamento;
+      const laudoAtual = versionado
+        && mesmaVersao
+        && ['concluido', 'revisao_humana'].includes(statusAtual)
+        && atual.analysis_status === 'ATIVO'
+        && atual.analysis_signature === expectedSignature;
+      deveProcessar = !(emAndamento || laudoAtual);
 
-      if (emAndamento) {
-        // Não toca no timestamp nem limpa resultado enquanto outra execução está em andamento.
-        extracao = existente.rows[0];
+      if (emAndamento || laudoAtual) {
+        extracao = atual;
       } else {
-        const atualizada = await client.query(
-          `UPDATE public.documentos_extracoes_ia
-              SET entidade_bloco_id = COALESCE($2, entidade_bloco_id),
-                  status = 'pendente',
-                  prompt_versao = $3,
-                  resultado = '{}'::jsonb,
-                  campos_extraidos = '{}'::jsonb,
-                  pendencias = '[]'::jsonb,
-                  erros = '[]'::jsonb,
-                  processado_em = NULL
-            WHERE id = $1
-            RETURNING *`,
-          [existente.rows[0].id, params.blocoEntidadeId, params.promptVersao || versaoPromptDocumental(params.promptCodigo)],
+        if (versionado && atual.id) {
+          await client.query(
+            `UPDATE public.documentos_extracoes_ia
+                SET analysis_status = CASE WHEN status IN ('concluido', 'revisao_humana') THEN 'SUPERSEDED' ELSE 'REANALISE_NECESSARIA' END,
+                    superseded_at = CASE WHEN status IN ('concluido', 'revisao_humana') THEN NOW() ELSE superseded_at END,
+                    satisfaz_requisito = FALSE
+              WHERE id = $1`,
+            [atual.id],
+          );
+        }
+        const insertVersioned = versionado ? `, analysis_signature, classifier_version, extractor_version, rule_version, schema_version, analysis_status, satisfaz_requisito` : '';
+        const valuesVersioned = versionado ? `, $5, $6, $7, $8, $9, 'REANALISE_NECESSARIA', FALSE` : '';
+        const paramsInsert = versionado
+          ? [params.arquivoId, params.blocoEntidadeId, params.promptCodigo, versaoEsperada, expectedSignature, CLASSIFIER_VERSION, EXTRACTOR_VERSION, RULE_VERSION, SCHEMA_VERSION]
+          : [params.arquivoId, params.blocoEntidadeId, params.promptCodigo, versaoEsperada];
+        const inserida = await client.query(
+          `INSERT INTO public.documentos_extracoes_ia
+            (arquivo_id, entidade_bloco_id, status, prompt_codigo, prompt_versao, resultado, campos_extraidos, pendencias, erros${insertVersioned})
+           VALUES ($1,$2,'pendente',$3,$4,'{}'::jsonb,'{}'::jsonb,'[]'::jsonb,'[]'::jsonb${valuesVersioned})
+           RETURNING *`,
+          paramsInsert,
         );
-        extracao = atualizada.rows[0];
+        extracao = inserida.rows[0];
       }
     } else {
+      const insertVersioned = versionado ? `, analysis_signature, classifier_version, extractor_version, rule_version, schema_version, analysis_status, satisfaz_requisito` : '';
+      const valuesVersioned = versionado ? `, $5, $6, $7, $8, $9, 'REANALISE_NECESSARIA', FALSE` : '';
+      const paramsInsert = versionado
+        ? [params.arquivoId, params.blocoEntidadeId, params.promptCodigo, versaoEsperada, expectedSignature, CLASSIFIER_VERSION, EXTRACTOR_VERSION, RULE_VERSION, SCHEMA_VERSION]
+        : [params.arquivoId, params.blocoEntidadeId, params.promptCodigo, versaoEsperada];
       const inserida = await client.query(
         `INSERT INTO public.documentos_extracoes_ia
-          (arquivo_id, entidade_bloco_id, status, prompt_codigo, prompt_versao, resultado, campos_extraidos, pendencias, erros)
-         VALUES ($1,$2,'pendente',$3,$4,'{}'::jsonb,'{}'::jsonb,'[]'::jsonb,'[]'::jsonb)
+          (arquivo_id, entidade_bloco_id, status, prompt_codigo, prompt_versao, resultado, campos_extraidos, pendencias, erros${insertVersioned})
+         VALUES ($1,$2,'pendente',$3,$4,'{}'::jsonb,'{}'::jsonb,'[]'::jsonb,'[]'::jsonb${valuesVersioned})
          RETURNING *`,
-        [params.arquivoId, params.blocoEntidadeId, params.promptCodigo, params.promptVersao || versaoPromptDocumental(params.promptCodigo)],
+        paramsInsert,
       );
       extracao = inserida.rows[0];
     }

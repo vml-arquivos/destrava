@@ -1276,3 +1276,404 @@ CREATE INDEX IF NOT EXISTS idx_banners_schedule
 
 COMMENT ON TABLE public.banners IS
   'Conteúdo de banners do site; tabela criada de forma aditiva pela migration 099.';
+
+
+-- ============================================================================
+-- Migrations 100-102 incorporadas do pacote auditado (idempotentes)
+-- ============================================================================
+-- Migration 100 — linha do tempo do regime tributário (histórico versionado).
+-- Idempotente e aditiva. Não apaga nem altera o campo público.empresas.regime_tributario
+-- (que continua sendo o "regime vigente" consumido pelo restante do sistema); esta
+-- migration ADICIONA um histórico completo ao lado dele, sem substituir nada.
+--
+-- Contexto (Missão de evolução do Acervo Documental, seção 11): o sistema até aqui só
+-- guarda "regime_tributario" como um valor único e atual. Isso não permite responder
+-- "qual era o regime da empresa em 12/2025?" nem impede que um documento histórico
+-- (ex.: um PGDAS-D de um período em que a empresa ainda era Simples Nacional)
+-- contamine, por engano, o regime considerado vigente hoje. Esta tabela guarda cada
+-- período do regime tributário com data de início/fim, a fonte da informação, a
+-- confiança da leitura e o documento que serviu de evidência -- sem nunca ser
+-- reescrita: um novo regime fecha o período anterior (preenchendo data_fim) e abre
+-- um novo período, preservando o histórico completo.
+
+CREATE TABLE IF NOT EXISTS public.empresas_regime_tributario_historico (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  empresa_id UUID NOT NULL,
+  regime TEXT NOT NULL,
+  data_inicio DATE NULL,
+  data_fim DATE NULL,
+  fonte TEXT NOT NULL DEFAULT 'documento',
+  confianca NUMERIC(4,3) NULL,
+  documento_evidencia_id UUID NULL,
+  observacao TEXT NULL,
+  criado_em TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  atualizado_em TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+DO $$
+BEGIN
+  IF to_regclass('public.empresas') IS NOT NULL
+     AND to_regclass('public.empresas_regime_tributario_historico') IS NOT NULL
+     AND NOT EXISTS (
+       SELECT 1 FROM information_schema.table_constraints
+        WHERE constraint_name = 'empresas_regime_historico_empresa_fk'
+     ) THEN
+    ALTER TABLE public.empresas_regime_tributario_historico
+      ADD CONSTRAINT empresas_regime_historico_empresa_fk
+      FOREIGN KEY (empresa_id) REFERENCES public.empresas(id) ON DELETE CASCADE;
+  END IF;
+EXCEPTION WHEN undefined_table THEN NULL;
+END $$;
+
+DO $$
+BEGIN
+  IF to_regclass('public.documentos_arquivos') IS NOT NULL
+     AND to_regclass('public.empresas_regime_tributario_historico') IS NOT NULL
+     AND NOT EXISTS (
+       SELECT 1 FROM information_schema.table_constraints
+        WHERE constraint_name = 'empresas_regime_historico_documento_fk'
+     ) THEN
+    ALTER TABLE public.empresas_regime_tributario_historico
+      ADD CONSTRAINT empresas_regime_historico_documento_fk
+      FOREIGN KEY (documento_evidencia_id) REFERENCES public.documentos_arquivos(id) ON DELETE SET NULL;
+  END IF;
+EXCEPTION WHEN undefined_table THEN NULL;
+END $$;
+
+CREATE INDEX IF NOT EXISTS idx_regime_historico_empresa_periodo
+  ON public.empresas_regime_tributario_historico (empresa_id, data_inicio, data_fim);
+
+-- No máximo um período "vigente" (data_fim IS NULL) por empresa: o registrador
+-- (regimeTributarioTemporalService.ts) sempre fecha o período aberto anterior antes
+-- de abrir um novo, e este índice único é a garantia de banco desse invariante.
+CREATE UNIQUE INDEX IF NOT EXISTS uq_regime_historico_periodo_vigente
+  ON public.empresas_regime_tributario_historico (empresa_id)
+  WHERE data_fim IS NULL;
+
+CREATE OR REPLACE FUNCTION public.atualizar_atualizado_em_100()
+RETURNS TRIGGER AS $$
+BEGIN
+  NEW.atualizado_em = NOW();
+  RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+DO $$
+BEGIN
+  IF to_regclass('public.empresas_regime_tributario_historico') IS NOT NULL THEN
+    DROP TRIGGER IF EXISTS trg_regime_historico_atualizado ON public.empresas_regime_tributario_historico;
+    CREATE TRIGGER trg_regime_historico_atualizado
+      BEFORE UPDATE ON public.empresas_regime_tributario_historico
+      FOR EACH ROW EXECUTE FUNCTION public.atualizar_atualizado_em_100();
+  END IF;
+END $$;
+
+-- Migration 101 — faturamento mensal por competência (base para a janela móvel
+-- de 12 meses). Idempotente e aditiva. Não toca em nenhuma tabela ou coluna
+-- existente relacionada a faturamento (ex.: os campos extraídos do documento
+-- `faturamento_12_meses` em extracaoDocumentalLocal.ts continuam existindo e
+-- funcionando exatamente como antes); esta migration ADICIONA um registro
+-- estruturado, um valor por competência (ano/mês), ao lado do que já existe.
+--
+-- Contexto (Missão de evolução do Acervo Documental): o sistema até aqui só
+-- guarda o faturamento como texto/metadado dentro do documento anexado, sem
+-- um valor por competência que possa ser somado numa janela móvel de 12
+-- meses. Isso impede, por exemplo, consolidar meses em que a empresa era
+-- Lucro Presumido com meses em que passou a ser Lucro Real dentro da mesma
+-- janela de 12 meses (uma mudança de regime no meio do caminho não pode
+-- exigir um único tipo de documento cobrindo os 12 meses inteiros). Esta
+-- tabela guarda um valor por competência, sem nunca ser sobrescrita por uma
+-- evidência mais fraca (ver faturamentoRolling12MesesService.ts).
+
+CREATE TABLE IF NOT EXISTS public.empresas_faturamento_mensal (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  empresa_id UUID NOT NULL,
+  ano INTEGER NOT NULL,
+  mes INTEGER NOT NULL,
+  valor NUMERIC(18,2) NOT NULL,
+  fonte TEXT NOT NULL DEFAULT 'documento',
+  documento_id UUID NULL,
+  regime_no_periodo TEXT NULL,
+  confianca NUMERIC(4,3) NULL,
+  observacao TEXT NULL,
+  criado_em TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  atualizado_em TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  CONSTRAINT empresas_faturamento_mensal_mes_valido CHECK (mes >= 1 AND mes <= 12)
+);
+
+DO $$
+BEGIN
+  IF to_regclass('public.empresas') IS NOT NULL
+     AND to_regclass('public.empresas_faturamento_mensal') IS NOT NULL
+     AND NOT EXISTS (
+       SELECT 1 FROM information_schema.table_constraints
+        WHERE constraint_name = 'empresas_faturamento_mensal_empresa_fk'
+     ) THEN
+    ALTER TABLE public.empresas_faturamento_mensal
+      ADD CONSTRAINT empresas_faturamento_mensal_empresa_fk
+      FOREIGN KEY (empresa_id) REFERENCES public.empresas(id) ON DELETE CASCADE;
+  END IF;
+EXCEPTION WHEN undefined_table THEN NULL;
+END $$;
+
+DO $$
+BEGIN
+  IF to_regclass('public.documentos_arquivos') IS NOT NULL
+     AND to_regclass('public.empresas_faturamento_mensal') IS NOT NULL
+     AND NOT EXISTS (
+       SELECT 1 FROM information_schema.table_constraints
+        WHERE constraint_name = 'empresas_faturamento_mensal_documento_fk'
+     ) THEN
+    ALTER TABLE public.empresas_faturamento_mensal
+      ADD CONSTRAINT empresas_faturamento_mensal_documento_fk
+      FOREIGN KEY (documento_id) REFERENCES public.documentos_arquivos(id) ON DELETE SET NULL;
+  END IF;
+EXCEPTION WHEN undefined_table THEN NULL;
+END $$;
+
+-- Um único valor por empresa/competência: o serviço faz upsert lógico (nunca
+-- duas linhas para o mesmo ano/mês), preservando sempre a evidência de maior
+-- confiança já registrada em vez de duplicar.
+CREATE UNIQUE INDEX IF NOT EXISTS uq_faturamento_mensal_empresa_competencia
+  ON public.empresas_faturamento_mensal (empresa_id, ano, mes);
+
+CREATE INDEX IF NOT EXISTS idx_faturamento_mensal_empresa
+  ON public.empresas_faturamento_mensal (empresa_id, ano, mes);
+
+CREATE OR REPLACE FUNCTION public.atualizar_atualizado_em_101()
+RETURNS TRIGGER AS $$
+BEGIN
+  NEW.atualizado_em = NOW();
+  RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+DO $$
+BEGIN
+  IF to_regclass('public.empresas_faturamento_mensal') IS NOT NULL THEN
+    DROP TRIGGER IF EXISTS trg_faturamento_mensal_atualizado ON public.empresas_faturamento_mensal;
+    CREATE TRIGGER trg_faturamento_mensal_atualizado
+      BEFORE UPDATE ON public.empresas_faturamento_mensal
+      FOR EACH ROW EXECUTE FUNCTION public.atualizar_atualizado_em_101();
+  END IF;
+END $$;
+
+-- Migration 102 — cobertura de evidência entre bureaus (SCR/CCS/CCF/CENPROT/
+-- CADIN/PGFN/CND/CNDT/Situação Fiscal/Serasa). Idempotente e aditiva. Não
+-- altera em nada o upload por slot já existente (`documentos_arquivos.tipo_documento`
+-- continua sendo o mesmo campo, com os mesmos tipos: scr_cnpj, ccs_cnpj,
+-- ccf_cnpj etc.) -- esta tabela ADICIONA, por documento, quais requisitos de
+-- consulta cadastral aquele arquivo efetivamente comprova, além do próprio
+-- slot em que foi anexado.
+--
+-- Contexto (Missão de evolução do Acervo Documental): hoje um relatório de
+-- bureau que já traga SCR + CCF + score numa página só (comum em relatórios
+-- consolidados) só é reconhecido como o slot em que foi literalmente anexado
+-- -- não há como um único arquivo "contar" para mais de um requisito sem
+-- pedir novo upload duplicado para cada um. Esta tabela guarda, para cada
+-- documento, a lista de requisitos que ele efetivamente cobre (podem ser
+-- vários), com o status de cobertura granular (uma CND negativa não é o
+-- mesmo que uma Certidão Positiva com Efeito de Negativa, que por sua vez
+-- não é o mesmo que uma Certidão Positiva pura -- tratar as três como
+-- equivalentes seria esconder risco).
+
+CREATE TABLE IF NOT EXISTS public.document_evidence_coverage (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  documento_id UUID NOT NULL,
+  requirement_code TEXT NOT NULL,
+  coverage_status TEXT NOT NULL,
+  confidence NUMERIC(4,3) NULL,
+  source_section TEXT NULL,
+  extracted_value JSONB NULL,
+  criado_em TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  atualizado_em TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+DO $$
+BEGIN
+  IF to_regclass('public.documentos_arquivos') IS NOT NULL
+     AND to_regclass('public.document_evidence_coverage') IS NOT NULL
+     AND NOT EXISTS (
+       SELECT 1 FROM information_schema.table_constraints
+        WHERE constraint_name = 'document_evidence_coverage_documento_fk'
+     ) THEN
+    ALTER TABLE public.document_evidence_coverage
+      ADD CONSTRAINT document_evidence_coverage_documento_fk
+      FOREIGN KEY (documento_id) REFERENCES public.documentos_arquivos(id) ON DELETE CASCADE;
+  END IF;
+EXCEPTION WHEN undefined_table THEN NULL;
+END $$;
+
+-- Um documento só tem UMA linha de cobertura por requisito (nunca duplica);
+-- o serviço faz upsert lógico, preservando sempre a evidência de maior
+-- confiança já registrada para aquele par (documento, requisito).
+CREATE UNIQUE INDEX IF NOT EXISTS uq_evidence_coverage_documento_requisito
+  ON public.document_evidence_coverage (documento_id, requirement_code);
+
+CREATE INDEX IF NOT EXISTS idx_evidence_coverage_requisito
+  ON public.document_evidence_coverage (requirement_code);
+
+CREATE OR REPLACE FUNCTION public.atualizar_atualizado_em_102()
+RETURNS TRIGGER AS $$
+BEGIN
+  NEW.atualizado_em = NOW();
+  RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+DO $$
+BEGIN
+  IF to_regclass('public.document_evidence_coverage') IS NOT NULL THEN
+    DROP TRIGGER IF EXISTS trg_evidence_coverage_atualizado ON public.document_evidence_coverage;
+    CREATE TRIGGER trg_evidence_coverage_atualizado
+      BEFORE UPDATE ON public.document_evidence_coverage
+      FOR EACH ROW EXECUTE FUNCTION public.atualizar_atualizado_em_102();
+  END IF;
+END $$;
+
+
+-- ============================================================================
+-- Migration 103: versionamento de laudos e backfill controlado
+-- ============================================================================
+-- Migration 103 — versionamento de laudos, classificação fail-closed e backfill controlado.
+-- Aditiva e idempotente: nenhuma linha de documento ou laudo é removida.
+
+DO $$
+BEGIN
+  IF to_regclass('public.documentos_extracoes_ia') IS NOT NULL THEN
+    ALTER TABLE public.documentos_extracoes_ia ADD COLUMN IF NOT EXISTS analysis_signature TEXT;
+    ALTER TABLE public.documentos_extracoes_ia ADD COLUMN IF NOT EXISTS classifier_version TEXT;
+    ALTER TABLE public.documentos_extracoes_ia ADD COLUMN IF NOT EXISTS extractor_version TEXT;
+    ALTER TABLE public.documentos_extracoes_ia ADD COLUMN IF NOT EXISTS rule_version TEXT;
+    ALTER TABLE public.documentos_extracoes_ia ADD COLUMN IF NOT EXISTS schema_version TEXT;
+    ALTER TABLE public.documentos_extracoes_ia ADD COLUMN IF NOT EXISTS analysis_status TEXT NOT NULL DEFAULT 'REANALISE_NECESSARIA';
+    ALTER TABLE public.documentos_extracoes_ia ADD COLUMN IF NOT EXISTS tipo_esperado TEXT;
+    ALTER TABLE public.documentos_extracoes_ia ADD COLUMN IF NOT EXISTS tipo_detectado TEXT;
+    ALTER TABLE public.documentos_extracoes_ia ADD COLUMN IF NOT EXISTS identidade_status TEXT;
+    ALTER TABLE public.documentos_extracoes_ia ADD COLUMN IF NOT EXISTS temporalidade_status TEXT;
+    ALTER TABLE public.documentos_extracoes_ia ADD COLUMN IF NOT EXISTS cobertura_status TEXT;
+    ALTER TABLE public.documentos_extracoes_ia ADD COLUMN IF NOT EXISTS satisfaz_requisito BOOLEAN NOT NULL DEFAULT FALSE;
+    ALTER TABLE public.documentos_extracoes_ia ADD COLUMN IF NOT EXISTS stale_at TIMESTAMPTZ;
+    ALTER TABLE public.documentos_extracoes_ia ADD COLUMN IF NOT EXISTS superseded_at TIMESTAMPTZ;
+    ALTER TABLE public.documentos_extracoes_ia ADD COLUMN IF NOT EXISTS last_error_at TIMESTAMPTZ;
+    ALTER TABLE public.documentos_extracoes_ia ADD COLUMN IF NOT EXISTS retry_count INTEGER NOT NULL DEFAULT 0;
+    ALTER TABLE public.documentos_extracoes_ia ADD COLUMN IF NOT EXISTS next_retry_at TIMESTAMPTZ;
+  END IF;
+END $$;
+
+DO $$
+BEGIN
+  IF to_regclass('public.documentos_extracoes_ia') IS NOT NULL THEN
+    UPDATE public.documentos_extracoes_ia
+       SET analysis_status = CASE
+         WHEN status IN ('concluido', 'revisao_humana') AND analysis_signature IS NOT NULL THEN 'ATIVO'
+         ELSE 'REANALISE_NECESSARIA'
+       END
+     WHERE analysis_status IS NULL OR analysis_status = '';
+  END IF;
+END $$;
+
+DO $$
+BEGIN
+  IF to_regclass('public.documentos_extracoes_ia') IS NOT NULL THEN
+    UPDATE public.documentos_extracoes_ia
+       SET analysis_status = 'REANALISE_NECESSARIA',
+           stale_at = COALESCE(stale_at, NOW()),
+           satisfaz_requisito = FALSE
+     WHERE analysis_status = 'ATIVO'
+       AND (extractor_version IS NULL OR rule_version IS NULL OR schema_version IS NULL);
+  END IF;
+END $$;
+
+DO $$
+BEGIN
+  IF to_regclass('public.documentos_extracoes_ia') IS NOT NULL
+     AND NOT EXISTS (
+       SELECT 1 FROM pg_constraint
+        WHERE conname = 'documentos_extracoes_ia_analysis_status_chk'
+     ) THEN
+    ALTER TABLE public.documentos_extracoes_ia
+      ADD CONSTRAINT documentos_extracoes_ia_analysis_status_chk
+      CHECK (analysis_status IN ('ATIVO', 'STALE', 'REANALISE_NECESSARIA', 'SUPERSEDED'));
+  END IF;
+EXCEPTION WHEN check_violation THEN
+  NULL;
+END $$;
+
+CREATE INDEX IF NOT EXISTS idx_documentos_extracoes_ia_signature
+  ON public.documentos_extracoes_ia (arquivo_id, prompt_codigo, analysis_signature);
+
+CREATE INDEX IF NOT EXISTS idx_documentos_extracoes_ia_active
+  ON public.documentos_extracoes_ia (arquivo_id, prompt_codigo, analysis_status, atualizado_em DESC);
+
+CREATE TABLE IF NOT EXISTS public.documentos_backfill_jobs (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  documento_id UUID NOT NULL,
+  empresa_id UUID NULL,
+  prompt_codigo TEXT NOT NULL,
+  prioridade INTEGER NOT NULL DEFAULT 100,
+  status TEXT NOT NULL DEFAULT 'PENDENTE',
+  tentativas INTEGER NOT NULL DEFAULT 0,
+  disponivel_em TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  bloqueado_em TIMESTAMPTZ NULL,
+  bloqueado_por TEXT NULL,
+  concluido_em TIMESTAMPTZ NULL,
+  ultimo_erro TEXT NULL,
+  criado_em TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  atualizado_em TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  CONSTRAINT documentos_backfill_jobs_status_chk CHECK (status IN ('PENDENTE', 'PROCESSANDO', 'CONCLUIDO', 'FALHOU'))
+);
+
+DO $$
+BEGIN
+  IF to_regclass('public.documentos_arquivos') IS NOT NULL
+     AND to_regclass('public.documentos_backfill_jobs') IS NOT NULL
+     AND NOT EXISTS (
+       SELECT 1 FROM information_schema.table_constraints
+        WHERE constraint_name = 'documentos_backfill_jobs_documento_fk'
+     ) THEN
+    ALTER TABLE public.documentos_backfill_jobs
+      ADD CONSTRAINT documentos_backfill_jobs_documento_fk
+      FOREIGN KEY (documento_id) REFERENCES public.documentos_arquivos(id) ON DELETE CASCADE;
+  END IF;
+EXCEPTION WHEN undefined_table THEN NULL;
+END $$;
+
+DO $$
+BEGIN
+  IF to_regclass('public.empresas') IS NOT NULL
+     AND to_regclass('public.documentos_backfill_jobs') IS NOT NULL
+     AND NOT EXISTS (
+       SELECT 1 FROM information_schema.table_constraints
+        WHERE constraint_name = 'documentos_backfill_jobs_empresa_fk'
+     ) THEN
+    ALTER TABLE public.documentos_backfill_jobs
+      ADD CONSTRAINT documentos_backfill_jobs_empresa_fk
+      FOREIGN KEY (empresa_id) REFERENCES public.empresas(id) ON DELETE CASCADE;
+  END IF;
+EXCEPTION WHEN undefined_table THEN NULL;
+END $$;
+
+CREATE UNIQUE INDEX IF NOT EXISTS uq_documentos_backfill_jobs_documento_prompt
+  ON public.documentos_backfill_jobs (documento_id, prompt_codigo);
+
+CREATE INDEX IF NOT EXISTS idx_documentos_backfill_jobs_dispatch
+  ON public.documentos_backfill_jobs (status, prioridade, disponivel_em, criado_em);
+
+CREATE OR REPLACE FUNCTION public.atualizar_atualizado_em_103()
+RETURNS TRIGGER AS $$
+BEGIN
+  NEW.atualizado_em = NOW();
+  RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+DO $$
+BEGIN
+  IF to_regclass('public.documentos_backfill_jobs') IS NOT NULL THEN
+    DROP TRIGGER IF EXISTS trg_documentos_backfill_jobs_atualizado ON public.documentos_backfill_jobs;
+    CREATE TRIGGER trg_documentos_backfill_jobs_atualizado
+      BEFORE UPDATE ON public.documentos_backfill_jobs
+      FOR EACH ROW EXECUTE FUNCTION public.atualizar_atualizado_em_103();
+  END IF;
+END $$;
