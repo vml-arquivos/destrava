@@ -20,10 +20,20 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 //
 // Este teste prova, de ponta a ponta (persistência mocada -> `montarRelatorioDocumental`
 // -> `estadoVisualDocumento`/`rotuloEstadoDocumento`), que agora: (1) a
-// conclusão do campo diz explicitamente que o documento é incorreto e não foi
-// validado; (2) o selo visual passa a ser "Documento incompatível", não mais
-// "Revisão necessária"; e que um documento realmente consistente continua
-// mostrando o selo de sucesso normalmente (sem regressão).
+// conclusão do campo diz explicitamente que o documento é inválido e nomeia
+// o documento esperado; (2) o selo visual passa a ser "Documento
+// incompatível", não mais "Revisão necessária"; e que um documento realmente
+// consistente continua mostrando o selo de sucesso normalmente (sem
+// regressão).
+//
+// ATUALIZAÇÃO (2026-08-31, feedback seguinte do mesmo usuário -- "não é pra
+// ele ler o que está nesse documento do simples, pra ele ler só se for o
+// s f... tire esse monte de texto"): não basta a conclusão e o selo estarem
+// certos -- NENHUM dado lido do documento errado pode aparecer na tela
+// (nem diagnóstico, nem "amostra objetiva dos dados lidos", nem os alertas
+// explicando o motivo). `construirSecoesAnaliseDocumento`
+// (shared/documentalPresentation.ts) agora devolve SÓ a seção "Resultado da
+// análise" para um documento incompatível -- testado abaixo também.
 
 const mocks = vi.hoisted(() => ({ poolQuery: vi.fn() }));
 
@@ -81,9 +91,9 @@ describe('montarResultadoDetalhadoRelatorio -- conclusão e selo visual de docum
   });
   afterEach(() => vi.clearAllMocks());
 
-  it('um PGDAS-D no slot do ECF vira "Documento incorreto... não validado" e o selo visual "Documento incompatível" -- não mais "Revisão necessária"', async () => {
+  it('um PGDAS-D no slot do ECF vira "Documento inválido... anexe o ECF" -- sem nenhum dado lido do PGDAS na tela -- e o selo visual "Documento incompatível"', async () => {
     const { montarRelatorioDocumental } = await import('../server/routes/documentacao');
-    const { estadoVisualDocumento, rotuloEstadoDocumento } = await import('../shared/documentalPresentation');
+    const { estadoVisualDocumento, rotuloEstadoDocumento, construirSecoesAnaliseDocumento } = await import('../shared/documentalPresentation');
     mockDocumentosExtracoesIa({
       tipo_analise: 'documento_generico',
       empresa_id: 'empresa-1',
@@ -96,7 +106,15 @@ describe('montarResultadoDetalhadoRelatorio -- conclusão e selo visual de docum
         identidade_status: 'INCOMPATIVEL',
         satisfaz_requisito: false,
         cobertura_status: 'NAO_SATISFAZ',
+        // Dados de fato lidos do PGDAS-D errado -- presentes no laudo (o
+        // motor continua lendo o arquivo para poder classificá-lo), mas que
+        // NÃO podem chegar à tela: é exatamente esse vazamento que o usuário
+        // reportou ("não é pra ele ler o que está nesse documento do
+        // simples").
+        situacao_simples: 'Optante',
+        regime_tributario: 'Simples Nacional',
       },
+      diagnostico_factual: 'O arquivo é um PGDAS-D (Simples Nacional), não um ECF.',
       alertas: [{ codigo: 'documento_catalogado_tipo_incompativel', mensagem: 'Documento incorreto para "ECF" -- conteúdo identificado: PGDAS-D (Simples Nacional). Não validado.', severidade: 'alta' }],
       divergencias: [],
       nivel_confianca: 0.8,
@@ -112,15 +130,29 @@ describe('montarResultadoDetalhadoRelatorio -- conclusão e selo visual de docum
     expect(item).toBeTruthy();
 
     // A conclusão não pode mais ser o texto genérico de revisão -- tem que
-    // dizer explicitamente que o documento é incorreto e não foi validado.
-    expect(item.resultado_analise.conclusao).toMatch(/incorreto/i);
-    expect(item.resultado_analise.conclusao).toMatch(/n[ãa]o validado/i);
+    // dizer explicitamente que o documento é inválido e qual é o documento
+    // esperado (nomeado, não só "o documento correto" genérico).
+    expect(item.resultado_analise.conclusao).toMatch(/inv[áa]lido/i);
+    expect(item.resultado_analise.conclusao).toMatch(/ECF/);
     expect(item.resultado_analise.conclusao).not.toBe('Leitura concluída com observações ou necessidade de revisão.');
 
     // A identidade/compatibilidade calculada pelo serviço de análise agora
     // chega ao objeto consumido pela tela.
     expect(item.resultado_analise.dados_extraidos?.documento_compativel).toBe(false);
     expect(item.resultado_analise.dados_extraidos?.identidade_status).toBe('INCOMPATIVEL');
+
+    // CORE: nenhum dado lido do PGDAS-D errado pode chegar à tela -- só a
+    // seção "Resultado da análise" com a mensagem mínima. Nem o diagnóstico,
+    // nem a "amostra objetiva dos dados lidos" (que teria "Situação no
+    // Simples Nacional"/"Regime tributário" se não fosse suprimida), nem o
+    // alerta explicando o motivo.
+    const secoes = construirSecoesAnaliseDocumento(item.resultado_analise, item);
+    expect(secoes).toHaveLength(1);
+    expect(secoes[0].id).toBe('resultado');
+    expect(secoes[0].texto).toMatch(/inv[áa]lido/i);
+    expect(secoes.some((s: any) => s.id === 'diagnostico_factual')).toBe(false);
+    expect(secoes.some((s: any) => s.id === 'campos')).toBe(false);
+    expect(secoes.some((s: any) => s.id === 'alertas')).toBe(false);
 
     // E o selo visual (o mesmo usado em ResultadoAnaliseDocumento.tsx) passa a
     // refletir isso -- não mais o genérico "Revisão necessária".
@@ -129,9 +161,9 @@ describe('montarResultadoDetalhadoRelatorio -- conclusão e selo visual de docum
     expect(rotuloEstadoDocumento(estado)).toBe('Documento incompatível');
   });
 
-  it('um ECF de verdade, lido e consistente, continua com a conclusão de sucesso e o selo "Requisito satisfeito" (sem regressão)', async () => {
+  it('um ECF de verdade, lido e consistente, continua com a conclusão de sucesso, o selo "Requisito satisfeito" e os dados lidos visíveis (sem regressão)', async () => {
     const { montarRelatorioDocumental } = await import('../server/routes/documentacao');
-    const { estadoVisualDocumento, rotuloEstadoDocumento } = await import('../shared/documentalPresentation');
+    const { estadoVisualDocumento, rotuloEstadoDocumento, construirSecoesAnaliseDocumento } = await import('../shared/documentalPresentation');
     mockDocumentosExtracoesIa({
       tipo_analise: 'documento_generico',
       empresa_id: 'empresa-1',
@@ -165,5 +197,14 @@ describe('montarResultadoDetalhadoRelatorio -- conclusão e selo visual de docum
     const estado = estadoVisualDocumento(item.resultado_analise, item);
     expect(estado).toBe('aprovado');
     expect(rotuloEstadoDocumento(estado)).toBe('Requisito satisfeito');
+
+    // Contraste explícito com o teste anterior: quando o documento CORRETO é
+    // o que está anexado, os dados lidos (regime tributário, neste caso)
+    // continuam aparecendo normalmente -- a supressão de dados é exclusiva
+    // do caso "documento errado no slot", nunca do caso "documento certo".
+    const secoes = construirSecoesAnaliseDocumento(item.resultado_analise, item);
+    const secaoCampos = secoes.find((s: any) => s.id === 'campos');
+    expect(secaoCampos).toBeTruthy();
+    expect(secaoCampos!.campos?.some((c: any) => c.label === 'Regime tributário declarado no documento' && c.valor === 'Lucro Presumido')).toBe(true);
   });
 });

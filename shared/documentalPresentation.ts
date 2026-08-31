@@ -349,22 +349,30 @@ export function construirSecoesAnaliseDocumento(resultado: any = {}, documento: 
     documento,
   );
 
+  // CORREÇÃO (2026-08-31, "não é pra ele ler o que está nesse documento do
+  // simples, pra ele ler só se for o s f... tire esse monte de texto"): um
+  // documento do tipo ERRADO para o slot (ex.: PGDAS-D anexado no lugar do
+  // ECF) não pode mostrar NENHUM dado lido dele -- nem diagnóstico, nem
+  // "amostra objetiva dos dados lidos", nem os alertas explicando o motivo.
+  // A única informação exibida é que o documento é inválido para este campo;
+  // os dados do documento errado só voltam a aparecer quando o documento
+  // CORRETO for anexado e lido. Isso é intencionalmente diferente de outros
+  // motivos de revisão (baixa confiança, regime ambíguo, certidão positiva
+  // etc.), que continuam mostrando os dados normalmente -- ali o documento É
+  // o certo, só tem uma pendência sobre o CONTEÚDO dele.
+  if (documentoMarcadoIncompativel(resultado, documento)) {
+    return [{ id: "resultado", titulo: "Resultado da análise", texto: conclusao }];
+  }
+
   const secoes: DocumentoAnaliseSecao[] = [{ id: "resultado", titulo: "Resultado da análise", texto: conclusao }];
   const diagnosticoFactual = texto(resultado?.diagnostico_factual || resultado?.diagnostico);
   if (diagnosticoFactual && diagnosticoFactual !== conclusao) {
     secoes.push({ id: "diagnostico_factual", titulo: "Diagnóstico objetivo do documento", texto: diagnosticoFactual });
   }
-  // CORREÇÃO (2026-08-31, "tem que deixar claro"): o backend já calcula
-  // alertas específicos e legíveis (ex.: "isto é um PGDAS-D do Simples
-  // Nacional, não um ECF -- anexe o documento correto") em
-  // `normalizarDocumentoCatalogado`, mas para documentos catalogados
-  // genéricos (fora do fluxo societário/QSA) essas mensagens nunca viravam
-  // uma seção visível -- só apareciam nos metadados brutos do laudo. Isso
-  // reproduzia, num componente novo, o mesmo problema já corrigido antes no
-  // Acervo Documental: o dado certo existia, mas não chegava à tela. Seção
-  // sempre visível (nunca `colapsavel`) para os alertas de maior severidade;
-  // alertas de severidade baixa/média continuam disponíveis só nos metadados,
-  // sem competir por atenção com o que realmente precisa de ação.
+  // Alertas de severidade alta/crítica que sobrevivem ao ramo acima (documento
+  // correto, mas com uma pendência de conteúdo -- ex.: certidão positiva,
+  // regime ambíguo, baixa confiança) continuam sempre visíveis, nunca atrás de
+  // um clique.
   const alertasCriticos = (Array.isArray(resultado?.alertas) ? resultado.alertas : [])
     .filter((alerta: any) => alerta && texto(alerta.mensagem) && (alerta.severidade === "alta" || alerta.severidade === "critica"));
   if (alertasCriticos.length) {
@@ -396,12 +404,13 @@ function statusVisualNormalizado(value: unknown): string {
  * A ausência de um marcador negativo só é aprovada quando o próprio laudo
  * está concluído; ausência de laudo permanece aguardando.
  */
-export function estadoVisualDocumento(resultado: any = {}, documento: any = {}): DocumentoEstadoVisual {
-  const lifecycle = statusVisualNormalizado(resultado?.analysis_status || documento?.analysis_status);
-  if (["stale", "superseded", "reanalise_necessaria", "reanalise", "reanalisar_necessario", "reanalisar_necessaria"].includes(lifecycle)) {
-    return "reanalisar";
-  }
-
+// CORREÇÃO (2026-08-31, "não é pra ele ler o que está nesse documento do
+// simples, pra ele ler só se for o s f"): extraído de dentro de
+// `estadoVisualDocumento` para ser reutilizado também em
+// `construirSecoesAnaliseDocumento` -- as duas funções precisam concordar
+// exatamente sobre quando um documento é o tipo errado para o slot, senão o
+// selo diz uma coisa e o conteúdo da tela mostra outra.
+function documentoMarcadoIncompativel(resultado: any, documento: any): boolean {
   const dadosExtraidos = resultado?.dados_extraidos && typeof resultado.dados_extraidos === "object" ? resultado.dados_extraidos : {};
   const classificacao = resultado?.classificacao || resultado?.classificacao_documental || resultado?.classificacao_central || dadosExtraidos?.classificacao || {};
   const identidade = statusVisualNormalizado(
@@ -409,9 +418,27 @@ export function estadoVisualDocumento(resultado: any = {}, documento: any = {}):
   );
   const tipoEsperado = statusVisualNormalizado(classificacao?.tipo_esperado || resultado?.tipo_esperado || dadosExtraidos?.tipo_esperado);
   const tipoDetectado = statusVisualNormalizado(classificacao?.tipo_detectado || resultado?.tipo_detectado || dadosExtraidos?.tipo_detectado);
-  if (resultado?.documento_compativel === false || dadosExtraidos?.documento_compativel === false || classificacao?.documento_compativel === false || identidade === "incompativel" || (tipoEsperado && tipoDetectado && tipoEsperado !== tipoDetectado)) {
+  return Boolean(
+    resultado?.documento_compativel === false
+    || dadosExtraidos?.documento_compativel === false
+    || classificacao?.documento_compativel === false
+    || identidade === "incompativel"
+    || (tipoEsperado && tipoDetectado && tipoEsperado !== tipoDetectado),
+  );
+}
+
+export function estadoVisualDocumento(resultado: any = {}, documento: any = {}): DocumentoEstadoVisual {
+  const lifecycle = statusVisualNormalizado(resultado?.analysis_status || documento?.analysis_status);
+  if (["stale", "superseded", "reanalise_necessaria", "reanalise", "reanalisar_necessario", "reanalisar_necessaria"].includes(lifecycle)) {
+    return "reanalisar";
+  }
+
+  if (documentoMarcadoIncompativel(resultado, documento)) {
     return "incompativel";
   }
+
+  const dadosExtraidos = resultado?.dados_extraidos && typeof resultado.dados_extraidos === "object" ? resultado.dados_extraidos : {};
+  const classificacao = resultado?.classificacao || resultado?.classificacao_documental || resultado?.classificacao_central || dadosExtraidos?.classificacao || {};
   if (resultado?.satisfaz_requisito === false || dadosExtraidos?.satisfaz_requisito === false || classificacao?.satisfaz_requisito === false || resultado?.cobertura_status === "NAO_SATISFAZ" || dadosExtraidos?.cobertura_status === "NAO_SATISFAZ" || classificacao?.cobertura_status === "NAO_SATISFAZ") {
     return "revisao";
   }

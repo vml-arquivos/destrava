@@ -1,4 +1,4 @@
-# Relatório de Build — 31/08/2026 (atualizado, Rodada 8 — mensagem mínima, fim da duplicidade de alertas, selo visual correto)
+# Relatório de Build — 31/08/2026 (atualizado, Rodada 9 — zero leitura exibida de documento incompatível)
 
 ## 1. Instalação de dependências
 `pnpm install --frozen-lockfile` -- concluída sem erros, lockfile respeitado (nenhuma dependência adicionada ou removida em nenhuma rodada desta sessão).
@@ -7,10 +7,10 @@
 `npx tsc --noEmit` -- concluído sem nenhum erro, executado novamente após CADA arquivo alterado nesta rodada (não só uma vez no final).
 
 ## 3. Suíte de testes
-`npx vitest run` -- 82 arquivos / 740 testes, todos passando (ver `TEST_REPORT.md` para a progressão completa). Prova por reversão temporária confirmou, para os DOIS bugs corrigidos nesta rodada (duplicidade de alertas e selo visual genérico), que os testes correspondentes falham exatamente como o bug relatado quando a correção não está presente.
+`npx vitest run` -- 82 arquivos / 740 testes, todos passando (ver `TEST_REPORT.md` para a progressão completa). Prova por reversão temporária confirmou, para os DOIS pontos corrigidos nesta rodada (corte de seções em `construirSecoesAnaliseDocumento` e a mensagem de conclusão nomeando o tipo esperado), que os testes correspondentes falham exatamente como o bug relatado quando a correção não está presente.
 
 ## 4. Build de produção
-`pnpm run build` -- concluído com sucesso (executado e confirmado novamente após a conclusão das mudanças desta rodada: as mensagens mínimas e a consolidação de alertas em `server/services/analiseDocumentalEspecializada.ts`, e a propagação de `dados_extraidos`/conclusão explícita em `server/routes/documentacao.ts`).
+`pnpm run build` -- concluído com sucesso (executado e confirmado novamente após a conclusão das mudanças desta rodada: a função compartilhada `documentoMarcadoIncompativel` e o corte de seções em `shared/documentalPresentation.ts`, e a mensagem de conclusão nomeando o documento esperado em `server/routes/documentacao.ts`).
 
 Orçamento de bundle (checagem automática do próprio projeto):
 - JavaScript inicial: 98.7 kB gzip (limite 130 kB) -- OK

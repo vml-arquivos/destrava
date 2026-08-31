@@ -1,12 +1,17 @@
-# Relatório de Testes — 31/08/2026 (atualizado, Rodada 8 — mensagem mínima, fim da duplicidade de alertas, selo visual correto)
+# Relatório de Testes — 31/08/2026 (atualizado, Rodada 9 — zero leitura exibida de documento incompatível)
 
 ## Resultado final
 
 ```
 Test Files  82 passed (82)
      Tests  740 passed (740)
-  Duration  ~29s
+  Duration  ~29-40s
 ```
+
+## Testes novos ou alterados na Rodada 9 (0 arquivos novos -- 1 arquivo alterado, mesma contagem de testes)
+
+- `tests/documentacaoConclusaoIncompatibilidade.test.ts` (atualizado -- ainda 2 testes): o primeiro teste agora inclui, no laudo persistido mocado, dados de fato lidos do PGDAS-D errado (`situacao_simples: 'Optante'`, `regime_tributario: 'Simples Nacional'`, `diagnostico_factual`) e passa a chamar `construirSecoesAnaliseDocumento` (`shared/documentalPresentation.ts`) diretamente, provando que o resultado tem exatamente 1 seção (`id: 'resultado'`, texto "Documento inválido... ECF") e que NENHUMA seção de diagnóstico/campos/alertas é construída -- mesmo com dados reais disponíveis para exibir. A mensagem de conclusão também passa a nomear o tipo esperado (`/ECF/`) em vez do texto genérico anterior. O segundo teste (ECF de verdade) ganha o contraste direto: `construirSecoesAnaliseDocumento` continua devolvendo a seção "campos" com "Regime tributário declarado no documento: Lucro Presumido" -- prova de que a supressão é exclusiva do documento incompatível, nunca do documento correto.
+- **Prova de causa raiz por reversão temporária (dois pontos, dois bugs distintos)**: (1) revertendo o corte de seções em `construirSecoesAnaliseDocumento` (removendo o `if (documentoMarcadoIncompativel(...))` antes da construção das seções), o primeiro teste falhou com "expected length 1 but got 4" -- a amostra de dados do PGDAS e o diagnóstico voltaram a aparecer; (2) revertendo a mensagem de conclusão em `montarResultadoDetalhadoRelatorio` (`server/routes/documentacao.ts`) para o texto genérico da Rodada 8, o teste falhou porque a conclusão não mencionava mais "inválido"/"ECF". Restauradas as duas correções, os dois testes voltam a passar.
 
 ## Testes novos ou alterados na Rodada 8 (4 testes: 1 arquivo novo + 1 arquivo alterado)
 
@@ -36,7 +41,8 @@ Progressão dentro desta sessão, sempre crescendo, nunca encolhendo:
 | Rodada 6 (`...-corrigido-final-20260831-v3.zip`) | 79 (+1 arquivo novo) | 727 | +2 testes -- Enquadramento Tributário duplicado no relatório consolidado |
 | Entre a Rodada 6 e esta entrega (não documentado antes -- ver PENDENCIAS_REAIS.md item 12) | 80 (+1 arquivo) | 736 | +9 testes -- `tests/p0LaudosBackfill.test.ts` (classificador central + versionamento de laudos) |
 | Rodada 7 | 81 (+1 arquivo novo) | 738 | +2 testes -- causa raiz definitiva do PGDAS no slot de ECF (`extrairHibrido` não propagava texto local para o classificador central fora do QSA) |
-| Rodada 8 (esta entrega) | 82 (+1 arquivo novo) | 740 | +2 testes -- selo visual/conclusão explícita para documento incompatível (0 testes líquidos a mais no arquivo de alertas -- reescrito, mesma contagem) |
+| Rodada 8 | 82 (+1 arquivo novo) | 740 | +2 testes -- selo visual/conclusão explícita para documento incompatível (0 testes líquidos a mais no arquivo de alertas -- reescrito, mesma contagem) |
+| Rodada 9 (esta entrega) | 82 (nenhum arquivo novo) | 740 | 0 testes líquidos -- `tests/documentacaoConclusaoIncompatibilidade.test.ts` reescrito (mesma contagem, 2 testes) para provar o corte total de seções em documento incompatível |
 
 ## Testes novos ou alterados na Rodada 6 (2 testes: 1 arquivo novo)
 

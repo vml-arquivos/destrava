@@ -10,7 +10,7 @@ import { InsufficientHistoricalPeriodException, validateTwelveMonthContractHisto
 import { buildCadastralValidationDTO, phase1Approved } from '../services/phase1AnalysisService';
 import { ensureDocumentacaoSchema } from '../services/documentacaoSchema';
 import { gerarMapaDocumentalCredito, identificarRegimeCredito, ROTULO_REGIME_CREDITO } from '../services/mapaDocumentalCreditoService';
-import { DOCUMENT_TYPE_CATALOG, canonicalizeDocumentType, documentAnalysisConfig } from '../../shared/documentTypes';
+import { DOCUMENT_TYPE_CATALOG, canonicalizeDocumentType, documentAnalysisConfig, documentLabel } from '../../shared/documentTypes';
 import { resolverRegrasDocumentais, type RegraResolvida } from '../services/regrasDocumentaisCredito';
 import { upsertSocioEmpresa } from './socios_documentos';
 import { generateBrandedPdfBuffer } from '../services/brandedPdfLayout';
@@ -385,11 +385,19 @@ export function montarResultadoDetalhadoRelatorio(documento: any, analiseEspecia
   // `identidade_status` (calculados em `normalizarDocumentoCatalogado`,
   // server/services/analiseDocumentalEspecializada.ts); agora a conclusão
   // deste campo passa a dizer isso explicitamente, sem ambiguidade.
+  //
+  // ATUALIZAÇÃO (2026-08-31, "não é pra ele ler o que está nesse documento do
+  // simples, pra ele ler só se for o s f"): a conclusão agora nomeia o
+  // documento esperado (ex.: "Anexe o documento correto: ECF") -- e esta é a
+  // ÚNICA informação exibida para um documento incompatível: nenhum dado lido
+  // do arquivo errado aparece na tela (ver o corte em
+  // `construirSecoesAnaliseDocumento`, shared/documentalPresentation.ts, que
+  // usa exatamente esta mesma condição de incompatibilidade).
   const identidadeIncompativel = dados?.documento_compativel === false || dados?.identidade_status === 'INCOMPATIVEL';
   const resultado = documento?.analisado === false || !temEvidenciaDeAnalise
     ? 'Aguardando leitura documental.'
     : identidadeIncompativel
-      ? 'Documento incorreto para este campo -- NÃO validado. Anexe o documento correto.'
+      ? `Documento inválido para este campo. Anexe o documento correto: ${documentLabel(documento?.tipo_documento)}.`
       : documento?.consistente === true
         ? 'Leitura concluída; documento considerado consistente.'
         : 'Leitura concluída com observações ou necessidade de revisão.';
