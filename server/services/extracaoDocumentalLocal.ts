@@ -394,20 +394,57 @@ function parseQsa(texto: string): { dados: Record<string, any>; confianca: numbe
 }
 
 // DARF de IRPJ não escreve "lucro presumido"/"lucro real" por extenso -- o
-// regime é indicado pelo código de receita do tributo pago (guia de referência
-// do usuário: 2089/5993 = Lucro Presumido; 8998/3373 = Lucro Real). Só aceito
-// quando o código aparece junto do rótulo "código de receita" do próprio DARF,
-// nunca um número de 3-4 dígitos solto em outro lugar do documento (data, CEP,
-// valor) -- mesma cautela de "nunca inventar" aplicada ao resto da função.
-const CODIGO_RECEITA_DARF_PRESUMIDO = new Set(['2089', '5993']);
-const CODIGO_RECEITA_DARF_REAL = new Set(['8998', '3373']);
-function regimeViaCodigoReceitaDarf(texto: string): string | null {
+// regime é indicado pelo código de receita do tributo pago. Só aceito quando o
+// código aparece junto do rótulo "código de receita" do próprio DARF, nunca um
+// número de 3-4 dígitos solto em outro lugar do documento (data, CEP, valor)
+// -- mesma cautela de "nunca inventar" aplicada ao resto da função.
+//
+// CORREÇÃO (2026-08-30, bug P0 do diagnóstico Master System Prompt): o código
+// 5993 estava classificado como Lucro Presumido. O código de receita 5993 é,
+// na verdade, "IRPJ - Lucro Real - Estimativa Mensal", e 5625 ("IRPJ - Lucro
+// Arbitrado") não existia no catálogo -- um DARF de empresa arbitrada nunca
+// conseguia ter o regime identificado. Classificar 5993 como Presumido é
+// exatamente o tipo de erro que muda a conclusão da análise: a trilha
+// documental (ECF/ECD/EFD x Livro Caixa) exigida para Real e para Presumido é
+// diferente, e a empresa poderia avançar pedindo o conjunto de documentos
+// errado. Tabela corrigida, com o código de receita como chave única (nunca
+// dois códigos apontando para regimes diferentes por engano):
+//   2089 -> Lucro Presumido (confirmado)
+//   5993 -> Lucro Real, estimativa mensal (confirmado)
+//   3373 -> Lucro Real, apuração trimestral (confirmado)
+//   8998 -> NÃO CONFIRMADO (ver correção abaixo)
+//   5625 -> Lucro Arbitrado (confirmado)
+//
+// CORREÇÃO (2026-08-30, reversão de decisão anterior -- auditoria
+// independente, seção sobre o código 8998): uma rodada anterior desta mesma
+// correção manteve 8998 mapeado para "Lucro Real" "por compatibilidade",
+// mesmo documentando que não é um código oficialmente confirmado na tabela
+// de códigos de receita da RFB para IRPJ. Isso foi um erro: em análise de
+// crédito, INFERIR um regime a partir de um código não confirmado é pior do
+// que não inferir nada, porque o regime errado puxa a lista errada de
+// documentação exigida adiante (ver a mesma regra já aplicada em
+// `detectarRegimeTributarioDeclarado`). A partir de agora 8998 tem
+// `regime: null` e `confirmado: false`: nunca gera um regime tributário
+// sozinho, e sinaliza explicitamente `codigoReceitaNaoConfirmado` para quem
+// chama, que por sua vez gera um alerta de auditoria com os marcadores
+// CODIGO_NAO_MAPEADO / REVISAO_HUMANA (ver `analiseDocumentalEspecializada.ts`,
+// `normalizarDocumentoCatalogado`) em vez de assumir Lucro Real
+// silenciosamente.
+export const CATALOGO_CODIGO_RECEITA_DARF_IRPJ: Record<string, { regime: string | null; forma_apuracao: string; confirmado: boolean }> = {
+  '2089': { regime: 'Lucro Presumido', forma_apuracao: 'trimestral', confirmado: true },
+  '5993': { regime: 'Lucro Real', forma_apuracao: 'estimativa_mensal', confirmado: true },
+  '3373': { regime: 'Lucro Real', forma_apuracao: 'trimestral', confirmado: true },
+  '8998': { regime: null, forma_apuracao: 'nao_confirmado', confirmado: false },
+  '5625': { regime: 'Lucro Arbitrado', forma_apuracao: 'trimestral', confirmado: true },
+};
+function regimeViaCodigoReceitaDarf(texto: string): { regime: string | null; codigoNaoConfirmado: string | null } {
   const match = texto.match(/c[oó]digo\s+(?:d[ea]\s+)?receita\D{0,12}(\d{3,4})/i);
-  if (!match) return null;
+  if (!match) return { regime: null, codigoNaoConfirmado: null };
   const codigo = match[1];
-  if (CODIGO_RECEITA_DARF_PRESUMIDO.has(codigo)) return 'Lucro Presumido';
-  if (CODIGO_RECEITA_DARF_REAL.has(codigo)) return 'Lucro Real';
-  return null;
+  const entrada = CATALOGO_CODIGO_RECEITA_DARF_IRPJ[codigo];
+  if (!entrada) return { regime: null, codigoNaoConfirmado: null };
+  if (!entrada.confirmado) return { regime: null, codigoNaoConfirmado: codigo };
+  return { regime: entrada.regime, codigoNaoConfirmado: null };
 }
 
 /**
@@ -424,7 +461,7 @@ function regimeViaCodigoReceitaDarf(texto: string): string | null {
  * quando o texto por extenso e o código de receita de um DARF discordam entre
  * si -- nesse caso também vira ambíguo, em vez de escolher um dos dois).
  */
-export function detectarRegimeTributarioDeclarado(texto: string): { regime: string | null; ambiguo: boolean } {
+export function detectarRegimeTributarioDeclarado(texto: string): { regime: string | null; ambiguo: boolean; codigoReceitaNaoConfirmado?: string } {
   const norm = textoNormalizado(texto);
   const afirmado = (termo: string) => {
     const negado = new RegExp(`(n[ãa]o|nao)\\s+(?:[a-zç]+\\s+){0,3}${termo}`, 'i');
@@ -434,7 +471,7 @@ export function detectarRegimeTributarioDeclarado(texto: string): { regime: stri
   const lucroPresumido = afirmado('lucro presumido');
   const lucroReal = afirmado('lucro real');
   const lucroArbitrado = afirmado('lucro arbitrado');
-  const regimeViaDarf = regimeViaCodigoReceitaDarf(texto);
+  const { regime: regimeViaDarf, codigoNaoConfirmado } = regimeViaCodigoReceitaDarf(texto);
   // Imune/isenta só conta quando o texto fala do regime, não quando a palavra
   // aparece solta (ex: "isenta de multa").
   const imuneIsenta = /regime\s+(?:tribut[aá]rio\s+)?(?:de\s+)?(?:imunidade|isen[cç][aã]o)/i.test(texto)
@@ -453,6 +490,13 @@ export function detectarRegimeTributarioDeclarado(texto: string): { regime: stri
     : imuneIsenta
       ? 'Imune ou isenta'
       : null;
+  // codigoNaoConfirmado (ex: DARF com código de receita 8998) só é
+  // sinalizado quando NENHUM outro regime foi confirmado por outra via --
+  // se o próprio texto já afirma o regime por extenso, essa confirmação
+  // prevalece e não há nada para revisar.
+  if (!regime && codigoNaoConfirmado) {
+    return { regime: null, ambiguo: false, codigoReceitaNaoConfirmado: codigoNaoConfirmado };
+  }
   return { regime, ambiguo: false };
 }
 
@@ -483,7 +527,7 @@ function parseSimples(texto: string): { dados: Record<string, any>; confianca: n
   // ver 'nao_optante_regime_a_confirmar' em mapaDocumentalCreditoService.ts.
   // "Não Optante" nunca é tratado como regime: Presumido, Real e Arbitrado são
   // todos não optantes e exigem documentos diferentes entre si.
-  const { regime: regimeDeclaradoBruto, ambiguo: regimeAmbiguo } = detectarRegimeTributarioDeclarado(texto);
+  const { regime: regimeDeclaradoBruto, ambiguo: regimeAmbiguo, codigoReceitaNaoConfirmado } = detectarRegimeTributarioDeclarado(texto);
   const regimeDeclarado = regimeDeclaradoBruto;
   const regime = simei
     ? 'MEI / SIMEI'
@@ -491,6 +535,12 @@ function parseSimples(texto: string): { dados: Record<string, any>; confianca: n
       ? 'Simples Nacional'
       : regimeDeclarado;
   const regimeConfirmado = Boolean(simei || optante || regimeDeclarado);
+  // CORREÇÃO (2026-08-30): código de receita do DARF não confirmado na
+  // tabela oficial da RFB (ex: 8998) nunca mais infere regime sozinho (ver
+  // detectarRegimeTributarioDeclarado). Em vez de ficar silenciosamente
+  // pendente como qualquer outro documento sem regime, fica marcado com um
+  // motivo explícito para revisão humana (REVISAO_HUMANA / CODIGO_NAO_MAPEADO).
+  const revisaoHumanaNecessaria = Boolean(codigoReceitaNaoConfirmado) && !regimeConfirmado;
   const confianca = clamp((compativel || regimeDeclarado ? 0.25 : 0) + (cnpj ? 0.35 : 0) + (situacao || regimeDeclarado ? 0.3 : 0) + ((dataOpcao || dataExclusao || agendamento) ? 0.1 : 0));
   return {
     dados: {
@@ -500,6 +550,11 @@ function parseSimples(texto: string): { dados: Record<string, any>; confianca: n
       regime_tributario: regime,
       regime_confirmado: regimeConfirmado,
       regime_a_confirmar: Boolean(situacao) && !regimeConfirmado,
+      codigo_receita_darf_nao_confirmado: codigoReceitaNaoConfirmado || null,
+      revisao_humana_necessaria: revisaoHumanaNecessaria,
+      motivo_revisao_humana: revisaoHumanaNecessaria
+        ? `Código de receita ${codigoReceitaNaoConfirmado} não está confirmado na tabela oficial de códigos de receita da RFB para IRPJ -- o regime tributário não pode ser inferido automaticamente (CODIGO_NAO_MAPEADO). Requer revisão humana.`
+        : null,
       data_opcao_simples: dataOpcao,
       data_exclusao_simples: dataExclusao,
       agendamento_exclusao: agendamento,
@@ -941,28 +996,59 @@ function parseAtosJunta(texto: string): { dados: Record<string, any>; confianca:
   };
 }
 
-export function parseComprovanteRegime(tipo: TipoDocumentoLocal, texto: string): { dados: Record<string, any>; confianca: number } {
-  const base = parseSimples(texto);
+export type TipoComprovanteRegime = 'ecf' | 'pgdas_d' | 'dctf_mit' | 'darf' | 'ecd' | 'livro_caixa';
+
+// Marcadores textuais de cada tipo, checados em ordem de especificidade. O
+// classificador nunca consulta o slot esperado: identifica somente o que o
+// texto efetivamente afirma ser, incluindo documentos fiscais que podem ser
+// evidência histórica sem satisfazer um slot diferente.
+const MARCADORES_COMPROVANTE_REGIME: Record<TipoComprovanteRegime, RegExp> = {
+  pgdas_d: /(?:recibo.{0,80})?pgdas[- ]?d|programa gerador do documento de arrecadacao do simples|programa gerador do documento de arrecadação do simples/i,
+  ecd: /(?:recibo.{0,80})?\becd\b|escrituracao contabil digital|escrituração contábil digital|sped\s+contabil/i,
+  ecf: /(?:recibo.{0,80})?\becf\b|escrituracao contabil fiscal|escrituração contábil fiscal|sped\s+ecf/i,
+  dctf_mit: /\bdctf(?:web)?\b|mit\b|modulo de inclusao de tributos|módulo de inclusão de tributos/i,
+  darf: /\bdarf\b|documento de arrecadacao de receitas federais|documento de arrecadação de receitas federais/i,
+  livro_caixa: /livro[- ]caixa/i,
+};
+const ORDEM_DETECCAO_COMPROVANTE_REGIME: TipoComprovanteRegime[] = ['pgdas_d', 'ecd', 'ecf', 'dctf_mit', 'darf', 'livro_caixa'];
+
+/**
+ * Classificador independente do slot: identifica qual dos quatro tipos de
+ * comprovante de regime (ECF, DCTF/DCTFWeb/MIT, DARF, Livro Caixa) o TEXTO em
+ * si afirma ser, sem nunca consultar para qual slot o arquivo foi enviado.
+ * Devolve `null` quando nenhum marcador é encontrado -- "não sei que documento
+ * é este", nunca "deve ser o que o usuário esperava anexar".
+ */
+export function detectarTipoComprovanteRegime(texto: string): TipoComprovanteRegime | null {
   const normalizado = textoNormalizado(texto);
-  const marcadores: Record<string, RegExp> = {
-    ecf: /(?:recibo.{0,80})?\becf\b|escrituracao contabil fiscal|escrituração contábil fiscal|sped\s+ecf/i,
-    pgdas_d: /(?:recibo.{0,80})?pgdas[- ]?d|programa gerador do documento de arrecadacao do simples/i,
-    dctf_mit: /\bdctf(?:web)?\b|mit\b|modulo de inclusao de tributos|módulo de inclusão de tributos/i,
-    darf: /\bdarf\b|documento de arrecadacao de receitas federais|documento de arrecadação de receitas federais/i,
-    ecd: /(?:recibo.{0,80})?\becd\b|escrituracao contabil digital|escrituração contábil digital|sped\s+contabil/i,
-    livro_caixa: /livro[- ]caixa/i,
-  };
-  const marcadorDoTipo = marcadores[tipo]?.test(normalizado) === true;
+  for (const tipo of ORDEM_DETECCAO_COMPROVANTE_REGIME) {
+    if (MARCADORES_COMPROVANTE_REGIME[tipo].test(normalizado)) return tipo;
+  }
+  return null;
+}
+
+export function parseComprovanteRegime(tipoEsperado: TipoDocumentoLocal, texto: string): { dados: Record<string, any>; confianca: number } {
+  const base = parseSimples(texto);
+  const tipoDetectado = detectarTipoComprovanteRegime(texto);
+  // A identidade do documento vem exclusivamente do texto, sem consultar o
+  // slot de upload. O requisito só é compatível quando o tipo detectado é
+  // exatamente o tipo esperado; o regime explicitamente lido continua sendo
+  // evidência histórica independente e nunca é inferido de código não confirmado.
   const regimeDetectado = base.dados.regime_confirmado === true;
-  const documentoCompativel = marcadorDoTipo && regimeDetectado;
+  const documentoCompativel = tipoDetectado === tipoEsperado && regimeDetectado;
+  const REGIMES_QUE_JUSTIFICAM_COMPROVANTE = new Set(['Lucro Presumido', 'Lucro Real', 'Lucro Arbitrado']);
+  const podeEvidenciarRegime = REGIMES_QUE_JUSTIFICAM_COMPROVANTE.has(String(base.dados.regime_tributario || ''));
   return {
     dados: {
       ...base.dados,
+      tipo_detectado: tipoDetectado,
+      tipo_esperado: tipoEsperado,
       documento_compativel: documentoCompativel,
+      pode_evidenciar_regime: podeEvidenciarRegime,
       comprovante_regime: true,
-      tipo_comprovante_regime: tipo,
+      tipo_comprovante_regime: tipoEsperado,
     },
-    confianca: clamp(base.confianca + (marcadorDoTipo ? 0.15 : 0)),
+    confianca: clamp(base.confianca + (documentoCompativel ? 0.15 : 0)),
   };
 }
 

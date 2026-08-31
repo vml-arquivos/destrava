@@ -1,0 +1,59 @@
+Arquivos alterados nesta entrega, cumulativos das seis rodadas desta sessão
+(30-31/08/2026), em relação ao repositório original antes de qualquer correção.
+Lista gerada por `diff -rq` contra uma cópia pristina do repositório original
+(ver TEST_REPORT.md / BUILD_REPORT.md para os comandos de verificação).
+
+Arquivos existentes ALTERADOS:
+
+PLANO_LEITURA_DOCUMENTAL.md
+client/src/components/documentos/DocumentosEntidade.tsx
+server/routes/documentacao.ts
+server/routes/documentos.ts
+server/services/analiseDocumentalEspecializada.ts
+server/services/extracaoDocumentalLocal.ts
+tests/analiseDocumentalEspecializada.test.ts
+tests/documentacaoAnaliseEspecializada.integration.test.ts
+tests/ordemConsultaCadastral.test.ts
+tests/regimeComprovante.test.ts
+tests/regimeTributarioConsistencia.test.ts
+
+Arquivos NOVOS -- código de produção:
+
+db/migrations/100_regime_tributario_linha_do_tempo.sql
+db/migrations/101_faturamento_mensal_rolling12.sql
+db/migrations/102_cobertura_evidencia_bureau.sql
+server/services/regimeTributarioTemporalService.ts
+server/services/faturamentoRolling12MesesService.ts
+server/services/coberturaEvidenciaBureauService.ts
+
+Arquivos NOVOS -- testes:
+
+tests/regimeTributarioTemporalService.test.ts
+tests/regimeTributarioLinhaDoTempoRoute.test.ts
+tests/uploadNaoBloqueadoPorOrdemConsultaCadastral.test.ts
+tests/faturamentoRolling12MesesService.test.ts
+tests/faturamentoRolling12MesesRoute.test.ts
+tests/coberturaEvidenciaBureauService.test.ts
+tests/coberturaEvidenciaBureauRoute.test.ts
+tests/catalogoDarfConsistencia.test.ts
+tests/relatorioDocumentalEnquadramentoTributarioDuplicado.test.ts
+
+Arquivos NOVOS -- relatórios e documentação da entrega:
+
+CHANGELOG_CORRECOES.md
+DIAGNOSTICO_PRE_CORRECAO.md
+REGRESSION_REPORT.md
+TEST_REPORT.md
+BUILD_REPORT.md
+ROLLBACK_PLAN.md
+MIGRATION_SAFETY_REPORT.md
+ARQUITETURA_DOCUMENTAL_FINAL.md
+PENDENCIAS_REAIS.md
+FILES_CHANGED.txt
+SHA256SUMS.txt
+
+Arquivo de entrega anterior (mantido, não alterado nesta sessão):
+
+DIAGNOSTICO_MASTER_PROMPT_CREDITO.md
+
+Total: 11 arquivos alterados + 6 arquivos novos de código/migration + 9 arquivos novos de teste + 11 arquivos novos de documentação = 37 arquivos.

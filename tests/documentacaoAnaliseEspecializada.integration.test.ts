@@ -207,4 +207,54 @@ describe('POST /api/documentacao/ia/documentos/:documentoId/extrair', () => {
     await new Promise((resolve) => setTimeout(resolve, 20));
     expect(mocks.analisarGenerico).toHaveBeenCalledWith('empresa-1', 'doc-2', 'balanco');
   });
+
+  // CORREÇÃO (2026-08-31, bug real reportado em produção): um documento já
+  // analisado (ex.: ECF) com laudo "concluido" persistido de ANTES de uma
+  // correção do motor de análise (ex.: a correção de identidade documental
+  // desta sessão) precisa poder ser relido sem reanexar o arquivo -- senão
+  // deployar a correção no servidor não muda em nada o que já foi lido.
+  // Este teste prova que /extrair dispara nova análise mesmo quando já
+  // existe um laudo "concluido" (não só quando não existe análise nenhuma
+  // ou quando está "pendente"/"processando").
+  it('reprocessa um documento já concluído (ex.: ECF) quando /extrair é chamado de novo -- correção do motor pós-deploy não fica presa no laudo antigo', async () => {
+    mocks.analisarGenerico.mockResolvedValue({
+      ...resultadoQsa,
+      tipo_analise: 'documento_generico',
+      tipo_documento: 'ecf',
+      tipo_documento_canonico: 'ecf',
+      dados_extraidos: { documento_compativel: false, tipo_detectado: null, tipo_esperado: 'ecf' },
+      alertas: [{ codigo: 'documento_catalogado_incompativel', mensagem: 'O arquivo não foi reconhecido como ECF (Escrituração Contábil Fiscal).', severidade: 'alta' }],
+      status: 'revisao_humana',
+    });
+    mocks.poolQuery.mockImplementation(async (text: string) => {
+      if (text.includes('FROM public.documentos_arquivos')) {
+        return { rows: [{ id: 'doc-ecf-antigo', empresa_id: 'empresa-1', entidade_id: 'empresa-1', entidade_tipo: 'empresa', tipo_documento: 'ecf' }] };
+      }
+      return { rows: [] };
+    });
+    mocks.clientQuery.mockImplementation(async (text: string) => {
+      if (text.includes('FROM public.documentos_extracoes_ia')) {
+        // Laudo antigo já CONCLUÍDO (não pendente/processando) -- exatamente o
+        // caso de um PGDAS lido como "válido" pelo motor antigo antes da
+        // correção de identidade documental ser deployada.
+        return { rows: [{ id: 'extracao-ecf-1', arquivo_id: 'doc-ecf-antigo', prompt_codigo: 'ecf_extract', prompt_versao: '1.0.0', status: 'concluido', atualizado_em: new Date(Date.now() - 60 * 60 * 1000).toISOString() }] };
+      }
+      if (text.includes('UPDATE public.documentos_extracoes_ia')) {
+        return { rows: [{ id: 'extracao-ecf-1', arquivo_id: 'doc-ecf-antigo', prompt_codigo: 'ecf_extract', status: 'pendente' }] };
+      }
+      return { rows: [] };
+    });
+
+    const response = await request(appTeste())
+      .post('/api/documentacao/ia/documentos/doc-ecf-antigo/extrair')
+      .send({});
+
+    expect(response.status).toBe(202);
+    expect(response.body.message).toBe('Processamento especializado registrado como pendente.');
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    // A garantia central deste teste: mesmo com um laudo "concluido" já
+    // persistido, a nova chamada dispara `analisarDocumentoCatalogado` de
+    // novo -- o resultado antigo nunca fica congelado para sempre.
+    expect(mocks.analisarGenerico).toHaveBeenCalledWith('empresa-1', 'doc-ecf-antigo', 'ecf');
+  });
 });

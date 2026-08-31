@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { apiFetch, apiFetchBlob } from "@/lib/api";
 import { DOCUMENT_TYPE_CATALOG, documentLabel } from "@shared/documentTypes";
 import { ResultadoAnaliseDocumento } from "./ResultadoAnaliseDocumento";
@@ -265,16 +265,15 @@ export const SECOES_DOCUMENTAIS: SecaoDocumento[] = [
   },
 ];
 
-// Espelha server/routes/documentos.ts (ORDEM_CONSULTA_CADASTRAL) -- ordem obrigatória
-// de leitura das consultas cadastrais: 1º SCR/Registrato, 2º CCS, 3º CCF, tanto para
-// CNPJ quanto para CPF (por sócio). O backend é a fonte de verdade e barra o upload de
-// qualquer forma; isto aqui só evita deixar o usuário anexar e só depois ver o erro.
-const ORDEM_CONSULTA_CADASTRAL: Record<string, { exige: string[]; rotulo: string }> = {
-  ccs_cnpj: { exige: ["rating_bacen_cnpj", "scr_cnpj"], rotulo: "SCR/Registrato (CNPJ)" },
-  ccf_cnpj: { exige: ["ccs_cnpj"], rotulo: "CCS (CNPJ)" },
-  ccs_cpf: { exige: ["rating_bacen_cpf", "scr_cpf"], rotulo: "SCR/Registrato (CPF)" },
-  ccf_cpf: { exige: ["ccs_cpf"], rotulo: "CCS (CPF)" },
-};
+// CORREÇÃO (2026-08-31, pedido explícito do usuário em produção): o aviso
+// informativo "Ordem recomendada: anexe primeiro o Relatório SCR/Registrato
+// (CNPJ)... (SCR → CCS → CCF)" foi removido da tela por instrução direta --
+// o usuário reportou que esse tipo de recomendação não deve mais aparecer.
+// A ordem SCR -> CCS -> CCF nunca bloqueou o upload (ver
+// tests/uploadNaoBloqueadoPorOrdemConsultaCadastral.test.ts, que continua
+// válido: o backend nunca recusou o anexo por causa da ordem) -- só o AVISO
+// visual é que foi removido aqui. `ORDEM_CONSULTA_CADASTRAL` (o mapa que
+// alimentava esse aviso) foi removido junto por ficar sem nenhum uso.
 
 const TODOS_SLOTS = SECOES_DOCUMENTAIS.flatMap((secao) => secao.slots);
 const TIPO_PARA_SLOT = new Map<string, DocumentoSlot>();
@@ -356,7 +355,7 @@ export function formatDate(value?: string | null) {
 // campos lidos ficam atrás de um clique, porque quem está conferindo não
 // precisa deles pra seguir. Quando há problema, o que aparece é o problema e o
 // que resolve.
-function StatusAnaliseSlot({ item }: { item?: { nome: string; anexado: boolean; analisado: boolean; consistente: boolean; status: string; diagnostico?: string | null; campos_principais?: Record<string, unknown>; regime_a_confirmar?: boolean } }) {
+function StatusAnaliseSlot({ item, tipo }: { item?: { nome: string; anexado: boolean; analisado: boolean; consistente: boolean; status: string; diagnostico?: string | null; campos_principais?: Record<string, unknown>; regime_a_confirmar?: boolean }; tipo?: string }) {
   const [aberto, setAberto] = useState(false);
   if (!item || !item.anexado) return null;
 
@@ -426,6 +425,13 @@ function StatusAnaliseSlot({ item }: { item?: { nome: string; anexado: boolean; 
 
   const falhou = item.status === "falha_leitura";
   const aguardando = !item.analisado && !falhou;
+  // O card de Enquadramento Tributário já tem, logo abaixo da grade de Identidade
+  // do CNPJ, um bloco dedicado explicando o que anexar (ECF/DCTF/DARF/Livro Caixa)
+  // e um botão de ação, quando o regime efetivo ainda não foi confirmado. Repetir
+  // "Revisão necessária" sem nenhuma ação aqui dentro do card era ruído -- pedido
+  // explícito do usuário para tirar isso "daqui". Falha de leitura e "aguardando
+  // análise" continuam aparecendo normalmente, em qualquer card.
+  if (tipo === "enquadramento_tributario_cnpj" && !falhou && !aguardando) return null;
   return (
     <div className={`rounded-md border px-2 py-1.5 ${falhou ? "border-destructive/20 bg-destructive/10" : "border-warning/20 bg-warning/10"}`}>
       <span className={`inline-flex items-center gap-1 text-[10px] font-black ${falhou ? "text-destructive" : "text-warning"}`}>
@@ -649,6 +655,20 @@ export default function DocumentosEntidade({
   const [selecionados, setSelecionados] = useState<Record<string, boolean>>({});
   const [exportando, setExportando] = useState(false);
   const [modalExportacao, setModalExportacao] = useState(false);
+  // CORREÇÃO (2026-08-31, bug real reportado em produção): um documento já
+  // analisado (ex.: o PGDAS anexado no slot de ECF, competência 12/2025)
+  // continuava mostrando o resultado ANTIGO da leitura mesmo depois do
+  // deploy de um motor de análise corrigido -- `enriquecerDocumentosAcervoComAnalise`
+  // (server/routes/documentacao.ts) só LÊ o laudo já persistido em
+  // `documentos_extracoes_ia`, nunca reprocessa sozinho. O endpoint
+  // `POST /api/documentacao/ia/documentos/:id/extrair` já sabia forçar uma
+  // nova leitura (usado hoje só pelo botão "Reanalisar" da continuidade
+  // societária), mas não existia nenhum jeito de disparar isso para os
+  // demais documentos catalogados (ECF, DCTF, CADIN, CND, PGFN etc.) --
+  // então a única forma de corrigir um laudo antigo era excluir e reanexar
+  // o arquivo. Este estado controla o botão "Reanalisar" novo, por arquivo,
+  // que resolve isso sem precisar reanexar nada.
+  const [reanalisandoId, setReanalisandoId] = useState<string | null>(null);
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   const [previewDoc, setPreviewDoc] = useState<DocumentoArquivo | null>(null);
   const [secaoAtiva, setSecaoAtiva] = useState<string | null>(secaoInicial);
@@ -673,6 +693,15 @@ export default function DocumentosEntidade({
   // igual ao mecanismo de "Ver detalhes" já usado na Etapa 1/2/3.
   const [descricaoVisivel, setDescricaoVisivel] = useState<Record<string, boolean>>({});
   const [pipeline, setPipeline] = useState<any>(null);
+  // Popover "Detalhes da pendência" do bloco compacto de confirmação de regime
+  // tributário -- pedido explícito do usuário para tirar o texto permanente
+  // ("Comprovação do regime tributário não optante", "Prioridade alta",
+  // "Próximo documento a anexar: ECF, DCTF/DCTFWeb, DARF ou Livro Caixa") e
+  // deixar só um selo "Pendência" com detalhes sob clique, mais os botões
+  // diretos de ECF/DCTF (ninguém vai anexar Livro Caixa, então não aparece
+  // mais como opção em destaque no bloco -- continua valendo como tipo de
+  // documento no catálogo/slots, só não é mais sugerido aqui).
+  const [pendenciaRegimeAberta, setPendenciaRegimeAberta] = useState(false);
   // Resultado da Etapa 1 (Cartão CNPJ + QSA + Enquadramento Tributário), mostrado
   // direto nesta tela com o mesmo cartão usado no Dossiê/Laudo IA
   // (ProntidaoIdentidadeCard) -- antes, clicar em "Iniciar análise documental"
@@ -1220,6 +1249,33 @@ export default function DocumentosEntidade({
     }
   }
 
+  // CORREÇÃO (2026-08-31): força uma nova leitura de um documento JÁ
+  // anexado e já analisado -- necessário sempre que o motor de análise for
+  // corrigido/atualizado depois que o arquivo já tinha sido lido pela
+  // versão antiga (o laudo antigo, errado, nunca se atualiza sozinho). O
+  // processamento roda em segundo plano no servidor (`setImmediate`), então
+  // aguarda alguns segundos antes de recarregar a lista para dar tempo do
+  // novo resultado ser persistido; se ainda não tiver terminado, o
+  // resultado antigo aparece por mais alguns segundos até o usuário abrir
+  // "Dados da análise" de novo ou recarregar a página.
+  async function reanalisar(doc: DocumentoArquivo) {
+    setReanalisandoId(doc.id);
+    try {
+      await apiFetch(`/api/documentacao/ia/documentos/${doc.id}/extrair`, { method: "POST", body: JSON.stringify({}) });
+      toast.success("Nova leitura solicitada. Atualizando em instantes...");
+      setTimeout(() => { void carregar(); }, 4000);
+    } catch (err: any) {
+      const mensagem = String(err?.message || "");
+      if (/ainda não implementado/i.test(mensagem)) {
+        toast.info("Este tipo de documento não tem reprocessamento automático disponível ainda.");
+      } else {
+        toast.error(mensagem || "Erro ao solicitar nova leitura do documento.");
+      }
+    } finally {
+      setReanalisandoId((prev) => (prev === doc.id ? null : prev));
+    }
+  }
+
   function marcarDocs(lista: DocumentoArquivo[], valor: boolean) {
     setSelecionados((prev) => {
       const copy = { ...prev };
@@ -1238,6 +1294,56 @@ export default function DocumentosEntidade({
   const grupoAtivoId = secaoAtivaTitulo ? grupoDaSecao(secaoAtivaTitulo) : gruposDaTela[0]?.id;
   const grupoAtivoObj = gruposDaTela.find((grupo) => grupo.id === grupoAtivoId) || gruposDaTela[0];
   const secoesDoGrupoAtivo = grupoAtivoObj?.secoesMembros || [];
+
+  // Pendência de confirmação de regime tributário (ECF/DCTF/DARF/Livro Caixa) --
+  // calculada uma única vez aqui e injetada dentro da grade de documentos, logo
+  // abaixo dos cards de Cartão CNPJ/QSA/Enquadramento (seção "Identidade do
+  // CNPJ"), em vez de acima de toda a grade como era antes. Ver ponto de injeção
+  // em secoesDoGrupoAtivo.map(...) mais abaixo.
+  const blocoPendenciaRegime = mapaCredito?.regime_a_confirmar === true ? (() => {
+    const pendencia = mapaCredito.pendencias?.find((item: any) => item.codigo === "nao_optante_regime_a_confirmar");
+    const emAnalise = pendencia?.status === "em_analise";
+    const chaveEcf = chaveContextoSlot("ecf", null);
+    const chaveDctf = chaveContextoSlot("dctf", null);
+    return (
+      <div className="flex flex-wrap items-center gap-2">
+        <div className="relative">
+          <button
+            type="button"
+            onClick={() => setPendenciaRegimeAberta((v) => !v)}
+            className="inline-flex items-center gap-1.5 rounded-full border border-warning/30 bg-card px-2.5 py-1 text-[10px] font-black text-warning"
+          >
+            <AlertTriangle className="h-3 w-3 shrink-0" /> {emAnalise ? "Aguardando análise" : "Pendência"}
+          </button>
+          {pendenciaRegimeAberta && (
+            <div className="absolute left-0 top-full z-20 mt-1.5 w-72 max-w-[90vw] rounded-xl border border-border bg-card p-3 shadow-lg">
+              <div className="flex items-center justify-between gap-2">
+                <p className="text-[11px] font-black text-warning">Detalhes da pendência</p>
+                <button type="button" onClick={() => setPendenciaRegimeAberta(false)} className="text-[10px] text-muted-foreground hover:text-foreground">Fechar</button>
+              </div>
+              <p className="mt-1.5 text-[11px] leading-relaxed text-muted-foreground">
+                {emAnalise
+                  ? "O documento foi anexado e aguarda leitura para identificar o regime efetivo."
+                  : pendencia?.descricao || "A empresa não é optante do Simples. Anexe ECF ou DCTF para confirmar o regime efetivo (Lucro Presumido, Real ou Arbitrado)."}
+              </p>
+            </div>
+          )}
+        </div>
+        {!emAnalise && (
+          <>
+            <label className={`h-7 inline-flex items-center justify-center gap-1 text-[10px] font-bold px-2.5 rounded-lg transition-colors shrink-0 ${uploadingTipo === chaveEcf ? "bg-border text-primary-foreground cursor-not-allowed" : "bg-primary text-primary-foreground cursor-pointer hover:bg-primary/90"}`}>
+              {uploadingTipo === chaveEcf ? <Loader2 className="w-3 h-3 animate-spin" /> : <Upload className="w-3 h-3" />} ECF
+              <input type="file" accept=".pdf,.jpg,.jpeg,.png,.webp,.xlsx,.csv,.docx" className="hidden" disabled={uploadingTipo === chaveEcf} onChange={(e) => { const file = e.target.files?.[0]; if (file) void enviar("ecf", file); e.currentTarget.value = ""; }} />
+            </label>
+            <label className={`h-7 inline-flex items-center justify-center gap-1 text-[10px] font-bold px-2.5 rounded-lg transition-colors shrink-0 ${uploadingTipo === chaveDctf ? "bg-border text-primary-foreground cursor-not-allowed" : "bg-primary text-primary-foreground cursor-pointer hover:bg-primary/90"}`}>
+              {uploadingTipo === chaveDctf ? <Loader2 className="w-3 h-3 animate-spin" /> : <Upload className="w-3 h-3" />} DCTF
+              <input type="file" accept=".pdf,.jpg,.jpeg,.png,.webp,.xlsx,.csv,.docx" className="hidden" disabled={uploadingTipo === chaveDctf} onChange={(e) => { const file = e.target.files?.[0]; if (file) void enviar("dctf", file); e.currentTarget.value = ""; }} />
+            </label>
+          </>
+        )}
+      </div>
+    );
+  })() : null;
 
   function contarPreenchidos(secao: SecaoDocumento) {
     return secao.slots.filter((documentoSlot) => {
@@ -1420,66 +1526,39 @@ export default function DocumentosEntidade({
               Documento a documento, o veredito aparece dentro do proprio campo
               (StatusAnaliseSlot); aqui fica so o da etapa. Sem "Ver detalhes":
               quando esta tudo certo e uma linha, quando nao esta mostra o que
-              resolve -- nao existe estado intermediario pra abrir/fechar. */}
-          {grupoAtivoId === "empresa" && entidadeTipo === "empresa" && empresaId && (
-            <div className="space-y-2">
-              {!identidadeCnpj && (
-                <div className="flex flex-wrap items-center justify-between gap-2 rounded-2xl border border-primary/20 bg-primary/10 px-3 py-2.5">
-                  <p className="text-xs font-black text-foreground">
-                    {identidadeObrigatorios.preenchidos}/{identidadeObrigatorios.total} documentos obrigatórios anexados
-                  </p>
-                  <button
-                    type="button"
-                    onClick={() => void iniciarAnaliseIdentidade()}
-                    disabled={analisandoIdentidade || identidadeObrigatorios.preenchidos !== identidadeObrigatorios.total}
-                    className="inline-flex h-9 shrink-0 items-center justify-center gap-1.5 rounded-xl bg-primary px-3 text-xs font-black text-primary-foreground hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-50"
-                  >
-                    {analisandoIdentidade ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <FileText className="h-3.5 w-3.5" />}
-                    {analisandoIdentidade ? "Analisando..." : "Analisar documentos"}
-                  </button>
-                </div>
-              )}
-
-              {identidadeCnpj && (
-                <ProntidaoIdentidadeCard
-                  identidade={identidadeCnpj}
-                  onTentarNovamente={() => void iniciarAnaliseIdentidade()}
-                  processando={analisandoIdentidade}
-                />
-              )}
+              resolve -- nao existe estado intermediario pra abrir/fechar.
+              O card de status da Etapa 1 (ProntidaoIdentidadeCard) NÃO fica mais
+              aqui em cima -- foi unificado com a pendência de regime tributário
+              (ECF/DCTF) dentro da grade, logo abaixo dos cards de Cartão CNPJ/QSA/
+              Enquadramento (ver blocoPendenciaRegime e o ponto de injeção dentro de
+              secoesDoGrupoAtivo.map(...) mais abaixo). Pedido explícito do usuário:
+              tirar o espaço em branco que sobrava ao lado de "Ação necessária"/
+              "Avisos" juntando os dois num só card, no mesmo lugar onde já se anexa
+              o documento que resolve a pendência. Aqui em cima só fica o prompt
+              para iniciar a primeira análise, quando ainda não há nenhuma. */}
+          {grupoAtivoId === "empresa" && entidadeTipo === "empresa" && empresaId && !identidadeCnpj && (
+            <div className="flex flex-wrap items-center justify-between gap-2 rounded-2xl border border-primary/20 bg-primary/10 px-3 py-2.5">
+              <p className="text-xs font-black text-foreground">
+                {identidadeObrigatorios.preenchidos}/{identidadeObrigatorios.total} documentos obrigatórios anexados
+              </p>
+              <button
+                type="button"
+                onClick={() => void iniciarAnaliseIdentidade()}
+                disabled={analisandoIdentidade || identidadeObrigatorios.preenchidos !== identidadeObrigatorios.total}
+                className="inline-flex h-9 shrink-0 items-center justify-center gap-1.5 rounded-xl bg-primary px-3 text-xs font-black text-primary-foreground hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                {analisandoIdentidade ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <FileText className="h-3.5 w-3.5" />}
+                {analisandoIdentidade ? "Analisando..." : "Analisar documentos"}
+              </button>
             </div>
           )}
 
-          {mapaCredito?.regime_a_confirmar === true && (() => {
-            const pendencia = mapaCredito.pendencias?.find((item: any) => item.codigo === "nao_optante_regime_a_confirmar");
-            const emAnalise = pendencia?.status === "em_analise";
-            return (
-              <div className="rounded-2xl border border-warning/30 bg-warning/10 p-3">
-                <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
-                  <div className="min-w-0">
-                    <div className="flex flex-wrap items-center gap-2">
-                      <AlertTriangle className="h-4 w-4 shrink-0 text-warning" />
-                      <p className="text-xs font-black text-foreground">{pendencia?.titulo || "Confirmação do regime tributário"}</p>
-                      <span className="rounded-full border border-warning/30 bg-card px-2 py-0.5 text-[10px] font-black text-warning">{emAnalise ? "Aguardando análise" : "Prioridade alta"}</span>
-                    </div>
-                    <p className="mt-2 flex items-center gap-1.5 text-[11px] font-bold text-primary"><ArrowRight className="h-3.5 w-3.5 shrink-0" /> Próximo documento a anexar: ECF, DCTF/DCTFWeb, DARF ou Livro Caixa</p>
-                    <div className="mt-2 rounded-xl border border-warning/20 bg-card p-2.5">
-                      <p className="text-[11px] font-black text-warning">O que precisa ser resolvido</p>
-                      <p className="mt-1 text-[10px] leading-relaxed text-muted-foreground">{emAnalise ? "O documento foi anexado e aguarda leitura para identificar o regime efetivo." : pendencia?.descricao || "A empresa foi identificada como não optante, mas o regime efetivo ainda precisa ser confirmado."}</p>
-                    </div>
-                  </div>
-                  <button
-                    type="button"
-                    onClick={() => { setSecaoAtiva("Documentação da Empresa"); setMostrarComplementares(true); }}
-                    className="inline-flex h-9 shrink-0 items-center justify-center gap-1.5 rounded-xl bg-primary px-3 text-xs font-black text-primary-foreground hover:bg-primary/90"
-                  >
-                    {emAnalise ? "Ver documento" : "Anexar comprovação"}
-                  </button>
-                </div>
-                <p className="mt-2 text-[10px] text-muted-foreground">Esta pendência não bloqueia a Etapa 1.</p>
-              </div>
-            );
-          })()}
+          {/* O bloco de pendência de regime tributário foi movido para dentro da grade
+              de documentos, logo abaixo dos cards de Cartão CNPJ/QSA/Enquadramento
+              (seção "Identidade do CNPJ") -- ver blocoPendenciaRegime e o ponto de
+              injeção dentro de secoesDoGrupoAtivo.map(...) mais abaixo. Pedido
+              explícito do usuário: a pendência deve aparecer abaixo dos três cards,
+              não acima de toda a grade de documentos como estava antes. */}
 
           {/* Etapa 2/3 (Atos da Junta + Contrato Social) -- mesma regra da Etapa 1:
               comprovado vira uma linha; pendente mostra o que falta e o que
@@ -1646,7 +1725,8 @@ export default function DocumentosEntidade({
               : secaoAtivaObj.slots;
             const ocultos = secaoAtivaObj.slots.length - slotsVisiveis.length;
             return (
-            <div key={secaoAtivaObj.titulo} className="rounded-lg border border-border bg-muted p-3">
+            <Fragment key={secaoAtivaObj.titulo}>
+            <div className="rounded-lg border border-border bg-muted p-3">
               {secoesDoGrupoAtivo.length > 1 && (
                 <p className="mb-2 text-[10px] font-black uppercase tracking-wide text-muted-foreground">{secaoAtivaObj.titulo}</p>
               )}
@@ -1678,21 +1758,27 @@ export default function DocumentosEntidade({
                       ? socios.filter((socio) => docsTipoTodos.some((doc) => doc.socio_id === socio.id)).length
                       : 0;
                     const uploading = uploadingTipo === chaveSlot;
-                    const regraOrdemConsulta = ORDEM_CONSULTA_CADASTRAL[tipo];
-                    const ordemConsultaPendente = regraOrdemConsulta && !docs.some((doc) => (
-                      regraOrdemConsulta.exige.includes(doc.tipo_documento)
-                      && (!documentoSlot.porSocio || !socioVinculado || doc.socio_id === socioVinculado)
-                    ));
                     const destaqueConfirmacaoRegime = regimeAConfirmar && tiposConfirmacaoRegime.has(tipo);
-                    const motivoBloqueio = tipo === "atos_junta_comercial" && regimeAConfirmar
-                      ? "Confirme o regime tributário (ECF, DCTF/DCTFWeb, DARF ou Livro Caixa) antes de anexar os Atos da Junta."
+                    // Decisão de negócio (2026-08-30): a ordem CNPJ -> QSA -> Enquadramento ->
+                    // confirmação de regime -> Atos da Junta -> Contrato Social/Alteração, e a
+                    // ordem de consulta cadastral SCR -> CCS -> CCF, são ordens RECOMENDADAS de
+                    // leitura, mas nunca podem impedir o anexo do arquivo -- upload é sempre
+                    // livre; a validação/análise é que continua rigorosa. O que está fora de
+                    // ordem vira pendência visível (ícone de informação + aviso), e o que fica
+                    // de fato bloqueado é o dossiê completo para a proposta de crédito
+                    // (apto_para_avancar) ou a conclusão da análise bancária, nunca o upload em
+                    // si. Antes desta correção, `motivoBloqueio` desabilitava o campo de anexo
+                    // quando SCR/CCS ainda não tinham sido anexados -- isso violava a mesma
+                    // regra já aplicada ao resto do pipeline (nenhum upload pode ser
+                    // tecnicamente bloqueado pela ordem de leitura).
+                    const avisoOrdemRecomendada = tipo === "atos_junta_comercial" && regimeAConfirmar
+                      ? "Ordem recomendada: confirme antes o regime tributário (ECF, DCTF/DCTFWeb, DARF ou Livro Caixa). Você já pode anexar os Atos da Junta se preferir; a pendência de regime continua até ser resolvida."
                       : tipo === "atos_junta_comercial" && pipeline?.fase_2?.bloqueada
-                        ? "Conclua e aprove a Fase 1 antes de anexar os Atos da Junta."
+                        ? "Ordem recomendada: conclua e aprove a Fase 1 antes dos Atos da Junta. O anexo está liberado, mas o dossiê só fica apto após a Fase 1."
                       : ["contrato_social", "alteracao_contratual"].includes(tipo) && pipeline?.fase_3?.bloqueada
-                        ? "Analise e aprove primeiro os Atos da Junta Comercial."
-                        : ordemConsultaPendente
-                          ? `Anexe primeiro o Relatório ${regraOrdemConsulta.rotulo}. Ordem obrigatória: SCR → CCS → CCF.`
-                          : null;
+                        ? "Ordem recomendada: analise e aprove primeiro os Atos da Junta Comercial. O anexo está liberado, mas o dossiê só fica apto depois disso."
+                        : null;
+                    const motivoBloqueio: string | null = null;
                     const exigeNome = Boolean(documentoSlot.exigeNome);
                     // Regra de anulação (ex: CND RFB cobre CADIN e PGFN) -- se algum tipo
                     // que satisfaz este campo já foi anexado em outro lugar, não precisa
@@ -1736,6 +1822,11 @@ export default function DocumentosEntidade({
                           )}
                         </div>
                         {motivoBloqueio && <p className="rounded-md border border-warning/20 bg-warning/10 px-2.5 py-1.5 text-[10px] font-semibold text-warning">🔒 {motivoBloqueio}</p>}
+                        {/* Pendência de ordem recomendada -- nunca desabilita o campo acima,
+                            só avisa. O anexo continua liberado mesmo fora da ordem sugerida. */}
+                        {!motivoBloqueio && avisoOrdemRecomendada && (
+                          <p className="rounded-md border border-primary/20 bg-primary/10 px-2.5 py-1.5 text-[10px] font-semibold text-primary">ℹ️ {avisoOrdemRecomendada}</p>
+                        )}
                         {satisfeitoPorOutro && (
                           <p className="text-[11px] text-success flex items-center gap-1.5">
                             <CheckCircle className="w-3 h-3 shrink-0" /> Não é necessário anexar -- já coberto por outro documento (ex: CND).
@@ -1798,7 +1889,7 @@ export default function DocumentosEntidade({
                             )}
                           </div>
                         </div>
-                        <StatusAnaliseSlot item={analiseDoSlot as any} />
+                        <StatusAnaliseSlot item={analiseDoSlot as any} tipo={tipo} />
                         {descricaoVisivel[tipo] && documentoSlot.descricao && <p className="text-[11px] text-muted-foreground bg-muted border border-border rounded-md px-2.5 py-1.5">{documentoSlot.descricao}</p>}
                         {descricaoVisivel[tipo] && tipo === "cartao_cnpj" && <p className="text-[11px] text-primary bg-primary/10 border border-primary/20 rounded-md px-2.5 py-1.5">O usuário só anexa. O sistema/IA deverá identificar emissão, CNPJ, matriz/filial, abertura, CNAE, natureza, porte, endereço e situação cadastral para o relatório.</p>}
                         {docsTipo.length > 0 && (
@@ -1854,6 +1945,17 @@ export default function DocumentosEntidade({
                                   <div className="flex items-center gap-0.5 shrink-0">
                                     <button type="button" title="Visualizar" onClick={() => visualizar(doc)} className="p-1 rounded-md hover:bg-primary/10 text-primary"><Eye className="w-3 h-3" /></button>
                                     <button type="button" title="Baixar" onClick={() => baixar(doc)} className="p-1 rounded-md hover:bg-muted text-muted-foreground"><Download className="w-3 h-3" /></button>
+                                    {temResultadoInline && (
+                                      <button
+                                        type="button"
+                                        title="Forçar nova leitura deste documento (use depois de corrigir o arquivo, ou depois de uma atualização do motor de análise)"
+                                        onClick={() => void reanalisar(doc)}
+                                        disabled={reanalisandoId === doc.id}
+                                        className="p-1 rounded-md hover:bg-primary/10 text-primary disabled:opacity-50"
+                                      >
+                                        <RefreshCw className={`w-3 h-3 ${reanalisandoId === doc.id ? "animate-spin" : ""}`} />
+                                      </button>
+                                    )}
                                     {permitirValidar && (
                                       <button type="button" onClick={() => validar(doc.id, !doc.validado)} title={doc.validado ? "Reabrir" : "Validar"} className={`p-1 rounded-md text-[10px] font-bold ${doc.validado ? "hover:bg-warning/10 text-warning" : "hover:bg-success/10 text-success"}`}>
                                         {doc.validado ? "↩" : "✓"}
@@ -1885,6 +1987,20 @@ export default function DocumentosEntidade({
                   })}
                 </div>
               </div>
+              {/* Status da Etapa 1 (Ação necessária/Avisos) + pendência de regime
+                  tributário (ECF/DCTF), unificados no mesmo card, logo depois da
+                  seção de Identidade do CNPJ (Cartão CNPJ + QSA + Enquadramento) --
+                  nunca acima da grade inteira, e nunca em dois cards separados com
+                  espaço em branco sobrando. Pedido explícito do usuário. */}
+              {secaoAtivaObj.titulo === "Identidade do CNPJ" && identidadeCnpj && (
+                <ProntidaoIdentidadeCard
+                  identidade={identidadeCnpj}
+                  onTentarNovamente={() => void iniciarAnaliseIdentidade()}
+                  processando={analisandoIdentidade}
+                  acaoRegime={blocoPendenciaRegime}
+                />
+              )}
+            </Fragment>
             );
           })}
           </div>

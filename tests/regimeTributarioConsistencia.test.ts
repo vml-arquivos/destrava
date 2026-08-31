@@ -61,11 +61,20 @@ describe('consistência do regime tributário entre as camadas de leitura', () =
   });
 
   // DARF de IRPJ não escreve o regime por extenso -- só o código de receita do
-  // tributo pago denuncia o regime (Guia de Análise de Crédito Corporativo do
-  // usuário: 2089/5993 = Lucro Presumido; 8998/3373 = Lucro Real). O DARF
-  // reaproveita o mesmo pipeline do Enquadramento/Simples Nacional (ver
-  // ANALISE_ESPECIALIZADA_POR_TIPO em documentacao.ts), então o leitor local
-  // recebe tipo 'simples_nacional' também para DARF.
+  // tributo pago denuncia o regime. O DARF reaproveita o mesmo pipeline do
+  // Enquadramento/Simples Nacional (ver ANALISE_ESPECIALIZADA_POR_TIPO em
+  // documentacao.ts), então o leitor local recebe tipo 'simples_nacional'
+  // também para DARF.
+  //
+  // CORREÇÃO (2026-08-30, bug P0): até esta correção, o código 5993 era
+  // tratado como Lucro Presumido. É, na verdade, "IRPJ - Lucro Real -
+  // Estimativa Mensal", e o código 5625 ("IRPJ - Lucro Arbitrado") não existia
+  // no catálogo. Classificar 5993 como Presumido fazia o motor pedir a
+  // trilha documental errada (ECF/DCTF de Presumido em vez de Real) para uma
+  // empresa em Lucro Real -- exatamente o tipo de erro que muda a conclusão
+  // da análise de crédito. Catálogo corrigido em extracaoDocumentalLocal.ts
+  // (CATALOGO_CODIGO_RECEITA_DARF_IRPJ). O teste abaixo antes afirmava
+  // 5993 -> Lucro Presumido; passou a afirmar o valor correto, Lucro Real.
   describe('DARF de IRPJ: regime pelo código de receita', () => {
     it('código 2089 (Lucro Presumido)', () => {
       const texto = `
@@ -81,14 +90,36 @@ describe('consistência do regime tributário entre as camadas de leitura', () =
       expect(lido.dados.documento_compativel).toBe(true);
     });
 
-    it('código 5993 (Lucro Presumido)', () => {
-      expect(detectarRegimeTributarioDeclarado('DARF -- Código de receita 5993').regime).toBe('Lucro Presumido');
-    });
-
-    it('código 8998 (Lucro Real)', () => {
-      const texto = 'DARF -- Código de Receita: 8998 -- IRPJ Lucro Real Estimativa Mensal';
+    it('código 5993 (Lucro Real -- estimativa mensal, corrigido do bug P0 que classificava como Presumido)', () => {
+      const texto = 'DARF -- Código de receita 5993';
       expect(detectarRegimeTributarioDeclarado(texto).regime).toBe('Lucro Real');
       expect(analisarTextoDocumentoLocal('simples_nacional', texto).dados.regime_tributario).toBe('Lucro Real');
+    });
+
+    it('código 5625 (Lucro Arbitrado -- ausente do catálogo antes da correção P0)', () => {
+      const texto = 'DARF -- Código de Receita: 5625 -- IRPJ Lucro Arbitrado';
+      expect(detectarRegimeTributarioDeclarado(texto).regime).toBe('Lucro Arbitrado');
+      expect(analisarTextoDocumentoLocal('simples_nacional', texto).dados.regime_tributario).toBe('Lucro Arbitrado');
+    });
+
+    // CORREÇÃO (2026-08-30, reversão de decisão anterior -- auditoria
+    // independente): este teste antes afirmava que o código 8998 confirmava
+    // "Lucro Real". O código 8998 NÃO está confirmado na tabela oficial de
+    // códigos de receita da RFB para IRPJ -- manter esse mapeamento "por
+    // compatibilidade" foi um erro, porque inferir um regime a partir de um
+    // código não confirmado é pior do que deixar o regime pendente (o regime
+    // errado puxa a lista errada de documentação exigida adiante). Agora o
+    // sistema nunca infere regime a partir de 8998 sozinho e sinaliza
+    // explicitamente para revisão humana.
+    it('código 8998 NÃO infere Lucro Real automaticamente -- fica sinalizado para revisão humana (reversão do bug P0)', () => {
+      const texto = 'DARF -- Código de Receita: 8998 -- Período de apuração 03/2026';
+      const detectado = detectarRegimeTributarioDeclarado(texto);
+      expect(detectado.regime).toBeNull();
+      expect(detectado.codigoReceitaNaoConfirmado).toBe('8998');
+      const lido = analisarTextoDocumentoLocal('simples_nacional', texto);
+      expect(lido.dados.regime_tributario).toBeNull();
+      expect(lido.dados.codigo_receita_darf_nao_confirmado).toBe('8998');
+      expect(lido.dados.revisao_humana_necessaria).toBe(true);
     });
 
     it('código 3373 (Lucro Real)', () => {

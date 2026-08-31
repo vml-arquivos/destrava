@@ -1171,7 +1171,7 @@ Retorne apenas JSON válido, sem markdown, com este formato:
 A decisão da Etapa 1 usa SOMENTE: CNPJ, razão social, capital social, nomes dos sócios e identificação de quem é Sócio-Administrador. O campo "qualificacao" é apenas evidência interna para inferir "administrador" e não deve criar requisito ou divergência independente. Não extraia nem devolva CPF, RG, endereço, nacionalidade, estado civil, cônjuge, profissão, telefone, e-mail ou qualquer outro dado pessoal. Não extraia data de registro neste QSA; essa validação pertence à etapa societária seguinte. Não invente dados. Use null quando não houver evidência.`;
 }
 
-function promptSimples(): string {
+export function promptSimples(): string {
   return `Você é um auditor tributário brasileiro. Extraia os dados do comprovante de enquadramento tributário anexado (consulta do Simples Nacional, relatório de situação fiscal, ECF, DCTF, DARF ou equivalente).
 Responda SOMENTE JSON válido, sem markdown e sem comentários:
 {
@@ -1196,9 +1196,11 @@ REGRA CRÍTICA sobre "regime_tributario": este campo define qual documentação 
 - Se a empresa for optante do Simples, use "Simples Nacional"; se for optante do SIMEI/MEI, use "MEI / SIMEI".
 
 REGRA ESPECÍFICA PARA DARF: se o documento for um DARF, o regime é indicado pelo "código de receita" no campo próprio do documento (não confundir com outros números do documento, como CNPJ ou valor). Use exclusivamente esta tabela:
-- Código 2089 ou 5993 → "regime_tributario": "Lucro Presumido"
-- Código 8998 ou 3373 → "regime_tributario": "Lucro Real"
-- Qualquer outro código de receita, ou se o campo "código de receita" não estiver legível/visível → "regime_tributario": null (não adivinhe pelo valor do tributo ou pelo nome do tributo).`;
+- Código 2089 → "regime_tributario": "Lucro Presumido"
+- Código 5993 → "regime_tributario": "Lucro Real" (estimativa mensal)
+- Código 3373 → "regime_tributario": "Lucro Real" (apuração trimestral)
+- Código 5625 → "regime_tributario": "Lucro Arbitrado"
+- Código 8998, qualquer outro código de receita não listado acima, ou se o campo "código de receita" não estiver legível/visível → "regime_tributario": null (não adivinhe pelo valor do tributo ou pelo nome do tributo; o código 8998 NÃO está confirmado na tabela oficial de códigos de receita da RFB para IRPJ e deve ser tratado como não mapeado, exigindo revisão humana, nunca como Lucro Real presumido automaticamente).`;
 }
 
 function promptAtosJunta(): string {
@@ -1395,8 +1397,34 @@ function normalizarExtratoBancario(
   };
 }
 
+// CORREÇÃO (2026-08-30, auditoria de linguagem do prompt -- seção sobre
+// remover frases que enviesam o modelo a favor do slot de upload): a versão
+// anterior deste prompt dizia "analise exclusivamente o arquivo enviado
+// COMO ${nome}", o que sugere ao modelo que o arquivo JÁ É aquele tipo só
+// porque foi anexado nesse campo -- exatamente o viés que motivou o bug P0
+// de identidade documental corrigido em extracaoDocumentalLocal.ts
+// (parseComprovanteRegime). O nome do campo de upload é a INTENÇÃO de quem
+// anexou, nunca uma prova do conteúdo real do arquivo; o prompt agora deixa
+// isso explícito e pede para o tipo real ser identificado pelo conteúdo
+// primeiro, só então comparado ao tipo esperado.
+// CORREÇÃO (2026-08-31, bug real reportado em produção): um Relatório de
+// Inclusão no CADIN de verdade (empresa CNPJ 49.366.887/0001-25, upload real
+// do usuário) foi lido e a IA confirmou "documento_compativel: true" (é
+// mesmo um documento de CADIN) sem que nada no prompt pedisse explicitamente
+// para verificar SE a certidão/relatório é negativa (nada consta) ou
+// positiva (o CNPJ ESTÁ incluído/tem pendência) -- o documento real dizia
+// "INCLUÍDO PELA RFB EM 23/11/2025", o oposto de "nada consta", e nada
+// garantia que isso virasse um alerta visível. `documento_compativel` só
+// prova que o TIPO do documento está certo; nunca provou que o RESULTADO da
+// certidão é favorável. Para a categoria `cnd_cpend` (CND/CPEND Federal,
+// PGFN, CADIN -- ver `analise: 'cnd_cpend'` em shared/documentTypes.ts) o
+// prompt agora exige explicitamente o campo `situacao_certidao`, com a
+// consequência de cada valor deixada inequívoca para o modelo.
 function promptDocumentoCatalogado(tipoDocumento: string, nome: string, categoria: string, promptCodigo: string): string {
-  return `Você é um analista documental de crédito empresarial. Analise exclusivamente o arquivo enviado como ${nome} (${tipoDocumento}), categoria ${categoria}. Retorne somente JSON válido e não tome decisão final de crédito. Separe rigorosamente campos_comprovados (valor, campo, página/trecho e confiança) de campos_inferidos; se algo não estiver legível, use null e registre pendencia. Identifique documento_compativel, competencia (inicio/fim), validade (inicio/fim), cnpj, cpf, razão social, nomes, valores financeiros, órgão emissor, número, situação, assinaturas e evidencias quando existirem. Nunca invente dados, não trate ausência de evidência como confirmação e indique revisao_humana_necessaria para divergência, baixa confiança ou documento incompatível. Prompt ${promptCodigo}.`;
+  const exigenciaSituacaoCertidao = promptCodigo === 'cnd_cpend_extract'
+    ? ' Além dos campos padrão, este documento é uma certidão/relatório de regularidade (CND, CPEND, PGFN ou CADIN): identifique explicitamente o RESULTADO declarado e retorne em "situacao_certidao" exatamente um destes valores -- "negativa" (nada consta / não há pendência / não está incluído), "positiva_com_efeito_negativo" (certidão positiva com efeito de negativa / CPEND), "positiva" (há pendência, débito ou inclusão ativa -- inclui qualquer CADIN que declare o CNPJ/CPF "incluído" ou "incluído pela RFB"), ou null se o resultado não estiver legível. NUNCA retorne "negativa" só porque o documento é do tipo certo -- "negativa" exige que o texto afirme expressamente ausência de pendência; um documento que declara o contribuinte incluído/positivo é "positiva" mesmo que estruturalmente pareça um relatório oficial válido.'
+    : '';
+  return `Você é um analista documental de crédito empresarial. Um arquivo foi anexado no campo "${nome}" (${tipoDocumento}), categoria ${categoria} -- mas o nome desse campo é apenas a intenção de quem fez o upload, nunca uma prova do que o arquivo realmente é. Identifique o tipo do documento exclusivamente pelo conteúdo real do arquivo (título, cabeçalho, órgão emissor, campos preenchidos), de forma totalmente independente do nome do campo em que foi anexado -- nunca presuma que o documento é "${nome}" só porque foi anexado nesse campo. Só depois de identificar o tipo real do conteúdo, compare com o tipo esperado ("${nome}" / ${tipoDocumento}) para decidir documento_compativel: documento_compativel deve ser false sempre que o conteúdo real for de um tipo diferente do esperado, mesmo que os dois pertençam à mesma categoria (${categoria}) ou sirvam a propósitos relacionados. Retorne somente JSON válido e não tome decisão final de crédito. Separe rigorosamente campos_comprovados (valor, campo, página/trecho e confiança) de campos_inferidos; se algo não estiver legível, use null e registre pendencia. Identifique documento_compativel, competencia (inicio/fim), validade (inicio/fim), cnpj, cpf, razão social, nomes, valores financeiros, órgão emissor, número, situação, assinaturas e evidencias quando existirem.${exigenciaSituacaoCertidao} Nunca invente dados, não trate ausência de evidência como confirmação e indique revisao_humana_necessaria para divergência, baixa confiança ou documento incompatível. Prompt ${promptCodigo}.`;
 }
 
 function normalizarDocumentoCatalogado(extraidos: any, tipoDocumento: string): {
@@ -1446,6 +1474,20 @@ function normalizarDocumentoCatalogado(extraidos: any, tipoDocumento: string): {
     const regime = detectado.ambiguo ? null : regimeExplicito || detectado.regime;
     if (detectado.ambiguo) {
       alertas.push({ codigo: 'regime_tributario_ambiguo', mensagem: 'O documento apresenta mais de um regime tributário possível; a confirmação foi retida para revisão humana.', severidade: 'alta', recomendacao: 'Conferir a declaração efetiva no documento e anexar uma evidência inequívoca.' });
+    } else if (!regime && detectado.codigoReceitaNaoConfirmado) {
+      // CORREÇÃO (2026-08-30): reversão da decisão anterior de tratar o
+      // código de receita 8998 como "Lucro Real" por compatibilidade. O
+      // código não está confirmado na tabela oficial da RFB para IRPJ, então
+      // o sistema não infere mais regime nenhum a partir dele -- fica
+      // explicitamente sinalizado como CODIGO_NAO_MAPEADO/REVISAO_HUMANA, em
+      // vez de arriscar um regime errado (que puxaria a lista de documentos
+      // exigidos errada adiante).
+      alertas.push({
+        codigo: 'regime_tributario_codigo_nao_mapeado',
+        mensagem: `O código de receita ${detectado.codigoReceitaNaoConfirmado} identificado no DARF não está confirmado na tabela oficial de códigos de receita da RFB para IRPJ -- o regime tributário não pode ser inferido automaticamente a partir dele (CODIGO_NAO_MAPEADO).`,
+        severidade: 'alta',
+        recomendacao: 'Encaminhar para revisão humana (REVISAO_HUMANA) e anexar um comprovante legível (ECF, DCTFWeb/MIT ou Livro Caixa) que declare o regime tributário efetivo.',
+      });
     } else if (!regime) {
       alertas.push({ codigo: 'regime_tributario_nao_identificado', mensagem: 'O documento foi lido, mas não identificou de forma inequívoca Lucro Presumido, Lucro Real ou Lucro Arbitrado.', severidade: 'alta', recomendacao: 'Anexar um comprovante legível que declare o regime tributário efetivo.' });
     } else {
@@ -1490,16 +1532,89 @@ function normalizarDocumentoCatalogado(extraidos: any, tipoDocumento: string): {
     }
   }
 
+  // NOVA CAPACIDADE (2026-08-30): EFD-Contribuições (registros M400/M800 de
+  // apuração de PIS/COFINS, usados para declarar a receita bruta mensal fora
+  // do Simples Nacional) não tem, neste sistema, uma leitura especializada
+  // capaz de calcular a receita bruta com segurança a partir desses
+  // registros. Construir uma fórmula às pressas correria o mesmo risco que
+  // motivou a correção do catálogo de códigos de receita do DARF: uma conta
+  // sutilmente errada é pior do que nenhuma conta. Antes desta correção, o
+  // documento era tratado pelo analisador genérico em silêncio total sobre
+  // essa limitação (auditoria em CHANGELOG_CORRECOES.md, rodada 1) -- agora
+  // fica explicitamente sinalizado como ANALISE_ESPECIALIZADA_PENDENTE, para
+  // que a limitação seja visível em vez de escondida atrás de um documento
+  // "compatível" sem mais nenhuma informação.
+  const dadosEfd: Record<string, any> = {};
+  if (canonicalizeDocumentType(tipoDocumento) === 'efd_contribuicoes') {
+    dadosEfd.status_analise = 'ANALISE_ESPECIALIZADA_PENDENTE';
+    dadosEfd.motivo_status_analise = 'A leitura especializada dos registros M400/M800 da EFD-Contribuições (PIS/COFINS) ainda não foi implementada neste sistema. O documento foi recebido e arquivado como evidência, mas nenhuma receita bruta foi calculada ou inferida automaticamente a partir dele -- isso evita adivinhar uma fórmula sem confirmação técnica.';
+    alertas.push({
+      codigo: 'efd_contribuicoes_analise_especializada_pendente',
+      mensagem: 'Este documento (EFD-Contribuições) ainda não tem leitura especializada implementada; nenhuma receita bruta foi calculada automaticamente a partir dos registros M400/M800.',
+      severidade: 'media',
+      recomendacao: 'Usar outro comprovante de faturamento já suportado (ex.: extrato bancário, PGDAS, declaração de faturamento) enquanto a leitura especializada de M400/M800 não é implementada; este documento continua arquivado como evidência do dossiê.',
+    });
+  }
+
+  // CORREÇÃO (2026-08-31, bug real reportado em produção -- ver
+  // CHANGELOG_CORRECOES.md, Rodada 4): um Relatório de Inclusão no CADIN de
+  // verdade (CNPJ 49.366.887/0001-25) foi anexado no campo "Nada consta
+  // CADIN (CNPJ)" e o documento em si é, de fato, um relatório de CADIN --
+  // `documento_compativel` corretamente seria `true`. O problema é outro:
+  // o CONTEÚDO do relatório diz "Situação do contribuinte no Cadin:
+  // INCLUÍDO PELA RFB EM 23/11/2025", ou seja, o EXATO OPOSTO de "nada
+  // consta" -- e nada no sistema convertia isso num alerta. Verificar o TIPO
+  // do documento nunca provou que o RESULTADO da certidão é favorável; são
+  // duas perguntas diferentes. Esta correção fecha essa lacuna para toda a
+  // categoria `cnd_cpend` (CND/CPEND Federal, PGFN e CADIN, tanto CNPJ
+  // quanto CPF -- ver `analise: 'cnd_cpend'` em shared/documentTypes.ts):
+  // `situacao_certidao` (ver exigência acrescentada a `promptDocumentoCatalogado`
+  // acima) agora vira um alerta de severidade crítica sempre que a certidão
+  // não for expressamente negativa ou positiva-com-efeito-de-negativa, e um
+  // alerta de revisão humana quando a IA não confirmar nenhum resultado --
+  // nunca fica em silêncio.
+  const dadosCertidao: Record<string, any> = {};
+  if (documentAnalysisConfig(tipoDocumento)?.tipo === 'cnd_cpend') {
+    const situacaoBruta = String(bruto.situacao_certidao ?? comprovados.situacao_certidao ?? '').trim().toLowerCase();
+    const situacaoCertidao: 'negativa' | 'positiva_com_efeito_negativo' | 'positiva' | null =
+      situacaoBruta === 'negativa' || situacaoBruta === 'positiva_com_efeito_negativo' || situacaoBruta === 'positiva'
+        ? situacaoBruta
+        : null;
+    dadosCertidao.situacao_certidao = situacaoCertidao;
+    if (situacaoCertidao === 'positiva') {
+      alertas.push({
+        codigo: 'certidao_situacao_positiva',
+        mensagem: `O documento indica que ${documentLabel(tipoDocumento)} está POSITIVO -- há pendência, débito ou inclusão ativa declarada no próprio documento. Isto não satisfaz uma exigência de "nada consta".`,
+        severidade: 'critica',
+        recomendacao: 'Tratar como pendência ativa de crédito: solicitar regularização, negociação ou uma certidão positiva com efeito de negativa (CPEND). Nunca considerar este requisito satisfeito com o documento atual.',
+      });
+    } else if (!situacaoCertidao) {
+      alertas.push({
+        codigo: 'certidao_situacao_nao_identificada',
+        mensagem: `Não foi possível confirmar se ${documentLabel(tipoDocumento)} é negativa, positiva ou positiva com efeito de negativa a partir do documento anexado.`,
+        severidade: 'alta',
+        recomendacao: 'Conferir manualmente o resultado da certidão/relatório antes de considerar este requisito satisfeito.',
+      });
+    }
+  }
+
   const regimeFoiComprovado = !tiposComprovacaoRegime.has(tipoDocumento) || dadosRegime.regime_confirmado === true;
-  const satisfazRequisito = classificacao.satisfaz_requisito && regimeFoiComprovado;
+  const certidaoExigeMerito = documentAnalysisConfig(tipoDocumento)?.tipo === 'cnd_cpend';
+  const situacaoCertidao = String(dadosCertidao.situacao_certidao || '');
+  const certidaoFoiComprovada = !certidaoExigeMerito || ['negativa', 'positiva_com_efeito_negativo'].includes(situacaoCertidao);
+  const satisfazRequisito = classificacao.satisfaz_requisito && regimeFoiComprovado && certidaoFoiComprovada;
+  const identidadeComprovada = classificacao.identidade_status === 'IDENTIFICADO'
+    || (classificacao.identidade_status === 'NAO_IDENTIFICADO' && bruto.documento_compativel === true);
   const dados = {
     ...brutoPersistivel,
     ...dadosRegime,
+    ...dadosEfd,
+    ...dadosCertidao,
     campos_comprovados: comprovados,
     campos_inferidos: camposInferidos,
     evidencias,
     documento_compativel: tiposCriticos.has(tipoDocumento)
-      ? bruto.documento_compativel !== false && satisfazRequisito
+      ? bruto.documento_compativel !== false && identidadeComprovada && regimeFoiComprovado
       : bruto.documento_compativel !== false,
     confianca,
     tipo_documento: tipoDocumento,
@@ -1511,7 +1626,7 @@ function normalizarDocumentoCatalogado(extraidos: any, tipoDocumento: string): {
     satisfaz_requisito: satisfazRequisito,
     identidade_status: classificacao.identidade_status,
     temporalidade_status: classificacao.temporalidade_status,
-    cobertura_status: classificacao.cobertura_status,
+    cobertura_status: satisfazRequisito ? classificacao.cobertura_status : 'NAO_SATISFAZ',
     classificacao_motivo: classificacao.motivo,
   };
   return { dados, evidencias, camposInferidos, alertas, classificacao, textoFonte: textoLocal || null };
