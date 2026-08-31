@@ -1,12 +1,26 @@
-# Relatório de Testes — 31/08/2026 (atualizado, Rodada 9 — zero leitura exibida de documento incompatível)
+# Relatório de Testes — 31/08/2026 (atualizado, Rodada 11 — "Dados da análise" direto para incompatível + janela de 12 meses na transição de regime)
 
 ## Resultado final
 
 ```
-Test Files  82 passed (82)
-     Tests  740 passed (740)
-  Duration  ~29-40s
+Test Files  83 passed (83)
+     Tests  762 passed (762)
+  Duration  ~29-43s
 ```
+
+## Testes novos ou alterados na Rodada 11 (10 testes: 2 arquivos alterados, 0 arquivos novos)
+
+- `tests/slotCompativelComRegimeTributario.test.ts` (+8 testes): prova a janela de 12 meses da exceção de transição de regime tributário -- transição recente (regime vigente há menos de 366 dias) mantém os dois grupos fiscais visíveis para slot ainda não anexado; transição antiga (366 dias ou mais) deixa de mostrar o grupo anterior para slot ainda não anexado, MAS nunca afeta um documento já anexado (a guarda de regressão da Rodada 10 não tem prazo); `regimeVigenteDesde` ausente ou com data inválida é tratado como "não sabemos há quanto tempo" e nunca esconde por incerteza. Um novo `describe` cobre `transicaoDeRegimeRecente` isoladamente (a função extraída como única fonte de verdade da visibilidade dos slots e do aviso na tela), com os mesmos quatro cenários.
+- `tests/mapaDocumentalCredito.test.ts` (+2 testes): prova que `regime_vigente_desde` (novo campo em `montarHistoricoRegimeTributarioParaMapa`) identifica corretamente o período aberto (sem `data_fim`) como o vigente, com fallback para o último período da lista quando não há nenhum período aberto.
+- **Prova de causa raiz por reversão temporária**: removendo a checagem de dias em `transicaoDeRegimeRecente` (fazendo-a devolver `true` sempre que os dois grupos aparecem na história, reproduzindo o comportamento sem limite de tempo da Rodada 10), os dois testes de "transição antiga" (um em `slotCompativelComRegimeTributario`, outro no `describe` de `transicaoDeRegimeRecente`) falharam exatamente como esperado -- restaurada a checagem, os 18 testes do arquivo voltam a passar.
+- **Sem teste de renderização dedicado para a remoção do "Dados da análise"** (`DocumentosEntidade.tsx`): mesma situação já registrada em rodadas anteriores -- este repositório não tem testes de DOM para este componente. A cobertura relevante é indireta: `estadoVisualDocumento` (usada para decidir `documentoIncompativel`) já tem cobertura própria em `tests/documentacaoConclusaoIncompatibilidade.test.ts` e `tests/documentalPresentation.test.ts`.
+
+## Testes novos ou alterados na Rodada 10 (12 testes: 1 arquivo novo + 1 arquivo alterado)
+
+- `tests/slotCompativelComRegimeTributario.test.ts` (novo, 10 testes): prova, com a função pura extraída de `DocumentosEntidade.tsx` (`slotCompativelComRegimeTributario`, agora em `shared/documentalPresentation.ts`), os quatro cenários pedidos pelo usuário -- empresa sempre-Simples (esconde os slots do grupo ECF/DCTF ainda não anexados), empresa sempre-ECF/Lucro Presumido/Real (esconde os slots do grupo Simples ainda não anexados), regime ainda não identificado ou "a confirmar" (comportamento inalterado -- mostra tudo quando não identificado; mantém só o grupo ECF/DCTF quando "a confirmar", como já era antes desta rodada) e empresa que mudou de regime tributário (linha do tempo com evidência nos dois grupos fiscais -- mostra os dois grupos, mesmo para slots ainda não anexados). Inclui o teste de regressão específico desta rodada (documento já anexado nunca desaparece, mesmo com o regime confirmado depois para o outro grupo fiscal) e 3 testes de `bucketDoRegimeTributarioHistorico` (classificação de um regime tributário no grupo fiscal Simples ou ECF/DCTF).
+- `tests/mapaDocumentalCredito.test.ts` (+2 testes): prova que a nova função `montarHistoricoRegimeTributarioParaMapa` (`server/services/mapaDocumentalCreditoService.ts`) mantém só `regime`/`data_inicio`/`data_fim` de cada período da linha do tempo, descartando os campos internos do registro persistido (id, fonte, confiança, documento_evidencia_id, observação) que não são usados pela tela; e que devolve `{ linha_do_tempo: [] }` sem erro quando a empresa ainda não tem nenhuma evidência de regime registrada (estado inicial).
+- **Prova de causa raiz por reversão temporária (duas guardas novas, dois cenários de risco distintos)**: (1) removendo temporariamente `if (jaAnexado) return true;` de `slotCompativelComRegimeTributario`, o teste de regressão ("documento já anexado nunca desaparece...") falhou exatamente como o risco identificado (`expected true, got false`) -- um documento do Simples já anexado voltaria a sumir da tela assim que o regime fosse confirmado para o outro grupo; (2) removendo temporariamente a condição `bucketsHistoricos.has("simples") && bucketsHistoricos.has("ecf")`, o teste "empresa que mudou de regime tributário" falhou da mesma forma -- os slots do regime anterior voltariam a ficar ocultos mesmo com evidência histórica dos dois grupos. Restauradas as duas guardas, os 10 testes voltam a passar.
+- **Auditoria sem alteração de código**: o segundo pedido desta rodada ("cada documento é pra ser lido e analisado no seu respectivo local... o que vale é a leitura dentro, a leitura real da documentação do arquivo") foi investigado e confirmado já garantido pela arquitetura existente (`detectarTipoComprovanteRegime`/`parseComprovanteRegime`, `classificadorDocumentalCentral.ts`, o prompt da IA e o curto-circuito determinístico de `extrairHibrido` -- nenhum deles usa nome de arquivo ou o `tipo_documento` do slot declarado para decidir identidade/compatibilidade). Nenhum teste novo foi necessário para este ponto porque nenhum código foi alterado; a cobertura relevante já existente (`tests/regimeComprovante.test.ts`, matriz cruzada tipo-esperado × tipo-detectado) já prova esse invariante indiretamente.
 
 ## Testes novos ou alterados na Rodada 9 (0 arquivos novos -- 1 arquivo alterado, mesma contagem de testes)
 
@@ -42,7 +56,9 @@ Progressão dentro desta sessão, sempre crescendo, nunca encolhendo:
 | Entre a Rodada 6 e esta entrega (não documentado antes -- ver PENDENCIAS_REAIS.md item 12) | 80 (+1 arquivo) | 736 | +9 testes -- `tests/p0LaudosBackfill.test.ts` (classificador central + versionamento de laudos) |
 | Rodada 7 | 81 (+1 arquivo novo) | 738 | +2 testes -- causa raiz definitiva do PGDAS no slot de ECF (`extrairHibrido` não propagava texto local para o classificador central fora do QSA) |
 | Rodada 8 | 82 (+1 arquivo novo) | 740 | +2 testes -- selo visual/conclusão explícita para documento incompatível (0 testes líquidos a mais no arquivo de alertas -- reescrito, mesma contagem) |
-| Rodada 9 (esta entrega) | 82 (nenhum arquivo novo) | 740 | 0 testes líquidos -- `tests/documentacaoConclusaoIncompatibilidade.test.ts` reescrito (mesma contagem, 2 testes) para provar o corte total de seções em documento incompatível |
+| Rodada 9 | 82 (nenhum arquivo novo) | 740 | 0 testes líquidos -- `tests/documentacaoConclusaoIncompatibilidade.test.ts` reescrito (mesma contagem, 2 testes) para provar o corte total de seções em documento incompatível |
+| Rodada 10 | 83 (+1 arquivo novo) | 752 | +12 testes -- visibilidade de slots fiscais em empresa que mudou de regime tributário (`slotCompativelComRegimeTributario`, novo) + molde do histórico de regime anexado ao dossiê (`montarHistoricoRegimeTributarioParaMapa`, +2 em `mapaDocumentalCredito.test.ts`) |
+| Rodada 11 (esta entrega) | 83 (nenhum arquivo novo) | 762 | +10 testes -- janela de 12 meses na exceção de transição de regime tributário (`transicaoDeRegimeRecente` + `regime_vigente_desde`); nenhum teste dedicado para a remoção de "Dados da análise" (sem testes de DOM neste componente) |
 
 ## Testes novos ou alterados na Rodada 6 (2 testes: 1 arquivo novo)
 

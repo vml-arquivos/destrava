@@ -468,3 +468,115 @@ export function rotuloEstadoDocumento(estado: DocumentoEstadoVisual): string {
     case "revisao": return "Revisão necessária";
   }
 }
+
+export type BucketRegimeFiscal = "simples" | "ecf";
+
+// CORREÇÃO (2026-08-31, "se ela era optante do simples ... vai precisar
+// anexar os documentos do simples também. Mas, com a ressalva de que agora
+// ela é de outro regime"): extraído da tela de documentos (DocumentosEntidade)
+// para virar uma função pura testável. Antes desta correção, a visibilidade
+// de um slot fiscal (Simples x ECF/DCTF) dependia só do regime ATUAL
+// confirmado, sem nenhuma memória de que a empresa já esteve no outro grupo
+// fiscal -- um PGDAS-D já anexado podia sumir da tela assim que o regime
+// fosse confirmado para Lucro Presumido/Real, e a empresa não tinha como
+// anexar prova do período de transição em que ainda estava sob o Simples.
+// Prazo considerado "transição recente" (Rodada 10, refinado nesta rodada a
+// pedido explícito do usuário -- caso de uma empresa que era optante do MEI e
+// mudou de regime há pouco tempo, "sem tempo de ter as certidões"): o mesmo
+// horizonte de 12 meses (366 dias, contando ano bissexto) já usado em
+// `secoesSocietariasCompactas` para "Completa 12 meses de histórico" -- prazo
+// que o resto do sistema já trata como o necessário para reunir um ano fiscal
+// completo de documentação (a mesma janela de um ECF/DCTF anual).
+const LIMITE_DIAS_TRANSICAO_REGIME_RECENTE = 366;
+
+function diasDesdeInicioRegimeVigente(regimeVigenteDesde: string | null | undefined, agora: Date): number | null {
+  const raw = texto(regimeVigenteDesde);
+  if (!raw) return null;
+  const match = raw.match(/^(\d{4})-(\d{2})-(\d{2})/);
+  if (!match) return null;
+  const inicio = new Date(`${match[1]}-${match[2]}-${match[3]}T00:00:00.000Z`);
+  if (Number.isNaN(inicio.getTime())) return null;
+  return Math.floor((agora.getTime() - inicio.getTime()) / (24 * 60 * 60 * 1000));
+}
+
+// Única fonte de verdade para "a empresa mudou de regime tributário e a
+// transição ainda é recente" -- usada tanto por `slotCompativelComRegimeTributario`
+// (decide quais slots ficam visíveis) quanto pela tela de documentos (decide
+// se mostra o aviso "Mudança de regime"), pra nunca mostrar o aviso sem os
+// slots correspondentes ou vice-versa.
+export function transicaoDeRegimeRecente(
+  bucketsHistoricos: BucketRegimeFiscal[] | null | undefined,
+  regimeVigenteDesde: string | null | undefined,
+  agora: Date = new Date(),
+): boolean {
+  const buckets = new Set(bucketsHistoricos || []);
+  if (!buckets.has("simples") || !buckets.has("ecf")) return false;
+  const dias = diasDesdeInicioRegimeVigente(regimeVigenteDesde, agora);
+  return dias === null || dias < LIMITE_DIAS_TRANSICAO_REGIME_RECENTE;
+}
+
+export function slotCompativelComRegimeTributario(params: {
+  regime: string;
+  matchTipos: string[];
+  tiposFiscaisSimplificados: Set<string> | string[];
+  tiposFiscaisEcf: Set<string> | string[];
+  jaAnexado: boolean;
+  bucketsHistoricos?: BucketRegimeFiscal[] | null;
+  // Data de início do regime hoje vigente na linha do tempo (`regime_vigente_desde`,
+  // devolvido pelo dossiê) -- usada só para decidir há quanto tempo a
+  // transição de regime aconteceu. `null`/ausente é tratado como "não sabemos
+  // há quanto tempo" -- e, na dúvida, o slot continua visível (mesma regra de
+  // "incerteza nunca esconde" já usada no resto desta decisão).
+  regimeVigenteDesde?: string | null;
+  // Injetável só para teste determinístico; em produção é sempre "agora".
+  agora?: Date;
+}): boolean {
+  const { regime, matchTipos, jaAnexado } = params;
+  const tiposFiscaisSimplificados = params.tiposFiscaisSimplificados instanceof Set
+    ? params.tiposFiscaisSimplificados
+    : new Set(params.tiposFiscaisSimplificados);
+  const tiposFiscaisEcf = params.tiposFiscaisEcf instanceof Set
+    ? params.tiposFiscaisEcf
+    : new Set(params.tiposFiscaisEcf);
+  // Um documento já anexado nunca desaparece da tela só porque o regime da
+  // empresa foi confirmado depois para o outro grupo fiscal -- ele continua
+  // sendo evidência real de um período em que a empresa esteve sob aquele
+  // regime. Esta guarda NÃO depende de quanto tempo se passou -- documento já
+  // anexado nunca é escondido, ponto final.
+  if (jaAnexado) return true;
+  if (!regime || regime === "nao_identificado") return true;
+
+  // CORREÇÃO (2026-08-31, "só ser nesse necessário, senão não é nem pra
+  // aparecer a conta de anexar esses documentos" -- caso de uma empresa que
+  // era optante do MEI e mudou de regime há pouco tempo): enquanto a
+  // transição de regime for recente, os dois grupos fiscais continuam
+  // disponíveis para slots AINDA NÃO anexados. Depois desse prazo, a empresa
+  // já teve tempo de reunir a documentação do regime novo, e a opção de
+  // anexar o regime antigo deixa de aparecer para slots ainda não anexados --
+  // documentos já anexados continuam visíveis pela guarda `jaAnexado` acima,
+  // para sempre.
+  if (transicaoDeRegimeRecente(params.bucketsHistoricos, params.regimeVigenteDesde, params.agora)) return true;
+
+  const regimeSimples = regime === "simples_nacional" || regime === "mei";
+  const regimeAConfirmar = regime === "nao_optante_regime_a_confirmar";
+  const regimeEcf = regimeAConfirmar || regime === "nao_optante_simples" || regime === "lucro_presumido" || regime === "lucro_real" || regime === "imune_isenta";
+  if (matchTipos.some((tipo) => tiposFiscaisSimplificados.has(tipo))) return regimeSimples;
+  if (matchTipos.some((tipo) => tiposFiscaisEcf.has(tipo))) return regimeEcf;
+  return true;
+}
+
+// Classifica um regime tributário (como registrado na linha do tempo, ex.:
+// "Simples Nacional", "Lucro Presumido") no grupo fiscal a que ele pertence,
+// para alimentar `bucketsHistoricos` acima a partir de
+// `historico_regime_tributario.linha_do_tempo` (devolvido pelo dossiê). Mantido
+// em sincronia com `REGIMES_TRIBUTARIOS_RECONHECIDOS`
+// (regimeTributarioTemporalService.ts) e `identificarRegimeCredito`
+// (mapaDocumentalCreditoService.ts) -- os três lugares descrevem o mesmo
+// conjunto fechado de regimes.
+export function bucketDoRegimeTributarioHistorico(regime: string | null | undefined): BucketRegimeFiscal | null {
+  const valor = normalizar(regime);
+  if (!valor) return null;
+  if (/\bmei\b|\bsimei\b|simples nacional/.test(valor)) return "simples";
+  if (/lucro presumido|lucro real|lucro arbitrado|imune|isenta|nao optante/.test(valor)) return "ecf";
+  return null;
+}

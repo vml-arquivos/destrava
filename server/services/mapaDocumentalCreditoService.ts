@@ -94,7 +94,54 @@ export type MapaDocumentalCredito = {
   indicadores: IndicadorCredito[];
   avisos: string[];
   pendencias: PendenciaMapaDocumental[];
+  // Linha do tempo de regime tributário (seção 11-19 da missão de evolução do
+  // Acervo Documental), anexada pelo montador do dossiê (documentacao.ts) a
+  // partir de `regimeTributarioTemporalService.obterLinhaDoTempoRegime` --
+  // opcional porque a tabela pode estar vazia (empresa sem nenhuma evidência
+  // de regime ainda registrada) e porque este campo não existia antes da
+  // Rodada 10 desta sessão. Usado pela tela de documentos para decidir se o
+  // grupo fiscal do Simples e o grupo do ECF/DCTF devem ficar visíveis ao
+  // mesmo tempo (empresa que mudou de regime tributário).
+  historico_regime_tributario?: HistoricoRegimeTributarioMapa;
 };
+
+export type HistoricoRegimeTributarioMapa = {
+  linha_do_tempo: Array<{ regime: string; data_inicio: string | null; data_fim: string | null }>;
+  // Data de início do período hoje vigente (o mais recente sem `data_fim`, ou
+  // o último da lista na ausência de um período aberto -- mesma regra de
+  // fallback de `regimeTributarioTemporalService.obterRegimeVigenteEm`).
+  // `null` quando não há nenhum período registrado ainda. Usado só para medir
+  // há quanto tempo a empresa está sob o regime atual (Rodada 10, refinamento
+  // "só ser nesse necessário, senão não é nem pra aparecer" -- a opção de
+  // anexar o regime anterior só continua aparecendo enquanto a transição for
+  // recente).
+  regime_vigente_desde: string | null;
+};
+
+// Função pura, extraída para ser testável sem precisar montar o dossiê
+// inteiro (`montarDossieCreditoEmpresa` depende de CNPJ/QSA/regras
+// documentais/etc.): só molda o que a linha do tempo persistida
+// (`regimeTributarioTemporalService.obterLinhaDoTempoRegime`) precisa expor
+// para a tela de documentos, sem vazar campos internos (id, fonte, confiança,
+// documento_evidencia_id, observação) que não são usados na decisão de
+// visibilidade dos slots fiscais.
+export function montarHistoricoRegimeTributarioParaMapa(
+  linhaDoTempo: Array<{ regime: string; data_inicio: string | null; data_fim: string | null }>,
+): HistoricoRegimeTributarioMapa {
+  const periodos = (linhaDoTempo || []).map((periodo) => ({
+    regime: periodo.regime,
+    data_inicio: periodo.data_inicio ?? null,
+    data_fim: periodo.data_fim ?? null,
+  }));
+  // Mesma regra de fallback de `obterRegimeVigenteEm`: o período aberto
+  // (sem data_fim) é o vigente; na ausência de um período aberto, cai para o
+  // último da lista (já ordenada por data_inicio ascendente).
+  const vigente = periodos.find((periodo) => periodo.data_fim === null) || periodos[periodos.length - 1] || null;
+  return {
+    linha_do_tempo: periodos,
+    regime_vigente_desde: vigente?.data_inicio ?? null,
+  };
+}
 
 function normalizar(value: unknown): string {
   return String(value || '')

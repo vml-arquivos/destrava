@@ -147,3 +147,59 @@ Nenhum arquivo novo nesta rodada.
 
 Total desta rodada: 2 arquivos de código alterados + 1 arquivo de teste
 alterado + 6 arquivos de documentação alterados = 9 arquivos.
+
+======================================================================
+Rodada 10 (esta entrega) -- empresa que mudou de regime tributário:
+documentos do regime anterior continuam sendo pedidos, com ressalva do
+regime atual; auditoria do invariante "conteúdo manda, nunca o nome do
+arquivo/campo" (sem alteração de código para este segundo ponto)
+======================================================================
+
+Arquivos existentes ALTERADOS nesta rodada:
+
+shared/documentalPresentation.ts                    (slotCompativelComRegimeTributario + bucketDoRegimeTributarioHistorico)
+server/services/mapaDocumentalCreditoService.ts     (campo historico_regime_tributario + montarHistoricoRegimeTributarioParaMapa)
+server/routes/documentacao.ts                       (anexa a linha do tempo de regime ao dossiê, best-effort)
+client/src/components/documentos/DocumentosEntidade.tsx (slotCompativelComRegime usa a função pura + aviso de mudança de regime)
+tests/mapaDocumentalCredito.test.ts                 (+2 testes -- montarHistoricoRegimeTributarioParaMapa)
+CHANGELOG_CORRECOES.md
+ROLLBACK_PLAN.md
+PENDENCIAS_REAIS.md
+TEST_REPORT.md
+BUILD_REPORT.md
+FILES_CHANGED.txt (este arquivo)
+SHA256SUMS.txt
+
+Arquivos NOVOS -- teste:
+
+tests/slotCompativelComRegimeTributario.test.ts
+
+Total desta rodada: 4 arquivos de código alterados + 1 arquivo de teste
+alterado + 6 arquivos de documentação alterados + 1 arquivo de teste novo
+= 12 arquivos.
+
+======================================================================
+Rodada 11 (esta entrega) -- "Dados da análise" direto para documento
+incompatível (sem clique); janela de 12 meses na exceção de transição de
+regime tributário
+======================================================================
+
+Arquivos existentes ALTERADOS nesta rodada:
+
+shared/documentalPresentation.ts                    (transicaoDeRegimeRecente, extraída e reutilizada)
+server/services/mapaDocumentalCreditoService.ts     (campo regime_vigente_desde)
+client/src/components/documentos/DocumentosEntidade.tsx ("Dados da análise" direto para incompatível + janela de 12 meses no aviso)
+tests/slotCompativelComRegimeTributario.test.ts     (+8 testes -- janela de 12 meses)
+tests/mapaDocumentalCredito.test.ts                 (+2 testes -- regime_vigente_desde)
+CHANGELOG_CORRECOES.md
+ROLLBACK_PLAN.md
+PENDENCIAS_REAIS.md
+TEST_REPORT.md
+BUILD_REPORT.md
+FILES_CHANGED.txt (este arquivo)
+SHA256SUMS.txt
+
+Nenhum arquivo novo nesta rodada.
+
+Total desta rodada: 3 arquivos de código alterados + 2 arquivos de teste
+alterados + 6 arquivos de documentação alterados = 11 arquivos.

@@ -1,6 +1,7 @@
 import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { apiFetch, apiFetchBlob } from "@/lib/api";
 import { DOCUMENT_TYPE_CATALOG, documentLabel } from "@shared/documentTypes";
+import { bucketDoRegimeTributarioHistorico, estadoVisualDocumento, slotCompativelComRegimeTributario, transicaoDeRegimeRecente, type BucketRegimeFiscal } from "@shared/documentalPresentation";
 import { ResultadoAnaliseDocumento } from "./ResultadoAnaliseDocumento";
 import { ProntidaoIdentidadeCard, type IdentidadeCnpj } from "../documentacao/DossieCreditoEmpresa";
 import { toast } from "sonner";
@@ -978,15 +979,36 @@ export default function DocumentosEntidade({
       if (doc.tipo_documento !== "simples_nacional") set.add(doc.tipo_documento);
     });
     const regime = String(mapaCredito?.regime_identificado || "");
-    const regimeSimples = regime === "simples_nacional" || regime === "mei";
     const regimeAConfirmar = regime === "nao_optante_regime_a_confirmar";
-    const regimeEcf = regimeAConfirmar || regime === "nao_optante_simples" || regime === "lucro_presumido" || regime === "lucro_real" || regime === "imune_isenta";
+    // Linha do tempo de regime tributário (anexada ao dossiê pelo backend --
+    // ver `historico_regime_tributario` em documentacao.ts): quando ela mostra
+    // que a empresa já esteve tanto no grupo do Simples quanto no grupo do
+    // ECF/DCTF em períodos diferentes, os dois grupos de slots fiscais
+    // continuam disponíveis, com a ressalva explicada em `blocoTransicaoRegime`
+    // logo abaixo (empresa que mudou de regime tributário).
+    const linhaDoTempoRegime: Array<{ regime?: string }> = mapaCredito?.historico_regime_tributario?.linha_do_tempo || [];
+    const bucketsHistoricos: BucketRegimeFiscal[] = Array.from(new Set(
+      linhaDoTempoRegime
+        .map((periodo) => bucketDoRegimeTributarioHistorico(periodo?.regime))
+        .filter((bucket): bucket is BucketRegimeFiscal => Boolean(bucket)),
+    ));
+    // Só mantém os dois grupos fiscais visíveis para slots AINDA NÃO anexados
+    // enquanto a transição de regime for recente (menos de 12 meses desde o
+    // início do regime hoje vigente) -- pedido explícito do usuário: "só ser
+    // nesse necessário, senão não é nem pra aparecer a conta de anexar esses
+    // documentos". Ver `slotCompativelComRegimeTributario`.
+    const regimeVigenteDesde: string | null = mapaCredito?.historico_regime_tributario?.regime_vigente_desde || null;
     const slotCompativelComRegime = (documentoSlot: DocumentoSlot) => {
-      if (!regime || regime === "nao_identificado") return true;
-      const tipos = new Set(documentoSlot.matchTipos);
-      if (Array.from(tipos).some((tipo) => TIPOS_FISCAIS_SIMPLIFICADOS.has(tipo))) return regimeSimples;
-      if (Array.from(tipos).some((tipo) => TIPOS_FISCAIS_ECF.has(tipo))) return regimeEcf;
-      return true;
+      const jaAnexado = documentoSlot.matchTipos.some((tipo) => set.has(tipo)) || set.has(documentoSlot.tipoUpload);
+      return slotCompativelComRegimeTributario({
+        regime,
+        matchTipos: documentoSlot.matchTipos,
+        tiposFiscaisSimplificados: TIPOS_FISCAIS_SIMPLIFICADOS,
+        tiposFiscaisEcf: TIPOS_FISCAIS_ECF,
+        jaAnexado,
+        bucketsHistoricos,
+        regimeVigenteDesde,
+      });
     };
 
     const ordenados: DocumentoSlot[] = [];
@@ -1015,7 +1037,7 @@ export default function DocumentosEntidade({
     });
 
     return ordenados;
-  }, [tiposPermitidos, docs, mapaCredito?.regime_identificado]);
+  }, [tiposPermitidos, docs, mapaCredito?.regime_identificado, mapaCredito?.historico_regime_tributario]);
 
   const secoesDaTela = useMemo(() => {
     const uploadsVisiveis = new Set(slotsDaTela.map((documentoSlot) => documentoSlot.tipoUpload));
@@ -1344,6 +1366,33 @@ export default function DocumentosEntidade({
       </div>
     );
   })() : null;
+
+  // Aviso de mudança de regime tributário (2026-08-31, "vai precisar anexar
+  // os documentos do simples também. Mas, com a ressalva de que agora ela é
+  // de outro regime, e falar o regime que vai estar no SRF ou no DCTF" --
+  // refinado na mesma rodada com "só ser nesse necessário, senão não é nem
+  // pra aparecer a conta de anexar esses documentos"): exibido só enquanto
+  // `transicaoDeRegimeRecente` também mantém os dois grupos de slots fiscais
+  // visíveis em `slotsDaTela` (mesma função, mesma condição -- nunca mostra o
+  // aviso sem os slots correspondentes nem vice-versa), nomeando o regime
+  // atual (o mesmo texto de `mapaCredito.regime_descricao` usado em "Faltam N
+  // documentos... — regime X", logo abaixo).
+  const linhaDoTempoRegimeParaAviso: Array<{ regime?: string }> = mapaCredito?.historico_regime_tributario?.linha_do_tempo || [];
+  const bucketsHistoricosRegime: BucketRegimeFiscal[] = Array.from(new Set(
+    linhaDoTempoRegimeParaAviso
+      .map((periodo) => bucketDoRegimeTributarioHistorico(periodo?.regime))
+      .filter((bucket): bucket is BucketRegimeFiscal => Boolean(bucket)),
+  ));
+  const regimeVigenteDesdeParaAviso: string | null = mapaCredito?.historico_regime_tributario?.regime_vigente_desde || null;
+  const houveTransicaoDeRegimeRecente = transicaoDeRegimeRecente(bucketsHistoricosRegime, regimeVigenteDesdeParaAviso);
+  const blocoTransicaoRegime = houveTransicaoDeRegimeRecente ? (
+    <span
+      className="inline-flex items-center gap-1.5 rounded-full border border-primary/30 bg-card px-2.5 py-1 text-[10px] font-black text-primary"
+      title={`Esta empresa já teve regime tributário diferente no passado (Simples Nacional/MEI). Regime atual: ${mapaCredito?.regime_descricao || "não identificado"}. Enquanto a transição for recente (até 12 meses sob o regime atual), os documentos do regime anterior continuam sendo solicitados como evidência do período de transição.`}
+    >
+      <Info className="h-3 w-3 shrink-0" /> Mudança de regime — regime atual: {mapaCredito?.regime_descricao || "não identificado"}
+    </span>
+  ) : null;
 
   function contarPreenchidos(secao: SecaoDocumento) {
     return secao.slots.filter((documentoSlot) => {
@@ -1909,6 +1958,15 @@ export default function DocumentosEntidade({
                                 const laudoErro = doc.resultado_validacao?.analise_regra_documental_erro || null;
                                 const resultadoInline = doc.resultado_analise || laudo || laudoErro || null;
                                 const temResultadoInline = Boolean(resultadoInline);
+                                // CORREÇÃO (2026-08-31, "isso é pra tirar, é já pra aparecer o
+                                // documento incompatível... isso pra todos que for incompatíveis"):
+                                // documento incompatível com o slot não fica mais atrás do clique
+                                // em "Dados da análise" -- o card mínimo "Documento incompatível"
+                                // (já reduzido a 1 única seção desde a Rodada 9) aparece direto,
+                                // sem exigir nenhuma interação. Para os demais casos (documento
+                                // correto, com ou sem pendência de conteúdo), o comportamento de
+                                // clicar para expandir continua exatamente como antes.
+                                const documentoIncompativel = temResultadoInline && estadoVisualDocumento(resultadoInline, doc) === "incompativel";
                                 const tipoTemAnaliseAutomatica = TIPOS_COM_ANALISE_AUTOMATICA.has(String(doc.tipo_documento || ""));
                                 const validacaoDocumentalConcluida = !!laudo && !laudoErro && doc.exige_revisao_humana !== true;
                                 const validadoComEvidencia = doc.validado === true
@@ -1932,7 +1990,7 @@ export default function DocumentosEntidade({
                                       {doc.validado && !validadoComEvidencia && tipoTemAnaliseAutomatica && <span title="Ainda sem leitura documental conclusiva" className="text-warning shrink-0 text-[9px]">análise pendente</span>}
                                     </div>
                                     <p className="text-[9px] text-muted-foreground truncate">{formatDate(doc.criado_em)}</p>
-                                    {temResultadoInline && (
+                                    {temResultadoInline && !documentoIncompativel && (
                                       <button
                                         type="button"
                                         onClick={() => setLaudosExpandidos((prev) => ({ ...prev, [doc.id]: !prev[doc.id] }))}
@@ -1964,7 +2022,7 @@ export default function DocumentosEntidade({
                                     {permitirExcluir && <button type="button" title="Excluir" onClick={() => excluir(doc.id)} className="p-1 rounded-md hover:bg-destructive/10 text-destructive"><Trash2 className="w-3 h-3" /></button>}
                                   </div>
                                   </div>
-                                  {laudosExpandidos[doc.id] && resultadoInline && <ResultadoAnaliseDocumento resultado={resultadoInline} documento={doc} compacto />}
+                                  {(documentoIncompativel || laudosExpandidos[doc.id]) && resultadoInline && <ResultadoAnaliseDocumento resultado={resultadoInline} documento={doc} compacto />}
                                 </div>
                                 );
                               })}
@@ -1997,7 +2055,7 @@ export default function DocumentosEntidade({
                   identidade={identidadeCnpj}
                   onTentarNovamente={() => void iniciarAnaliseIdentidade()}
                   processando={analisandoIdentidade}
-                  acaoRegime={blocoPendenciaRegime}
+                  acaoRegime={(blocoPendenciaRegime || blocoTransicaoRegime) ? <>{blocoPendenciaRegime}{blocoTransicaoRegime}</> : null}
                 />
               )}
             </Fragment>

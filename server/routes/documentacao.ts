@@ -9,7 +9,7 @@ import { calcularCadeiaComprovacaoSocietaria } from '../services/cadeiaSocietari
 import { InsufficientHistoricalPeriodException, validateTwelveMonthContractHistory } from '../services/documentPipelineService';
 import { buildCadastralValidationDTO, phase1Approved } from '../services/phase1AnalysisService';
 import { ensureDocumentacaoSchema } from '../services/documentacaoSchema';
-import { gerarMapaDocumentalCredito, identificarRegimeCredito, ROTULO_REGIME_CREDITO } from '../services/mapaDocumentalCreditoService';
+import { gerarMapaDocumentalCredito, identificarRegimeCredito, montarHistoricoRegimeTributarioParaMapa, ROTULO_REGIME_CREDITO } from '../services/mapaDocumentalCreditoService';
 import { DOCUMENT_TYPE_CATALOG, canonicalizeDocumentType, documentAnalysisConfig, documentLabel } from '../../shared/documentTypes';
 import { resolverRegrasDocumentais, type RegraResolvida } from '../services/regrasDocumentaisCredito';
 import { upsertSocioEmpresa } from './socios_documentos';
@@ -2693,6 +2693,23 @@ export async function montarDossieCreditoEmpresa(empresaId: string, options: { p
     etapa1Aprovada: identidadeCnpj.apto_para_avancar === true,
     etapa2Aprovada: documentacaoSocietaria.apto_para_avancar === true,
   });
+  // CORREÇÃO (2026-08-31, "se ela era optante do simples ... vai precisar
+  // anexar os documentos do simples também. Mas, com a ressalva de que agora
+  // ela é de outro regime"): anexa ao mapa documental a linha do tempo de
+  // regime tributário já existente (regimeTributarioTemporalService.ts,
+  // populada a cada documento lido com regime confirmado -- ver
+  // `persistirEvidenciasP0` em analiseDocumentalEspecializada.ts), para a
+  // tela de documentos decidir se os slots do Simples e do ECF/DCTF devem
+  // ficar visíveis ao mesmo tempo. Aditivo e best-effort: qualquer falha aqui
+  // (ex.: tabela ainda vazia ou indisponível) não pode derrubar o dossiê
+  // inteiro -- o mapa documental segue funcionando com o regime atual apenas,
+  // exatamente como antes desta correção.
+  try {
+    const linhaDoTempoRegime = await obterLinhaDoTempoRegime(pool, empresaId);
+    mapaDocumentalCredito.historico_regime_tributario = montarHistoricoRegimeTributarioParaMapa(linhaDoTempoRegime);
+  } catch (error: any) {
+    console.warn('[Dossiê] Histórico de regime tributário indisponível; mapa documental segue com o regime atual apenas:', error?.message || error);
+  }
   const modoMotorRegras = String(process.env.DOCUMENTAL_RULE_ENGINE_MODE || 'shadow').toLowerCase() === 'active' ? 'active' : 'shadow';
   const regrasResolvidas = await resolverRegrasDocumentais({
     db: pool,

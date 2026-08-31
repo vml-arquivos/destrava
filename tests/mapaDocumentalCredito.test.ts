@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { gerarMapaDocumentalCredito, identificarRegimeCredito } from '../server/services/mapaDocumentalCreditoService';
+import { gerarMapaDocumentalCredito, identificarRegimeCredito, montarHistoricoRegimeTributarioParaMapa } from '../server/services/mapaDocumentalCreditoService';
 
 describe('mapa documental de crédito', () => {
   it('identifica Simples Nacional e monta PGDAS/DEFIS', () => {
@@ -169,5 +169,55 @@ describe('mapa documental de crédito', () => {
     expect(mapa.programas_referencia.some((p) => p.codigo === 'fne_bnb')).toBe(true);
     expect(mapa.indicadores.some((i) => i.codigo === 'dscr')).toBe(true);
     expect(mapa.operacoes_disponiveis.find((o) => o.codigo === 'investimento')?.documentos_adicionais).toContain('Projeto de investimento');
+  });
+});
+
+// CORREÇÃO (2026-08-31, "se ela era optante do simples ... vai precisar
+// anexar os documentos do simples também. Mas, com a ressalva de que agora
+// ela é de outro regime"): `documentacao.ts` anexa este campo ao mapa
+// documental do dossiê (`historico_regime_tributario`), a partir da linha do
+// tempo persistida em `empresas_regime_tributario_historico`
+// (regimeTributarioTemporalService.ts). Esta função só molda essa lista para
+// a tela de documentos -- testada isoladamente porque montar o dossiê inteiro
+// (`montarDossieCreditoEmpresa`) exigiria mockar CNPJ, QSA, societário e o
+// motor de regras documentais só para provar um mapeamento de campos.
+describe('montarHistoricoRegimeTributarioParaMapa', () => {
+  it('mantém regime/data_inicio/data_fim e descarta os campos internos do registro (id, fonte, confiança, documento_evidencia_id, observação)', () => {
+    const resultado = montarHistoricoRegimeTributarioParaMapa([
+      { id: 'p1', empresa_id: 'e1', regime: 'Simples Nacional', data_inicio: '2023-01-01', data_fim: '2025-12-31', fonte: 'consulta_optantes', confianca: 0.9, documento_evidencia_id: null, observacao: null } as any,
+      { id: 'p2', empresa_id: 'e1', regime: 'Lucro Presumido', data_inicio: '2026-01-01', data_fim: null, fonte: 'darf', confianca: 0.85, documento_evidencia_id: 'doc-darf-1', observacao: null } as any,
+    ]);
+    expect(resultado.linha_do_tempo).toEqual([
+      { regime: 'Simples Nacional', data_inicio: '2023-01-01', data_fim: '2025-12-31' },
+      { regime: 'Lucro Presumido', data_inicio: '2026-01-01', data_fim: null },
+    ]);
+    expect((resultado.linha_do_tempo[0] as any).fonte).toBeUndefined();
+    expect((resultado.linha_do_tempo[0] as any).id).toBeUndefined();
+  });
+
+  it('devolve linha do tempo vazia quando a empresa ainda não tem nenhuma evidência de regime registrada (estado inicial, não é erro)', () => {
+    expect(montarHistoricoRegimeTributarioParaMapa([])).toEqual({ linha_do_tempo: [], regime_vigente_desde: null });
+  });
+
+  // CORREÇÃO (2026-08-31, "só ser nesse necessário, senão não é nem pra
+  // aparecer a conta de anexar esses documentos"): `regime_vigente_desde`
+  // alimenta a decisão de "transição recente" em `slotCompativelComRegimeTributario`
+  // (shared/documentalPresentation.ts) -- precisa identificar corretamente o
+  // período ABERTO (sem data_fim) como o vigente, mesmo quando ele não é o
+  // último da lista por algum motivo de ordenação.
+  it('regime_vigente_desde é a data de início do período aberto (sem data_fim)', () => {
+    const resultado = montarHistoricoRegimeTributarioParaMapa([
+      { regime: 'Simples Nacional', data_inicio: '2023-01-01', data_fim: '2025-12-31' } as any,
+      { regime: 'Lucro Presumido', data_inicio: '2026-01-01', data_fim: null } as any,
+    ]);
+    expect(resultado.regime_vigente_desde).toBe('2026-01-01');
+  });
+
+  it('regime_vigente_desde cai para o último período da lista quando não há nenhum período aberto', () => {
+    const resultado = montarHistoricoRegimeTributarioParaMapa([
+      { regime: 'Simples Nacional', data_inicio: '2023-01-01', data_fim: '2024-12-31' } as any,
+      { regime: 'Lucro Presumido', data_inicio: '2025-01-01', data_fim: '2025-12-31' } as any,
+    ]);
+    expect(resultado.regime_vigente_desde).toBe('2025-01-01');
   });
 });
