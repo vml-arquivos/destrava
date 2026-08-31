@@ -1,12 +1,21 @@
-# Relatório de Testes — 31/08/2026 (atualizado, Rodada 12 — selo "Avisos" removido, popover reescrito, terceiro botão "Outro" para comprovação do regime tributário)
+# Relatório de Testes — 31/08/2026 (atualizado, Rodada 13 — diagnóstico e correção de falsos-positivos no Acervo Documental de uma empresa real)
 
 ## Resultado final
 
 ```
-Test Files  84 passed (84)
-     Tests  766 passed (766)
+Test Files  86 passed (86)
+     Tests  773 passed (773)
   Duration  ~40-46s
 ```
+
+## Testes novos ou alterados na Rodada 13 (7 testes: 2 arquivos novos + 2 arquivos alterados)
+
+- `tests/extracaoDocumentalLocal.test.ts` (+1 teste): reproduz o texto real da consulta QSA de uma empresa Empresário Individual ("A NATUREZA JURÍDICA NÃO PERMITE O PREENCHIMENTO DO QSA") e prova que `parseQsa` marca `qsa_nao_aplicavel: true`, `socios: []`, `extracao_parcial: false` e confiança ≥ 0.6 -- zero sócios não derruba mais a confiança nem marca extração parcial quando o próprio documento responde isso oficialmente.
+- `tests/analiseDocumentalEspecializada.test.ts` (+1 teste): prova, com `validarQsaExtraida` diretamente, que `qsa_nao_aplicavel: true` (sem nenhum sócio sincronizado) não gera nenhum alerta de severidade alta/crítica -- só o alerta informativo `qsa_nao_aplicavel_natureza_juridica` (severidade baixa).
+- `tests/statusDaLeituraSemAnaliseReal.test.ts` (novo, 3 testes): prova, com `montarResultadoDetalhadoRelatorio` diretamente, que (1) um documento com `status: 'validado'` (flag manual "✓ Validar") mas sem nenhum laudo real não mostra mais o campo "Status da leitura"; (2) com uma análise especializada real (`analiseEspecializada`), o campo continua mostrando o status real do laudo (`'concluido'`), sem regressão; (3) com um laudo legado em `resultado_validacao` (sem `analiseEspecializada`), o campo também continua funcionando normalmente, sem regressão.
+- `tests/acervoDocumentalFalhaRealVsAguardando.test.ts` (novo, 2 testes): prova, com `enriquecerDocumentosAcervoComAnalise` diretamente (mockando `pg`), que (1) quando existe uma falha real persistida (`status = 'falhou'` em `documentos_extracoes_ia`, com o motivo já gravado), a conclusão/diagnóstico do Acervo Documental citam o motivo real em vez do texto genérico; (2) quando não existe nenhuma tentativa registrada, o texto genérico "Anexo recebido, aguardando análise documental." continua exatamente como antes -- sem regressão.
+- **Prova de causa raiz por reversão temporária, três vezes (uma por correção):** (1) desligando a checagem `qsa_nao_aplicavel` em `validarQsaExtraida`, o novo teste falhou exatamente como o bug relatado (`expected true to be false` -- um alerta de severidade alta voltou a aparecer); (2) revertendo `adicionarCampo('Status da leitura', ...)` para a versão original, os 3 testes do novo arquivo falharam exatamente como o bug relatado (o campo "validado" reaparece a partir do flag manual no primeiro teste; o valor mostrado passa a ser o status administrativo genérico, não o real, nos outros dois); (3) desligando a busca de `buscarFalhaAnaliseEspecializada` em `enriquecerDocumentosAcervoComAnalise`, o primeiro teste do novo arquivo falhou exatamente como esperado (a conclusão voltou a ser o texto genérico de "aguardando"). Restauradas as três correções, todos os testes voltam a passar.
+- **Sem teste de renderização dedicado para os três problemas** (telas do Acervo Documental/`DocumentosEntidade.tsx`): mesma situação já registrada em rodadas anteriores -- este repositório não tem testes de DOM para esses componentes. Nenhum dos três pontos desta rodada exigiu alteração de componente React: as três correções são inteiramente de backend (extração local, validação e montagem do relatório documental).
 
 ## Testes novos ou alterados na Rodada 12 (4 testes: 1 arquivo novo + 1 fixture sintético novo)
 
@@ -69,7 +78,8 @@ Progressão dentro desta sessão, sempre crescendo, nunca encolhendo:
 | Rodada 9 | 82 (nenhum arquivo novo) | 740 | 0 testes líquidos -- `tests/documentacaoConclusaoIncompatibilidade.test.ts` reescrito (mesma contagem, 2 testes) para provar o corte total de seções em documento incompatível |
 | Rodada 10 | 83 (+1 arquivo novo) | 752 | +12 testes -- visibilidade de slots fiscais em empresa que mudou de regime tributário (`slotCompativelComRegimeTributario`, novo) + molde do histórico de regime anexado ao dossiê (`montarHistoricoRegimeTributarioParaMapa`, +2 em `mapaDocumentalCredito.test.ts`) |
 | Rodada 11 | 83 (nenhum arquivo novo) | 762 | +10 testes -- janela de 12 meses na exceção de transição de regime tributário (`transicaoDeRegimeRecente` + `regime_vigente_desde`); nenhum teste dedicado para a remoção de "Dados da análise" (sem testes de DOM neste componente) |
-| Rodada 12 (esta entrega) | 84 (+1 arquivo novo) | 766 | +4 testes -- terceiro botão "Outro" (tipo `comprovante_regime_outro`, identidade flexível + regime explícito exigido); nenhum teste dedicado para a remoção do selo "Avisos" nem para o botão em si (sem testes de DOM nesses componentes) |
+| Rodada 12 | 84 (+1 arquivo novo) | 766 | +4 testes -- terceiro botão "Outro" (tipo `comprovante_regime_outro`, identidade flexível + regime explícito exigido); nenhum teste dedicado para a remoção do selo "Avisos" nem para o botão em si (sem testes de DOM nesses componentes) |
+| Rodada 13 (esta entrega) | 86 (+2 arquivos novos) | 773 | +7 testes -- QSA de Empresário Individual (`qsa_nao_aplicavel`, +2 em 2 arquivos), "Status da leitura" não vem mais de flag manual sem laudo real (+3, novo), diagnóstico de falha real vs. "ainda não processado" no Acervo Documental (+2, novo) |
 
 ## Testes novos ou alterados na Rodada 6 (2 testes: 1 arquivo novo)
 

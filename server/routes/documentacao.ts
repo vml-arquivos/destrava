@@ -224,6 +224,19 @@ function valorResultadoRelatorio(value: unknown): string | null {
 export function montarResultadoDetalhadoRelatorio(documento: any, analiseEspecializada: any = null) {
   const laudo = documento?.resultado_validacao?.analise_regra_documental;
   const laudoErro = documento?.resultado_validacao?.analise_regra_documental_erro;
+  // CORREÇÃO (31/08/2026, pedido explícito do usuário -- card mostrando ao
+  // mesmo tempo "Resultado da análise: Aguardando análise" / "ainda não
+  // existe laudo concluído" E "Amostra objetiva dos dados lidos > Status da
+  // leitura: validado", uma contradição): `documento?.status` é um campo
+  // administrativo genérico da linha do arquivo (inclui o "✓ Validar" manual
+  // do Acervo Documental, um sinalizador de um analista humano, não uma
+  // confirmação de que a leitura automática rodou). Sem nenhum laudo real
+  // (nem `laudo` nem `analiseEspecializada`), esse campo não pode ser exibido
+  // sob o rótulo "Status da leitura" -- ele nunca representou o resultado de
+  // uma leitura. Sem esta checagem, um documento marcado manualmente como
+  // validado sem nunca ter sido lido pela IA aparecia, neste campo, como se a
+  // leitura tivesse confirmado "validado".
+  const temLeituraAutomatica = Boolean(laudo) || Boolean(analiseEspecializada);
   const analiseNormalizada = analiseEspecializada?.resultado_analise || analiseEspecializada || null;
   const analise = analiseNormalizada || laudo || null;
   const dados = analise?.dados_extraidos || {};
@@ -339,7 +352,7 @@ export function montarResultadoDetalhadoRelatorio(documento: any, analiseEspecia
   }
   adicionarCampo('Fonte da leitura', documento?.fonte || documento?.fonte_extracao || documento?.origem || analise?.modelo_ia);
   adicionarCampo('Confiança da leitura', formatarConfiancaRelatorio(documento?.confianca ?? documento?.nivel_confianca ?? analise?.nivel_confianca));
-  adicionarCampo('Status da leitura', documento?.status_leitura || documento?.status || analise?.status);
+  adicionarCampo('Status da leitura', documento?.status_leitura || analise?.status || (temLeituraAutomatica ? documento?.status : null));
   if (dados?.periodo_analisado) adicionarCampo('Período analisado', dados.periodo_analisado);
   if (dados?.titular_identificado) adicionarCampo('Titular identificado', dados.titular_identificado);
   if (ehSocietario) {
@@ -439,7 +452,12 @@ export function montarResultadoDetalhadoRelatorio(documento: any, analiseEspecia
   };
 }
 
-async function enriquecerDocumentosAcervoComAnalise(blocos: any[]): Promise<any[]> {
+// Exportada (2026-08-31) apenas para permitir teste unitário direto do
+// diagnóstico de falha real vs. "ainda não processado" -- ver
+// tests/acervoDocumentalFalhaRealVsAguardando.test.ts. Continua sendo
+// chamada internamente do mesmo jeito; exportar não muda seu comportamento
+// para os chamadores existentes.
+export async function enriquecerDocumentosAcervoComAnalise(blocos: any[]): Promise<any[]> {
   const documentos = blocos.flatMap((bloco: any) => (Array.isArray(bloco.documentos) ? bloco.documentos : []).map((documento: any) => ({
     ...documento,
     bloco_codigo: bloco.codigo,
@@ -480,9 +498,32 @@ async function enriquecerDocumentosAcervoComAnalise(blocos: any[]): Promise<any[
       resultadoAnalise.conclusao = 'Laudo antigo ou superseded; reanálise necessária antes de considerar o documento válido.';
       resultadoAnalise.diagnostico = analiseEspecializada?.mensagem_status || 'A versão do motor mudou ou a assinatura do arquivo não confere. O laudo histórico foi preservado e não satisfaz o requisito atual.';
     } else if (!analisado) {
-      resultadoAnalise.conclusao = 'Anexo recebido, aguardando análise documental.';
-      if (!resultadoAnalise.diagnostico) {
-        resultadoAnalise.diagnostico = 'O arquivo foi anexado, mas ainda não existe laudo concluído para este documento.';
+      // CORREÇÃO (31/08/2026, pedido explícito do usuário -- "quero saber o
+      // motivo por que que está dando pendência"): antes desta checagem, um
+      // documento cuja análise automática JÁ TINHA FALHADO (status 'falhou'
+      // em documentos_extracoes_ia, ver executarAnaliseDocumentalEspecializada)
+      // ficava indistinguível de um documento que simplesmente ainda não
+      // tinha sido processado -- os dois mostravam a mesma mensagem genérica
+      // "aguardando análise documental". O motivo real da falha já era
+      // persistido (e já era usado em outras telas via
+      // buscarFalhaAnaliseEspecializada); só faltava consultá-lo aqui também.
+      let falhaPersistida: { mensagem: string; processado_em: string | null } | null = null;
+      if (configuracao && documento?.id) {
+        try {
+          falhaPersistida = await buscarFalhaAnaliseEspecializada(String(documento.id), configuracao.promptCodigo);
+        } catch (error) {
+          console.warn('[Acervo] Falha ao buscar motivo de falha da análise:', documento.id, configuracao.promptCodigo, (error as any)?.message || error);
+        }
+      }
+      if (falhaPersistida) {
+        const mensagem = mensagemSeguraFalhaLeitura(documentLabel(tipo) || 'Documento', falhaPersistida.mensagem);
+        resultadoAnalise.conclusao = 'Falha na análise automática deste documento.';
+        resultadoAnalise.diagnostico = mensagem;
+      } else {
+        resultadoAnalise.conclusao = 'Anexo recebido, aguardando análise documental.';
+        if (!resultadoAnalise.diagnostico) {
+          resultadoAnalise.diagnostico = 'O arquivo foi anexado, mas ainda não existe laudo concluído para este documento.';
+        }
       }
     }
     return {

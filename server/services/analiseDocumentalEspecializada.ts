@@ -654,7 +654,25 @@ export function validarQsaExtraida(empresa: any, sociosReceita: any[], dados: an
   // identificação de quem é Sócio-Administrador. CPF, RG, endereço, estado civil,
   // cônjuge, profissão, contato e qualquer outro dado pessoal não participam desta
   // validação e jamais podem bloquear o avanço.
-  if (!sociosDocumento.length) {
+  //
+  // CORREÇÃO (31/08/2026, pedido explícito do usuário -- QSA de empresa
+  // Empresário Individual marcado como "Revisão necessária: Não foi possível
+  // identificar os nomes dos sócios", quando na verdade o documento respondeu
+  // corretamente "A NATUREZA JURÍDICA NÃO PERMITE O PREENCHIMENTO DO QSA"):
+  // naturezas jurídicas como Empresário (Individual) não têm sócios no
+  // sentido societário -- o titular é o próprio CNPJ, não um "sócio" a ser
+  // listado. Zero sócios extraídos, nesse caso, é a leitura completa e
+  // correta do documento oficial, não uma falha de extração. `qsa_nao_aplicavel`
+  // vem do próprio conteúdo do documento (ver parseQsa/promptQsa), nunca de
+  // uma suposição sobre o tipo de empresa feita fora do texto lido.
+  if (dados?.qsa_nao_aplicavel === true) {
+    alertas.push({
+      codigo: 'qsa_nao_aplicavel_natureza_juridica',
+      campo: 'socios',
+      mensagem: 'A natureza jurídica desta empresa não permite o preenchimento do QSA (sem sócios no sentido societário) -- resposta oficial da consulta à Receita Federal. Nenhum sócio é exigido neste QSA.',
+      severidade: 'baixa',
+    });
+  } else if (!sociosDocumento.length) {
     alertas.push({
       codigo: 'qsa_socios_nao_extraidos',
       campo: 'socios',
@@ -719,7 +737,11 @@ export function validarQsaExtraida(empresa: any, sociosReceita: any[], dados: an
   const confiancaExtracao = normalizarConfianca(dados?.confianca);
   const baseExigeAdministrador = sociosBase.some((socio) => socio.administrador === true);
   const documentoTemAdministrador = sociosDocumento.some((socio: ReturnType<typeof socioNormalizado>) => socio.administrador === true);
-  const faltouCampoInstitucional = !cnpjDocumento || !razaoDocumento || capitalDocumento === null || !sociosDocumento.length || (baseExigeAdministrador && !documentoTemAdministrador);
+  // Quando a natureza jurídica não permite QSA, a ausência de sócios/administrador
+  // no documento não conta como campo institucional faltando -- não há sócio a
+  // exigir (ver a checagem de `qsa_nao_aplicavel` acima).
+  const faltouCampoInstitucional = !cnpjDocumento || !razaoDocumento || capitalDocumento === null
+    || (dados?.qsa_nao_aplicavel !== true && (!sociosDocumento.length || (baseExigeAdministrador && !documentoTemAdministrador)));
   if ((dados?.extracao_parcial === true || (confiancaExtracao !== null && confiancaExtracao < 0.6)) && faltouCampoInstitucional) {
     alertas.push({
       codigo: 'qsa_extracao_inconclusiva',
@@ -1049,10 +1071,13 @@ function normalizarDadosQsa(dados: any): Record<string, any> {
     razao_social: dados?.razao_social ? String(dados.razao_social).trim() : null,
     capital_social: asNumber(dados?.capital_social),
     socios,
+    qsa_nao_aplicavel: dados?.qsa_nao_aplicavel === true,
     confianca: normalizarConfianca(dados?.confianca),
     fonte_extracao: dados?.fonte_extracao || null,
     mecanismo_extracao: dados?.mecanismo_extracao || null,
-    extracao_parcial: dados?.extracao_parcial === true,
+    // Quando a natureza jurídica não permite QSA, a ausência de sócios é a
+    // resposta correta e completa -- não é uma extração parcial/falha.
+    extracao_parcial: dados?.qsa_nao_aplicavel === true ? false : dados?.extracao_parcial === true,
   };
 }
 
@@ -1180,9 +1205,11 @@ Retorne apenas JSON válido, sem markdown, com este formato:
   "razao_social": string | null,
   "capital_social": number | null,
   "socios": [{ "nome": string, "qualificacao": string | null, "administrador": boolean | null }],
+  "qsa_nao_aplicavel": boolean,
   "confianca": number
 }
-A decisão da Etapa 1 usa SOMENTE: CNPJ, razão social, capital social, nomes dos sócios e identificação de quem é Sócio-Administrador. O campo "qualificacao" é apenas evidência interna para inferir "administrador" e não deve criar requisito ou divergência independente. Não extraia nem devolva CPF, RG, endereço, nacionalidade, estado civil, cônjuge, profissão, telefone, e-mail ou qualquer outro dado pessoal. Não extraia data de registro neste QSA; essa validação pertence à etapa societária seguinte. Não invente dados. Use null quando não houver evidência.`;
+A decisão da Etapa 1 usa SOMENTE: CNPJ, razão social, capital social, nomes dos sócios e identificação de quem é Sócio-Administrador. O campo "qualificacao" é apenas evidência interna para inferir "administrador" e não deve criar requisito ou divergência independente. Não extraia nem devolva CPF, RG, endereço, nacionalidade, estado civil, cônjuge, profissão, telefone, e-mail ou qualquer outro dado pessoal. Não extraia data de registro neste QSA; essa validação pertence à etapa societária seguinte. Não invente dados. Use null quando não houver evidência.
+REGRA IMPORTANTE: se o documento contiver literalmente a frase "A NATUREZA JURÍDICA NÃO PERMITE O PREENCHIMENTO DO QSA" (ou equivalente), isto é a resposta OFICIAL e COMPLETA da Receita Federal para naturezas jurídicas sem sócios no sentido societário (ex.: Empresário Individual) -- não é uma falha de leitura. Nesse caso, devolva "socios": [] e "qsa_nao_aplicavel": true; NÃO tente adivinhar ou inventar um sócio. Caso contrário, "qsa_nao_aplicavel": false.`;
 }
 
 export function promptSimples(): string {

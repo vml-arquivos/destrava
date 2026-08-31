@@ -221,6 +221,17 @@ function parseQsa(texto: string): { dados: Record<string, any>; confianca: numbe
     || norm.includes('quadro societario')
     || norm.includes('capital social')
     || norm.includes('qualificacao do socio');
+  // CORREÇÃO (31/08/2026, pedido explícito do usuário -- empresa Empresário
+  // Individual cujo QSA foi marcado "Revisão necessária: Não foi possível
+  // identificar os nomes dos sócios"): esta é a resposta OFICIAL da própria
+  // consulta QSA da Receita Federal para naturezas jurídicas que não têm
+  // sócios no sentido societário (Empresário Individual -- código 213-5 -- é
+  // o caso mais comum; o titular não é "sócio", é o próprio CNPJ). Quando o
+  // documento traz literalmente esta frase, a ausência de sócios no array não
+  // é uma falha de leitura: é a resposta completa e correta da Receita. O
+  // conteúdo do documento manda, nunca uma suposição sobre o tipo de empresa
+  // feita fora dele.
+  const qsaNaoAplicavel = norm.includes('natureza juridica nao permite o preenchimento do qsa');
   const cnpj = formatarCnpj(primeiroCnpj(texto));
   const razaoSocial = limparValor(valorAposRotulo(linhas, ['nome empresarial', 'razão social', 'razao social']))
     || limparValor(linhas.find((linha) => /\b(?:ltda|limitada|eireli|s\/?a)\b/i.test(linha) && !/qualificacao|socio|administrador/i.test(linha)) || null);
@@ -371,11 +382,15 @@ function parseQsa(texto: string): { dados: Record<string, any>; confianca: numbe
     }
   }
 
+  // Quando a natureza jurídica não permite QSA, a lista de sócios vazia É o
+  // resultado correto e completo -- pontua como se os sócios tivessem sido
+  // lidos (em vez de derrubar a confiança como se a leitura tivesse falhado)
+  // e não é tratada como extração parcial.
   const pontuacao = (compativel ? 0.15 : 0)
     + (cnpj ? 0.25 : 0)
     + (razaoSocial ? 0.1 : 0)
     + (capitalSocial !== null ? 0.2 : 0)
-    + (socios.length ? 0.3 : 0);
+    + (socios.length || qsaNaoAplicavel ? 0.3 : 0);
   const confianca = clamp(pontuacao);
   return {
     dados: {
@@ -384,8 +399,9 @@ function parseQsa(texto: string): { dados: Record<string, any>; confianca: numbe
       razao_social: razaoSocial,
       capital_social: capitalSocial,
       socios,
+      qsa_nao_aplicavel: qsaNaoAplicavel,
       data_registro: dataRegistro,
-      extracao_parcial: socios.length === 0,
+      extracao_parcial: !qsaNaoAplicavel && socios.length === 0,
       confianca,
       fonte_extracao: 'local_deterministica',
     },

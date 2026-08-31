@@ -88,6 +88,37 @@ describe('validação documental especializada', () => {
     expect(alertas.filter((a) => a.codigo === 'qsa_socio_receita_ausente_documento')).toHaveLength(0);
   });
 
+  it('não marca "revisão necessária" quando o QSA responde oficialmente que a natureza jurídica (Empresário Individual) não permite sócios', () => {
+    // CORREÇÃO (31/08/2026, pedido explícito do usuário): uma empresa
+    // Empresário Individual (sem sócios no sentido societário -- o titular é
+    // o próprio CNPJ) teve seu QSA marcado "Revisão necessária: Não foi
+    // possível identificar os nomes dos sócios", mesmo o documento
+    // respondendo corretamente "A NATUREZA JURÍDICA NÃO PERMITE O
+    // PREENCHIMENTO DO QSA" (resposta oficial da Receita Federal). Sem
+    // sócios sincronizados (`sociosReceita: []`, coerente com a mesma
+    // natureza jurídica) e `qsa_nao_aplicavel: true` vindo do próprio
+    // conteúdo do documento, nenhum alerta de severidade alta/crítica pode
+    // ser gerado.
+    const alertas = validarQsaExtraida(
+      { cnpj: '44.598.036/0001-94', razao_social: '44.598.036 PAULO BOLSONI BALDI', capital_social: 200_000 },
+      [],
+      {
+        cnpj: '44.598.036/0001-94',
+        razao_social: '44.598.036 PAULO BOLSONI BALDI',
+        capital_social: 200_000,
+        socios: [],
+        qsa_nao_aplicavel: true,
+        confianca: 1,
+        extracao_parcial: false,
+      },
+    );
+
+    expect(alertas.some((a) => a.severidade === 'alta' || a.severidade === 'critica')).toBe(false);
+    expect(alertas.some((a) => a.codigo === 'qsa_socios_nao_extraidos')).toBe(false);
+    expect(alertas.some((a) => a.codigo === 'qsa_extracao_inconclusiva')).toBe(false);
+    expect(alertas.some((a) => a.codigo === 'qsa_nao_aplicavel_natureza_juridica')).toBe(true);
+  });
+
   it('não bloqueia por qualificação genérica quando nome e condição de administrador conferem', () => {
     const alertas = validarQsaExtraida(
       { cnpj: '52.008.360/0001-33', razao_social: 'PALUMA BURGER LTDA', capital_social: 65_000 },

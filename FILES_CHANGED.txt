@@ -235,3 +235,37 @@ tests/fixtures/documento-sem-regime-sintetico.pdf
 Total desta rodada: 6 arquivos de código alterados + 6 arquivos de
 documentação alterados + 1 arquivo de teste novo + 1 fixture sintético novo
 = 14 arquivos.
+
+======================================================================
+Rodada 13 (esta entrega) -- diagnóstico e correção de falsos-positivos no
+Acervo Documental de uma empresa real: QSA de Empresário Individual marcado
+"revisão necessária" indevidamente; "Status da leitura" mostrando um flag
+manual como se fosse confirmação de leitura automática; diagnóstico honesto
+de falha real de análise vs. "ainda não processado"
+======================================================================
+
+Arquivos existentes ALTERADOS nesta rodada:
+
+server/services/extracaoDocumentalLocal.ts          (parseQsa: qsa_nao_aplicavel)
+server/services/analiseDocumentalEspecializada.ts   (promptQsa/normalizarDadosQsa/validarQsaExtraida)
+server/routes/documentacao.ts                       (Status da leitura + diagnóstico de falha real)
+tests/extracaoDocumentalLocal.test.ts               (+1 teste)
+tests/analiseDocumentalEspecializada.test.ts        (+1 teste)
+CHANGELOG_CORRECOES.md
+ROLLBACK_PLAN.md
+PENDENCIAS_REAIS.md
+TEST_REPORT.md
+BUILD_REPORT.md
+FILES_CHANGED.txt (este arquivo)
+SHA256SUMS.txt
+
+Arquivos NOVOS -- teste (nenhum dado real de cliente; texto reproduzido é o
+mesmo tipo de resposta oficial pública da Receita Federal, sem nenhum dado
+pessoal ou fiscal identificável de terceiros):
+
+tests/statusDaLeituraSemAnaliseReal.test.ts
+tests/acervoDocumentalFalhaRealVsAguardando.test.ts
+
+Total desta rodada: 3 arquivos de código alterados + 2 arquivos de teste
+alterados + 6 arquivos de documentação alterados + 2 arquivos de teste novos
+= 13 arquivos.

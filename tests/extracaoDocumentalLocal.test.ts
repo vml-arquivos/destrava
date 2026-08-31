@@ -65,6 +65,37 @@ describe('extração documental local determinística', () => {
     expect(resultado.confianca).toBeGreaterThanOrEqual(0.8);
   });
 
+  it('reconhece "a natureza jurídica não permite o preenchimento do QSA" como resposta oficial completa (Empresário Individual), não como falha de leitura', () => {
+    // Texto real da consulta QSA da Receita Federal para uma empresa
+    // Empresário (Individual) -- reproduzido conforme relatado pelo usuário
+    // (31/08/2026): o QSA estava marcado "Revisão necessária: Não foi
+    // possível identificar os nomes dos sócios", mas o próprio documento
+    // já responde, de forma completa e oficial, que esta natureza jurídica
+    // não tem sócios no sentido societário (o titular é o próprio CNPJ).
+    const texto = `
+      Consulta Quadro de Sócios e Administradores - QSA
+      CNPJ:
+      44.598.036/0001-94
+      NOME EMPRESARIAL:
+      44.598.036 PAULO BOLSONI BALDI
+      CAPITAL SOCIAL:
+      R$ 200.000,00 (Duzentos mil reais)
+      A NATUREZA JURÍDICA NÃO PERMITE O PREENCHIMENTO DO QSA
+    `;
+
+    const resultado = analisarTextoDocumentoLocal('qsa', texto);
+
+    expect(resultado.dados.documento_compativel).not.toBe(false);
+    expect(resultado.dados.cnpj).toBe('44.598.036/0001-94');
+    expect(resultado.dados.capital_social).toBe(200000);
+    expect(resultado.dados.socios).toHaveLength(0);
+    expect(resultado.dados.qsa_nao_aplicavel).toBe(true);
+    // Zero sócios aqui é a resposta completa e correta -- não é extração
+    // parcial nem falha, e a confiança não deve ser penalizada por isso.
+    expect(resultado.dados.extracao_parcial).toBe(false);
+    expect(resultado.confianca).toBeGreaterThanOrEqual(0.6);
+  });
+
   it('extrai o sócio do layout horizontal oficial do QSA sem exigir CPF ou documentos pessoais', () => {
     const texto = `
       QUADRO DE SÓCIOS E ADMINISTRADORES - QSA
