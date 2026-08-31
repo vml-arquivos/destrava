@@ -1,6 +1,6 @@
-# Plano de Rollback — 30/08/2026 (atualizado, Rodada 3 — final pré-commit)
+# Plano de Rollback — 31/08/2026 (atualizado, Rodada 4 — bug real reportado em produção)
 
-## Como reverter tudo desta sessão (as três rodadas)
+## Como reverter tudo desta sessão (as quatro rodadas)
 
 Se este pacote for aplicado por cima de um checkout limpo do commit anterior, reverter é restaurar os arquivos listados em `FILES_CHANGED.txt` para a versão anterior (o commit atual em produção, ou o commit correspondente à entrega v19 anterior a esta missão) e remover os arquivos novos listados no mesmo arquivo. Nenhuma migration precisa ser desfeita no banco se ela nunca chegou a ser aplicada manualmente contra a VPS (ver abaixo) -- `npm run migrate` nunca as aplica sozinho.
 
@@ -23,6 +23,10 @@ Se este pacote for aplicado por cima de um checkout limpo do commit anterior, re
 10. **EFD-Contribuições `ANALISE_ESPECIALIZADA_PENDENTE`**: remover o bloco `dadosEfd`/o alerta `efd_contribuicoes_analise_especializada_pendente` em `normalizarDocumentoCatalogado` (`analiseDocumentalEspecializada.ts`). Remover os 3 testes correspondentes em `tests/analiseDocumentalEspecializada.test.ts`.
 11. **Teste de consistência catálogo × prompt**: remover `tests/catalogoDarfConsistencia.test.ts` e, se desejado, as duas exportações adicionadas só para viabilizá-lo (`CATALOGO_CODIGO_RECEITA_DARF_IRPJ` e `promptSimples` -- ambas seguras de manter exportadas mesmo sem o teste, pois não mudam nenhum comportamento em runtime).
 
+### Rodada 4 (esta entrega -- bug real reportado em produção)
+12. **Situação da certidão CND/CPEND/PGFN/CADIN**: reverter o bloco `exigenciaSituacaoCertidao` em `promptDocumentoCatalogado` e o bloco `dadosCertidao`/alertas `certidao_situacao_positiva`/`certidao_situacao_nao_identificada` em `normalizarDocumentoCatalogado` (`server/services/analiseDocumentalEspecializada.ts`). Remover os 8 testes correspondentes em `tests/analiseDocumentalEspecializada.test.ts`.
+13. **Remoção do banner "Ordem recomendada" (SCR→CCS→CCF)**: reintroduzir `ORDEM_CONSULTA_CADASTRAL`, `regraOrdemConsulta`, `ordemConsultaPendente` e o branch correspondente de `avisoOrdemRecomendada` em `client/src/components/documentos/DocumentosEntidade.tsx` (git history desta sessão tem a versão anterior; o comentário deixado no lugar do bloco removido documenta o que foi tirado e por quê).
+
 ## Risco de rollback
 
-Baixo em todos os itens. Nenhuma das correções de código (itens 1, 2, 3, 5, 6, 7, 10, 11) depende de dado gravado no banco -- reverter o código volta exatamente ao comportamento anterior. As três capacidades aditivas com tabela nova (itens 4, 8, 9) só têm risco de perda de dado SE a migration correspondente já tiver sido aplicada manualmente contra a VPS E já existirem linhas gravadas nela por uso real do sistema -- nesse caso um `DROP TABLE` apaga esse histórico específico (linha do tempo de regime, faturamento por competência ou cobertura de bureau já registrados), mas nunca afeta `empresas.regime_tributario`, `documentos_arquivos` ou qualquer outra tabela existente, porque as três são estritamente aditivas e nenhuma coluna de tabela existente foi alterada.
+Baixo em todos os itens. Nenhuma das correções de código (itens 1, 2, 3, 5, 6, 7, 10, 11, 12, 13) depende de dado gravado no banco -- reverter o código volta exatamente ao comportamento anterior. As três capacidades aditivas com tabela nova (itens 4, 8, 9) só têm risco de perda de dado SE a migration correspondente já tiver sido aplicada manualmente contra a VPS E já existirem linhas gravadas nela por uso real do sistema -- nesse caso um `DROP TABLE` apaga esse histórico específico (linha do tempo de regime, faturamento por competência ou cobertura de bureau já registrados), mas nunca afeta `empresas.regime_tributario`, `documentos_arquivos` ou qualquer outra tabela existente, porque as três são estritamente aditivas e nenhuma coluna de tabela existente foi alterada. O item 13 (remoção do banner) não tem nenhum risco de dado -- é puramente visual no frontend.

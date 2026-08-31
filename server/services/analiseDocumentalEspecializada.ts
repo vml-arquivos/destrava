@@ -1403,8 +1403,24 @@ function normalizarExtratoBancario(
 // anexou, nunca uma prova do conteúdo real do arquivo; o prompt agora deixa
 // isso explícito e pede para o tipo real ser identificado pelo conteúdo
 // primeiro, só então comparado ao tipo esperado.
+// CORREÇÃO (2026-08-31, bug real reportado em produção): um Relatório de
+// Inclusão no CADIN de verdade (empresa CNPJ 49.366.887/0001-25, upload real
+// do usuário) foi lido e a IA confirmou "documento_compativel: true" (é
+// mesmo um documento de CADIN) sem que nada no prompt pedisse explicitamente
+// para verificar SE a certidão/relatório é negativa (nada consta) ou
+// positiva (o CNPJ ESTÁ incluído/tem pendência) -- o documento real dizia
+// "INCLUÍDO PELA RFB EM 23/11/2025", o oposto de "nada consta", e nada
+// garantia que isso virasse um alerta visível. `documento_compativel` só
+// prova que o TIPO do documento está certo; nunca provou que o RESULTADO da
+// certidão é favorável. Para a categoria `cnd_cpend` (CND/CPEND Federal,
+// PGFN, CADIN -- ver `analise: 'cnd_cpend'` em shared/documentTypes.ts) o
+// prompt agora exige explicitamente o campo `situacao_certidao`, com a
+// consequência de cada valor deixada inequívoca para o modelo.
 function promptDocumentoCatalogado(tipoDocumento: string, nome: string, categoria: string, promptCodigo: string): string {
-  return `Você é um analista documental de crédito empresarial. Um arquivo foi anexado no campo "${nome}" (${tipoDocumento}), categoria ${categoria} -- mas o nome desse campo é apenas a intenção de quem fez o upload, nunca uma prova do que o arquivo realmente é. Identifique o tipo do documento exclusivamente pelo conteúdo real do arquivo (título, cabeçalho, órgão emissor, campos preenchidos), de forma totalmente independente do nome do campo em que foi anexado -- nunca presuma que o documento é "${nome}" só porque foi anexado nesse campo. Só depois de identificar o tipo real do conteúdo, compare com o tipo esperado ("${nome}" / ${tipoDocumento}) para decidir documento_compativel: documento_compativel deve ser false sempre que o conteúdo real for de um tipo diferente do esperado, mesmo que os dois pertençam à mesma categoria (${categoria}) ou sirvam a propósitos relacionados. Retorne somente JSON válido e não tome decisão final de crédito. Separe rigorosamente campos_comprovados (valor, campo, página/trecho e confiança) de campos_inferidos; se algo não estiver legível, use null e registre pendencia. Identifique documento_compativel, competencia (inicio/fim), validade (inicio/fim), cnpj, cpf, razão social, nomes, valores financeiros, órgão emissor, número, situação, assinaturas e evidencias quando existirem. Nunca invente dados, não trate ausência de evidência como confirmação e indique revisao_humana_necessaria para divergência, baixa confiança ou documento incompatível. Prompt ${promptCodigo}.`;
+  const exigenciaSituacaoCertidao = promptCodigo === 'cnd_cpend_extract'
+    ? ' Além dos campos padrão, este documento é uma certidão/relatório de regularidade (CND, CPEND, PGFN ou CADIN): identifique explicitamente o RESULTADO declarado e retorne em "situacao_certidao" exatamente um destes valores -- "negativa" (nada consta / não há pendência / não está incluído), "positiva_com_efeito_negativo" (certidão positiva com efeito de negativa / CPEND), "positiva" (há pendência, débito ou inclusão ativa -- inclui qualquer CADIN que declare o CNPJ/CPF "incluído" ou "incluído pela RFB"), ou null se o resultado não estiver legível. NUNCA retorne "negativa" só porque o documento é do tipo certo -- "negativa" exige que o texto afirme expressamente ausência de pendência; um documento que declara o contribuinte incluído/positivo é "positiva" mesmo que estruturalmente pareça um relatório oficial válido.'
+    : '';
+  return `Você é um analista documental de crédito empresarial. Um arquivo foi anexado no campo "${nome}" (${tipoDocumento}), categoria ${categoria} -- mas o nome desse campo é apenas a intenção de quem fez o upload, nunca uma prova do que o arquivo realmente é. Identifique o tipo do documento exclusivamente pelo conteúdo real do arquivo (título, cabeçalho, órgão emissor, campos preenchidos), de forma totalmente independente do nome do campo em que foi anexado -- nunca presuma que o documento é "${nome}" só porque foi anexado nesse campo. Só depois de identificar o tipo real do conteúdo, compare com o tipo esperado ("${nome}" / ${tipoDocumento}) para decidir documento_compativel: documento_compativel deve ser false sempre que o conteúdo real for de um tipo diferente do esperado, mesmo que os dois pertençam à mesma categoria (${categoria}) ou sirvam a propósitos relacionados. Retorne somente JSON válido e não tome decisão final de crédito. Separe rigorosamente campos_comprovados (valor, campo, página/trecho e confiança) de campos_inferidos; se algo não estiver legível, use null e registre pendencia. Identifique documento_compativel, competencia (inicio/fim), validade (inicio/fim), cnpj, cpf, razão social, nomes, valores financeiros, órgão emissor, número, situação, assinaturas e evidencias quando existirem.${exigenciaSituacaoCertidao} Nunca invente dados, não trate ausência de evidência como confirmação e indique revisao_humana_necessaria para divergência, baixa confiança ou documento incompatível. Prompt ${promptCodigo}.`;
 }
 
 function normalizarDocumentoCatalogado(extraidos: any, tipoDocumento: string): {
@@ -1502,10 +1518,53 @@ function normalizarDocumentoCatalogado(extraidos: any, tipoDocumento: string): {
     });
   }
 
+  // CORREÇÃO (2026-08-31, bug real reportado em produção -- ver
+  // CHANGELOG_CORRECOES.md, Rodada 4): um Relatório de Inclusão no CADIN de
+  // verdade (CNPJ 49.366.887/0001-25) foi anexado no campo "Nada consta
+  // CADIN (CNPJ)" e o documento em si é, de fato, um relatório de CADIN --
+  // `documento_compativel` corretamente seria `true`. O problema é outro:
+  // o CONTEÚDO do relatório diz "Situação do contribuinte no Cadin:
+  // INCLUÍDO PELA RFB EM 23/11/2025", ou seja, o EXATO OPOSTO de "nada
+  // consta" -- e nada no sistema convertia isso num alerta. Verificar o TIPO
+  // do documento nunca provou que o RESULTADO da certidão é favorável; são
+  // duas perguntas diferentes. Esta correção fecha essa lacuna para toda a
+  // categoria `cnd_cpend` (CND/CPEND Federal, PGFN e CADIN, tanto CNPJ
+  // quanto CPF -- ver `analise: 'cnd_cpend'` em shared/documentTypes.ts):
+  // `situacao_certidao` (ver exigência acrescentada a `promptDocumentoCatalogado`
+  // acima) agora vira um alerta de severidade crítica sempre que a certidão
+  // não for expressamente negativa ou positiva-com-efeito-de-negativa, e um
+  // alerta de revisão humana quando a IA não confirmar nenhum resultado --
+  // nunca fica em silêncio.
+  const dadosCertidao: Record<string, any> = {};
+  if (documentAnalysisConfig(tipoDocumento)?.tipo === 'cnd_cpend') {
+    const situacaoBruta = String(bruto.situacao_certidao ?? comprovados.situacao_certidao ?? '').trim().toLowerCase();
+    const situacaoCertidao: 'negativa' | 'positiva_com_efeito_negativo' | 'positiva' | null =
+      situacaoBruta === 'negativa' || situacaoBruta === 'positiva_com_efeito_negativo' || situacaoBruta === 'positiva'
+        ? situacaoBruta
+        : null;
+    dadosCertidao.situacao_certidao = situacaoCertidao;
+    if (situacaoCertidao === 'positiva') {
+      alertas.push({
+        codigo: 'certidao_situacao_positiva',
+        mensagem: `O documento indica que ${documentLabel(tipoDocumento)} está POSITIVO -- há pendência, débito ou inclusão ativa declarada no próprio documento. Isto não satisfaz uma exigência de "nada consta".`,
+        severidade: 'critica',
+        recomendacao: 'Tratar como pendência ativa de crédito: solicitar regularização, negociação ou uma certidão positiva com efeito de negativa (CPEND). Nunca considerar este requisito satisfeito com o documento atual.',
+      });
+    } else if (!situacaoCertidao) {
+      alertas.push({
+        codigo: 'certidao_situacao_nao_identificada',
+        mensagem: `Não foi possível confirmar se ${documentLabel(tipoDocumento)} é negativa, positiva ou positiva com efeito de negativa a partir do documento anexado.`,
+        severidade: 'alta',
+        recomendacao: 'Conferir manualmente o resultado da certidão/relatório antes de considerar este requisito satisfeito.',
+      });
+    }
+  }
+
   const dados = {
     ...brutoPersistivel,
     ...dadosRegime,
     ...dadosEfd,
+    ...dadosCertidao,
     campos_comprovados: comprovados,
     campos_inferidos: camposInferidos,
     evidencias,

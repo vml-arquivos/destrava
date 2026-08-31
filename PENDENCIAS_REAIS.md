@@ -1,4 +1,4 @@
-# Pendências Reais — 30/08/2026 (Rodada 3 — final pré-commit)
+# Pendências Reais — 31/08/2026 (Rodada 4 — bug real reportado em produção)
 
 Lista honesta do que a missão pediu e NÃO foi implementado nesta sessão, com a razão concreta de cada omissão. Nada aqui está descartado por "fora de escopo" sem justificativa -- cada item abaixo é trabalho real, mapeado, que exige mais que uma correção cirúrgica para ser feito com segurança.
 
@@ -12,9 +12,11 @@ A missão pede doze status (`PENDENTE`, `VALIDADO`, `VALIDADO_COM_ALERTA`, `VALI
 
 `registrarPeriodoRegime` (Rodada 2), `registrarFaturamentoCompetencia` e `registrarCoberturaEvidencia` (Rodada 3) são funções prontas, testadas e com rota de leitura -- mas nenhuma delas é chamada automaticamente quando um documento é analisado hoje (`analisarSimplesNacional`, `analisarDocumentoCatalogado` etc.). Ou seja: a infraestrutura de gravação existe, mas hoje só é populada se alguém chamar essas funções manualmente (ex.: via script ou futura chamada explícita). Conectar isso ao pipeline de análise real exige decidir, para cada tipo de documento, QUAL requisito/competência/período ele evidencia e QUANTA confiança atribuir -- uma decisão de produto e não só de código, que merece revisão dedicada em vez de ser assumida nesta rodada.
 
-## 3. Classificador de tipo de comprovante de regime cobre só 4 tipos
+## 3. Classificador de tipo de comprovante de regime cobre só 4 tipos (e o novo `situacao_certidao` da Rodada 4 depende da IA, não é determinístico)
 
 `detectarTipoComprovanteRegime` reconhece `ecf`, `dctf_mit`, `darf`, `livro_caixa` -- os tipos que a missão pediu explicitamente na matriz cruzada (seção 47). Os demais tipos documentais do catálogo (CND, CADIN, CRF, SCR, PGDAS, DEFIS) ainda não têm um classificador de identidade independente do slot equivalente -- continuam usando a checagem de compatibilidade genérica de `normalizarDocumentoCatalogado` (`bruto.documento_compativel === false`), que depende inteiramente do que a IA/OCR retornou, sem uma segunda camada determinística de verificação de tipo real. Extender o classificador para esses tipos é viável, mas cada um tem marcadores textuais próprios que precisam ser levantados com cuidado (o mesmo processo usado para os 4 tipos desta rodada) para não introduzir falsos negativos.
+
+**Atualização Rodada 4:** para a categoria `cnd_cpend` (CND/CPEND Federal, PGFN, CADIN) especificamente, foi acrescentado um campo `situacao_certidao` exigido explicitamente no prompt da IA e convertido em alerta obrigatório (`certidao_situacao_positiva` / `certidao_situacao_nao_identificada`) sempre que o resultado não seja claramente negativo -- isso responde ao bug real encontrado (CADIN "incluído" tratado como válido). Essa correção NÃO é determinística: ela depende da IA extrair `situacao_certidao` corretamente, ao contrário do classificador local (`detectarTipoComprovanteRegime`) usado para ECF/DCTF/DARF/Livro Caixa, que lê o texto diretamente com regex e nunca depende de uma chamada externa. Construir um classificador determinístico equivalente para `cnd_cpend` exigiria ligar `extrairDocumentoLocal` a essa categoria (hoje ela pula direto para a IA, `usarExtracaoLocal = false`) SEM substituir a extração rica que a IA hoje devolve (razão social, número do documento, órgão emissor etc.) -- arriscado demais para fazer às pressas numa correção de urgência. Prioridade real para uma próxima rodada dedicada.
 
 ## 4. EFD-Contribuições: leitura especializada de M400/M800 continua não implementada
 
@@ -35,6 +37,24 @@ Mencionado na missão original (Rodada 1) como parte da arquitetura completa; n�
 ## 8. Bureaus: classificador textual cobre os marcadores mais comuns, não uma extração estruturada
 
 `detectarRequisitosCobertosPeloTexto` reconhece os requisitos pela presença de palavras/siglas no texto (SCR, CCS, CCF, CENPROT, CADIN, PGFN, CND federal, CNDT, Situação Fiscal, Serasa) -- não faz uma extração estruturada de campos (número do relatório, data de emissão, órgão). É suficiente para o propósito desta rodada (provar que um documento cobre múltiplos requisitos), mas não substitui uma leitura completa de cada tipo de bureau.
+
+## 9. Relatório de Situação Fiscal (CNPJ/CPF): sem checagem de mérito dedicada
+
+Documento real da empresa ZR CONSTRUCOES E REFORMAS CIVIS LTDA (CNPJ 49.366.887/0001-25), anexado no slot "Relatório de Situação Fiscal (CNPJ)", mostra parcelamento em atraso (3 parcelas) e débitos de PIS/COFINS em aberto -- uma situação fiscal claramente desfavorável. Esse tipo (`situacao_fiscal_cnpj`/`situacao_fiscal_cpf`) tem sua própria categoria de análise (`analise` distinta de `cnd_cpend`, não coberta pela correção da Rodada 4) e continua dependendo inteiramente da extração genérica da IA para os campos `situação`/`campos_comprovados`, sem nenhum alerta dedicado equivalente ao `certidao_situacao_positiva` criado para CND/CADIN/PGFN nesta rodada. Levantar os marcadores textuais próprios de um "Diagnóstico Fiscal na Receita Federal" (que é estruturalmente diferente de uma certidão negativa/positiva -- é uma lista de pendências de parcelamento e débito, não um resultado binário) exige o mesmo cuidado dedicado já aplicado aos outros tipos, e não uma extensão apressada da lógica de `situacao_certidao`.
+
+## 10. Descompasso entre o código no GitHub e o que roda em produção
+
+O print do campo "Enquadramento tributário" mostra `FONTE DA LEITURA:
+local:reextract-v1` -- uma string que não existe em nenhuma versão deste
+repositório, em nenhuma rodada desta sessão. Isso é evidência concreta de
+que o site em produção (destravacredito.com) está rodando um código
+diferente do que está hoje em `vml-arquivos/destrava` branch `main`. Esta
+sessão nunca teve acesso de push/deploy (o usuário sempre aplicou os zips
+manualmente via Coolify), então não é possível confirmar a partir daqui se
+há um ajuste manual direto no servidor, uma branch diferente em produção,
+ou uma versão desatualizada com nomenclatura antiga -- só recomendar que
+isso seja verificado antes de assumir que o deploy do zip desta entrega vai
+produzir exatamente o comportamento descrito nos changelogs desta sessão.
 
 ---
 

@@ -35,6 +35,10 @@ Estas duas peças ainda não estão conectadas entre si nem a nenhum fluxo de gr
 
 `normalizarDocumentoCatalogado` (`analiseDocumentalEspecializada.ts`) marca qualquer documento `efd_contribuicoes` (ou seu alias legado `efd`) com `status_analise: 'ANALISE_ESPECIALIZADA_PENDENTE'` e um alerta dedicado. O documento continua sendo aceito e arquivado normalmente como evidência do dossiê -- a única mudança é que a ausência de uma leitura especializada de M400/M800 deixa de ser invisível.
 
+## 6a. Situação de mérito da certidão (CND/CPEND/PGFN/CADIN) -- Rodada 4
+
+Complementa o princípio da seção 1: identidade correta (`documento_compativel: true`) nunca provou que o RESULTADO da certidão é favorável -- um relatório de CADIN de verdade pode dizer que o CNPJ está incluído (pendência ativa), não "nada consta". Para a categoria `analise: 'cnd_cpend'` (CND/CPEND Federal, PGFN, CADIN -- CNPJ e CPF), `promptDocumentoCatalogado` agora exige o campo `situacao_certidao` (`negativa` | `positiva_com_efeito_negativo` | `positiva` | `null`) com a consequência de cada valor deixada inequívoca para o modelo, e `normalizarDocumentoCatalogado` converte um resultado desfavorável ou não confirmado num alerta garantido (`certidao_situacao_positiva`, crítico, ou `certidao_situacao_nao_identificada`, revisão humana) -- nunca em silêncio. Diferente da seção 1 (classificador determinístico local por regex), esta checagem depende da leitura da IA; ver `PENDENCIAS_REAIS.md`, item 3, para a limitação assumida.
+
 ## 6. Consistência entre fontes de verdade
 
 `tests/catalogoDarfConsistencia.test.ts` prova automaticamente que o catálogo de código de receita do DARF (`CATALOGO_CODIGO_RECEITA_DARF_IRPJ`, em código) e o texto do prompt enviado à IA (`promptSimples`) nunca divergem -- a mesma classe de bug corrigida duas vezes nesta sessão (5993 na Rodada 1, 8998 na Rodada 3) tinha exatamente essa divergência como causa raiz.

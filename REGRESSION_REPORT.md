@@ -1,6 +1,6 @@
-# Relatório de Regressão — 30/08/2026 (atualizado, Rodada 3 — final pré-commit)
+# Relatório de Regressão — 31/08/2026 (atualizado, Rodada 4 — bug real reportado em produção)
 
-Verificação item a item pedida na missão original (Rodada 1), reconfirmada nesta rodada final. "OK" significa: suíte completa de testes passando, comportamento não alterado por nenhuma das correções cumulativas das três rodadas desta sessão, e -- para os itens diretamente relacionados -- teste de regressão dedicado.
+Verificação item a item pedida na missão original (Rodada 1), reconfirmada nesta rodada. "OK" significa: suíte completa de testes passando, comportamento não alterado por nenhuma das correções cumulativas das quatro rodadas desta sessão, e -- para os itens diretamente relacionados -- teste de regressão dedicado.
 
 | Item | Status | Observação |
 |---|---|---|
@@ -22,10 +22,12 @@ Verificação item a item pedida na missão original (Rodada 1), reconfirmada ne
 | Banco compatível | OK | 3 migrations aditivas novas nesta rodada (100, 101, 102) -- todas idempotentes, todas com FK/constraint em blocos `DO $$...EXCEPTION WHEN undefined_table$$` que nunca falham contra um schema que ainda não tenha as tabelas referenciadas. Ver `MIGRATION_SAFETY_REPORT.md`. |
 | EFD-Contribuições | OK, com capacidade nova | Rodada 1: auditado, nenhuma fórmula (certa ou errada) existia. Rodada 3: status explícito `ANALISE_ESPECIALIZADA_PENDENTE` -- documento continua sendo aceito e arquivado normalmente, só nunca mais em silêncio sobre a limitação. |
 | Faturamento rolling 12 meses | Capacidade nova (Rodada 3) | Infraestrutura completa e testada (janela calculada, soma, meses faltantes, consolidação cross-regime); não conectada a nenhum fluxo de gravação automática ainda -- ver `PENDENCIAS_REAIS.md`. |
+| Regularidade (CND/CPEND/PGFN/CADIN) | OK, com correção nova (Rodada 4) | Um documento real de CADIN "incluído" (empresa com pendência ativa) estava sendo aceito sem nenhum alerta de mérito. `situacao_certidao` agora é exigido no prompt da IA para essa categoria e vira alerta crítico/revisão humana quando não for claramente negativo. 8 testes novos; documentos fora dessa categoria (ex.: ECF) confirmadamente não recebem o campo novo. |
+| Banner "Ordem recomendada" (SCR→CCS→CCF) | Removido a pedido do usuário (Rodada 4) | Só o aviso visual foi removido; o upload nunca foi bloqueado por essa ordem em nenhuma rodada (`tests/uploadNaoBloqueadoPorOrdemConsultaCadastral.test.ts`, sem alteração, continua passando). Os outros dois avisos "Ordem recomendada" do mesmo componente (sobre etapas do pipeline, não sobre tipos de documento) não foram tocados -- não foram evidenciados nos prints nem pedidos explicitamente. |
 
-## Checklist de critérios de aprovação da missão (seção 59, Rodada 1) + itens da auditoria independente (Rodada 3)
+## Checklist de critérios de aprovação da missão (seção 59, Rodada 1) + itens da auditoria independente (Rodadas 3 e 4)
 
-- Nenhum teste falhou: confirmado (716/716, ver `TEST_REPORT.md`).
+- Nenhum teste falhou: confirmado (724/724, ver `TEST_REPORT.md`).
 - Build não falhou: confirmado (ver `BUILD_REPORT.md`).
 - Migrations testadas: 100 (Rodada 2), 101 e 102 (Rodada 3) -- todas idempotentes, todas aditivas, nenhuma aplicada automaticamente por `npm run migrate` (aplicação contra a VPS é manual, fora desta entrega). Ver `MIGRATION_SAFETY_REPORT.md`.
 - PGDAS ainda pode validar como ECF: corrigido e testado desde a Rodada 1 (`tests/regimeComprovante.test.ts`).

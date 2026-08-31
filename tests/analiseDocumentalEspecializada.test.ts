@@ -394,6 +394,114 @@ describe('AnaliseDocumentalService com dependências isoladas', () => {
     });
   });
 
+  // CORREÇÃO (2026-08-31, bug real reportado em produção pelo usuário): um
+  // Relatório de Inclusão no CADIN de verdade (CNPJ 49.366.887/0001-25) foi
+  // anexado no slot "Nada consta CADIN (CNPJ)" -- o documento É um relatório
+  // de CADIN de verdade (documento_compativel corretamente true), mas o
+  // conteúdo diz "Situação do contribuinte no Cadin: INCLUÍDO PELA RFB", o
+  // oposto de "nada consta". Nada convertia isso num alerta antes desta
+  // correção. Estes testes cobrem `cnd_cpend` (CND/CPEND Federal, PGFN e
+  // CADIN) nos dois sentidos -- positivo vira alerta crítico, ausência de
+  // confirmação vira alerta de revisão humana, e uma certidão efetivamente
+  // negativa não gera alerta nenhum (sem falso positivo).
+  describe('AnaliseDocumentalService.analisarDocumentoCatalogado -- situação da certidão (CND/CPEND/PGFN/CADIN)', () => {
+    const empresa = { id: 'empresa-1', cnpj: '49.366.887/0001-25', razao_social: 'ZR Construcoes e Reformas Civis Ltda' };
+
+    it('CADIN com situação "positiva" (empresa incluída) vira alerta crítico, nunca satisfeito silenciosamente', async () => {
+      const db = criarDbMock(empresa, [], { tipo_documento: 'cadin_cnpj' });
+      const extrator = async () => ({
+        documento_compativel: true,
+        situacao_certidao: 'positiva',
+        campos_extraidos: { situacao: 'INCLUÍDO PELA RFB EM 23/11/2025' },
+        confianca: 0.9,
+      });
+      const service = new AnaliseDocumentalService(db, extrator);
+
+      const resultado = await service.analisarDocumentoCatalogado('empresa-1', 'doc-1', 'cadin_cnpj');
+
+      expect(resultado.dados_extraidos.situacao_certidao).toBe('positiva');
+      expect(resultado.dados_extraidos.documento_compativel).toBe(true);
+      const alerta = resultado.alertas.find((a) => a.codigo === 'certidao_situacao_positiva');
+      expect(alerta).toBeDefined();
+      expect(alerta?.severidade).toBe('critica');
+      expect(resultado.alertas.some((a) => a.codigo === 'certidao_situacao_nao_identificada')).toBe(false);
+    });
+
+    it('CND/CPEND Federal (CNPJ) com situação "positiva" também vira alerta crítico -- mesma regra para cnd_rfb_cnpj', async () => {
+      const db = criarDbMock(empresa, [], { tipo_documento: 'cnd_rfb_cnpj' });
+      const service = new AnaliseDocumentalService(db, async () => ({ documento_compativel: true, situacao_certidao: 'positiva' }));
+
+      const resultado = await service.analisarDocumentoCatalogado('empresa-1', 'doc-1', 'cnd_rfb_cnpj');
+
+      expect(resultado.alertas.some((a) => a.codigo === 'certidao_situacao_positiva')).toBe(true);
+    });
+
+    it('PGFN com situação "positiva" também vira alerta crítico -- mesma regra para pgfn_cnpj', async () => {
+      const db = criarDbMock(empresa, [], { tipo_documento: 'pgfn_cnpj' });
+      const service = new AnaliseDocumentalService(db, async () => ({ documento_compativel: true, situacao_certidao: 'positiva' }));
+
+      const resultado = await service.analisarDocumentoCatalogado('empresa-1', 'doc-1', 'pgfn_cnpj');
+
+      expect(resultado.alertas.some((a) => a.codigo === 'certidao_situacao_positiva')).toBe(true);
+    });
+
+    it('CADIN com situação "negativa" (nada consta de verdade) não gera nenhum alerta de situação -- sem falso positivo', async () => {
+      const db = criarDbMock(empresa, [], { tipo_documento: 'cadin_cnpj' });
+      const service = new AnaliseDocumentalService(db, async () => ({ documento_compativel: true, situacao_certidao: 'negativa' }));
+
+      const resultado = await service.analisarDocumentoCatalogado('empresa-1', 'doc-1', 'cadin_cnpj');
+
+      expect(resultado.dados_extraidos.situacao_certidao).toBe('negativa');
+      expect(resultado.alertas.some((a) => a.codigo === 'certidao_situacao_positiva')).toBe(false);
+      expect(resultado.alertas.some((a) => a.codigo === 'certidao_situacao_nao_identificada')).toBe(false);
+    });
+
+    it('certidão positiva com efeito de negativa (CPEND) também não gera alerta de situação -- equivalente a satisfeito', async () => {
+      const db = criarDbMock(empresa, [], { tipo_documento: 'cnd_rfb_cnpj' });
+      const service = new AnaliseDocumentalService(db, async () => ({ documento_compativel: true, situacao_certidao: 'positiva_com_efeito_negativo' }));
+
+      const resultado = await service.analisarDocumentoCatalogado('empresa-1', 'doc-1', 'cnd_rfb_cnpj');
+
+      expect(resultado.alertas.some((a) => a.codigo === 'certidao_situacao_positiva')).toBe(false);
+      expect(resultado.alertas.some((a) => a.codigo === 'certidao_situacao_nao_identificada')).toBe(false);
+    });
+
+    it('quando a IA não confirma nenhuma situação, fica revisão humana explícita -- nunca satisfeito por omissão', async () => {
+      const db = criarDbMock(empresa, [], { tipo_documento: 'cadin_cnpj' });
+      const service = new AnaliseDocumentalService(db, async () => ({ documento_compativel: true }));
+
+      const resultado = await service.analisarDocumentoCatalogado('empresa-1', 'doc-1', 'cadin_cnpj');
+
+      expect(resultado.dados_extraidos.situacao_certidao).toBeNull();
+      expect(resultado.alertas.some((a) => a.codigo === 'certidao_situacao_nao_identificada')).toBe(true);
+    });
+
+    it('documentos fora da categoria cnd_cpend (ex.: ECF) nunca recebem o campo situacao_certidao -- sem regressão', async () => {
+      const db = criarDbMock(empresa, [], { tipo_documento: 'ecf' });
+      const service = new AnaliseDocumentalService(db, async () => ({ documento_compativel: true }));
+
+      const resultado = await service.analisarDocumentoCatalogado('empresa-1', 'doc-1', 'ecf');
+
+      expect(resultado.dados_extraidos.situacao_certidao).toBeUndefined();
+      expect(resultado.alertas.some((a) => a.codigo === 'certidao_situacao_positiva' || a.codigo === 'certidao_situacao_nao_identificada')).toBe(false);
+    });
+
+    it('o prompt enviado para cadin_cnpj exige explicitamente o campo situacao_certidao com a semântica correta', async () => {
+      const db = criarDbMock(empresa, [], { tipo_documento: 'cadin_cnpj' });
+      let promptCapturado = '';
+      const service = new AnaliseDocumentalService(db, async (_arquivo: string, prompt: string) => {
+        promptCapturado = prompt;
+        return { documento_compativel: true, situacao_certidao: 'negativa' };
+      });
+
+      await service.analisarDocumentoCatalogado('empresa-1', 'doc-1', 'cadin_cnpj');
+
+      expect(promptCapturado).toContain('situacao_certidao');
+      expect(promptCapturado).toContain('incluído');
+      expect(promptCapturado).toMatch(/NUNCA retorne "negativa"/);
+    });
+  });
+
   // CORREÇÃO (2026-08-30, auditoria de linguagem do prompt -- seção 43 da
   // missão): o prompt enviado à IA para o analisador documental genérico
   // dizia "analise exclusivamente o arquivo enviado COMO ${nome}", uma frase

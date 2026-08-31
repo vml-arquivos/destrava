@@ -1,5 +1,5 @@
-Arquivos alterados nesta entrega, cumulativos das três rodadas desta sessão
-(30/08/2026), em relação ao repositório original antes de qualquer correção.
+Arquivos alterados nesta entrega, cumulativos das quatro rodadas desta sessão
+(30-31/08/2026), em relação ao repositório original antes de qualquer correção.
 Lista gerada por `diff -rq` contra uma cópia pristina do repositório original
 (ver TEST_REPORT.md / BUILD_REPORT.md para os comandos de verificação).
 

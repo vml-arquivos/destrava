@@ -1,11 +1,11 @@
-# Relatório de Testes — 30/08/2026 (atualizado, Rodada 3 — final pré-commit)
+# Relatório de Testes — 31/08/2026 (atualizado, Rodada 4 — bug real reportado em produção)
 
 ## Resultado final
 
 ```
 Test Files  78 passed (78)
-     Tests  716 passed (716)
-  Duration  28.49s
+     Tests  724 passed (724)
+  Duration  28.84s
 ```
 
 Progressão dentro desta sessão, sempre crescendo, nunca encolhendo:
@@ -15,7 +15,13 @@ Progressão dentro desta sessão, sempre crescendo, nunca encolhendo:
 | Antes desta sessão (v19 anterior) | 70 | 652 | Estado herdado |
 | Rodada 1 (`...-corrigido-20260830.zip`) | 71 | 656 | 3 bugs P0 + auditoria EFD |
 | Rodada 2 (`...-corrigido-20260830-v2.zip`) | 73 | 670 | Linha do tempo do regime tributário |
-| Rodada 3 (esta entrega, `...-corrigido-final-20260830.zip`) | 78 | 716 | Ver abaixo |
+| Rodada 3 (`...-corrigido-final-20260830.zip`) | 78 | 716 | Ver seção "Rodada 3" abaixo |
+| Rodada 4 (esta entrega) | 78 (nenhum arquivo novo) | 724 | +8 testes em `tests/analiseDocumentalEspecializada.test.ts` -- situação da certidão CND/CPEND/PGFN/CADIN |
+
+## Testes novos ou alterados na Rodada 4 (8 testes: 1 arquivo alterado, 0 arquivos novos)
+
+- `tests/analiseDocumentalEspecializada.test.ts`: +8 testes -- categoria `cnd_cpend` (CND/CPEND Federal, PGFN, CADIN): situação "positiva" vira alerta crítico para os três tipos (`cadin_cnpj`, `cnd_rfb_cnpj`, `pgfn_cnpj`), situação "negativa" e "positiva_com_efeito_negativo" não geram alerta (sem falso positivo), ausência de confirmação vira alerta de revisão humana, tipos fora da categoria (ex.: `ecf`) não recebem o campo novo (sem regressão), e o prompt de verdade enviado à IA é capturado e verificado.
+- `client/src/components/documentos/DocumentosEntidade.tsx` (remoção do banner "Ordem recomendada" SCR→CCS→CCF): sem teste de renderização dedicado neste repositório (não há testes de DOM para este componente); a cobertura relevante é `tests/uploadNaoBloqueadoPorOrdemConsultaCadastral.test.ts`, que testa o comportamento do BACKEND (upload nunca bloqueado pela ordem) e continua passando sem nenhuma alteração -- a remoção foi só do aviso visual, o comportamento de upload não mudou.
 
 ## Testes novos ou alterados na Rodada 3 (46 testes: 5 arquivos alterados, 8 arquivos novos)
 

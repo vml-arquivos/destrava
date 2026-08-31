@@ -1,4 +1,128 @@
-# Changelog de Correções — 30/08/2026
+# Changelog de Correções — 30/08/2026 (Rodada 4: 31/08/2026)
+
+## Rodada 4 — Bug real reportado em produção (CADIN/CND/PGFN) + remoção de banner + diagnóstico do PGDAS-no-ECF
+
+Esta rodada responde a um relato do usuário sobre o site **em produção**
+(destravacredito.com), acompanhado de 5 prints do Acervo Documental e 8
+documentos reais da empresa ZR CONSTRUCOES E REFORMAS CIVIS LTDA (CNPJ
+49.366.887/0001-25). Cada documento foi lido de verdade (via `pdftotext` e,
+para os três que não têm camada de texto, renderizado e lido visualmente)
+e cruzado com o print correspondente.
+
+### Achado 1 (já corrigido nas Rodadas 1-3, ainda não implantado): PGDAS no slot de ECF
+
+Os prints confirmam que `PGDASD-DECLARACAO-49366887202512001.pdf` e
+`PGDASD-RECIBO-49366887202512001.pdf` — os dois comprovantes reais de PGDAS-D
+da empresa para a competência 12/2025 (o último mês em que ela ainda era
+optante pelo Simples Nacional) — estão anexados nos campos **"ECF"** e
+**"Recibo de entrega da ECF"**, respectivamente, enquanto os campos corretos
+("PGDAS / PGMEI" e "Recibo de entrega do PGDAS / PGMEI") estão vazios. O
+resultado exibido no print ("Leitura concluída com observações ou
+necessidade de revisão" / "a análise exige revisão humana") mostra que a
+produção está rodando uma versão do analisador **anterior** à correção de
+identidade documental já entregue nesta sessão (`detectarTipoComprovanteRegime`
+/ `parseComprovanteRegime`, Rodadas 1 e 3): essa correção já faz exatamente
+o que o usuário pediu -- calcula o tipo real do documento pelo texto (aqui,
+nenhum marcador de ECF aparece no texto de um PGDAS-D) e só marca
+`documento_compativel: true` quando o tipo detectado bate exatamente com o
+tipo esperado pelo slot, gerando o alerta genérico
+`documento_catalogado_incompativel` ("O arquivo não foi reconhecido como
+ECF.") em vez de um "revisão humana" vago. **Nenhum código novo era
+necessário para este achado específico -- o gap é de implantação, não de
+código.** Ver `PENDENCIAS_REAIS.md` para o diagnóstico completo do descompasso
+entre o código entregue e o que está rodando em produção.
+
+### Achado 2 (novo, corrigido nesta rodada): CADIN "incluído" sendo tratado como documento válido sem alerta de mérito
+
+O documento anexado no campo **"Nada consta CADIN (CNPJ)"**
+(`CADIN_CNPJ.pdf`) é, de fato, um relatório de CADIN de verdade -- o TIPO
+está correto para o slot. O problema é o CONTEÚDO: o relatório diz
+"Situação do contribuinte no Cadin: **INCLUÍDO PELA RFB EM 23/11/2025**",
+com uma lista de débitos que motivarão a manutenção da inclusão -- o exato
+oposto de "nada consta". Nenhuma parte do sistema convertia isso num
+alerta: `documento_compativel` só prova que o tipo do arquivo está certo,
+nunca que o RESULTADO da certidão é favorável, e essas são perguntas
+diferentes. Esta rodada fecha essa lacuna para toda a categoria `cnd_cpend`
+do catálogo (CND/CPEND Federal, PGFN e CADIN -- CNPJ e CPF, 6 tipos ao todo,
+ver `analise: 'cnd_cpend'` em `shared/documentTypes.ts`):
+
+- `promptDocumentoCatalogado` (`server/services/analiseDocumentalEspecializada.ts`)
+  agora exige explicitamente, só para essa categoria, o campo
+  `situacao_certidao` (`negativa` | `positiva_com_efeito_negativo` |
+  `positiva` | `null`), com a semântica de cada valor deixada inequívoca
+  para o modelo -- inclusive a instrução explícita de que um CADIN
+  "incluído" é `positiva`, mesmo parecendo estruturalmente um documento
+  oficial válido.
+- `normalizarDocumentoCatalogado` transforma isso num alerta de severidade
+  **crítica** (`certidao_situacao_positiva`) sempre que a situação não for
+  negativa nem positiva-com-efeito-de-negativa, e num alerta de **revisão
+  humana** (`certidao_situacao_nao_identificada`) quando a IA não confirmar
+  nenhum resultado -- nunca fica em silêncio, nunca é tratado como
+  satisfeito por omissão.
+- 8 testes novos em `tests/analiseDocumentalEspecializada.test.ts`, cobrindo
+  CADIN/CND-RFB/PGFN positivos (alerta crítico), negativo e CPEND (sem
+  alerta -- sem falso positivo), ausência de confirmação (revisão humana),
+  ausência de regressão em tipos fora da categoria (ex.: ECF) e o texto do
+  prompt de verdade enviado à IA.
+- **Limitação assumida:** esta correção depende da leitura da IA (Gemini),
+  não de um classificador determinístico local como o das Rodadas 1/3 para
+  ECF/DCTF/DARF/Livro Caixa -- construir uma extração 100% determinística
+  para CND/CADIN/PGFN exigiria ligar a extração textual local
+  (`extrairDocumentoLocal`) a essa categoria sem substituir a extração rica
+  hoje feita pela IA, o que é um trabalho maior e mais arriscado do que
+  cabe numa correção cirúrgica de urgência (ver `PENDENCIAS_REAIS.md`, item
+  3). O ganho real desta rodada é que a pergunta "a certidão é negativa?"
+  passou a ser OBRIGATÓRIA e ter consequência garantida -- antes, nem
+  sequer era perguntada.
+
+### Achado 3: Relatório de Situação Fiscal com pendências reais, sem checagem dedicada
+
+O documento anexado em "Relatório de Situação Fiscal (CNPJ)"
+(`CND_CNPJ_NOK_RELATA_RIO_FISCAL.pdf`) é um relatório real de diagnóstico
+fiscal da Receita Federal que mostra parcelamento em atraso (3 parcelas) e
+débitos de PIS/COFINS em aberto -- o próprio nome do arquivo ("NOK") já
+indica que a empresa não tiraria uma certidão negativa hoje. Esse tipo
+(`situacao_fiscal_cnpj`) tem sua PRÓPRIA categoria de análise (`analise`
+distinta de `cnd_cpend`) e não foi alterado nesta rodada -- ver
+`PENDENCIAS_REAIS.md`, item 9, para a decisão explícita de não estender às
+pressas o mesmo tratamento sem antes levantar os marcadores textuais desse
+relatório com o mesmo cuidado usado para os outros tipos.
+
+### Achado 4 (frontend, pedido explícito do usuário): remoção do banner "Ordem recomendada" (SCR → CCS → CCF)
+
+Os prints mostram, nos campos "Relatório CCS do CNPJ" e "Relatório CCF do
+CNPJ", o banner informativo "Ordem recomendada: anexe primeiro o Relatório
+SCR/Registrato (CNPJ)...". O usuário pediu a remoção imediata desse tipo de
+aviso. `client/src/components/documentos/DocumentosEntidade.tsx`: o cálculo
+e a renderização desse aviso específico (`ordemConsultaPendente`, derivado
+de `ORDEM_CONSULTA_CADASTRAL`) foram removidos por completo -- os outros
+dois avisos "Ordem recomendada" que existiam no mesmo componente (sobre
+confirmar o regime tributário antes dos Atos da Junta, e sobre aprovar a
+Fase 1/2 do pipeline antes de anexar os Atos da Junta / Contrato Social)
+NÃO foram tocados, porque tratam de uma ordem de ETAPAS do pipeline, não de
+ordem entre TIPOS de documento, e não aparecem em nenhum dos prints
+enviados -- removê-los também é possível, mas não foi pedido nem
+evidenciado, e mudar um recurso não implicado pela evidência violaria a
+mesma disciplina cirúrgica desta sessão. Nenhum comportamento de upload foi
+alterado: o backend nunca bloqueou o anexo por causa dessa ordem (ver
+`tests/uploadNaoBloqueadoPorOrdemConsultaCadastral.test.ts`, que continua
+passando sem alteração), só o AVISO visual sumiu.
+
+### Achado técnico adicional (não é bug de código, é observação de infraestrutura)
+
+O print do campo "Enquadramento tributário (consulta CNPJ)" mostra `FONTE
+DA LEITURA: local:reextract-v1`. A string `"reextract"` não existe em
+NENHUMA versão deste repositório (nem na base original, nem em nenhuma
+entrega desta sessão -- confirmado por busca em todo o histórico de zips
+gerados). O código deste repositório só produz `local:pdftotext-v1` ou
+`local:tesseract-v1` para leitura local. Isso é evidência de que o site em
+produção está rodando um código diferente do que está hoje no GitHub
+(`vml-arquivos/destrava`, branch `main`) -- seja por um ajuste feito direto
+no servidor fora do fluxo do repositório, seja por uma versão mais antiga
+com nomenclatura diferente. Vale confirmar com quem administra o Coolify se
+existe alguma alteração manual no servidor, porque isso pode fazer parte do
+comportamento observado se comportar diferente do previsto mesmo depois do
+deploy desta entrega.
 
 ## Rodada 3 — Auditoria independente pré-commit (correção residual + 3 capacidades aditivas)
 
