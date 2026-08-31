@@ -302,3 +302,33 @@ tests/fonteDaLeituraAmigavel.test.ts
 Total desta rodada: 2 arquivos de código alterados + 1 arquivo de teste
 alterado + 6 arquivos de documentação alterados + 3 arquivos de teste novos
 = 12 arquivos.
+
+======================================================================
+Rodada 15 (esta entrega) -- "continua com erro": bump de RULE_VERSION
+ausente na Rodada 13 (laudo antigo do QSA continuava sendo servido como
+atual), agregadores de Etapa 1 (QSA e Enquadramento Tributário) sem
+checagem de laudo desatualizado, bloqueio duplicado do QSA (mesmo padrão
+já corrigido para o Enquadramento Tributário na Rodada 14)
+======================================================================
+
+Arquivos existentes ALTERADOS nesta rodada:
+
+server/services/documentalLaudoVersioning.ts        (RULE_VERSION: 'rules-2026.09.01.1' -> 'rules-2026.09.01.2')
+server/routes/documentacao.ts                       (nova função analiseDesatualizada; guard em montarQsaDocumentalDados e montarEnquadramentoDados; bloqueio do QSA deduplicado; montarQsaDocumentalDados agora export)
+CHANGELOG_CORRECOES.md
+ROLLBACK_PLAN.md
+PENDENCIAS_REAIS.md
+TEST_REPORT.md
+BUILD_REPORT.md
+FILES_CHANGED.txt (este arquivo)
+SHA256SUMS.txt
+
+Arquivos NOVOS -- teste (nenhum dado real de cliente; nomes, CNPJs e valores
+são fictícios, no mesmo padrão das rodadas anteriores):
+
+tests/analiseQsaDesatualizadaNaoRepeteErroAntigo.test.ts
+tests/analiseEnquadramentoDesatualizadaNaoRepeteErroAntigo.test.ts
+tests/qsaBloqueiosSemDuplicidade.test.ts
+
+Total desta rodada: 2 arquivos de código alterados + 6 arquivos de
+documentação alterados + 3 arquivos de teste novos = 11 arquivos.

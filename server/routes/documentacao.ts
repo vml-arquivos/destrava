@@ -1603,7 +1603,34 @@ export async function sincronizarSociosExtraidosDoQsa(empresaId: string, sociosE
   }
 }
 
-async function montarQsaDocumentalDados(
+// CORREÇÃO (2026-08-31, Rodada 15 -- causa raiz de "continua com erro" no QSA
+// de uma empresa Empresário Individual mesmo depois da correção de regra da
+// Rodada 13): `buscarAnaliseEspecializadaPersistida` (via `decidirVersaoLaudo`,
+// `documentalLaudoVersioning.ts`) já marca um laudo persistido com assinatura
+// antiga como precisando de reanálise -- mas, antes desta correção, só
+// `enriquecerDocumentosAcervoComAnalise` (o card por documento do Acervo
+// Documental) checava essa marcação. Os agregadores de etapa (QSA e
+// Enquadramento Tributário, usados no banner "Etapa 1"/"Ação necessária")
+// usavam `analise.alertas` direto, sem checar se esses alertas vinham de um
+// laudo já marcado como desatualizado -- então, mesmo depois de um bump de
+// `RULE_VERSION` (necessário sempre que uma regra de validação muda), o
+// banner continuava mostrando a pendência calculada pela regra ANTIGA até
+// alguém clicar manualmente em "Forçar nova leitura". Esta função dá aos
+// agregadores de etapa a MESMA checagem de obsolescência que o card por
+// documento já tinha.
+function analiseDesatualizada(analise: AnaliseDocumentalResult | null | undefined): boolean {
+  if (!analise) return false;
+  const status = String((analise as any)?.analysis_status || '').toUpperCase();
+  return (analise as any)?.reprocessamento_necessario === true
+    || ['STALE', 'SUPERSEDED', 'REANALISE_NECESSARIA'].includes(status);
+}
+
+// Exportada (2026-08-31, Rodada 15) apenas para permitir teste unitário
+// direto da checagem de obsolescência (`analiseDesatualizada`) -- ver
+// tests/analiseQsaDesatualizadaNaoRepeteErroAntigo.test.ts. Continua sendo
+// chamada internamente do mesmo jeito; exportar não muda seu comportamento
+// para os chamadores existentes.
+export async function montarQsaDocumentalDados(
   empresaId: string,
   processar: boolean,
 ): Promise<{ dados: Record<string, any>; pendencias: Pendencia[] }> {
@@ -1636,6 +1663,28 @@ async function montarQsaDocumentalDados(
       return {
         dados: { anexado: true, analisado: false, documento_id: docMaisRecente.id, status_leitura: 'aguardando_analise', diagnostico: 'QSA anexado e aguardando o início da análise documental.' },
         pendencias: [{ codigo: 'qsa_aguardando_analise', mensagem: 'QSA anexado e aguardando o início da análise documental.', severidade: 'alta', origem: 'qsa', recomendacao: 'Iniciar a Etapa 1 quando Cartão CNPJ, QSA e Enquadramento Tributário estiverem anexados.' }],
+      };
+    }
+    // Ver comentário de `analiseDesatualizada` acima: um laudo de QSA já
+    // persistido, mas calculado por uma regra de validação anterior (ex.: a
+    // correção da Rodada 13 para "natureza jurídica não permite QSA"), não
+    // pode continuar sendo mostrado como se a pendência antiga ainda fosse
+    // válida -- isso é exatamente o que causou o usuário ver "continua com
+    // erro" mesmo depois da correção estar no código. Sem pendência nova
+    // adicionada aqui (o bloqueio "QSA anexado; leitura pendente" abaixo, em
+    // `avaliarProntidaoIdentidadeCnpj`, já cobre a situação de forma honesta,
+    // sem repetir a mesma informação em dois lugares).
+    if (analiseDesatualizada(analise)) {
+      return {
+        dados: {
+          anexado: true,
+          analisado: false,
+          tentativa_realizada: true,
+          documento_id: docMaisRecente.id,
+          status_leitura: 'reanalise_necessaria',
+          diagnostico: 'O motor de leitura do QSA foi atualizado desde a última análise. Uma nova leitura é necessária para confirmar o resultado -- clique em "Forçar nova leitura" no Acervo Documental.',
+        },
+        pendencias: [],
       };
     }
     if (processar) await sincronizarSociosExtraidosDoQsa(empresaId, analise.dados_extraidos?.socios);
@@ -1915,6 +1964,22 @@ export async function montarEnquadramentoDados(
         pendencias: [{ codigo: 'enquadramento_aguardando_analise', mensagem: 'Enquadramento Tributário anexado e aguardando o início da análise documental.', severidade: 'alta', origem: 'enquadramento_tributario', recomendacao: 'Iniciar a análise documental quando Cartão CNPJ, QSA e Enquadramento Tributário estiverem anexados.' }],
       };
     }
+    // Ver comentário de `analiseDesatualizada` (acima de `montarQsaDocumentalDados`):
+    // mesma checagem, para o Enquadramento Tributário nunca voltar a exibir uma
+    // pendência calculada por uma regra de validação já substituída.
+    if (analiseDesatualizada(analise)) {
+      return {
+        dados: {
+          anexado: true,
+          analisado: false,
+          tentativa_realizada: true,
+          documento_id: docMaisRecente.id,
+          status_leitura: 'reanalise_necessaria',
+          diagnostico: 'O motor de leitura do Enquadramento Tributário foi atualizado desde a última análise. Uma nova leitura é necessária para confirmar o resultado -- clique em "Forçar nova leitura" no Acervo Documental.',
+        },
+        pendencias: [],
+      };
+    }
     return {
       dados: {
         anexado: true,
@@ -2176,7 +2241,23 @@ export async function avaliarProntidaoIdentidadeCnpj(params: {
   const qsaConsistente = qsaAnexado && qsaAnalisado && !qsaTemGrave;
   if (!qsaAnexado) addBloqueio('Documento QSA não anexado.');
   else if (!qsaAnalisado) addBloqueio(params.qsaDados?.erro_processamento || 'QSA anexado; leitura pendente.');
-  else if (qsaTemGrave) addBloqueio('QSA tem divergências societárias relevantes.');
+  else if (qsaTemGrave) {
+    // CORREÇÃO (2026-08-31, Rodada 15, pedido explícito do usuário -- "tire
+    // esse monte de poluição visual e diagnósticos errados"): mesmo problema
+    // estrutural já corrigido para o Enquadramento Tributário na Rodada 14.
+    // `qsaTemGrave` já significa que existe uma pendência de severidade alta
+    // em `params.qsaPendencias`, e essa MESMA pendência (com sua mensagem
+    // específica e real, ex.: "Não foi possível identificar os nomes dos
+    // sócios no QSA") é adicionada separadamente pelo loop de
+    // `todasPendencias` logo abaixo -- as duas sempre coexistiam, duplicando
+    // o mesmo problema com dois textos diferentes ("Ação necessária" mostrava
+    // os dois ao mesmo tempo). O resumo genérico só volta a aparecer no caso
+    // defensivo de uma pendência grave sem mensagem própria.
+    const temPendenciaQsaGraveComMensagem = params.qsaPendencias.some((p) => p.severidade === 'alta' && p.mensagem);
+    if (!temPendenciaQsaGraveComMensagem) {
+      addBloqueio('QSA tem divergências societárias relevantes.');
+    }
+  }
   else pontosPositivos.push('QSA conferido: CNPJ, razão social, capital, sócios e administrador.');
 
   // A consulta da Receita identifica a situação no Simples, mas "não optante"

@@ -12,7 +12,30 @@ export const EXTRACTOR_VERSION = 'local-2026.09.01';
 // própria leitura (`buscarAnaliseEspecializadaPersistida`), e
 // `scripts/backfill-laudos.ts` (`npm run backfill:laudos -- enqueue-and-run`)
 // os reprocessa em lote depois do deploy.
-export const RULE_VERSION = 'rules-2026.09.01.1';
+// CORREÇÃO (2026-08-31, Rodada 15 -- caso real "44.598.036 PAULO BOLSONI
+// BALDI": o usuário reportou que o QSA de uma empresa Empresário Individual
+// "continua com erro" mesmo depois da correção da Rodada 13 em
+// `validarQsaExtraida` (server/services/analiseDocumentalEspecializada.ts).
+// A causa raiz: a Rodada 13 mudou COMO um QSA é validado (o texto oficial "A
+// NATUREZA JURÍDICA NÃO PERMITE O PREENCHIMENTO DO QSA" deixou de gerar um
+// alerta de severidade alta), mas esqueceu de bumpar `RULE_VERSION` -- e sem
+// esse bump, `decidirVersaoLaudo` (chamado por `buscarAnaliseEspecializadaPersistida`)
+// considera qualquer laudo de QSA já persistido ANTES da correção como
+// "ATIVO" para sempre, porque a assinatura antiga continua batendo com a
+// assinatura esperada. O laudo antigo (com o alerta "Não foi possível
+// identificar os nomes dos sócios no QSA", calculado pela regra ANTIGA)
+// nunca é reprocessado -- nenhum deploy de código, sozinho, muda um registro
+// já gravado no banco (mesmo problema documentado no comentário do bump da
+// Rodada 7, logo acima). Com este bump, `decidirVersaoLaudo` marca qualquer
+// laudo já persistido (de QUALQUER tipo de documento, não só QSA) como
+// REANALISE_NECESSARIA na próxima leitura -- e `scripts/backfill-laudos.ts`
+// (`npm run backfill:laudos -- enqueue-and-run`) os reprocessa em lote depois
+// do deploy. É intencional que este bump seja amplo (afeta todo o sistema, não
+// só o QSA): a Rodada 13 já havia mudado `promptQsa`/`normalizarDadosQsa`/
+// `validarQsaExtraida` sem bump nenhum, então TODO QSA já analisado antes do
+// deploy da Rodada 13 está na mesma situação -- não é possível bumpar de forma
+// seletiva só para QSA com a infraestrutura de assinatura única hoje existente.
+export const RULE_VERSION = 'rules-2026.09.01.2';
 export const PROMPT_VERSION = 'prompt-1.0.0';
 export const SCHEMA_VERSION = 'laudo-103';
 

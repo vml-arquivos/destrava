@@ -1,12 +1,23 @@
-# Relatório de Testes — 31/08/2026 (atualizado, Rodada 14 — limpeza visual e deduplicação de avisos no Acervo Documental)
+# Relatório de Testes — 31/08/2026 (atualizado, Rodada 15 — bump de RULE_VERSION e checagem de laudo desatualizado nos agregadores de Etapa 1)
 
 ## Resultado final
 
 ```
-Test Files  89 passed (89)
-     Tests  778 passed (778)
-  Duration  ~40-46s
+Test Files  92 passed (92)
+     Tests  784 passed (784)
+  Duration  ~34s
 ```
+
+## Testes novos ou alterados na Rodada 15 (6 testes: 3 arquivos novos)
+
+- `tests/analiseQsaDesatualizadaNaoRepeteErroAntigo.test.ts` (novo, 2 testes): prova, com `montarQsaDocumentalDados` diretamente (mockando `pg`), que (1) um laudo de QSA persistido com `rule_version` diferente da atual para de repassar a pendência "Não foi possível identificar os nomes dos sócios no QSA." e passa a reportar `analisado: false` com um diagnóstico honesto de reanálise necessária; (2) um laudo já na versão atual continua repassando seus alertas normalmente, sem regressão.
+- `tests/analiseEnquadramentoDesatualizadaNaoRepeteErroAntigo.test.ts` (novo, 2 testes): mesma prova, com `montarEnquadramentoDados` diretamente, para o Enquadramento Tributário -- garante que a mesma checagem de obsolescência (`analiseDesatualizada`) funciona nos dois agregadores de Etapa 1, não só num deles.
+- `tests/qsaBloqueiosSemDuplicidade.test.ts` (novo, 2 testes): prova, com `avaliarProntidaoIdentidadeCnpj` diretamente, que (1) uma pendência grave de QSA com mensagem própria gera só UM bloqueio (a mensagem específica) -- não também o resumo genérico "QSA tem divergências societárias relevantes."; (2) uma pendência grave sem mensagem própria (caso defensivo) ainda mostra o resumo genérico, sem regressão.
+- **Prova de causa raiz por reversão temporária, três vezes (uma por correção):** (1) desligando o guard `analiseDesatualizada(analise)` dentro de `montarQsaDocumentalDados` (curto-circuitando para `false`), o primeiro teste de `analiseQsaDesatualizadaNaoRepeteErroAntigo.test.ts` falhou exatamente como o sintoma relatado pelo usuário (`expected true to be false` -- a pendência antiga "Não foi possível identificar os nomes dos sócios no QSA" reapareceu); (2) o mesmo experimento dentro de `montarEnquadramentoDados` -- sem essa reversão, os 784 testes da suíte inteira passavam mesmo SEM o guard (nenhum teste pré-existente cobria esse segundo agregador), confirmando que era uma lacuna de cobertura real, não só teórica; escrito o teste dedicado, a reversão faz o teste falhar exatamente como esperado; (3) revertendo a checagem `temPendenciaQsaGraveComMensagem` em `avaliarProntidaoIdentidadeCnpj` para a forma de uma linha, o teste de `qsaBloqueiosSemDuplicidade.test.ts` falhou (`expected length 1, got 2` bloqueios) -- o bloqueio genérico duplicado reapareceu ao lado da mensagem específica. Restauradas as três correções, todos os 784 testes voltam a passar.
+- Durante a escrita do primeiro teste, uma primeira versão errada (usando `promptVersao: '1.0.0'` genérico) falhou porque `qsa_extract` tem uma versão própria de prompt (`VERSAO_ANALISE_DOCUMENTAL['qsa_extract'] = '5.1.0'`, `server/routes/documentacao.ts`) diferente do `PROMPT_VERSION` padrão -- corrigido usando o mesmo valor (`'5.1.0'`) tanto ao computar a assinatura esperada quanto no `prompt_versao` do laudo mocado no cenário "já atualizado". Registrado aqui por transparência -- não é uma correção de produto, é um ajuste do próprio teste antes de ele refletir a realidade do código.
+- `montarQsaDocumentalDados` (`server/routes/documentacao.ts`) foi exportada nesta rodada, mesmo padrão já usado em rodadas anteriores para outras funções internas, apenas para permitir teste unitário direto -- nenhuma mudança de comportamento para os chamadores existentes (`montarEnquadramentoDados`/`avaliarProntidaoIdentidadeCnpj` já eram `export` desde rodadas anteriores).
+- **Sem teste de renderização dedicado** (telas do Acervo Documental): mesma situação já registrada em todas as rodadas anteriores -- este repositório não tem testes de DOM para esses componentes. As três correções desta rodada são inteiramente de backend/lógica compartilhada.
+- **Confirmação sem alteração de teste**: a regra de "empresa com pouco tempo de abertura" (`empresaApta12Meses`, `avaliarProntidaoIdentidadeCnpj`) já era coberta implicitamente pelo comportamento existente da função e não precisou de teste novo -- ela já usa `addAviso` (não-bloqueante), nunca `addBloqueio`, quando a idade é menor que 12 meses. Nenhum teste dedicado a esse ponto específico existia antes desta rodada nem foi necessário agora, porque nenhum código foi alterado ali.
 
 ## Testes novos ou alterados na Rodada 14 (5 testes: 3 arquivos novos + 1 arquivo alterado)
 
@@ -90,7 +101,8 @@ Progressão dentro desta sessão, sempre crescendo, nunca encolhendo:
 | Rodada 11 | 83 (nenhum arquivo novo) | 762 | +10 testes -- janela de 12 meses na exceção de transição de regime tributário (`transicaoDeRegimeRecente` + `regime_vigente_desde`); nenhum teste dedicado para a remoção de "Dados da análise" (sem testes de DOM neste componente) |
 | Rodada 12 | 84 (+1 arquivo novo) | 766 | +4 testes -- terceiro botão "Outro" (tipo `comprovante_regime_outro`, identidade flexível + regime explícito exigido); nenhum teste dedicado para a remoção do selo "Avisos" nem para o botão em si (sem testes de DOM nesses componentes) |
 | Rodada 13 | 86 (+2 arquivos novos) | 773 | +7 testes -- QSA de Empresário Individual (`qsa_nao_aplicavel`, +2 em 2 arquivos), "Status da leitura" não vem mais de flag manual sem laudo real (+3, novo), diagnóstico de falha real vs. "ainda não processado" no Acervo Documental (+2, novo) |
-| Rodada 14 (esta entrega) | 89 (+3 arquivos novos) | 778 | +5 testes -- nome de sócio duplicado no QSA (`formatarSocio`, expectativa corrigida), dois avisos idênticos de Atos da Junta não anexado (+1, novo), "4 avisos" duplicados do Enquadramento Tributário (+1, novo), "Fonte da leitura" traduzida em vez de código interno cru (+3, novo) |
+| Rodada 14 | 89 (+3 arquivos novos) | 778 | +5 testes -- nome de sócio duplicado no QSA (`formatarSocio`, expectativa corrigida), dois avisos idênticos de Atos da Junta não anexado (+1, novo), "4 avisos" duplicados do Enquadramento Tributário (+1, novo), "Fonte da leitura" traduzida em vez de código interno cru (+3, novo) |
+| Rodada 15 (esta entrega) | 92 (+3 arquivos novos) | 784 | +6 testes -- bump de `RULE_VERSION` ausente na Rodada 13 (+2, novo, QSA), mesma checagem espelhada para o Enquadramento Tributário (+2, novo), bloqueio duplicado do QSA (+2, novo) |
 
 ## Testes novos ou alterados na Rodada 6 (2 testes: 1 arquivo novo)
 
