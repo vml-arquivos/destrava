@@ -83,7 +83,9 @@ export default function EmpresaDocumentos() {
               titulo={`Acervo Documental — ${empresa.razao_social || empresa.nome_fantasia || ""}`}
               permitirUpload
               permitirExcluir
-              permitirValidar
+              // CORREÇÃO (2026-09-01): botão "✓ Validar" manual removido -- ver
+              // comentário completo em AcervoDocumentalEmpresa.tsx. A leitura
+              // automática já decide, pelo conteúdo do documento, se ele é válido.
             />
           </div>
         )}

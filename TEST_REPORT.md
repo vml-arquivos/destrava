@@ -1,12 +1,18 @@
-# Relatório de Testes — 31/08/2026 (atualizado, Rodada 15 — bump de RULE_VERSION e checagem de laudo desatualizado nos agregadores de Etapa 1)
+# Relatório de Testes — 31/08/2026 (atualizado, Rodada 16 — 01/09/2026: upload sem recarregar a tela, validação manual removida, acervo mais compacto)
 
 ## Resultado final
 
 ```
 Test Files  92 passed (92)
      Tests  784 passed (784)
-  Duration  ~34s
+  Duration  ~34-49s
 ```
+
+## Rodada 16 (0 testes novos -- mudanças de frontend, sem alteração de backend)
+
+As quatro correções desta rodada (upload sem `carregar()` bloqueante, remoção do botão de validação manual, grid mais compacto, "Ver documentos complementares" com revelação de mão única) são inteiramente de `client/src/components/documentos/DocumentosEntidade.tsx` e das duas telas que o usam (`AcervoDocumentalEmpresa.tsx`, `EmpresaDocumentos.tsx`) -- nenhum arquivo de backend foi tocado, e a suíte completa (92 arquivos / 784 testes) continua passando sem nenhuma alteração de expectativa.
+
+**Sem teste de renderização dedicado** (mesma situação já registrada em TODAS as rodadas anteriores desta sessão -- este repositório não tem testes de DOM para nenhum componente React, incluindo `DocumentosEntidade.tsx`, que já tinha mais de 2100 linhas antes desta rodada e continua sem nenhuma suíte de teste própria). Isso significa que, diferente das correções de backend desta sessão (sempre confirmadas por reversão temporária de um teste automatizado), estas quatro correções foram verificadas por: (1) leitura cuidadosa e completa do trecho de código alterado e de tudo que ele afeta (por exemplo, confirmando que a resposta de `POST /api/documentos/upload` já devolve o documento completo, com todos os campos que a lista usa, antes de decidir que um `carregar()` completo não era mais necessário para refletir o novo arquivo na tela -- ver `server/routes/documentos.ts`, RETURNING da rota); (2) checagem cruzada de que nenhum outro componente ativo (`AcervoDocumentalWorkspace.tsx`, em dois lugares, confirmado sem nenhuma importação/uso em todo o `client/src` -- código morto, não tocado) dependia do comportamento removido; (3) os três comandos padrão desta engenharia, todos limpos: `npx tsc --noEmit` (sem erros de tipo em nenhum dos 4 arquivos alterados), `npx vitest run` (784/784, nenhuma regressão na suíte de backend existente) e `pnpm run build` (bundle gerado com sucesso, orçamento de tamanho dentro do limite, chunk `DocumentosEntidade` com tamanho praticamente idêntico ao anterior -- 149.33 kB vs. 149.25 kB, a diferença é só o texto dos comentários novos).
 
 ## Testes novos ou alterados na Rodada 15 (6 testes: 3 arquivos novos)
 

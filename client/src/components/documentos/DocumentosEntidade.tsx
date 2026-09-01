@@ -780,10 +780,20 @@ export default function DocumentosEntidade({
       // Depois que os Atos da Junta forem aprovados, o acervo deixa de esconder
       // os documentos complementares: eles ficam disponíveis para anexação conforme
       // o mapa do regime tributário, sem exigir outra navegação ou criar nova trava.
+      //
+      // CORREÇÃO (2026-09-01, pedido explícito do usuário -- "não vamos deixá-los
+      // escondidos, vamos só pra poder clicar pra aparecê-los" + "não recarregue a
+      // página... e tenha que procurar o local de novo"): antes desta correção, esta
+      // checagem rodava a CADA `carregar()` (ou seja, a cada upload, a cada exclusão)
+      // e sempre FORÇAVA `mostrarComplementares` de volta para `false` quando o
+      // marco (Atos da Junta aprovados/dispensados por MEI) ainda não tinha sido
+      // atingido -- descartando o clique manual do usuário em "Ver documentos
+      // complementares" toda vez que a lista era recarregada. Agora a revelação
+      // automática pelo marco societário é só de mão única (nunca re-esconde
+      // nada que já esteja visível, seja pelo marco ou por um clique manual do
+      // usuário) -- uma vez mostrado, um campo complementar nunca some sozinho.
       if (societariaAtual?.atos_junta_aprovados === true || societariaAtual?.atos_dispensados_por_mei === true) {
         setMostrarComplementares(true);
-      } else {
-        setMostrarComplementares(false);
       }
       setMapaCredito(dossieAtual?.mapa_documental_credito || null);
       const analisesPorArquivo = new Map<string, any>(
@@ -1170,12 +1180,44 @@ export default function DocumentosEntidade({
       if (obs) await salvarObservacao(tipoDocumento, socioVinculado || socioId || null, obs);
       toast.success(`${labelTipoDocumento(tipoDocumento)} anexado com sucesso.`);
       setNomeCustomizadoPorTipo((prev) => ({ ...prev, [tipoDocumento]: "" }));
-      await carregar();
+
+      // CORREÇÃO (2026-09-01, pedido explícito do usuário -- "ao anexar, a página
+      // não é pra recarregar, é pra fazer o anexo e continuar na mesma [tela]...
+      // não recarregue a página e recomece e tenha que procurar o local de novo"):
+      // antes desta correção, cada anexo disparava `await carregar()` -- um refetch
+      // bloqueante de 5 endpoints (documentos, observações, sócios, status do
+      // pipeline E o dossiê completo, que recalcula Etapa 1/2/3 inteiras) só para
+      // refletir UM arquivo novo na lista. Além de lento (a "Etapa 1 pendente" e o
+      // resto da tela ficavam recalculando a cada anexo), a resposta desse upload
+      // já TRAZ o documento recém-criado completo (`resultado`, a linha inserida em
+      // documentos_arquivos -- ver server/routes/documentos.ts, RETURNING da rota
+      // POST /upload) -- suficiente para inserir o novo arquivo na lista na hora,
+      // sem nenhuma consulta adicional. A leitura automática deste documento (para
+      // os tipos que já têm motor de leitura -- Cartão CNPJ, QSA, Enquadramento
+      // Tributário, Faturamento, Comprovante de Residência -- ver
+      // TIPOS_COM_ANALISE_AUTOMATICA em server/routes/documentos.ts) roda sozinha,
+      // em segundo plano, no servidor; e a análise consolidada do dossiê (Etapa
+      // 1/2/3, "Ação necessária") continua sendo acionada explicitamente pelos
+      // botões "Iniciar análise documental"/"Iniciar análise societária" (ou pelo
+      // gatilho automático já existente abaixo, só para Atos da Junta/Contrato
+      // Social) -- nunca a cada anexo isolado, exatamente como pedido: "a leitura
+      // de cada documento é automática, mas a análise para o dossiê completo é
+      // somente acionada depois que a documentação necessária estiver completa".
+      if (resultado?.id) {
+        setDocs((prev) => (
+          entidadeTipo === "empresa" && TIPOS_FORA_DO_CHECKLIST_CREDITO.has(String(resultado.tipo_documento))
+            ? prev
+            : [resultado, ...prev.filter((d) => d.id !== resultado.id)]
+        ));
+      }
 
       // Atos da Junta / Contrato Social / alteração contratual: dispara a análise
       // da Etapa 2/3 automaticamente, sem exigir que o usuário navegue até outra
       // aba e clique em "Analisar" -- o painel abaixo (societaria) já mostra
-      // "Analisando..." e, ao concluir, o próximo documento exigido.
+      // "Analisando..." e, ao concluir, o próximo documento exigido. Comportamento
+      // já existente antes desta correção, mantido sem alteração -- é o próprio
+      // `iniciarAnaliseSocietaria` que faz o único `carregar()` completo necessário
+      // aqui, e só depois que a análise societária termina, não a cada anexo.
       if (entidadeTipo === "empresa" && empresaId && TIPOS_GATILHO_ANALISE_SOCIETARIA.has(tipoDocumento)) {
         await iniciarAnaliseSocietaria({ silencioso: true });
       }
@@ -1803,7 +1845,15 @@ export default function DocumentosEntidade({
                     : ocultos > 0 ? `Ver documentos complementares (${ocultos})` : "Todos os campos já são obrigatórios"}
                 </button>
               )}
-              <div className="grid grid-cols-[repeat(auto-fill,minmax(320px,1fr))] gap-3">
+              {/* CORREÇÃO (2026-09-01, pedido explícito do usuário -- "diminuir o
+                  acervo documental... diminuir os modais, pra que caiba quatro ou
+                  cinco locais de anexo em cada linha"): a largura mínima de cada
+                  card era 320px, o que só cabia 3 por linha na largura útil típica
+                  desta tela. Reduzida para 230px (cards mais compactos, ver também
+                  o padding/espaçamento internos abaixo) -- cabem 4-5 por linha nas
+                  larguras de tela em que cabiam só 3 antes, sem esconder nenhuma
+                  informação do card, só menos espaço em branco ao redor dela. */}
+              <div className="grid grid-cols-[repeat(auto-fill,minmax(230px,1fr))] gap-2">
                 {slotsVisiveis.map((documentoSlot) => {
                     const tipo = documentoSlot.tipoUpload;
                     const exigeVinculoSocio = entidadeTipo === "empresa" && documentoSlot.porSocio === true;
@@ -1853,7 +1903,7 @@ export default function DocumentosEntidade({
                     // relatorio separado repetindo os mesmos documentos.
                     const analiseDoSlot = identidadeCnpj?.documentos_iniciais?.[CHAVE_ANALISE_POR_SLOT[tipo] || ""] || undefined;
                     return (
-                      <div key={tipo} className={`rounded-lg border p-3 space-y-2.5 self-start ${satisfeitoPorOutro ? "border-success/20 bg-success/10/40" : "border-border bg-card shadow-sm shadow-slate-100/30"}`}>
+                      <div key={tipo} className={`rounded-lg border p-2.5 space-y-2 self-start ${satisfeitoPorOutro ? "border-success/20 bg-success/10/40" : "border-border bg-card shadow-sm shadow-slate-100/30"}`}>
                         <div className="flex items-center justify-between gap-2">
                           <div className="min-w-0">
                             <div className="flex items-center gap-1.5 flex-wrap">

@@ -190,7 +190,18 @@ export default function AcervoDocumentalEmpresa() {
               titulo={empresa ? `Acervo Documental — ${empresa.razao_social || empresa.nome_fantasia || ""}` : "Acervo Documental"}
               permitirUpload
               permitirExcluir
-              permitirValidar
+              // CORREÇÃO (2026-09-01, pedido explícito do usuário -- "não precisa
+              // validar mais documentação anexada. Pois na leitura, vai saber se
+              // já é... válido pra aquele campo... o documento correto"):
+              // `permitirValidar` (removido) mostrava um botão "✓ Validar" manual
+              // por documento -- redundante com a leitura automática, que já
+              // decide sozinha, pelo CONTEÚDO do arquivo, se o documento é o
+              // correto para aquele campo (ver `identidade_status`/`satisfaz_requisito`
+              // em `analiseDocumentalEspecializada.ts`, e o selo "Validado após
+              // leitura documental" já mostrado por documento nesta mesma tela).
+              // O campo `validado` no banco continua existindo e não foi alterado
+              // -- só o controle manual de marcá-lo pelo usuário nesta tela foi
+              // removido; nenhum outro comportamento do sistema depende deste botão.
               secaoInicial={secaoInicial}
             />
           )}

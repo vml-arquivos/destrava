@@ -332,3 +332,31 @@ tests/qsaBloqueiosSemDuplicidade.test.ts
 
 Total desta rodada: 2 arquivos de código alterados + 6 arquivos de
 documentação alterados + 3 arquivos de teste novos = 11 arquivos.
+
+======================================================================
+Rodada 16 (esta entrega) -- upload no Acervo Documental deixa de recarregar
+a tela inteira; botão de validação manual removido; grid mais compacto
+(4-5 campos por linha, era 3); "Ver documentos complementares" para de
+perder o estado a cada anexo
+======================================================================
+
+Arquivos existentes ALTERADOS nesta rodada (todos de frontend; nenhum
+arquivo de backend foi tocado):
+
+client/src/components/documentos/DocumentosEntidade.tsx   (enviar() atualiza a lista localmente em vez de recarregar tudo; grid/padding mais compactos; revelação de "Ver complementares" de mão única)
+client/src/pages/colaborador/AcervoDocumentalEmpresa.tsx  (prop permitirValidar removida)
+client/src/pages/colaborador/EmpresaDocumentos.tsx        (prop permitirValidar removida)
+CHANGELOG_CORRECOES.md
+ROLLBACK_PLAN.md
+PENDENCIAS_REAIS.md
+TEST_REPORT.md
+BUILD_REPORT.md
+FILES_CHANGED.txt (este arquivo)
+SHA256SUMS.txt
+
+Nenhum arquivo de teste novo nesta rodada -- mudanças de frontend, e este
+repositório não tem testes de DOM para nenhum componente React (ver
+TEST_REPORT.md).
+
+Total desta rodada: 3 arquivos de código alterados + 6 arquivos de
+documentação alterados = 9 arquivos.
