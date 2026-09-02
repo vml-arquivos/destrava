@@ -18,9 +18,17 @@
 import type { Pool } from "pg";
 import { executarVarreduraOutbox } from "./dispatcher";
 import { publishEvent } from "./eventBus";
+import { executarSincronizacaoReceitaAutomatica } from "../sincronizacaoReceitaAutomaticaService";
 
 const INTERVALO_RETRY_MS = Number(process.env.AUTOMATION_RETRY_INTERVAL_MS || 60_000);
 const INTERVALO_ROTINAS_MS = Number(process.env.AUTOMATION_ROTINAS_INTERVAL_MS || 15 * 60_000);
+// CORREÇÃO (2026-09-02, Rodada 19): terceira responsabilidade do scheduler --
+// reconsulta automática de CNPJ para empresas com situação cadastral não-ativa
+// ou nunca sincronizada, sem depender de alguém clicar em "Atualizar cadastral"
+// manualmente. Ver server/services/sincronizacaoReceitaAutomaticaService.ts
+// para a justificativa completa (por que nenhuma API gratuita resolveria isso
+// sozinha) e CHANGELOG_CORRECOES.md, seção "Rodada 19".
+const INTERVALO_SINCRONIZACAO_RECEITA_MS = Number(process.env.SINCRONIZACAO_RECEITA_INTERVAL_MS || 30 * 60_000);
 
 interface ContratoAtivoRow {
   id: string;
@@ -137,7 +145,21 @@ export function iniciarAutomationScheduler(pool: Pool): void {
     });
   }, INTERVALO_ROTINAS_MS);
 
+  setInterval(() => {
+    executarSincronizacaoReceitaAutomatica(pool)
+      .then((resumo) => {
+        if (resumo.candidatas > 0) {
+          console.log(
+            `[automation-engine] Sincronização automática de CNPJ: ${resumo.processadas}/${resumo.candidatas} processadas, ${resumo.atualizadas} com situação cadastral alterada, ${resumo.erros} erro(s).`
+          );
+        }
+      })
+      .catch((err) => {
+        console.error("[automation-engine] Erro na sincronização automática de CNPJ:", err);
+      });
+  }, INTERVALO_SINCRONIZACAO_RECEITA_MS);
+
   console.log(
-    `[automation-engine] Scheduler iniciado (retry a cada ${INTERVALO_RETRY_MS}ms, rotinas a cada ${INTERVALO_ROTINAS_MS}ms)`
+    `[automation-engine] Scheduler iniciado (retry a cada ${INTERVALO_RETRY_MS}ms, rotinas a cada ${INTERVALO_ROTINAS_MS}ms, sincronização de CNPJ a cada ${INTERVALO_SINCRONIZACAO_RECEITA_MS}ms)`
   );
 }

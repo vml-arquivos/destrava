@@ -1,12 +1,21 @@
-# Relatório de Testes — 31/08/2026 (atualizado, Rodada 17 — 02/09/2026: confirmação automática da Etapa 1, sem clicar em "Iniciar análise documental"; Rodada 18 — 02/09/2026: validação local sem IA/orientação de documento correto/menos texto repetido)
+# Relatório de Testes — 31/08/2026 (atualizado, Rodada 17 — 02/09/2026: confirmação automática da Etapa 1, sem clicar em "Iniciar análise documental"; Rodada 18 — 02/09/2026: validação local sem IA/orientação de documento correto/menos texto repetido; Rodada 19 — 02/09/2026: sincronização automática de CNPJ)
 
 ## Resultado final
 
 ```
-Test Files  94 passed (94)
-     Tests  788 passed (788)
+Test Files  95 passed (95)
+     Tests  796 passed (796)
   Duration  ~34-53s
 ```
+
+## Testes novos na Rodada 19 (8 testes: 1 arquivo novo)
+
+- `tests/sincronizacaoReceitaAutomatica.test.ts` (novo, 8 testes em 2 describes):
+  - Funções puras (5 testes, sem banco/rede): `precisaSincronizar` -- empresa nunca sincronizada sempre precisa; uma empresa "INAPTA" sincronizada há mais que o limiar configurado (6h no teste) precisa reconsultar, há menos tempo ainda não; uma empresa já "ATIVA" tem um limiar 10x mais espaçado que uma "INAPTA" no mesmo instante, então não compete pelo mesmo lote urgente -- é exatamente essa distinção que garante que o caso relatado (empresa "inapta" há mais de uma semana) tenha prioridade sobre reforços periódicos de quem já está regular. `montarCamposRegistroReceita` -- extrai só os campos de REGISTRO do resultado unificado de `consultarCnpj` (situação cadastral, data, motivo, natureza jurídica, CNAE, capital social, matriz/filial), nunca campos de contato (e-mail, telefone testados explicitamente como ausentes do resultado) e ignora campos vazios/ausentes da consulta sem inventar valor; com `null`/`undefined` não gera nenhum campo.
+  - Ciclo completo (3 testes, com `pg` e `consultarCnpj` mockados): uma empresa "INAPTA" sincronizada há 10h (limiar 6h) é escolhida automaticamente pelo lote, `consultarCnpj` é chamada com o CNPJ correto, a consulta mockada devolve "ATIVA", e o teste prova que o `UPDATE` grava a nova situação e que um evento é registrado em `empresa_historico` -- reproduzindo de ponta a ponta o sintoma relatado ("empresa que já mudou de inapta pra ativa e continua constando inapta") e provando que ele deixa de acontecer sem nenhum clique manual; uma falha de consulta (rede fora do ar) é contabilizada como erro sem lançar exceção nem impedir o resumo de ser retornado; nenhuma candidata retorna um resumo zerado sem consultar nenhum provedor (evita chamada desnecessária às fontes gratuitas quando não há nada para sincronizar).
+- **Prova de causa raiz por reversão temporária**: alterando `precisaSincronizar` para usar sempre o multiplicador de 10x (ignorando se a situação está ativa ou não -- ou seja, tratando uma empresa "INAPTA" com a mesma prioridade espaçada de uma já "ATIVA"), 4 dos 8 testes falharam exatamente como o sintoma relatado (a empresa "INAPTA" do teste de ciclo completo deixou de ser escolhida para reconsulta -- `consultarCnpj` nunca foi chamada, `resumo.candidatas` voltou a 0). Restaurada a lógica original, os 8 testes voltam a passar e a suíte completa (95 arquivos / 796 testes) permanece 100% verde.
+- **Sem teste dedicado para o `setInterval` de `iniciarAutomationScheduler`** (o novo terceiro job do scheduler, `server/services/automation/scheduler.ts`): mesmo padrão já em vigor para os outros dois jobs do mesmo scheduler (retry do outbox, avaliação de rotinas CND/CEMPROT) -- nenhum dos três tem teste de wiring do `setInterval` em si, só a lógica de negócio por trás de cada um é testada isoladamente (aqui, todo o conteúdo de `executarSincronizacaoReceitaAutomatica`).
+- **Pesquisa web sem teste correspondente**: a conclusão de que nenhuma API gratuita/governamental de uso livre para empresa privada garante tempo real (documentação pública da CNPJá Open, do Catálogo Conecta gov.br e do Portal de Dados Abertos da Receita, ver `CHANGELOG_CORRECOES.md`) é uma constatação de pesquisa externa, não uma regra de código -- não há teste automatizado para "verdade sobre o mundo real", só para o comportamento do sistema em resposta a ela (a sincronização automática em si, coberta pelos 8 testes acima).
 
 ## Testes alterados na Rodada 18 (0 testes novos, 1 arquivo com asserções atualizadas -- contagem de arquivos/testes não muda)
 
