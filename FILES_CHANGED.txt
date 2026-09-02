@@ -580,3 +580,26 @@ Arquivos de teste NOVOS ou AMPLIADOS: nenhum (mudança de frontend, reaproveita 
 
 Total desta rodada: 1 arquivo de código alterado + 6 arquivos de
 documentação alterados = 7 arquivos.
+
+======================================================================
+Rodada 24 (esta entrega) -- falha de leitura já pendente/travada (sem
+upload novo) passa a se resolver sozinha na tela, sem recarregar a
+página inteira
+======================================================================
+
+Arquivos existentes ALTERADOS nesta rodada:
+
+client/src/components/documentos/DocumentosEntidade.tsx   (novo useRef tentativasVerificacaoAutomaticaRef + novo useEffect que verifica, a cada 60s, GET .../analise-inicial/status enquanto houver item com status "falha_leitura" em identidadeCnpj.documentos_iniciais)
+CHANGELOG_CORRECOES.md
+PENDENCIAS_REAIS.md
+ROLLBACK_PLAN.md
+TEST_REPORT.md
+BUILD_REPORT.md
+FILES_CHANGED.txt (este arquivo)
+SHA256SUMS.txt
+
+Arquivos NOVOS: nenhum.
+Arquivos de teste NOVOS ou AMPLIADOS: nenhum (mudança de frontend, reaproveita rota de status já existente e já testada indiretamente pelo backend desde a Rodada 21 -- ver TEST_REPORT.md).
+
+Total desta rodada: 1 arquivo de código alterado + 6 arquivos de
+documentação alterados = 7 arquivos.

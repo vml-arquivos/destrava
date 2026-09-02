@@ -733,6 +733,13 @@ export default function DocumentosEntidade({
   // gerado depois que todos os documentos já estiverem validados.
   const [identidadeCnpj, setIdentidadeCnpj] = useState<IdentidadeCnpj | null>(null);
   const [analisandoIdentidade, setAnalisandoIdentidade] = useState(false);
+  // Rodada 24 (02/09/2026, pedido explícito do usuário: "eu tive que atualizar
+  // a página pra aparecer... não é pra recarregar a página inteira, é pra
+  // fazer a leitura do documento e trazer os dados corretos"): contador de
+  // verificações automáticas em segundo plano usadas logo abaixo -- só existe
+  // pra dar um limite de segurança (não deixar rodando pra sempre numa aba
+  // esquecida aberta com um documento genuinamente ilegível).
+  const tentativasVerificacaoAutomaticaRef = useRef(0);
   // Depois que a Etapa 1 está apta pra avançar, o cartão completo (com todos os
   // documentos, confirmações e avisos) fica fechado por padrão -- só o resumo de
   // uma linha aparece -- pra não poluir a tela de quem já passou pra Etapa 2.
@@ -1001,6 +1008,51 @@ export default function DocumentosEntidade({
   }
 
   useEffect(() => { carregar(); }, [carregar]);
+
+  // Rodada 24 (02/09/2026, pedido explícito do usuário: viu o Cartão CNPJ
+  // aparecer validado, mas só depois de dar F5 na página -- "essa parte de
+  // atualização... não é pra recarregar a página inteira"). PROBLEMA REAL: a
+  // Rodada 23 só reexibe o resultado sozinho quando o próprio upload de
+  // Cartão CNPJ/QSA/Enquadramento acontece nesta aba. Quando a falha já
+  // estava persistida de antes (ex.: o usuário deixou a tela aberta e a
+  // retentativa automática da Rodada 21 só resolveria na PRÓXIMA vez que o
+  // dossiê fosse consultado -- o que só acontecia ao reabrir/recarregar a
+  // página), a tela ficava com o cartão de identidade desatualizado até
+  // alguém recarregar manualmente. Regra geral (vale pra qualquer empresa,
+  // não é específica de nenhum documento ou regime): enquanto existir algum
+  // item da Etapa 1 com leitura falhada, a tela consulta sozinha, em segundo
+  // plano, a mesma rota de status (somente leitura, sem forçar reprocessamento)
+  // já usada pelo polling de iniciarAnaliseIdentidade -- respeitando o mesmo
+  // intervalo mínimo entre tentativas (RETENTATIVA_ANALISE_DOCUMENTAL_COOLDOWN_MINUTOS,
+  // 15 min por padrão) que já existe no backend desde a Rodada 21. Sem nenhuma
+  // chamada extra ao mecanismo de leitura além do que já era tentado antes --
+  // só passa a exibir o resultado assim que ele ficar pronto, sem precisar de
+  // upload novo nem de recarregar a página. Some sozinha assim que a falha for
+  // resolvida (ou depois de 1h de tentativas, como limite de segurança).
+  useEffect(() => {
+    if (entidadeTipo !== "empresa" || !empresaId) return;
+    const documentos = Object.values(identidadeCnpj?.documentos_iniciais || {}) as Array<any>;
+    const temFalhaPendente = documentos.some((item) => item?.status === "falha_leitura");
+    if (!temFalhaPendente) {
+      tentativasVerificacaoAutomaticaRef.current = 0;
+      return;
+    }
+    const intervalo = window.setInterval(async () => {
+      tentativasVerificacaoAutomaticaRef.current += 1;
+      if (tentativasVerificacaoAutomaticaRef.current > 60) {
+        window.clearInterval(intervalo);
+        return;
+      }
+      try {
+        const status = await apiFetch(`/api/documentacao/empresa/${empresaId}/analise-inicial/status`);
+        if (status?.dossie?.identidade_cnpj) setIdentidadeCnpj(status.dossie.identidade_cnpj);
+      } catch (err: any) {
+        console.warn("[DocumentosEntidade] verificação automática de leitura pendente falhou:", err?.message || err);
+      }
+    }, 60000);
+    return () => window.clearInterval(intervalo);
+  }, [entidadeTipo, empresaId, identidadeCnpj?.documentos_iniciais]);
+
   useEffect(() => { if (secaoInicial) setSecaoAtiva(secaoInicial); }, [secaoInicial]);
   useEffect(() => () => { if (previewUrl) URL.revokeObjectURL(previewUrl); }, [previewUrl]);
 
