@@ -3,6 +3,7 @@ import pkg from 'pg';
 import { GoogleGenerativeAI } from '@google/generative-ai';
 import { isSituacaoAtiva, isSituacaoIrregular, normalizarSituacaoCadastral } from '../utils/situacaoCadastral';
 import { montarPatchConfirmacaoCadastralDocumento } from '../utils/confirmacaoCadastralDocumento';
+import { campoFoiEditadoManualmente } from '../utils/edicaoManualCamposEmpresa';
 import { colunasDaTabela, registrarHistoricoSincronizacaoSeguro } from './sincronizacaoReceitaAutomaticaService';
 import {
   codigoCnae,
@@ -753,20 +754,54 @@ export type ResultadoConfirmacaoCadastralDocumento = {
  * no resto da análise, contado a partir da data de emissão/consulta impressa
  * no rodapé do Cartão CNPJ ("Emitido no dia... às...") -- NUNCA a partir da
  * data de abertura da empresa, que é permanente e não indica atualidade.
+ *
+ * CORREÇÃO (Rodada 22, 02/09/2026, pedido explícito do usuário: "coloque
+ * como regra que o documento para atualização dos dados não pode ter mais de
+ * 5 dias da consulta e emissão, isso é só se a empresa tiver alterações e a
+ * API da Receita ainda não estiver atualizada; caso contrário deixo os dados
+ * como está"): quando o documento efetivamente CORRIGE a situação cadastral
+ * gravada (ou seja, a API gratuita da Receita ainda não refletiu a mudança
+ * que o Cartão CNPJ já mostra), a janela de 30 dias acima -- pensada para a
+ * análise documental em geral -- é permissiva demais para uma correção
+ * automática de cadastro; nesse caso específico, o documento precisa ter
+ * sido emitido há no máximo 5 dias contados da consulta/leitura atual. Se a
+ * situação do documento já é a mesma que já está gravada (nada para
+ * corrigir -- a API já está atualizada), o cadastro "fica como está" de
+ * qualquer forma (é um no-op) e a janela de 30 dias já existente continua
+ * suficiente para apenas travar contra a sincronização automática. Regra
+ * geral: não depende de qual seja a situação, só do fato objetivo de haver
+ * (ou não) uma divergência a corrigir.
+ *
+ * CORREÇÃO (Rodada 22, mesma mensagem, "depois de atualizar manualmente
+ * dados de contato e informações, não alterar automaticamente de forma
+ * alguma"): se o colaborador já editou manualmente a situação cadastral
+ * (`campoFoiEditadoManualmente`, ver `edicaoManualCamposEmpresa.ts`), a
+ * leitura automática do documento nunca mais sobrescreve esse campo.
  */
 export function deveConfirmarSituacaoCadastralViaCartao(args: {
   cartao: DocCartao | null;
   camposCartao: ExtracaoCartao | null;
   extracaoGemini: ExtracaoCartao | null;
   statusValidadeCartao: string;
+  situacaoAtualEmpresa?: string | null;
+  diasEmissaoCartao?: number | null;
+  situacaoEditadaManualmente?: boolean;
 }): { pode: boolean; motivo: string } {
-  const { cartao, camposCartao, extracaoGemini, statusValidadeCartao } = args;
+  const { cartao, camposCartao, extracaoGemini, statusValidadeCartao, situacaoAtualEmpresa, diasEmissaoCartao, situacaoEditadaManualmente } = args;
   if (!cartao) return { pode: false, motivo: 'sem_cartao_cnpj_anexado' };
+  if (situacaoEditadaManualmente) return { pode: false, motivo: 'situacao_cadastral_editada_manualmente_pelo_usuario' };
   if (!camposCartao?.situacao_cadastral) return { pode: false, motivo: 'situacao_nao_extraida_do_documento' };
   if (!isSituacaoAtiva(camposCartao.situacao_cadastral)) return { pode: false, motivo: 'documento_nao_confirma_situacao_ativa' };
   if (statusValidadeCartao !== 'valido') return { pode: false, motivo: 'cartao_cnpj_fora_do_prazo_de_validade_documental' };
   if (!extracaoTemQualidade(extracaoGemini)) return { pode: false, motivo: 'leitura_do_documento_sem_qualidade_minima_confirmada' };
-  return { pode: true, motivo: 'documento_ativo_valido_e_com_qualidade_confirmada' };
+
+  const haCorrecaoPendente = !!situacaoAtualEmpresa
+    && normalizarSituacaoCadastral(situacaoAtualEmpresa) !== normalizarSituacaoCadastral(camposCartao.situacao_cadastral);
+  if (haCorrecaoPendente) {
+    const documentoRecenteOSuficiente = typeof diasEmissaoCartao === 'number' && diasEmissaoCartao <= 5;
+    if (!documentoRecenteOSuficiente) return { pode: false, motivo: 'correcao_cadastral_exige_documento_emitido_ha_no_maximo_5_dias' };
+  }
+  return { pode: true, motivo: haCorrecaoPendente ? 'correcao_cadastral_aplicada_com_documento_recente' : 'documento_ativo_valido_e_com_qualidade_confirmada' };
 }
 
 /**
@@ -800,7 +835,15 @@ export async function aplicarConfirmacaoCadastralDocumentoEmpresa(args: {
 }): Promise<ResultadoConfirmacaoCadastralDocumento> {
   const { empresaId, empresaAtual, cartao, camposCartao, extracaoGemini, dataEmissaoCartao, diasEmissaoCartao, statusValidadeCartao } = args;
 
-  const decisao = deveConfirmarSituacaoCadastralViaCartao({ cartao, camposCartao, extracaoGemini, statusValidadeCartao });
+  const decisao = deveConfirmarSituacaoCadastralViaCartao({
+    cartao,
+    camposCartao,
+    extracaoGemini,
+    statusValidadeCartao,
+    situacaoAtualEmpresa: empresaAtual?.situacao_cadastral ?? null,
+    diasEmissaoCartao,
+    situacaoEditadaManualmente: campoFoiEditadoManualmente(empresaAtual?.dados_extra_receita, 'situacao_cadastral'),
+  });
   const situacaoCadastralConfirmada = camposCartao?.situacao_cadastral;
   if (!decisao.pode || !cartao || !situacaoCadastralConfirmada) return { aplicado: false, motivo: decisao.motivo };
 
@@ -896,6 +939,28 @@ export function deveAtualizarContatoViaCartao(args: {
 }
 
 /**
+ * CORREÇÃO (Rodada 22, 02/09/2026, pedido explícito do usuário: "depois de
+ * atualizar manualmente dados de contato e informações, não alterar
+ * automaticamente de forma alguma"): decisão pura (sem banco/rede) por
+ * CAMPO -- telefone e e-mail são independentes, então uma edição manual só
+ * bloqueia o campo que foi editado, nunca os dois juntos. Extraída para ser
+ * diretamente testável, no mesmo padrão das demais funções de decisão deste
+ * arquivo. Regra geral: vale para qualquer empresa/campo, sem expiração por
+ * tempo -- uma vez editado manualmente, o campo nunca mais é sobrescrito
+ * automaticamente por esta leitura documental.
+ */
+export function deveAtualizarCampoContatoViaCartao(args: {
+  valorCartao: string | null | undefined;
+  valorAtual: string | null | undefined;
+  editadoManualmente: boolean;
+}): boolean {
+  if (!args.valorCartao) return false;
+  if (args.valorCartao === args.valorAtual) return false;
+  if (args.editadoManualmente) return false;
+  return true;
+}
+
+/**
  * Quando `deveAtualizarContatoViaCartao` autoriza, substitui
  * `empresas.telefone`/`empresas.email` pelo valor lido no Cartão CNPJ --
  * "substituir", como pedido explicitamente pelo usuário, não apenas
@@ -930,18 +995,43 @@ export async function aplicarAtualizacaoContatoDocumentoEmpresa(args: {
     let telefoneAtualizado = false;
     let emailAtualizado = false;
 
-    if (camposCartao.telefone && colunas.has('telefone') && camposCartao.telefone !== empresaAtual?.telefone) {
+    // CORREÇÃO (Rodada 22, 02/09/2026, pedido explícito do usuário: "depois
+    // de atualizar manualmente dados de contato e informações, não alterar
+    // automaticamente de forma alguma"): telefone e e-mail são independentes
+    // -- se o colaborador já corrigiu manualmente só um dos dois, o outro
+    // continua sendo atualizado normalmente pela leitura do documento; só o
+    // campo que teve edição manual registrada fica protegido, para sempre
+    // (ver `edicaoManualCamposEmpresa.ts`).
+    const telefoneEditadoManualmente = campoFoiEditadoManualmente(empresaAtual?.dados_extra_receita, 'telefone');
+    const emailEditadoManualmente = campoFoiEditadoManualmente(empresaAtual?.dados_extra_receita, 'email');
+
+    if (colunas.has('telefone') && deveAtualizarCampoContatoViaCartao({
+      valorCartao: camposCartao.telefone,
+      valorAtual: empresaAtual?.telefone,
+      editadoManualmente: telefoneEditadoManualmente,
+    })) {
       values.push(camposCartao.telefone);
       assignments.push(`"telefone" = $${values.length}`);
       telefoneAtualizado = true;
     }
-    if (camposCartao.email && colunas.has('email') && camposCartao.email !== empresaAtual?.email) {
+    if (colunas.has('email') && deveAtualizarCampoContatoViaCartao({
+      valorCartao: camposCartao.email,
+      valorAtual: empresaAtual?.email,
+      editadoManualmente: emailEditadoManualmente,
+    })) {
       values.push(camposCartao.email);
       assignments.push(`"email" = $${values.length}`);
       emailAtualizado = true;
     }
 
-    if (!assignments.length) return { aplicado: false, motivo: 'contato_do_documento_igual_ao_ja_cadastrado' };
+    if (!assignments.length) {
+      return {
+        aplicado: false,
+        motivo: (telefoneEditadoManualmente || emailEditadoManualmente)
+          ? 'contato_editado_manualmente_pelo_usuario'
+          : 'contato_do_documento_igual_ao_ja_cadastrado',
+      };
+    }
 
     if (colunas.has('updated_at')) assignments.push('"updated_at" = NOW()');
 

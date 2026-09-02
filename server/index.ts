@@ -96,6 +96,11 @@ import {
 import { enviarDocumento, resolverTokenPublico } from "./services/documentDeliveryService";
 import { analiseDocumentalService } from './services/analiseDocumentalEspecializada';
 import { isUuid } from './utils/validators';
+import {
+  CAMPOS_RASTREAVEIS_EDICAO_MANUAL,
+  montarPatchCamposEditadosManualmente,
+  type CampoRastreavelEdicaoManual,
+} from './utils/edicaoManualCamposEmpresa';
 import { buildEmpresaCnpjUpdate } from './services/empresaCnpjEnrichment';
 import { gerarCodigoIndicacao, montarLinkIndicacao, normalizarCodigoIndicacao } from './services/referralService';
 
@@ -8422,6 +8427,41 @@ async function startServer() {
           }
         }
       }
+      // CORREÇÃO (Rodada 22, 02/09/2026, pedido explícito do usuário: "depois
+      // de atualizar manualmente dados de contato e informações, não alterar
+      // automaticamente de forma alguma"): quando esta é uma edição manual do
+      // colaborador (não a sincronização automática) e ela realmente muda um
+      // dos campos que a leitura automática do Cartão CNPJ também sabe
+      // escrever (situação cadastral e telefone/e-mail -- ver
+      // `analiseCnpjReceitaCartao.ts`), registra um selo em
+      // `dados_extra_receita` para que aquela leitura automática nunca mais
+      // sobrescreva esse campo específico. Regra geral: vale para qualquer
+      // empresa, qualquer um dos campos rastreados, não fica presa a nenhum
+      // caso específico.
+      if (!ehSincronizacaoAutomatica && columns.has("dados_extra_receita")) {
+        const camposEditadosAgora = CAMPOS_RASTREAVEIS_EDICAO_MANUAL.filter((campo) => {
+          if (!Object.prototype.hasOwnProperty.call(updates, campo)) return false;
+          const valorAtualStr = atual[campo] == null ? "" : String(atual[campo]);
+          const valorNovoStr = updates[campo] == null ? "" : String(updates[campo]);
+          return valorAtualStr !== valorNovoStr;
+        }) as CampoRastreavelEdicaoManual[];
+        if (camposEditadosAgora.length) {
+          let dadosExtraBase: unknown = atual.dados_extra_receita;
+          if (Object.prototype.hasOwnProperty.call(updates, "dados_extra_receita")) {
+            try {
+              dadosExtraBase = JSON.parse(String(updates.dados_extra_receita));
+            } catch {
+              dadosExtraBase = atual.dados_extra_receita;
+            }
+          }
+          const patch = montarPatchCamposEditadosManualmente(dadosExtraBase, camposEditadosAgora);
+          if (patch) {
+            const mergedDadosExtra = { ...(dadosExtraBase && typeof dadosExtraBase === "object" ? dadosExtraBase : {}), ...patch };
+            updates.dados_extra_receita = JSON.stringify(mergedDadosExtra);
+          }
+        }
+      }
+
       const combinado = { ...atual, ...updates };
       const pendencias = pendenciasEmpresa(combinado);
       if (columns.has("cadastro_status")) updates.cadastro_status = statusCadastroFromPendencias(pendencias);

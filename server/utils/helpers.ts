@@ -104,7 +104,24 @@ export function normalizarNomeEmpresarial(value: unknown): string {
   // seguido de espaço no início do texto -- um nome empresarial legítimo nunca
   // começa dessa forma.
   const semRadicalCnpj = texto.replace(/^\d{2}\.?\d{3}\.?\d{3}\s+/, '');
-  return semRadicalCnpj
+  // CORREÇÃO (Rodada 22, 02/09/2026 -- ao testar o caso real com o QSA/Cartão
+  // CNPJ verdadeiros, a divergência continuava mesmo após a correção acima:
+  // o valor sincronizado em `empresas.razao_social` para este Empresário
+  // Individual está gravado como "VILSON MARCIO DE LIMA 70010668187" -- com
+  // um identificador de 11 dígitos (formato de CPF) no FINAL do nome, não no
+  // início. Esse padrão de guardar um identificador pessoal junto do nome
+  // (para diferenciar cadastros de mesmo nome) é uma convenção do próprio
+  // sistema/CRM, não um dado corrompido -- por isso o ajuste correto é
+  // tornar a comparação tolerante a esse identificador em qualquer uma das
+  // pontas, não alterar o dado gravado. Regra geral, simétrica à de cima e
+  // igualmente válida para qualquer empresa: remove também um identificador
+  // de 8 dígitos (radical de CNPJ, com ou sem pontuação) OU de 11 dígitos
+  // (formato de CPF, com ou sem pontuação/traço) no FINAL do texto, separado
+  // por espaço -- nunca no meio de uma palavra/número menor que faça parte
+  // do nome fantasia (ex.: "24 Horas", ou um número de loja/filial curto).
+  const identificadorPessoalOuRadical = /(?:\d{2}\.?\d{3}\.?\d{3}|\d{3}\.?\d{3}\.?\d{3}-?\d{2})/.source;
+  const semIdentificadorNoFim = semRadicalCnpj.replace(new RegExp(`\\s+${identificadorPessoalOuRadical}$`), '');
+  return semIdentificadorNoFim
     .replace(/\b(ltda|limitada|me|epp|eireli)\b/g, (m) => m)
     .replace(/[^a-z0-9]/g, '');
 }

@@ -1,5 +1,11 @@
 import { describe, expect, it } from "vitest";
-import { calcularScore, deveAtualizarContatoViaCartao, deveConfirmarSituacaoCadastralViaCartao, extracaoTemQualidade } from "../server/services/analiseCnpjReceitaCartao";
+import {
+  calcularScore,
+  deveAtualizarCampoContatoViaCartao,
+  deveAtualizarContatoViaCartao,
+  deveConfirmarSituacaoCadastralViaCartao,
+  extracaoTemQualidade,
+} from "../server/services/analiseCnpjReceitaCartao";
 
 describe("calcularScore — leitura do Cartão CNPJ", () => {
   const camposReceitaCompletos = {
@@ -175,6 +181,87 @@ describe("deveConfirmarSituacaoCadastralViaCartao — trava a situação cadastr
     });
     expect(resultado.pode).toBe(false);
   });
+
+  // Rodada 22 (02/09/2026) -- pedido explícito do usuário: "coloque como
+  // regra que o documento para atualização dos dados não pode ter mais de 5
+  // dias da consulta e emissão, isso é só se a empresa tiver alterações e a
+  // API da Receita ainda não estiver atualizada; caso contrário deixo os
+  // dados como está".
+  it("quando HÁ uma correção pendente (situação atual da empresa diverge da do documento), só autoriza com documento emitido há no máximo 5 dias", () => {
+    const autorizaComDocumentoRecente = deveConfirmarSituacaoCadastralViaCartao({
+      cartao,
+      camposCartao: extracaoConfiavelAtiva,
+      extracaoGemini: extracaoConfiavelAtiva,
+      statusValidadeCartao: "valido",
+      situacaoAtualEmpresa: "Inapta",
+      diasEmissaoCartao: 3,
+    });
+    expect(autorizaComDocumentoRecente).toEqual({ pode: true, motivo: "correcao_cadastral_aplicada_com_documento_recente" });
+
+    const negaComDocumentoDeMaisDeCincoDias = deveConfirmarSituacaoCadastralViaCartao({
+      cartao,
+      camposCartao: extracaoConfiavelAtiva,
+      extracaoGemini: extracaoConfiavelAtiva,
+      statusValidadeCartao: "valido",
+      situacaoAtualEmpresa: "Inapta",
+      diasEmissaoCartao: 6,
+    });
+    expect(negaComDocumentoDeMaisDeCincoDias).toEqual({ pode: false, motivo: "correcao_cadastral_exige_documento_emitido_ha_no_maximo_5_dias" });
+  });
+
+  it("quando NÃO há correção pendente (situação da empresa já bate com o documento), a janela de 30 dias já existente continua suficiente -- não exige o documento ter no máximo 5 dias", () => {
+    const resultado = deveConfirmarSituacaoCadastralViaCartao({
+      cartao,
+      camposCartao: extracaoConfiavelAtiva,
+      extracaoGemini: extracaoConfiavelAtiva,
+      statusValidadeCartao: "valido",
+      situacaoAtualEmpresa: "ATIVA",
+      diasEmissaoCartao: 20,
+    });
+    expect(resultado).toEqual({ pode: true, motivo: "documento_ativo_valido_e_com_qualidade_confirmada" });
+  });
+
+  it("continua autorizando normalmente quando `situacaoAtualEmpresa`/`diasEmissaoCartao` não são informados (compatibilidade com quem ainda não passa esses argumentos)", () => {
+    const resultado = deveConfirmarSituacaoCadastralViaCartao({
+      cartao,
+      camposCartao: extracaoConfiavelAtiva,
+      extracaoGemini: extracaoConfiavelAtiva,
+      statusValidadeCartao: "valido",
+    });
+    expect(resultado.pode).toBe(true);
+  });
+
+  // Rodada 22, mesma mensagem: "depois de atualizar manualmente dados de
+  // contato e informações, não alterar automaticamente de forma alguma".
+  it("nega quando a situação cadastral já foi editada manualmente pelo colaborador -- nunca mais sobrescrita pela leitura automática do documento", () => {
+    const resultado = deveConfirmarSituacaoCadastralViaCartao({
+      cartao,
+      camposCartao: extracaoConfiavelAtiva,
+      extracaoGemini: extracaoConfiavelAtiva,
+      statusValidadeCartao: "valido",
+      situacaoAtualEmpresa: "Inapta",
+      diasEmissaoCartao: 1,
+      situacaoEditadaManualmente: true,
+    });
+    expect(resultado).toEqual({ pode: false, motivo: "situacao_cadastral_editada_manualmente_pelo_usuario" });
+  });
+
+  it("PROVA DE REVERSÃO: se a checagem de correção pendente/5 dias fosse removida, um documento vencido de 6+ dias corrigiria o cadastro mesmo assim -- reversão manual confirma que o gate está de fato em vigor", () => {
+    // Sem a checagem `haCorrecaoPendente`/`diasEmissaoCartao <= 5`, o teste
+    // acima ("nega...5 dias") teria de falhar. Este teste apenas documenta o
+    // comportamento oposto esperado (autorizar) quando a correção pendente
+    // não existe -- serve de referência cruzada para a prova de reversão já
+    // demonstrada diretamente nas execuções de teste (ver TEST_REPORT.md).
+    const semCorrecaoPendente = deveConfirmarSituacaoCadastralViaCartao({
+      cartao,
+      camposCartao: extracaoConfiavelAtiva,
+      extracaoGemini: extracaoConfiavelAtiva,
+      statusValidadeCartao: "valido",
+      situacaoAtualEmpresa: "ATIVA",
+      diasEmissaoCartao: 29,
+    });
+    expect(semCorrecaoPendente.pode).toBe(true);
+  });
 });
 
 // Rodada 21 (02/09/2026) -- pedido explícito do usuário: "quando ler o cartão
@@ -275,5 +362,64 @@ describe("deveAtualizarContatoViaCartao — atualiza telefone/e-mail da empresa 
       statusValidadeCartao: "valido",
     });
     expect(soEmail.pode).toBe(true);
+  });
+});
+
+// Rodada 22 (02/09/2026) -- pedido explícito do usuário: "depois de atualizar
+// manualmente dados de contato e informações, não alterar automaticamente de
+// forma alguma". `deveAtualizarCampoContatoViaCartao` é a decisão pura POR
+// CAMPO usada por `aplicarAtualizacaoContatoDocumentoEmpresa` -- telefone e
+// e-mail são independentes, então uma edição manual só bloqueia o campo que
+// foi editado.
+describe("deveAtualizarCampoContatoViaCartao — respeita edição manual do colaborador, campo a campo", () => {
+  it("autoriza quando o documento traz um valor novo e o campo nunca foi editado manualmente", () => {
+    const resultado = deveAtualizarCampoContatoViaCartao({
+      valorCartao: "(61) 9145-9287",
+      valorAtual: "(61) 0000-0000",
+      editadoManualmente: false,
+    });
+    expect(resultado).toBe(true);
+  });
+
+  it("nega quando o campo já foi editado manualmente -- mesmo que o documento traga um valor diferente do atual", () => {
+    const resultado = deveAtualizarCampoContatoViaCartao({
+      valorCartao: "(61) 9145-9287",
+      valorAtual: "(61) 0000-0000",
+      editadoManualmente: true,
+    });
+    expect(resultado).toBe(false);
+  });
+
+  it("nega quando o documento não trouxe valor nenhum para o campo", () => {
+    const resultado = deveAtualizarCampoContatoViaCartao({
+      valorCartao: null,
+      valorAtual: "(61) 0000-0000",
+      editadoManualmente: false,
+    });
+    expect(resultado).toBe(false);
+  });
+
+  it("nega quando o valor do documento já é igual ao valor atual (nada para atualizar)", () => {
+    const resultado = deveAtualizarCampoContatoViaCartao({
+      valorCartao: "(61) 9145-9287",
+      valorAtual: "(61) 9145-9287",
+      editadoManualmente: false,
+    });
+    expect(resultado).toBe(false);
+  });
+
+  it("PROVA DE REVERSÃO: se a checagem de edição manual fosse removida, o campo protegido voltaria a ser sobrescrito -- reversão manual confirma que o gate está de fato em vigor", () => {
+    // Sem `editadoManualmente`, o segundo teste acima ("nega quando o campo já
+    // foi editado manualmente") teria de falhar (voltaria a `true`). Este
+    // teste isola o comportamento equivalente sem o gate: com
+    // `editadoManualmente: false` mas os mesmos valores, o resultado é `true`
+    // -- prova de que é exclusivamente o gate `editadoManualmente` que muda o
+    // resultado para `false` no teste correspondente.
+    const semEdicaoManual = deveAtualizarCampoContatoViaCartao({
+      valorCartao: "(61) 9145-9287",
+      valorAtual: "(61) 0000-0000",
+      editadoManualmente: false,
+    });
+    expect(semEdicaoManual).toBe(true);
   });
 });

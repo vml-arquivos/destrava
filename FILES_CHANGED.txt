@@ -517,3 +517,43 @@ tests/extracaoDocumentalLocal.test.ts      (+2 testes, extração de email/telef
 Total desta rodada: 4 arquivos de código alterados + 6 arquivos de
 documentação alterados + 1 arquivo de código novo + 2 arquivos de teste
 novos + 2 arquivos de teste ampliados = 15 arquivos.
+
+======================================================================
+Rodada 22 (esta entrega) -- refinamento da Rodada 21 com os documentos reais
+(Cartão CNPJ + QSA) anexados pelo usuário: identificador de 11 dígitos no
+final do nome, situação cadastral contaminada com a data, janela de 5 dias
+para correção automática de cadastro, e trava permanente contra sobrescrever
+uma edição manual
+======================================================================
+
+Arquivos existentes ALTERADOS nesta rodada:
+
+server/utils/helpers.ts                       (normalizarNomeEmpresarial remove também um identificador de 8/11 dígitos no FINAL do nome, além do já existente no início)
+server/services/extracaoDocumentalLocal.ts    (parseCartaoCnpj separa a data grudada no valor da situação cadastral e reaproveita para data_situacao_cadastral)
+server/services/analiseCnpjReceitaCartao.ts   (deveConfirmarSituacaoCadastralViaCartao ganha a janela de 5 dias para correção pendente + trava de edição manual; nova deveAtualizarCampoContatoViaCartao por campo)
+server/index.ts                               (PATCH /api/empresas/:id grava o selo de edição manual em dados_extra_receita quando um campo rastreado muda fora da sincronização automática)
+CHANGELOG_CORRECOES.md
+PENDENCIAS_REAIS.md
+ROLLBACK_PLAN.md
+TEST_REPORT.md
+BUILD_REPORT.md
+FILES_CHANGED.txt (este arquivo)
+SHA256SUMS.txt
+
+Arquivos NOVOS -- código de produção:
+
+server/utils/edicaoManualCamposEmpresa.ts
+
+Arquivos NOVOS -- teste:
+
+tests/edicaoManualCamposEmpresa.test.ts
+
+Arquivos existentes com testes AMPLIADOS (mesmo arquivo, mais casos):
+
+tests/normalizarNomeEmpresarial.test.ts    (6 -> 10 testes: +4, identificador de 11 dígitos no final)
+tests/extracaoDocumentalLocal.test.ts      (+1 teste, situação cadastral sem a data grudada)
+tests/analiseCnpjReceitaCartao.test.ts     (18 -> 28 testes: +10, janela de 5 dias + trava de edição manual + describe deveAtualizarCampoContatoViaCartao)
+
+Total desta rodada: 4 arquivos de código alterados + 6 arquivos de
+documentação alterados + 1 arquivo de código novo + 1 arquivo de teste
+novo + 3 arquivos de teste ampliados = 15 arquivos.

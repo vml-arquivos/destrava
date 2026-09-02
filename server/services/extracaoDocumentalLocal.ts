@@ -185,8 +185,29 @@ function parseCartaoCnpj(texto: string): { dados: Record<string, any>; confianca
   const cnae = limparValor(valorAposRotulo(linhas, ['código e descrição da atividade econômica principal', 'codigo e descricao da atividade economica principal']));
   const natureza = limparValor(valorAposRotulo(linhas, ['código e descrição da natureza jurídica', 'codigo e descricao da natureza juridica']));
   const porte = limparValor(valorAposRotulo(linhas, ['porte']));
-  const situacao = limparValor(valorAposRotulo(linhas, ['situação cadastral', 'situacao cadastral']));
-  const dataSituacao = parseDate(valorAposRotulo(linhas, ['data da situação cadastral', 'data da situacao cadastral']));
+  // CORREÇÃO (Rodada 22, 02/09/2026 -- descoberta ao testar o Cartão CNPJ real
+  // anexado pelo usuário): no mesmo layout oficial da Receita descrito acima
+  // para e-mail/telefone, "SITUAÇÃO CADASTRAL" e "DATA DA SITUAÇÃO CADASTRAL"
+  // também ficam impressos lado a lado na mesma linha de rótulo, com "ATIVA"
+  // e a data igualmente lado a lado na linha de valor seguinte (ex.: "ATIVA
+  // 30/08/2026"). Como o rótulo da data fica fundido dentro do rótulo da
+  // situação, a busca isolada por "data da situação cadastral" não encontra
+  // nada nesse layout -- e, sem este ajuste, o valor da situação ficava
+  // contaminado com a data ("ATIVA 30/08/2026" em vez de "ATIVA"), o que
+  // impediria a Rodada 20 gravar a situação cadastral confirmada de forma
+  // limpa no cadastro da empresa. Aqui a data é destacada do valor da
+  // situação e reaproveitada para preencher `data_situacao_cadastral` quando
+  // a busca direta pelo rótulo não encontrar nada. Regra geral: vale para
+  // qualquer Cartão CNPJ nesse layout oficial, não depende de nenhuma
+  // empresa/regime específico; quando situação e data já vêm em linhas
+  // separadas (layout mais espaçado), o comportamento não muda.
+  const situacaoBruta = limparValor(valorAposRotulo(linhas, ['situação cadastral', 'situacao cadastral']));
+  const dataEmbutidaNaSituacao = situacaoBruta?.match(/\d{2}\/\d{2}\/\d{4}/)?.[0] || null;
+  const situacao = situacaoBruta
+    ? (situacaoBruta.replace(/\s*\d{2}\/\d{2}\/\d{4}\s*$/, '').trim() || situacaoBruta)
+    : situacaoBruta;
+  const dataSituacao = parseDate(valorAposRotulo(linhas, ['data da situação cadastral', 'data da situacao cadastral']))
+    || parseDate(dataEmbutidaNaSituacao);
   const cep = limparValor(valorAposRotulo(linhas, ['cep']));
   const logradouro = limparValor(valorAposRotulo(linhas, ['logradouro']));
   const numero = limparValor(valorAposRotulo(linhas, ['número', 'numero']));

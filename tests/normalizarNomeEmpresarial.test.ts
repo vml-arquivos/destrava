@@ -50,4 +50,33 @@ describe('normalizarNomeEmpresarial -- radical do CNPJ de Empresário Individual
     const b = normalizarNomeEmpresarial('COMERCIO DE ALIMENTOS SILVA LTDA');
     expect(a).toBe(b);
   });
+
+  // Rodada 22 (02/09/2026) -- descoberta ao testar o caso real com o QSA/
+  // Cartão CNPJ verdadeiros: mesmo após a correção acima, a divergência
+  // continuava, porque `empresas.razao_social` estava gravado como "VILSON
+  // MARCIO DE LIMA 70010668187" -- com um identificador de 11 dígitos (CPF)
+  // no FINAL do nome, não um radical de CNPJ no início.
+  it('trata "29.705.345 VILSON MARCIO DE LIMA" (documento oficial) e "VILSON MARCIO DE LIMA 70010668187" (valor real sincronizado no sistema) como o mesmo nome', () => {
+    const doDocumento = normalizarNomeEmpresarial('29.705.345 VILSON MARCIO DE LIMA');
+    const doSistema = normalizarNomeEmpresarial('VILSON MARCIO DE LIMA 70010668187');
+    expect(doDocumento).toBe(doSistema);
+    expect(doDocumento).toBe('vilsonmarciodelima');
+  });
+
+  it('remove o identificador de 11 dígitos no final mesmo com pontuação de CPF (700.106.681-87)', () => {
+    const a = normalizarNomeEmpresarial('VILSON MARCIO DE LIMA 700.106.681-87');
+    const b = normalizarNomeEmpresarial('VILSON MARCIO DE LIMA');
+    expect(a).toBe(b);
+  });
+
+  it('não remove um número curto no final que faça parte do nome fantasia (ex.: número de loja/filial)', () => {
+    expect(normalizarNomeEmpresarial('Padaria Sao Jose 2')).toContain('padariasaojose2');
+    expect(normalizarNomeEmpresarial('Loja 24 Horas Comercio Ltda')).toContain('24horascomercioltda');
+  });
+
+  it('continua identificando uma divergência real mesmo quando ambos os nomes têm um identificador no final', () => {
+    const a = normalizarNomeEmpresarial('VILSON MARCIO DE LIMA 70010668187');
+    const b = normalizarNomeEmpresarial('OUTRA PESSOA COMPLETAMENTE DIFERENTE 12345678901');
+    expect(a).not.toBe(b);
+  });
 });

@@ -71,6 +71,39 @@ describe('extração documental local determinística', () => {
     expect(resultado.dados.telefone).toBe('(61) 9145-9287');
   });
 
+  // Rodada 22 (02/09/2026) -- descoberta ao testar o Cartão CNPJ real anexado
+  // pelo usuário: nesse mesmo layout com colunas lado a lado (fixture acima),
+  // "SITUAÇÃO CADASTRAL" e "DATA DA SITUAÇÃO CADASTRAL" ficam na mesma linha
+  // de rótulo e "ATIVA"/"30/08/2026" na mesma linha de valor -- sem o ajuste,
+  // `situacao_cadastral` saía contaminado como "ATIVA 30/08/2026".
+  it('extrai a situação cadastral limpa (sem a data grudada) quando situação e data ficam lado a lado na mesma linha (layout real da Receita)', () => {
+    const texto = `
+      REPÚBLICA FEDERATIVA DO BRASIL
+      CADASTRO NACIONAL DA PESSOA JURÍDICA
+      NÚMERO DE INSCRIÇÃO
+      29.705.345/0001-22
+      COMPROVANTE DE INSCRIÇÃO E DE SITUAÇÃO DATA DE ABERTURA
+                                            17/02/2018
+      MATRIZ                                       CADASTRAL
+      NOME EMPRESARIAL
+      29.705.345 VILSON MARCIO DE LIMA
+      CÓDIGO E DESCRIÇÃO DA ATIVIDADE ECONÔMICA PRINCIPAL
+      73.19-0-02 - Promoção de vendas
+      CÓDIGO E DESCRIÇÃO DA NATUREZA JURÍDICA
+      213-5 - Empresário (Individual)
+      ENDEREÇO ELETRÔNICO                                        TELEFONE
+      VILSONMARCIO@GMAIL.COM                                     (61) 9145-9287
+      SITUAÇÃO CADASTRAL                                                                    DATA DA SITUAÇÃO CADASTRAL
+      ATIVA                                                                                 30/08/2026
+      Emitido no dia 30/08/2026 às 19:46:52 (data e hora de Brasília)
+    `;
+
+    const resultado = analisarTextoDocumentoLocal('cartao_cnpj', texto);
+
+    expect(resultado.dados.situacao_cadastral).toBe('ATIVA');
+    expect(resultado.dados.data_situacao_cadastral).toBe('2026-08-30');
+  });
+
   it('não inventa email/telefone quando o Cartão CNPJ não traz esses campos', () => {
     const texto = `
       CADASTRO NACIONAL DA PESSOA JURÍDICA
