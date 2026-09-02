@@ -3385,6 +3385,126 @@ router.get('/empresa/:empresaId/analise-inicial/status', auth, async (req: Reque
   }
 });
 
+// CORREÇÃO (Rodada 27, 02/09/2026, pedido explícito do usuário -- depois de
+// confirmar que a correção automática do nome empresarial funcionou: "quero
+// que coloque, pode ser em cada modal mesmo, um botão pra reler... pra
+// reanalisar os dados. Caso não atualize automaticamente e também pra não
+// precisar ficar trocando toda a documentação"): até esta rodada, uma vez que
+// a Etapa 1 (Cartão CNPJ/QSA/Enquadramento Tributário) já tinha alguma
+// análise registrada, não existia mais nenhum botão para forçar uma releitura
+// -- o botão "Analisar documentos" só aparece ANTES da primeira análise
+// (`!identidadeCnpj`, ver client/src/components/documentos/DocumentosEntidade.tsx).
+// A única forma de forçar uma nova leitura era excluir e reanexar o mesmo
+// arquivo (o que já dispara a releitura automática desde a Rodada 23) -- só
+// que trocar a documentação inteira não deveria ser necessário só para pedir
+// uma nova leitura do MESMO documento já anexado.
+//
+// Esta rota permite reler, isoladamente, UM dos três tipos da Etapa 1 por vez
+// (sem depender dos outros dois estarem corretos/anexados) -- ao contrário de
+// "Analisar documentos"/`iniciarAnaliseInicialEmSegundoPlano`, que sempre força
+// os três juntos e exige os três anexados. Reaproveita 100% das funções de
+// análise já existentes e já testadas (`analisarCnpjReceitaCartaoEmpresa` para
+// o Cartão CNPJ -- mesma função usada por `montarDossieCreditoEmpresa` quando
+// `processarDocumentos: true`; `montarQsaDocumentalDados`/`montarEnquadramentoDados`
+// com `processar: true` para QSA/Enquadramento, que já fazem a leitura forçada
+// via `obterAnaliseEspecializada({ reprocessar: true })`) -- nenhuma lógica de
+// leitura nova foi criada aqui, só um ponto de entrada que aciona a função
+// certa para o tipo pedido e depois remonta o dossiê para refletir o
+// resultado fresco na mesma resposta.
+//
+// Regra geral, válida para qualquer empresa/regime/porte -- nunca condicionada
+// a um CNPJ específico: os três tipos aceitos (`cartao_cnpj`, `qsa`,
+// `enquadramento_tributario_cnpj`) são sempre os mesmos, independentemente de
+// qual documentação aquela empresa específica precisa anexar (o conjunto de
+// documentos exigidos por regime/porte, calculado em outro lugar, não muda
+// nesta rodada) -- esta rota só oferece uma releitura manual de um documento
+// do MESMO tipo que já poderia ser lido automaticamente.
+const TIPOS_RELEITURA_MANUAL_IDENTIDADE = new Set(['cartao_cnpj', 'qsa', 'enquadramento_tributario_cnpj']);
+
+// Extraída como função pura só para permitir teste unitário direto do gate
+// (sem precisar montar toda a infraestrutura de mock de banco necessária para
+// testar a rota HTTP inteira) -- ver tests/releituraManualIdentidadeEtapa1.test.ts.
+// Continua chamada normalmente pela rota abaixo; exportar não muda o
+// comportamento para quem já usa a rota.
+export function tipoIdentidadeTemReleituraManual(tipo: string): boolean {
+  return TIPOS_RELEITURA_MANUAL_IDENTIDADE.has(tipo);
+}
+
+router.post('/empresa/:empresaId/identidade/:tipo/reler', auth, async (req: Request, res: Response) => {
+  try {
+    const user = (req as any).colaborador || (req as any).user;
+    const { empresaId, tipo } = req.params;
+
+    if (!tipoIdentidadeTemReleituraManual(tipo)) {
+      res.status(422).json({ error: 'Este tipo de documento não tem releitura manual disponível por aqui.' });
+      return;
+    }
+
+    const empresa = await getEmpresa(empresaId);
+    if (!empresa) { res.status(404).json({ error: 'Empresa não encontrada' }); return; }
+
+    // Evita uma releitura manual pisar em cima de um processamento em massa
+    // (o botão "Analisar documentos") já em andamento para a mesma empresa --
+    // ambos escrevem no mesmo lugar; esperar o que já está rodando terminar é
+    // mais seguro do que disparar dois processamentos concorrentes.
+    if (analisesIniciaisEmAndamento.has(empresaId)) {
+      res.status(409).json({ error: 'Já existe uma análise em andamento para esta empresa. Aguarde alguns segundos e tente novamente.' });
+      return;
+    }
+
+    if (tipo === 'cartao_cnpj') {
+      const docsCartao = await listarDocumentosEmpresaPorTipos(empresaId, ['cartao_cnpj', 'cnpj_cartao']);
+      if (!docsCartao.length) { res.status(422).json({ error: 'Anexe o Cartão CNPJ antes de solicitar uma nova leitura.' }); return; }
+      try {
+        await analisarCnpjReceitaCartaoEmpresa(empresaId, user?.id || null);
+        await pool.query(
+          `UPDATE public.documentos_arquivos
+              SET resultado_validacao = COALESCE(resultado_validacao, '{}'::jsonb) - 'analise_inicial_erro',
+                  atualizado_em = NOW()
+            WHERE id = $1`,
+          [docsCartao[0].id],
+        ).catch(() => undefined);
+      } catch (error: any) {
+        const mensagem = mensagemSeguraFalhaLeitura('Cartão CNPJ', error);
+        await pool.query(
+          `UPDATE public.documentos_arquivos
+              SET resultado_validacao = COALESCE(resultado_validacao, '{}'::jsonb) || $2::jsonb,
+                  atualizado_em = NOW()
+            WHERE id = $1`,
+          [docsCartao[0].id, JSON.stringify({ analise_inicial_erro: { mensagem, ocorrido_em: new Date().toISOString() } })],
+        ).catch(() => undefined);
+        console.warn('[Identidade][reler cartao_cnpj] Falha controlada (não interrompe a resposta):', error?.message || error);
+      }
+    } else if (tipo === 'qsa') {
+      const docsQsa = await listarDocumentosEmpresaPorTipos(empresaId, ['qsa']);
+      if (!docsQsa.length) { res.status(422).json({ error: 'Anexe o QSA antes de solicitar uma nova leitura.' }); return; }
+      await montarQsaDocumentalDados(empresaId, true).catch((error: any) => {
+        console.warn('[Identidade][reler qsa] Falha controlada (não interrompe a resposta):', error?.message || error);
+      });
+    } else {
+      const docsEnquadramento = await listarDocumentosEmpresaPorTipos(empresaId, ['enquadramento_tributario_cnpj', 'simples_nacional']);
+      if (!docsEnquadramento.length) { res.status(422).json({ error: 'Anexe o Enquadramento Tributário antes de solicitar uma nova leitura.' }); return; }
+      await montarEnquadramentoDados(empresaId, true, empresa).catch((error: any) => {
+        console.warn('[Identidade][reler enquadramento_tributario_cnpj] Falha controlada (não interrompe a resposta):', error?.message || error);
+      });
+    }
+
+    // Remonta o dossiê SEM forçar nada de novo -- o tipo pedido acabou de ser
+    // reprocessado e persistido acima; esta chamada só lê o resultado fresco
+    // (e os outros dois tipos continuam vindo do que já estava persistido,
+    // sem gastar uma nova chamada de OCR/IA para quem não foi pedido).
+    const dossie = await montarDossieCreditoEmpresa(empresaId);
+    res.json({
+      dossie,
+      identidade_cnpj: dossie?.identidade_cnpj || null,
+      status: dossie?.identidade_cnpj?.status || 'PHASE_1_PENDING',
+    });
+  } catch (err: any) {
+    console.error('[POST identidade/:tipo/reler]', err);
+    res.status(500).json({ error: 'Não foi possível solicitar a nova leitura deste documento.' });
+  }
+});
+
 async function analisarDocumentosIniciaisHandler(req: Request, res: Response) {
   try {
     const user = (req as any).colaborador || (req as any).user;

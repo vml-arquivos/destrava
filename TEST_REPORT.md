@@ -1,12 +1,33 @@
-# Relatório de Testes — 31/08/2026 (atualizado, Rodada 17 — 02/09/2026: confirmação automática da Etapa 1, sem clicar em "Iniciar análise documental"; Rodada 18 — 02/09/2026: validação local sem IA/orientação de documento correto/menos texto repetido; Rodada 19 — 02/09/2026: sincronização automática de CNPJ; Rodada 20 — 02/09/2026: Cartão CNPJ confirma e trava a situação cadastral contra a reversão automática; Rodada 21 — 02/09/2026: leitura automática sem clique, falso positivo de nome para Empresário Individual, telefone/e-mail via Cartão CNPJ; Rodada 22 — 02/09/2026: refinamento com os documentos reais, janela de 5 dias, trava de edição manual; Rodada 23 — 02/09/2026: leitura visível ao anexar Cartão CNPJ/QSA/Enquadramento; Rodada 24 — 02/09/2026: falha já pendente/travada passa a se resolver sozinha na tela, sem F5; Rodada 25 — 02/09/2026: todos os campos do checklist sempre visíveis, para qualquer empresa/regime; Rodada 26 — 02/09/2026: Cartão CNPJ também corrige o nome empresarial/razão social)
+# Relatório de Testes — 31/08/2026 (atualizado, Rodada 17 — 02/09/2026: confirmação automática da Etapa 1, sem clicar em "Iniciar análise documental"; Rodada 18 — 02/09/2026: validação local sem IA/orientação de documento correto/menos texto repetido; Rodada 19 — 02/09/2026: sincronização automática de CNPJ; Rodada 20 — 02/09/2026: Cartão CNPJ confirma e trava a situação cadastral contra a reversão automática; Rodada 21 — 02/09/2026: leitura automática sem clique, falso positivo de nome para Empresário Individual, telefone/e-mail via Cartão CNPJ; Rodada 22 — 02/09/2026: refinamento com os documentos reais, janela de 5 dias, trava de edição manual; Rodada 23 — 02/09/2026: leitura visível ao anexar Cartão CNPJ/QSA/Enquadramento; Rodada 24 — 02/09/2026: falha já pendente/travada passa a se resolver sozinha na tela, sem F5; Rodada 25 — 02/09/2026: todos os campos do checklist sempre visíveis, para qualquer empresa/regime; Rodada 26 — 02/09/2026: Cartão CNPJ também corrige o nome empresarial/razão social; Rodada 27 — 02/09/2026: botão "Reler" manual em cada card da Etapa 1)
 
 ## Resultado final
 
 ```
-Test Files  99 passed (99)
-     Tests  888 passed (888)
+Test Files  100 passed (100)
+     Tests  895 passed (895)
   Duration  ~50-58s
 ```
+
+## Rodada 27 — 7 testes novos para a releitura manual da Etapa 1 (888 → 895 testes, 99 → 100 arquivos)
+
+Novo arquivo `tests/releituraManualIdentidadeEtapa1.test.ts`, cobrindo a nova rota `POST /empresa/:empresaId/identidade/:tipo/reler` e a função pura que decide quais tipos aceitam essa releitura manual:
+
+1. `tipoIdentidadeTemReleituraManual` (função pura, extraída de propósito para ser testável sem mock de banco): autoriza os três tipos da Etapa 1 (`cartao_cnpj`, `qsa`, `enquadramento_tributario_cnpj`); nega qualquer outro tipo do catálogo de documentos (`scr`, `ccs`, `ccf`, `atos_junta_comercial`, `contrato_social`, `simples_nacional`, `cnpj_cartao`) e string vazia.
+2. Teste de integração HTTP (supertest, `pg` mockado no mesmo padrão de `tests/documentacaoAnaliseEspecializada.integration.test.ts`): tipo fora dos três aceitos → 422, **sem nenhuma consulta ao banco** (prova de que o gate roda antes de qualquer I/O).
+3. Empresa inexistente → 404.
+4. Documento do tipo pedido ainda não anexado → 422 pedindo para anexar, testado para os três tipos (`it.each`).
+
+**O caminho de sucesso (que de fato aciona `analisarCnpjReceitaCartaoEmpresa`/`montarQsaDocumentalDados`/`montarEnquadramentoDados` e remonta o dossiê) não tem teste unitário direto** -- mesma convenção já documentada na Rodada 26 para funções impuras com muitas dependências de banco (`aplicarConfirmacaoCadastralDocumentoEmpresa`/`aplicarConfirmacaoNomeEmpresarialDocumentoEmpresa`): montar um mock de banco exaustivo para toda a árvore de chamadas de `montarDossieCreditoEmpresa` (empresa, sócios, múltiplos tipos de documento, avaliação de prontidão, validação societária) traria alto risco de um mock incompleto mascarar comportamento real, sem o mesmo benefício de uma função pura testada em isolamento. Verificado por leitura completa do código: cada branch (`cartao_cnpj`/`qsa`/`enquadramento_tributario_cnpj`) chama exatamente a mesma função já usada pelo caminho automático existente (`montarDossieCreditoEmpresa` com `processarDocumentos: true`), sem nenhuma lógica de leitura nova.
+
+**Verificação completa da suíte, executada depois de reinstalar `node_modules`:**
+```
+Test Files  100 passed (100)
+     Tests  895 passed (895)
+  Duration  55.49s
+```
+Nenhuma expectativa de teste pré-existente mudou -- os 7 testes novos são estritamente aditivos.
+
+**Frontend sem teste automatizado dedicado**, mesmo motivo já documentado em rodadas anteriores (o projeto não tem infraestrutura de teste de componente React): o botão novo em `StatusAnaliseSlot` foi verificado por leitura completa do trecho alterado (as três branches de renderização, a prop `onReler`/`relendo` opcional para não quebrar nenhum uso existente do componente) e por `npx tsc --noEmit`/`pnpm run build` limpos.
 
 ## Rodada 26 — 12 testes novos para `deveConfirmarNomeEmpresarialViaCartao` (876 → 888 testes, 99 arquivos inalterados)
 

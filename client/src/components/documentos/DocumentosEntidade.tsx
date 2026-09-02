@@ -368,9 +368,33 @@ export function formatDate(value?: string | null) {
 // campos lidos ficam atrás de um clique, porque quem está conferindo não
 // precisa deles pra seguir. Quando há problema, o que aparece é o problema e o
 // que resolve.
-function StatusAnaliseSlot({ item, tipo }: { item?: { nome: string; anexado: boolean; analisado: boolean; consistente: boolean; status: string; diagnostico?: string | null; campos_principais?: Record<string, unknown>; regime_a_confirmar?: boolean }; tipo?: string }) {
+// CORREÇÃO (Rodada 27, 02/09/2026, pedido explícito do usuário -- depois de
+// confirmar que a correção automática do nome empresarial funcionou: "quero
+// que coloque... um botão pra reler... reanalisar os dados. Caso não
+// atualize automaticamente e também pra não precisar ficar trocando toda a
+// documentação"): `onReler`/`relendo` são opcionais para não quebrar nenhum
+// outro uso futuro deste componente que não precise do botão -- quando
+// informados, um botão pequeno de "reler" aparece em qualquer um dos três
+// estados do card (validado, revisão necessária/aguardando/falha, ou regime a
+// confirmar), sempre que o documento já está anexado. Regra geral: o botão
+// não depende do tipo de empresa/regime -- só de o card ter um documento
+// anexado, então aparece igual para qualquer empresa.
+function StatusAnaliseSlot({ item, tipo, onReler, relendo }: { item?: { nome: string; anexado: boolean; analisado: boolean; consistente: boolean; status: string; diagnostico?: string | null; campos_principais?: Record<string, unknown>; regime_a_confirmar?: boolean }; tipo?: string; onReler?: () => void; relendo?: boolean }) {
   const [aberto, setAberto] = useState(false);
   if (!item || !item.anexado) return null;
+
+  const botaoReler = onReler ? (
+    <button
+      type="button"
+      onClick={onReler}
+      disabled={relendo}
+      title="Forçar uma nova leitura deste documento (sem precisar reanexar o arquivo)"
+      className="inline-flex shrink-0 items-center gap-1 rounded-md px-1.5 py-0.5 text-[9px] font-bold text-muted-foreground hover:bg-card/60 disabled:opacity-50"
+    >
+      <RefreshCw className={`w-2.5 h-2.5 ${relendo ? "animate-spin" : ""}`} />
+      {relendo ? "Relendo..." : "Reler"}
+    </button>
+  ) : null;
 
   const campos = Object.entries(item.campos_principais || {})
     .map(([chave, valor]) => {
@@ -387,9 +411,12 @@ function StatusAnaliseSlot({ item, tipo }: { item?: { nome: string; anexado: boo
   if (item.consistente && item.regime_a_confirmar) {
     return (
       <div className="rounded-md border border-warning/20 bg-warning/10 px-2 py-1.5">
-        <span className="inline-flex items-center gap-1 text-[10px] font-black text-warning">
-          <AlertTriangle className="h-3 w-3 shrink-0" /> Regime a confirmar
-        </span>
+        <div className="flex items-center justify-between gap-2">
+          <span className="inline-flex items-center gap-1 text-[10px] font-black text-warning">
+            <AlertTriangle className="h-3 w-3 shrink-0" /> Regime a confirmar
+          </span>
+          {botaoReler}
+        </div>
         {item.diagnostico && <p className="mt-1 text-[9px] leading-relaxed text-warning">{item.diagnostico}</p>}
         {campos.length > 0 && (
           <dl className="mt-1.5 space-y-0.5 border-t border-warning/20 pt-1.5">
@@ -412,15 +439,18 @@ function StatusAnaliseSlot({ item, tipo }: { item?: { nome: string; anexado: boo
           <span className="inline-flex items-center gap-1 text-[10px] font-black text-success">
             <CheckCircle className="h-3 w-3 shrink-0" /> OK — validado
           </span>
-          {campos.length > 0 && (
-              <button
-              type="button"
-              onClick={() => setAberto((v) => !v)}
-              className="shrink-0 text-[9px] font-bold text-success underline decoration-dotted"
-            >
-              {aberto ? "ocultar" : "Dados da análise"}
-            </button>
-          )}
+          <div className="flex shrink-0 items-center gap-1">
+            {campos.length > 0 && (
+                <button
+                type="button"
+                onClick={() => setAberto((v) => !v)}
+                className="shrink-0 text-[9px] font-bold text-success underline decoration-dotted"
+              >
+                {aberto ? "ocultar" : "Dados da análise"}
+              </button>
+            )}
+            {botaoReler}
+          </div>
         </div>
         {aberto && campos.length > 0 && (
           <dl className="mt-1.5 space-y-0.5 border-t border-success/20 pt-1.5">
@@ -447,10 +477,13 @@ function StatusAnaliseSlot({ item, tipo }: { item?: { nome: string; anexado: boo
   if (tipo === "enquadramento_tributario_cnpj" && !falhou && !aguardando) return null;
   return (
     <div className={`rounded-md border px-2 py-1.5 ${falhou ? "border-destructive/20 bg-destructive/10" : "border-warning/20 bg-warning/10"}`}>
-      <span className={`inline-flex items-center gap-1 text-[10px] font-black ${falhou ? "text-destructive" : "text-warning"}`}>
-        <AlertTriangle className="h-3 w-3 shrink-0" />
-        {falhou ? "Falha na leitura" : aguardando ? "Aguardando análise" : "Revisão necessária"}
-      </span>
+      <div className="flex items-center justify-between gap-2">
+        <span className={`inline-flex items-center gap-1 text-[10px] font-black ${falhou ? "text-destructive" : "text-warning"}`}>
+          <AlertTriangle className="h-3 w-3 shrink-0" />
+          {falhou ? "Falha na leitura" : aguardando ? "Aguardando análise" : "Revisão necessária"}
+        </span>
+        {botaoReler}
+      </div>
       {item.diagnostico && (
         <p className={`mt-1 text-[9px] leading-relaxed ${falhou ? "text-destructive" : "text-warning"}`}>{item.diagnostico}</p>
       )}
@@ -691,6 +724,14 @@ export default function DocumentosEntidade({
   // o arquivo. Este estado controla o botão "Reanalisar" novo, por arquivo,
   // que resolve isso sem precisar reanexar nada.
   const [reanalisandoId, setReanalisandoId] = useState<string | null>(null);
+  // CORREÇÃO (Rodada 27, 02/09/2026, pedido explícito do usuário -- "quero
+  // que coloque... um botão pra reler... pra reanalisar os dados. Caso não
+  // atualize automaticamente e também pra não precisar ficar trocando toda a
+  // documentação"): controla qual dos três cards da Etapa 1 (Cartão CNPJ,
+  // QSA, Enquadramento Tributário) está com uma releitura manual em
+  // andamento -- só um por vez, guardado pelo próprio `tipoUpload`
+  // ("cartao_cnpj"/"qsa"/"enquadramento_tributario_cnpj").
+  const [relendoTipoIdentidade, setRelendoTipoIdentidade] = useState<string | null>(null);
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   const [previewDoc, setPreviewDoc] = useState<DocumentoArquivo | null>(null);
   const [secaoAtiva, setSecaoAtiva] = useState<string | null>(secaoInicial);
@@ -926,6 +967,35 @@ export default function DocumentosEntidade({
       else console.warn("[DocumentosEntidade] análise de identidade do CNPJ automática pendente:", err?.message || err);
     } finally {
       setAnalisandoIdentidade(false);
+    }
+  }, [empresaId, entidadeTipo, carregar]);
+
+  // CORREÇÃO (Rodada 27, 02/09/2026, pedido explícito do usuário, depois de
+  // confirmar que a correção automática do nome empresarial funcionou:
+  // "quero que coloque... um botão pra reler... pra reanalisar os dados.
+  // Caso não atualize automaticamente e também pra não precisar ficar
+  // trocando toda a documentação"): diferente de `iniciarAnaliseIdentidade`
+  // (que só aparece ANTES da primeira análise e sempre força os três
+  // documentos juntos, exigindo os três anexados), esta função relê UM só
+  // dos três tipos da Etapa 1 por vez, a qualquer momento -- inclusive depois
+  // de já existir uma análise (`identidadeCnpj` já preenchido). Chama a nova
+  // rota dedicada (`server/routes/documentacao.ts`,
+  // POST /empresa/:id/identidade/:tipo/reler), que já devolve o dossiê
+  // remontado com o resultado fresco -- sem precisar do loop de polling usado
+  // por `iniciarAnaliseIdentidade` (aquela rota dispara o processamento em
+  // segundo plano; esta responde só depois de a releitura terminar).
+  const relerDocumentoIdentidade = useCallback(async (tipo: string) => {
+    if (!empresaId || entidadeTipo !== "empresa") return;
+    setRelendoTipoIdentidade(tipo);
+    try {
+      const resultado = await apiFetch(`/api/documentacao/empresa/${empresaId}/identidade/${tipo}/reler`, { method: "POST" });
+      if (resultado?.identidade_cnpj) setIdentidadeCnpj(resultado.identidade_cnpj);
+      await carregar();
+      toast.success("Nova leitura concluída.");
+    } catch (err: any) {
+      toast.error(err?.message || "Erro ao solicitar nova leitura deste documento.");
+    } finally {
+      setRelendoTipoIdentidade((prev) => (prev === tipo ? null : prev));
     }
   }, [empresaId, entidadeTipo, carregar]);
 
@@ -2110,7 +2180,12 @@ export default function DocumentosEntidade({
                             )}
                           </div>
                         </div>
-                        <StatusAnaliseSlot item={analiseDoSlot as any} tipo={tipo} />
+                        <StatusAnaliseSlot
+                          item={analiseDoSlot as any}
+                          tipo={tipo}
+                          onReler={entidadeTipo === "empresa" && empresaId ? () => void relerDocumentoIdentidade(tipo) : undefined}
+                          relendo={relendoTipoIdentidade === tipo}
+                        />
                         {(descricaoVisivel[tipo] || algumArquivoIncompativelNoSlot) && documentoSlot.descricao && <p className="text-[11px] text-muted-foreground bg-muted border border-border rounded-md px-2.5 py-1.5">{documentoSlot.descricao}</p>}
                         {descricaoVisivel[tipo] && tipo === "cartao_cnpj" && <p className="text-[11px] text-primary bg-primary/10 border border-primary/20 rounded-md px-2.5 py-1.5">O usuário só anexa. O sistema/IA deverá identificar emissão, CNPJ, matriz/filial, abertura, CNAE, natureza, porte, endereço e situação cadastral para o relatório.</p>}
                         {docsTipo.length > 0 && (

@@ -652,3 +652,27 @@ Arquivos de teste NOVOS ou AMPLIADOS: tests/analiseCnpjReceitaCartao.test.ts amp
 
 Total desta rodada: 2 arquivos de código alterados + 1 arquivo de teste
 ampliado + 7 arquivos de documentação alterados = 10 arquivos.
+
+======================================================================
+Rodada 27 (esta entrega) -- botão "Reler" manual em cada card da
+Etapa 1 (Cartão CNPJ, QSA, Enquadramento Tributário), para forçar uma
+nova leitura sem precisar reanexar o arquivo
+======================================================================
+
+Arquivos existentes ALTERADOS nesta rodada:
+
+server/routes/documentacao.ts   (nova constante TIPOS_RELEITURA_MANUAL_IDENTIDADE, nova função pura tipoIdentidadeTemReleituraManual, nova rota POST /empresa/:empresaId/identidade/:tipo/reler)
+client/src/components/documentos/DocumentosEntidade.tsx   (StatusAnaliseSlot ganha as props opcionais onReler/relendo e um botão "Reler" nas três branches de renderização; novo estado relendoTipoIdentidade; nova função relerDocumentoIdentidade; StatusAnaliseSlot passa a receber onReler/relendo na chamada)
+tests/releituraManualIdentidadeEtapa1.test.ts   (arquivo novo: 7 testes -- função pura tipoIdentidadeTemReleituraManual isolada + testes de integração HTTP dos gates da rota nova)
+CHANGELOG_CORRECOES.md
+ROLLBACK_PLAN.md
+TEST_REPORT.md
+BUILD_REPORT.md
+FILES_CHANGED.txt (este arquivo)
+SHA256SUMS.txt
+
+Arquivos NOVOS: tests/releituraManualIdentidadeEtapa1.test.ts.
+Arquivos de teste NOVOS ou AMPLIADOS: tests/releituraManualIdentidadeEtapa1.test.ts (novo, 7 testes -- ver TEST_REPORT.md).
+
+Total desta rodada: 2 arquivos de código alterados + 1 arquivo de teste
+novo + 6 arquivos de documentação alterados = 9 arquivos.
