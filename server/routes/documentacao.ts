@@ -4076,6 +4076,50 @@ router.post('/ia/documentos/:documentoId/extrair', auth, async (req: Request, re
     const documento = documentoResult.rows[0];
     if (!documento) { res.status(404).json({ error: 'Documento não encontrado' }); return; }
 
+    // CORREÇÃO (Rodada 28, 02/09/2026, pedido explícito do usuário, com print
+    // da tela em produção mostrando o Contrato Social preso em "Aguardando
+    // análise" -- "o botãozinho também de reler, pra confirmar que o
+    // contrato social é o que confirma o que foi pedido no ato da junta"):
+    // Contrato Social/Alteração Contratual NUNCA tinham entrada em
+    // `ANALISE_ESPECIALIZADA_POR_TIPO` -- clicar no botão "Reanalisar" (🔄,
+    // já existente por arquivo desde 2026-08-31) para um desses dois tipos
+    // sempre respondia 501 "ainda não implementado", silenciosamente, sem
+    // nunca confrontar o contrato contra o Ato da Junta. A causa é estrutural:
+    // a análise real desses dois tipos (`analisarContratoComAtosJunta`, já
+    // usada por `montarValidacaoSocietaria` mais acima neste arquivo) exige
+    // um segundo documento como parâmetro (o Ato da Junta correspondente) --
+    // algo que o despacho genérico baseado em `ANALISE_ESPECIALIZADA_POR_TIPO`
+    // (pensado para "1 documento -> 1 análise") não sabe fornecer. Em vez de
+    // generalizar aquele despacho para suportar um segundo documento (mudança
+    // ampla, arriscada, numa peça já complexa e usada por muitos outros
+    // tipos), este bloco trata os dois tipos societários À PARTE, ANTES do
+    // despacho genérico -- reaproveitando 100% da mesma função de análise já
+    // usada e já testada indiretamente por `montarValidacaoSocietaria`, só
+    // que disparada por arquivo (o mesmo botão "Reanalisar" que já existe na
+    // tela), sem esperar o próximo "Iniciar análise societária" completo.
+    // Resposta síncrona (200, não 202) porque a chamada é rápida o bastante
+    // e evita o cliente ter que adivinhar quando a releitura de fato terminou.
+    if (['contrato_social', 'alteracao_contratual'].includes(String(documento.tipo_documento || ''))) {
+      const empresaIdContrato = documento.empresa_id || (documento.entidade_tipo === 'empresa' ? documento.entidade_id : null);
+      if (!empresaIdContrato) { res.status(422).json({ error: 'Documento societário sem vínculo válido com uma empresa.' }); return; }
+      const docsAtos = await listarDocumentosEmpresaPorTipos(empresaIdContrato, ['atos_junta_comercial']);
+      const atos = docsAtos.find(arquivoDocumentoTemConteudo) || null;
+      if (!atos) {
+        res.status(422).json({ error: 'Anexe um Ato da Junta Comercial legível antes de reler o Contrato Social/Alteração Contratual -- é contra ele que o contrato é confrontado.' });
+        return;
+      }
+      try {
+        const analise = await analiseDocumentalService.analisarContratoComAtosJunta(empresaIdContrato, arquivoId, atos.id);
+        await persistirAnaliseEspecializada(arquivoId, 'contrato_junta_crosscheck', analise);
+        res.status(200).json({ message: 'Releitura concluída.', tipo_analise: 'contrato_junta_crosscheck', analise });
+      } catch (error: any) {
+        const mensagem = mensagemSeguraFalhaLeitura('Contrato/Alteração Social', error);
+        await persistirFalhaAnaliseEspecializada(arquivoId, 'contrato_junta_crosscheck', error).catch(() => undefined);
+        res.status(502).json({ error: mensagem });
+      }
+      return;
+    }
+
     const configuracao = ANALISE_ESPECIALIZADA_POR_TIPO[String(documento.tipo_documento || '')];
     if (!configuracao) {
       res.status(501).json({ error: 'Processamento assíncrono genérico ainda não implementado. Use os endpoints especializados por tipo de documento.' });

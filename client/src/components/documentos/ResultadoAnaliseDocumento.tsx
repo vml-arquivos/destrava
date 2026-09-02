@@ -53,7 +53,26 @@ function classesTitulo(secao: DocumentoAnaliseSecao, estado: DocumentoEstadoVisu
   return "text-muted-foreground";
 }
 
-function BlocoSecao({ secao, texto }: { secao: DocumentoAnaliseSecao; texto: string }) {
+// CORREÇÃO (Rodada 28, 02/09/2026, pedido explícito do usuário, com print
+// anotado da tela em produção -- "a visualização dos dados... está totalmente
+// desconfigurado, não dá pra ler perfeitamente os dados"): a grade de campos
+// ("AMOSTRA OBJETIVA DOS DADOS LIDOS" nos Atos da Junta, e qualquer outra
+// seção com `campos`) usava `sm:grid-cols-2 lg:grid-cols-4` -- breakpoints
+// de VIEWPORT do navegador, não do espaço realmente disponível no card. Em
+// `compacto` (o uso de dentro do Acervo Documental, onde cada card tem só
+// ~230px de largura -- ver o comentário de 2026-09-02/Rodada 18 sobre
+// `grid-cols-[repeat(auto-fit,minmax(230px,1fr))]` na grade externa de
+// cards), numa tela larga o navegador já bate o breakpoint `lg:` e força 4
+// colunas MESMO com o card tendo só ~200px de largura útil -- cada coluna
+// sobra com uns 40-50px, estreita demais até para uma palavra inteira, e o
+// texto passa a quebrar letra por letra ("522\n078\n367\n98", "ALT\nERA\nÇÃO").
+// Trocado por `auto-fit`/`minmax` (mesma técnica já usada na grade externa),
+// que reage ao espaço REAL do container, não ao viewport -- em qualquer card
+// estreito, no máximo 2 colunas cabem (e cai para 1 automaticamente se nem
+// isso couber), sem nenhuma palavra quebrando letra por letra. Fora do modo
+// compacto (relatório de página inteira, com bem mais espaço horizontal
+// disponível), o comportamento mais denso é preservado.
+function BlocoSecao({ secao, texto, compacto }: { secao: DocumentoAnaliseSecao; texto: string; compacto: boolean }) {
   return (
     <>
       {secao.texto && <p className={`mt-0.5 whitespace-pre-line font-semibold text-foreground ${texto}`}>{secao.texto}</p>}
@@ -67,9 +86,9 @@ function BlocoSecao({ secao, texto }: { secao: DocumentoAnaliseSecao; texto: str
         </div>
       )}
       {!!secao.campos?.length && (
-        <div className="mt-1.5 grid gap-1.5 sm:grid-cols-2 lg:grid-cols-4">
+        <div className={`mt-1.5 grid gap-1.5 ${compacto ? "grid-cols-[repeat(auto-fit,minmax(110px,1fr))]" : "sm:grid-cols-2 lg:grid-cols-4"}`}>
           {secao.campos.map((campo, index) => (
-            <div key={`${campo.label}-${index}`} className="rounded-lg border border-border bg-card/80 px-2 py-1.5">
+            <div key={`${campo.label}-${index}`} className="min-w-0 rounded-lg border border-border bg-card/80 px-2 py-1.5">
               <p className="text-[8px] font-black uppercase text-muted-foreground">{campo.label}</p>
               <p className={`mt-0.5 break-words font-semibold text-muted-foreground ${texto}`}>{campo.valor}</p>
             </div>
@@ -105,7 +124,7 @@ export function ResultadoAnaliseDocumento({ resultado, documento, compacto = fal
             <p className={`${titulo} font-black uppercase ${classesTitulo(secao, estado)}`}>{secao.titulo}</p>
             {secao.id === "resultado" && <span className={`${titulo} rounded-full border px-2 py-0.5 font-black uppercase ${estado === "aprovado" ? "border-success/20 bg-success/10 text-success" : estado === "incompativel" || estado === "reanalisar" ? "border-destructive/20 bg-destructive/10 text-destructive" : "border-warning/20 bg-warning/10 text-warning"}`}>{rotuloEstadoDocumento(estado)}</span>}
           </div>
-          <BlocoSecao secao={secao} texto={texto} />
+          <BlocoSecao secao={secao} texto={texto} compacto={compacto} />
         </div>
       ))}
 
@@ -125,7 +144,7 @@ export function ResultadoAnaliseDocumento({ resultado, documento, compacto = fal
               {detalhes.map((secao) => (
                 <div key={secao.id} className={`rounded-lg border p-2 ${classesSecao(secao, estado)}`}>
                   <p className={`${titulo} font-black uppercase ${classesTitulo(secao, estado)}`}>{secao.titulo}</p>
-                  <BlocoSecao secao={secao} texto={texto} />
+                  <BlocoSecao secao={secao} texto={texto} compacto={compacto} />
                 </div>
               ))}
             </div>

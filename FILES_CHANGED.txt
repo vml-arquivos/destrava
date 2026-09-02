@@ -676,3 +676,29 @@ Arquivos de teste NOVOS ou AMPLIADOS: tests/releituraManualIdentidadeEtapa1.test
 
 Total desta rodada: 2 arquivos de código alterados + 1 arquivo de teste
 novo + 6 arquivos de documentação alterados = 9 arquivos.
+
+======================================================================
+Rodada 28 (esta entrega) -- grade de campos ilegível corrigida no
+Acervo Documental (breakpoint de viewport trocado por auto-fit/minmax
+no modo compacto); botão "Reler" do Contrato Social/Alteração
+Contratual passa a de fato confrontar contra o Ato da Junta anexado
+======================================================================
+
+Arquivos existentes ALTERADOS nesta rodada:
+
+client/src/components/documentos/ResultadoAnaliseDocumento.tsx   (BlocoSecao ganha o parâmetro compacto: boolean; grade de campos usa grid-cols-[repeat(auto-fit,minmax(110px,1fr))] quando compacto=true, preservando sm:grid-cols-2 lg:grid-cols-4 fora do modo compacto; min-w-0 acrescentado à célula de cada campo; os dois pontos de chamada de BlocoSecao passam a repassar compacto)
+server/routes/documentacao.ts   (novo bloco especial dentro de POST /ia/documentos/:documentoId/extrair, antes do despacho genérico ANALISE_ESPECIALIZADA_POR_TIPO: para contrato_social/alteracao_contratual, busca o Ato da Junta Comercial legível mais recente da empresa e chama analiseDocumentalService.analisarContratoComAtosJunta diretamente, persistindo sob tipo_analise 'contrato_junta_crosscheck'; responde 422 quando não há Ato da Junta legível, 502 com mensagem segura em caso de falha)
+tests/documentacaoAnaliseEspecializada.integration.test.ts   (analisarContrato: vi.fn() acrescentado ao vi.hoisted; analisarContratoComAtosJunta: mocks.analisarContrato acrescentado ao mock de analiseDocumentalService; novo describe com 3 testes -- caminho de sucesso, 422 sem Ato da Junta, 502 com mensagem sanitizada)
+CHANGELOG_CORRECOES.md
+PENDENCIAS_REAIS.md
+ROLLBACK_PLAN.md
+TEST_REPORT.md
+BUILD_REPORT.md
+FILES_CHANGED.txt (este arquivo)
+SHA256SUMS.txt
+
+Arquivos NOVOS: nenhum.
+Arquivos de teste NOVOS ou AMPLIADOS: tests/documentacaoAnaliseEspecializada.integration.test.ts ampliado (novo describe, 3 testes novos -- ver TEST_REPORT.md).
+
+Total desta rodada: 2 arquivos de código alterados + 1 arquivo de teste
+ampliado + 7 arquivos de documentação alterados = 10 arquivos.

@@ -11,6 +11,7 @@ const mocks = vi.hoisted(() => ({
   analisarSimples: vi.fn(),
   analisarAtos: vi.fn(),
   analisarGenerico: vi.fn(),
+  analisarContrato: vi.fn(),
 }));
 
 vi.mock('pg', () => {
@@ -37,6 +38,7 @@ vi.mock('../server/services/analiseDocumentalEspecializada', () => ({
     analisarSimplesNacional: mocks.analisarSimples,
     analisarAtosJuntaComercial: mocks.analisarAtos,
     analisarDocumentoCatalogado: mocks.analisarGenerico,
+    analisarContratoComAtosJunta: mocks.analisarContrato,
   },
 }));
 
@@ -256,5 +258,128 @@ describe('POST /api/documentacao/ia/documentos/:documentoId/extrair', () => {
     // persistido, a nova chamada dispara `analisarDocumentoCatalogado` de
     // novo -- o resultado antigo nunca fica congelado para sempre.
     expect(mocks.analisarGenerico).toHaveBeenCalledWith('empresa-1', 'doc-ecf-antigo', 'ecf');
+  });
+});
+
+// CORREÇÃO (Rodada 28, 02/09/2026, pedido explícito do usuário, com print da
+// tela em produção mostrando o Contrato Social preso em "Aguardando análise"
+// -- "o botãozinho também de reler, pra confirmar que o contrato social é o
+// que confirma o que foi pedido no ato da junta"): antes desta correção,
+// `contrato_social`/`alteracao_contratual` não tinham entrada em
+// `ANALISE_ESPECIALIZADA_POR_TIPO` -- clicar em "Reanalisar" para esses dois
+// tipos sempre respondia 501, sem nunca confrontar o contrato contra o Ato da
+// Junta (`analisarContratoComAtosJunta`, a mesma função já usada por
+// `montarValidacaoSocietaria`). Estes testes cobrem o novo bloco especial
+// para esses dois tipos, tratado à parte do despacho genérico porque a
+// análise real precisa de um segundo documento (o Ato da Junta) como
+// parâmetro -- algo que o despacho genérico (pensado para "1 documento -> 1
+// análise") não sabe fornecer.
+describe('POST /api/documentacao/ia/documentos/:documentoId/extrair — Contrato Social/Alteração Contratual confrontados contra o Ato da Junta', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mocks.connect.mockResolvedValue({ query: mocks.clientQuery, release: mocks.release });
+  });
+
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  const resultadoContrato = {
+    tipo_analise: 'contrato_junta_crosscheck',
+    empresa_id: 'empresa-1',
+    arquivo_id: 'doc-contrato-1',
+    status: 'concluido',
+    dados_extraidos: { contrato: { nire: '52207836798', data_registro: '2026-08-31', tipo_ato: 'ALTERACAO' } },
+    alertas: [],
+    nivel_confianca: 0.9,
+    modelo_ia: 'gemini-2.5-flash',
+    analisado_em: new Date().toISOString(),
+    revisao_humana_necessaria: false,
+  };
+
+  it('relê o Contrato Social confrontando contra o Ato da Junta já anexado -- responde 200 e persiste sob o prompt "contrato_junta_crosscheck"', async () => {
+    mocks.analisarContrato.mockResolvedValue(resultadoContrato);
+    mocks.poolQuery.mockImplementation(async (text: string) => {
+      const sql = String(text);
+      if (sql.includes('FROM public.documentos_arquivos') && sql.includes('WHERE id = $1')) {
+        return { rows: [{ id: 'doc-contrato-1', empresa_id: 'empresa-1', entidade_id: 'empresa-1', entidade_tipo: 'empresa', tipo_documento: 'contrato_social' }] };
+      }
+      if (sql.includes('FROM information_schema.tables')) return { rows: [{ exists: 1 }] };
+      if (sql.includes('FROM public.documentos_arquivos') && sql.includes('tipo_documento = ANY')) {
+        return { rows: [{ id: 'doc-atos-1', tamanho_bytes: 1024 }] };
+      }
+      if (sql.includes('UPDATE public.documentos_extracoes_ia') && sql.includes('SET status = $2')) return { rows: [] };
+      return { rows: [] };
+    });
+    mocks.clientQuery.mockImplementation(async (text: string) => {
+      const sql = String(text);
+      if (sql.includes('FROM public.documentos_extracoes_ia')) return { rows: [] };
+      if (sql.includes('INSERT INTO public.documentos_extracoes_ia')) {
+        return { rows: [{ id: 'extracao-contrato-1', arquivo_id: 'doc-contrato-1', prompt_codigo: 'contrato_junta_crosscheck', status: 'pendente' }] };
+      }
+      return { rows: [] };
+    });
+
+    const response = await request(appTeste())
+      .post('/api/documentacao/ia/documentos/doc-contrato-1/extrair')
+      .send({});
+
+    expect(response.status).toBe(200);
+    expect(response.body.tipo_analise).toBe('contrato_junta_crosscheck');
+    expect(mocks.analisarContrato).toHaveBeenCalledWith('empresa-1', 'doc-contrato-1', 'doc-atos-1');
+    const updateCall = mocks.poolQuery.mock.calls.find(([sql]) => String(sql).includes('UPDATE public.documentos_extracoes_ia') && String(sql).includes('SET status = $2'));
+    expect(updateCall).toBeTruthy();
+  });
+
+  it('responde 422 e não chama a análise quando não há Ato da Junta legível anexado -- é contra ele que o contrato é confrontado', async () => {
+    mocks.poolQuery.mockImplementation(async (text: string) => {
+      const sql = String(text);
+      if (sql.includes('FROM public.documentos_arquivos') && sql.includes('WHERE id = $1')) {
+        return { rows: [{ id: 'doc-contrato-2', empresa_id: 'empresa-1', entidade_id: 'empresa-1', entidade_tipo: 'empresa', tipo_documento: 'alteracao_contratual' }] };
+      }
+      if (sql.includes('FROM information_schema.tables')) return { rows: [{ exists: 1 }] };
+      if (sql.includes('FROM public.documentos_arquivos') && sql.includes('tipo_documento = ANY')) return { rows: [] };
+      return { rows: [] };
+    });
+
+    const response = await request(appTeste())
+      .post('/api/documentacao/ia/documentos/doc-contrato-2/extrair')
+      .send({});
+
+    expect(response.status).toBe(422);
+    expect(response.body?.error || '').toMatch(/ato da junta/i);
+    expect(mocks.analisarContrato).not.toHaveBeenCalled();
+  });
+
+  it('responde 502 com mensagem segura e registra a falha quando o crosscheck lança um erro', async () => {
+    mocks.analisarContrato.mockRejectedValue(new Error('timeout do provedor de IA'));
+    mocks.poolQuery.mockImplementation(async (text: string) => {
+      const sql = String(text);
+      if (sql.includes('FROM public.documentos_arquivos') && sql.includes('WHERE id = $1')) {
+        return { rows: [{ id: 'doc-contrato-3', empresa_id: 'empresa-1', entidade_id: 'empresa-1', entidade_tipo: 'empresa', tipo_documento: 'contrato_social' }] };
+      }
+      if (sql.includes('FROM information_schema.tables')) return { rows: [{ exists: 1 }] };
+      if (sql.includes('FROM public.documentos_arquivos') && sql.includes('tipo_documento = ANY')) {
+        return { rows: [{ id: 'doc-atos-1', tamanho_bytes: 1024 }] };
+      }
+      if (sql.includes("status = 'falhou'")) return { rows: [] };
+      return { rows: [] };
+    });
+    mocks.clientQuery.mockImplementation(async (text: string) => {
+      const sql = String(text);
+      if (sql.includes('FROM public.documentos_extracoes_ia')) return { rows: [] };
+      if (sql.includes('INSERT INTO public.documentos_extracoes_ia')) {
+        return { rows: [{ id: 'extracao-contrato-3', arquivo_id: 'doc-contrato-3', prompt_codigo: 'contrato_junta_crosscheck', status: 'pendente' }] };
+      }
+      return { rows: [] };
+    });
+
+    const response = await request(appTeste())
+      .post('/api/documentacao/ia/documentos/doc-contrato-3/extrair')
+      .send({});
+
+    expect(response.status).toBe(502);
+    expect(response.body?.error).toBeTruthy();
+    expect(String(response.body.error)).not.toMatch(/timeout do provedor de ia/i);
   });
 });

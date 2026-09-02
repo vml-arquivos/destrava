@@ -1,12 +1,30 @@
-# Relatório de Testes — 31/08/2026 (atualizado, Rodada 17 — 02/09/2026: confirmação automática da Etapa 1, sem clicar em "Iniciar análise documental"; Rodada 18 — 02/09/2026: validação local sem IA/orientação de documento correto/menos texto repetido; Rodada 19 — 02/09/2026: sincronização automática de CNPJ; Rodada 20 — 02/09/2026: Cartão CNPJ confirma e trava a situação cadastral contra a reversão automática; Rodada 21 — 02/09/2026: leitura automática sem clique, falso positivo de nome para Empresário Individual, telefone/e-mail via Cartão CNPJ; Rodada 22 — 02/09/2026: refinamento com os documentos reais, janela de 5 dias, trava de edição manual; Rodada 23 — 02/09/2026: leitura visível ao anexar Cartão CNPJ/QSA/Enquadramento; Rodada 24 — 02/09/2026: falha já pendente/travada passa a se resolver sozinha na tela, sem F5; Rodada 25 — 02/09/2026: todos os campos do checklist sempre visíveis, para qualquer empresa/regime; Rodada 26 — 02/09/2026: Cartão CNPJ também corrige o nome empresarial/razão social; Rodada 27 — 02/09/2026: botão "Reler" manual em cada card da Etapa 1)
+# Relatório de Testes — 31/08/2026 (atualizado, Rodada 17 — 02/09/2026: confirmação automática da Etapa 1, sem clicar em "Iniciar análise documental"; Rodada 18 — 02/09/2026: validação local sem IA/orientação de documento correto/menos texto repetido; Rodada 19 — 02/09/2026: sincronização automática de CNPJ; Rodada 20 — 02/09/2026: Cartão CNPJ confirma e trava a situação cadastral contra a reversão automática; Rodada 21 — 02/09/2026: leitura automática sem clique, falso positivo de nome para Empresário Individual, telefone/e-mail via Cartão CNPJ; Rodada 22 — 02/09/2026: refinamento com os documentos reais, janela de 5 dias, trava de edição manual; Rodada 23 — 02/09/2026: leitura visível ao anexar Cartão CNPJ/QSA/Enquadramento; Rodada 24 — 02/09/2026: falha já pendente/travada passa a se resolver sozinha na tela, sem F5; Rodada 25 — 02/09/2026: todos os campos do checklist sempre visíveis, para qualquer empresa/regime; Rodada 26 — 02/09/2026: Cartão CNPJ também corrige o nome empresarial/razão social; Rodada 27 — 02/09/2026: botão "Reler" manual em cada card da Etapa 1; Rodada 28 — 02/09/2026: grade de campos ilegível corrigida, botão "Reler" do Contrato Social confronta contra o Ato da Junta)
 
 ## Resultado final
 
 ```
 Test Files  100 passed (100)
-     Tests  895 passed (895)
+     Tests  898 passed (898)
   Duration  ~50-58s
 ```
+
+## Rodada 28 — 3 testes novos para o crosscheck do Contrato Social via botão "Reler" (895 → 898 testes, 100 arquivos inalterados)
+
+`tests/documentacaoAnaliseEspecializada.integration.test.ts` (arquivo pré-existente, ampliado -- não um arquivo novo, por isso a contagem de arquivos não muda): novo `describe` cobrindo o bloco especial acrescentado à rota `POST /api/documentacao/ia/documentos/:documentoId/extrair` para os tipos `contrato_social`/`alteracao_contratual`. `analisarContrato: vi.fn()` acrescentado ao objeto `vi.hoisted` já existente, e `analisarContratoComAtosJunta: mocks.analisarContrato` acrescentado ao mock de `analiseDocumentalService` (mesmo módulo já mockado pelos testes pré-existentes deste arquivo, que cobrem os demais tipos de documento).
+
+1. **Caminho de sucesso**: com um Ato da Junta Comercial legível já anexado (mock de `pg`/`client.query` retornando um documento `atos_junta_comercial` com `tamanho_bytes: 1024`), reler um Contrato Social responde 200, o corpo traz `tipo_analise: 'contrato_junta_crosscheck'`, `analisarContratoComAtosJunta` é chamado com os três IDs corretos (`'empresa-1'`, `'doc-contrato-1'`, `'doc-atos-1'`), e uma query UPDATE contra `documentos_extracoes_ia` de fato acontece (prova de persistência sob o mesmo `tipo_analise` já usado por `montarValidacaoSocietaria`).
+2. **Sem Ato da Junta legível**: mock da consulta de atos retornando `{rows: []}` -- responde 422 com mensagem citando "Ato da Junta" (regex `/ato da junta/i`), e `analisarContratoComAtosJunta` NUNCA é chamado (prova de que o gate roda antes de qualquer chamada de análise).
+3. **Erro do provedor de IA durante o crosscheck**: `mocks.analisarContrato.mockRejectedValue(new Error('timeout do provedor de IA'))` -- responde 502 com um corpo de erro presente, e o texto cru do erro (`/timeout do provedor de ia/i`) NÃO aparece em lugar nenhum do corpo da resposta -- prova de que `mensagemSeguraFalhaLeitura` sanitizou a mensagem antes de chegar ao cliente, mesma trava de segurança já usada por toda a rota `/extrair` desde rodadas anteriores.
+
+**Verificação completa da suíte, executada depois de reinstalar `node_modules`:**
+```
+Test Files  100 passed (100)
+     Tests  898 passed (898)
+  Duration  ~55s
+```
+Nenhuma expectativa de teste pré-existente mudou -- os 3 testes novos são estritamente aditivos, e os 5 testes pré-existentes deste mesmo arquivo (cobrindo os demais tipos de documento do despacho genérico) continuam passando sem nenhuma alteração.
+
+**Correção de CSS (grade de campos, `ResultadoAnaliseDocumento.tsx`) sem teste automatizado dedicado**, mesmo motivo já documentado em rodadas anteriores (o projeto não tem infraestrutura de teste de componente React): verificado por leitura completa do trecho alterado (`BlocoSecao`, os dois pontos de chamada, e os quatro usos de `compacto` já existentes no restante do código -- `DocumentosEntidade.tsx` linhas ~1695/~2272, `DossieCreditoEmpresa.tsx` linhas ~449/~876/~936 -- confirmando que a mudança está corretamente restrita ao modo compacto) e por `npx tsc --noEmit`/`pnpm run build` limpos.
 
 ## Rodada 27 — 7 testes novos para a releitura manual da Etapa 1 (888 → 895 testes, 99 → 100 arquivos)
 
