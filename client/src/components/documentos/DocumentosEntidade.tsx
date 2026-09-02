@@ -467,6 +467,15 @@ const CHAVE_ANALISE_POR_SLOT: Record<string, string> = {
   enquadramento_tributario_cnpj: "enquadramento_tributario",
 };
 
+// CORREÇÃO (2026-09-02, pedido explícito do usuário: "quando anexa os
+// documentos como eles são analisados e validados, para a leitura e dados
+// ficar visível"): os mesmos três tipos de `CHAVE_ANALISE_POR_SLOT` disparam
+// a análise da Etapa 1 automaticamente ao serem anexados, no mesmo padrão já
+// usado para Atos da Junta/Contrato Social (`TIPOS_GATILHO_ANALISE_SOCIETARIA`
+// abaixo) -- ver o uso em `enviar()`. Derivado da mesma fonte para nunca
+// divergir da lista que já alimenta o card de identidade.
+const TIPOS_GATILHO_ANALISE_IDENTIDADE = new Set(Object.keys(CHAVE_ANALISE_POR_SLOT));
+
 const CAMPO_ANALISE_LABEL: Record<string, string> = {
   cnpj: "CNPJ",
   data_opcao_simples: "Opção pelo Simples",
@@ -1221,6 +1230,22 @@ export default function DocumentosEntidade({
             ? prev
             : [resultado, ...prev.filter((d) => d.id !== resultado.id)]
         ));
+      }
+
+      // CORREÇÃO (2026-09-02, pedido explícito do usuário: "quando anexa os
+      // documentos como eles são analisados e validados, para a leitura e dados
+      // ficar visível"): Cartão CNPJ / QSA / Enquadramento Tributário disparam a
+      // mesma análise da Etapa 1 que hoje só rodava ao clicar em "Iniciar análise
+      // documental" -- mesmo padrão já usado abaixo para Atos da Junta/Contrato
+      // Social. `iniciarAnaliseIdentidade` já mostra "Aguardando análise" no card
+      // de identidade (StatusAnaliseSlot) enquanto processa e atualiza sozinho
+      // quando termina (ou "Revisão necessária"/"OK — validado", conforme o
+      // resultado real) -- nenhuma tela nova, nenhum polling novo, só o mesmo
+      // fluxo do botão manual acionado automaticamente. Não recarrega a tela
+      // inteira a cada anexo isolado: só o `carregar()` único que já acontece ao
+      // final desse fluxo, exatamente como o societário já fazia.
+      if (entidadeTipo === "empresa" && empresaId && TIPOS_GATILHO_ANALISE_IDENTIDADE.has(tipoDocumento)) {
+        await iniciarAnaliseIdentidade({ silencioso: true });
       }
 
       // Atos da Junta / Contrato Social / alteração contratual: dispara a análise
