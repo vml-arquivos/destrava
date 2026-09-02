@@ -166,7 +166,19 @@ export const SECOES_DOCUMENTAIS: SecaoDocumento[] = [
       // A consulta do CNPJ identifica a situação no Simples. Para empresas não
       // optantes, o regime efetivo precisa ser comprovado nos slots fiscais da
       // documentação da empresa antes de liberar Atos da Junta.
-      slot("Enquadramento tributário (consulta CNPJ)", "enquadramento_tributario_cnpj", [], { descricao: "A situação no Simples vem da consulta de CNPJ. Se a empresa não for optante, ECF, DCTF/DCTFWeb, DARF ou Livro Caixa deve confirmar o regime efetivo antes dos Atos da Junta." }),
+      //
+      // CORREÇÃO (2026-09-02, Rodada 18, pedido explícito do usuário -- print
+      // anotado "qual documento correto de cada tipo de empresa, no caso essa
+      // e mei tem que saber e expor as informações", apontando para o aviso
+      // de documento incompatível neste campo): esta descrição passou a
+      // explicar, de forma genérica por regime (não hardcoded para nenhuma
+      // empresa específica), que (a) para MEI/Simples optante o próprio
+      // resultado da consulta de CNPJ já confirma o enquadramento, então
+      // normalmente NADA precisa ser anexado aqui -- o campo é informativo;
+      // e (b) documentos que às vezes são anexados aqui por engano (CCMEI,
+      // PGDAS-D/PGMEI e seu recibo, DEFIS/DASN-SIMEI e seu recibo) têm campo
+      // próprio mais abaixo, em "Fiscal/Tributário", e devem ir lá.
+      slot("Enquadramento tributário (consulta CNPJ)", "enquadramento_tributario_cnpj", [], { descricao: "A situação no Simples/MEI vem da própria consulta de CNPJ -- normalmente não é preciso anexar nada aqui. Se a empresa não for optante, ECF, DCTF/DCTFWeb, DARF ou Livro Caixa deve confirmar o regime efetivo antes dos Atos da Junta. CCMEI, PGDAS/PGMEI (e recibo) e DEFIS/DASN-SIMEI (e recibo) têm campo próprio em \"Fiscal/Tributário\" -- não devem ser anexados aqui." }),
     ],
   },
   {
@@ -1852,8 +1864,23 @@ export default function DocumentosEntidade({
                   desta tela. Reduzida para 230px (cards mais compactos, ver também
                   o padding/espaçamento internos abaixo) -- cabem 4-5 por linha nas
                   larguras de tela em que cabiam só 3 antes, sem esconder nenhuma
-                  informação do card, só menos espaço em branco ao redor dela. */}
-              <div className="grid grid-cols-[repeat(auto-fill,minmax(230px,1fr))] gap-2">
+                  informação do card, só menos espaço em branco ao redor dela.
+
+                  CORREÇÃO (2026-09-02, Rodada 18, pedido explícito do usuário --
+                  print anotado com "preencher esse espaço, aumente os modais de
+                  documentos" apontando para o espaço vazio à direita da seção
+                  "Identidade do CNPJ", que só tem 3 campos): `auto-fill` reserva
+                  o espaço de uma coluna inteira de 230px mesmo quando não há mais
+                  nenhum card para preenchê-la -- então uma seção com poucos itens
+                  (como Identidade do CNPJ, sempre 3) deixava uma faixa em branco
+                  do lado direito em telas largas, mesmo com `1fr` no minmax.
+                  `auto-fit` colapsa as colunas vazias e deixa o `1fr` esticar os
+                  cards que já existem para ocupar o espaço liberado -- mesmo
+                  efeito de 4-5 cards por linha quando a seção tem itens
+                  suficientes para isso (nada muda nesse caso, largura mínima
+                  continua 230px), e cards mais largos (sem espaço vazio) quando a
+                  seção tem poucos itens, como esta. */}
+              <div className="grid grid-cols-[repeat(auto-fit,minmax(230px,1fr))] gap-2">
                 {slotsVisiveis.map((documentoSlot) => {
                     const tipo = documentoSlot.tipoUpload;
                     const exigeVinculoSocio = entidadeTipo === "empresa" && documentoSlot.porSocio === true;
@@ -1902,6 +1929,23 @@ export default function DocumentosEntidade({
                     // fica no proprio campo, junto do arquivo, em vez de num
                     // relatorio separado repetindo os mesmos documentos.
                     const analiseDoSlot = identidadeCnpj?.documentos_iniciais?.[CHAVE_ANALISE_POR_SLOT[tipo] || ""] || undefined;
+                    // CORREÇÃO (2026-09-02, Rodada 18, pedido explícito do usuário --
+                    // print anotado "qual documento correto de cada tipo de empresa...
+                    // tem que saber e expor as informações"): quando algum arquivo
+                    // deste campo está marcado como incompatível, a explicação de "o
+                    // que é este documento / o que anexar aqui" (descricao do slot)
+                    // passa a aparecer automaticamente, sem exigir o clique manual no
+                    // botão "i" -- é exatamente o momento em que o usuário mais precisa
+                    // dela. Regra genérica, válida para QUALQUER slot com descricao (não
+                    // é um caso especial de enquadramento_tributario_cnpj); reaproveita a
+                    // mesma detecção de incompatibilidade por arquivo já usada mais
+                    // abaixo para exibir o resultado inline (linhas ~2047-2049).
+                    const algumArquivoIncompativelNoSlot = docsTipo.some((doc) => {
+                      const laudoDoc = doc.resultado_validacao?.analise_regra_documental || null;
+                      const laudoErroDoc = doc.resultado_validacao?.analise_regra_documental_erro || null;
+                      const resultadoInlineDoc = doc.resultado_analise || laudoDoc || laudoErroDoc || null;
+                      return Boolean(resultadoInlineDoc) && estadoVisualDocumento(resultadoInlineDoc, doc) === "incompativel";
+                    });
                     return (
                       <div key={tipo} className={`rounded-lg border p-2.5 space-y-2 self-start ${satisfeitoPorOutro ? "border-success/20 bg-success/10/40" : "border-border bg-card shadow-sm shadow-slate-100/30"}`}>
                         <div className="flex items-center justify-between gap-2">
@@ -2002,7 +2046,7 @@ export default function DocumentosEntidade({
                           </div>
                         </div>
                         <StatusAnaliseSlot item={analiseDoSlot as any} tipo={tipo} />
-                        {descricaoVisivel[tipo] && documentoSlot.descricao && <p className="text-[11px] text-muted-foreground bg-muted border border-border rounded-md px-2.5 py-1.5">{documentoSlot.descricao}</p>}
+                        {(descricaoVisivel[tipo] || algumArquivoIncompativelNoSlot) && documentoSlot.descricao && <p className="text-[11px] text-muted-foreground bg-muted border border-border rounded-md px-2.5 py-1.5">{documentoSlot.descricao}</p>}
                         {descricaoVisivel[tipo] && tipo === "cartao_cnpj" && <p className="text-[11px] text-primary bg-primary/10 border border-primary/20 rounded-md px-2.5 py-1.5">O usuário só anexa. O sistema/IA deverá identificar emissão, CNPJ, matriz/filial, abertura, CNAE, natureza, porte, endereço e situação cadastral para o relatório.</p>}
                         {docsTipo.length > 0 && (
                           <div className="rounded-md border border-border bg-muted p-2">

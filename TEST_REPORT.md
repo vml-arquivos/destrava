@@ -1,12 +1,19 @@
-# Relatório de Testes — 31/08/2026 (atualizado, Rodada 17 — 02/09/2026: confirmação automática da Etapa 1, sem clicar em "Iniciar análise documental")
+# Relatório de Testes — 31/08/2026 (atualizado, Rodada 17 — 02/09/2026: confirmação automática da Etapa 1, sem clicar em "Iniciar análise documental"; Rodada 18 — 02/09/2026: validação local sem IA/orientação de documento correto/menos texto repetido)
 
 ## Resultado final
 
 ```
 Test Files  94 passed (94)
      Tests  788 passed (788)
-  Duration  ~34-49s
+  Duration  ~34-53s
 ```
+
+## Testes alterados na Rodada 18 (0 testes novos, 1 arquivo com asserções atualizadas -- contagem de arquivos/testes não muda)
+
+- `tests/acervoDocumentalFalhaRealVsAguardando.test.ts` (asserções atualizadas, mesma contagem de testes): a fusão de `conclusao`/`diagnostico` no ramo de falha real (`enriquecerDocumentosAcervoComAnalise`, ver `CHANGELOG_CORRECOES.md` seção "Rodada 18") tornou a asserção antiga (`expect(item.resultado_analise.conclusao).toMatch(/falha/i)`) tecnicamente correta por acidente, mas sem nenhum valor de detecção de regressão -- nenhuma das mensagens de `mensagemSeguraFalhaLeitura` contém a palavra "falha", então essa asserção nunca teria capturado a regressão real (o texto genérico voltando a aparecer sozinho). Substituída por três asserções que de fato provam o comportamento pedido: (1) `conclusao === diagnostico` (prova de que não há mais duas caixas de texto diferentes para a mesma falha); (2) `conclusao` contém o motivo real específico (`/mecanismo externo de apoio/i`, para o cenário de erro "gemini" já usado no teste); (3) `conclusao` não é mais o texto genérico antigo (`'Falha na análise automática deste documento.'`).
+- **Prova de causa raiz por reversão temporária**: revertendo só `resultadoAnalise.conclusao = mensagem;` de volta para `resultadoAnalise.conclusao = 'Falha na análise automática deste documento.';` (mantendo `resultadoAnalise.diagnostico = mensagem;` como estava), o teste falhou exatamente como esperado (`expected 'Falha na análise automática deste doc…' to be 'Atos da Junta Comercial: a leitura in…'`) -- provando que a asserção nova de fato depende da correção. Restaurada a correção, o teste volta a passar e a suíte completa (94 arquivos / 788 testes) permanece 100% verde.
+- **Sem teste de renderização dedicado** para as demais três correções desta rodada (texto do slot de Enquadramento Tributário, exibição automática dessa descrição quando há arquivo incompatível, grid `auto-fit`) -- mesma situação já registrada em todas as rodadas anteriores para mudanças de frontend puro (este repositório não tem testes de DOM para `DocumentosEntidade.tsx`). Verificadas por leitura cuidadosa do código (confirmando que `algumArquivoIncompativelNoSlot` reaproveita exatamente a mesma lógica de detecção de incompatibilidade já usada, poucas linhas abaixo, para exibir o resultado inline por arquivo -- `estadoVisualDocumento(resultadoInlineDoc, doc) === "incompativel"`) e pelos três comandos padrão desta engenharia, todos limpos: `npx tsc --noEmit`, `npx vitest run` (788/788, sem nenhuma alteração de contagem) e `pnpm run build` (bundle dentro do orçamento, ver `BUILD_REPORT.md`).
+- **Confirmação sem alteração de código nem de teste**: a leitura/validação local-primeiro (sem depender de IA externa para a confirmação inicial de dados como CNPJ, razão social, data de abertura, matriz/filial e endereço) já é o comportamento de `extrairHibrido` e de `analisarCnpjReceitaCartaoEmpresa` desde antes desta rodada -- investigado e confirmado por leitura de código, sem necessidade de nenhuma mudança nem de nenhum teste novo (nenhum comportamento foi alterado, só documentado) -- ver `CHANGELOG_CORRECOES.md`, seção "Rodada 18".
 
 ## Testes novos ou alterados na Rodada 17 (4 testes: 2 arquivos novos)
 

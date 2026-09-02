@@ -387,3 +387,30 @@ tests/uploadDispensaCliqueAnaliseDocumentalEtapa1.test.ts
 
 Total desta rodada: 2 arquivos de código alterados + 6 arquivos de
 documentação alterados + 2 arquivos de teste novos = 10 arquivos.
+
+======================================================================
+Rodada 18 (esta entrega) -- validação local sem IA externa (confirmação de
+comportamento já existente), orientação de documento correto por regime no
+campo de Enquadramento Tributário, menos texto repetido na falha de leitura
+do Cartão CNPJ, espaço vazio preenchido na seção "Identidade do CNPJ"
+======================================================================
+
+Arquivos existentes ALTERADOS nesta rodada:
+
+client/src/components/documentos/DocumentosEntidade.tsx (descricao do slot de Enquadramento Tributário reescrita; descricao aparece automaticamente quando há arquivo incompatível no slot -- genérico, qualquer slot; grid auto-fill -> auto-fit)
+server/routes/documentacao.ts                            (conclusao/diagnostico unificados no ramo de falha real de leitura, em vez de um texto genérico + um específico)
+tests/acervoDocumentalFalhaRealVsAguardando.test.ts       (asserções atualizadas -- provam ausência de duplicação em vez de checar a palavra "falha", que não é mais literal em nenhuma das mensagens)
+CHANGELOG_CORRECOES.md
+PENDENCIAS_REAIS.md
+ROLLBACK_PLAN.md
+TEST_REPORT.md
+BUILD_REPORT.md
+FILES_CHANGED.txt (este arquivo)
+SHA256SUMS.txt
+
+Nenhum arquivo de teste novo nesta rodada -- um arquivo de teste existente
+teve asserções atualizadas (mesma contagem de `it`); as demais correções são
+de texto/CSS em frontend, sem teste de DOM (ver TEST_REPORT.md).
+
+Total desta rodada: 3 arquivos de código/teste alterados + 6 arquivos de
+documentação alterados = 9 arquivos.

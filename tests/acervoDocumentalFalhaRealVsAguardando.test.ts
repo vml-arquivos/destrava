@@ -18,6 +18,18 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 // quando não existe nenhuma tentativa registrada (nunca processado), o texto
 // genérico "aguardando análise documental" continua exatamente como antes
 // (sem regressão).
+//
+// ATUALIZADO (2026-09-02, Rodada 18, pedido explícito do usuário -- print
+// anotado "não precisa desse tanto de texto, deixar menos poluido e sem
+// repetição" apontando para o card de falha do Cartão CNPJ): `conclusao` e
+// `diagnostico` passaram a receber a MESMA mensagem específica (em vez de um
+// texto genérico em `conclusao` e o motivo real só em `diagnostico`), para
+// que a tela (construirSecoesAnaliseDocumento) não renderize duas caixas de
+// texto repetindo a mesma informação. Nenhuma das mensagens de
+// `mensagemSeguraFalhaLeitura` contém literalmente a palavra "falha", então
+// a asserção abaixo passou a checar (a) que os dois campos são idênticos
+// (prova de que não há mais duplicação) e (b) que o conteúdo é o motivo
+// real específico (mecanismo externo/gemini), não o texto genérico antigo.
 
 const mocks = vi.hoisted(() => ({ poolQuery: vi.fn() }));
 
@@ -69,8 +81,12 @@ describe('enriquecerDocumentosAcervoComAnalise -- distingue "falhou de verdade" 
 
     const item = resultado[0].documentos[0];
     expect(item.analisado).toBe(false);
-    expect(item.resultado_analise.conclusao).toMatch(/falha/i);
+    // conclusao e diagnostico devem ser IDÊNTICOS -- prova de que não há mais
+    // duas caixas de texto repetindo a mesma falha (ver comentário acima).
+    expect(item.resultado_analise.conclusao).toBe(item.resultado_analise.diagnostico);
+    expect(item.resultado_analise.conclusao).toMatch(/mecanismo externo de apoio/i);
     expect(item.resultado_analise.conclusao).not.toBe('Anexo recebido, aguardando análise documental.');
+    expect(item.resultado_analise.conclusao).not.toBe('Falha na análise automática deste documento.');
     expect(item.resultado_analise.diagnostico).not.toBe('O arquivo foi anexado, mas ainda não existe laudo concluído para este documento.');
   });
 

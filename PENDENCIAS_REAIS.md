@@ -1,4 +1,8 @@
-# Pendências Reais — 31/08/2026 (atualizado, Rodada 17 — 02/09/2026: confirmação automática da Etapa 1, sem clicar em "Iniciar análise documental")
+# Pendências Reais — 31/08/2026 (atualizado, Rodada 17 — 02/09/2026: confirmação automática da Etapa 1, sem clicar em "Iniciar análise documental"; Rodada 18 — 02/09/2026: validação local sem IA/orientação de documento correto/menos texto repetido)
+
+## 0-E. Cruzamento DIRETO entre Cartão CNPJ e QSA (comparar os dois documentos entre si) não existe -- hoje o cruzamento é indireto, via Receita Federal -- decisão de escopo pendente de confirmação
+
+A mensagem de voz da Rodada 18 pediu que, depois de ler os dados do documento anexado, o sistema "confira com o QSA, se tudo bate, se tudo está correto de acordo com o CNPJ". Hoje, tanto o Cartão CNPJ (`analiseCnpjReceitaCartaoEmpresa`) quanto o QSA (`analisarQSA`) já comparam seus próprios dados contra a mesma fonte de verdade -- os dados da empresa sincronizados a partir da Receita Federal (`empresas`/`socios_empresa`) -- então uma divergência em qualquer um dos dois já é pega hoje, mesmo sem uma rotina que compare os dois documentos diretamente entre si. Uma comparação DIRETA (ex.: mesmo CNPJ extraído nos dois arquivos, capital social do Cartão CNPJ batendo com o do QSA quando esse dado aparece em ambos) seria um reforço adicional -- mais como uma segunda camada de garantia do que a correção de um problema concreto observado nos prints desta rodada, já que nenhuma divergência real desse tipo foi reportada. Ver `CHANGELOG_CORRECOES.md`, seção "Rodada 18", nota final. Fica registrado aqui para confirmação explícita antes de ser implementado numa rodada futura.
 
 ## 0-D. Confirmação da Etapa 1 só aparece na próxima carga de tela, não instantaneamente após o upload -- decisão de escopo consciente
 

@@ -540,8 +540,20 @@ export async function enriquecerDocumentosAcervoComAnalise(blocos: any[]): Promi
         }
       }
       if (falhaPersistida) {
+        // CORREÇÃO (2026-09-02, Rodada 18, pedido explícito do usuário -- print
+        // anotado "não precisa desse tanto de texto, deixar menos poluido e sem
+        // repetição" apontando para o card de falha do Cartão CNPJ): antes desta
+        // correção, `conclusao` recebia um texto genérico ("Falha na análise
+        // automática deste documento.") e `diagnostico` recebia o motivo real e
+        // específico (via mensagemSeguraFalhaLeitura) -- como os dois textos são
+        // sempre diferentes, `construirSecoesAnaliseDocumento` (shared/documentalPresentation.ts)
+        // renderizava DUAS caixas de texto para a mesma falha, uma repetindo a
+        // outra sem acrescentar informação. Agora os dois campos recebem a MESMA
+        // mensagem (a específica), então só uma caixa aparece -- vale para
+        // qualquer tipo de documento que caia neste ramo, não é específico de
+        // Cartão CNPJ.
         const mensagem = mensagemSeguraFalhaLeitura(documentLabel(tipo) || 'Documento', falhaPersistida.mensagem);
-        resultadoAnalise.conclusao = 'Falha na análise automática deste documento.';
+        resultadoAnalise.conclusao = mensagem;
         resultadoAnalise.diagnostico = mensagem;
       } else {
         resultadoAnalise.conclusao = 'Anexo recebido, aguardando análise documental.';
