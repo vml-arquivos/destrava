@@ -603,3 +603,26 @@ Arquivos de teste NOVOS ou AMPLIADOS: nenhum (mudança de frontend, reaproveita 
 
 Total desta rodada: 1 arquivo de código alterado + 6 arquivos de
 documentação alterados = 7 arquivos.
+
+======================================================================
+Rodada 25 (esta entrega) -- todos os campos do checklist de documentos
+ficam sempre visíveis, para qualquer empresa/regime; só o resultado da
+leitura dentro do card continua colapsável
+======================================================================
+
+Arquivos existentes ALTERADOS nesta rodada:
+
+client/src/components/documentos/DocumentosEntidade.tsx   (removidos o estado mostrarComplementares, o bloco em carregar() que o ativava pelo marco societário, e a filtragem obrigatório/complementar + botão "Ver documentos complementares"/"Mostrar só os obrigatórios"; slotsVisiveis passa a ser sempre secaoAtivaObj.slots)
+CHANGELOG_CORRECOES.md
+PENDENCIAS_REAIS.md
+ROLLBACK_PLAN.md
+TEST_REPORT.md
+BUILD_REPORT.md
+FILES_CHANGED.txt (este arquivo)
+SHA256SUMS.txt
+
+Arquivos NOVOS: nenhum.
+Arquivos de teste NOVOS ou AMPLIADOS: nenhum (mudança de frontend, remoção de uma filtragem de exibição, sem nenhuma lógica pura nova -- ver TEST_REPORT.md).
+
+Total desta rodada: 1 arquivo de código alterado + 6 arquivos de
+documentação alterados = 7 arquivos.

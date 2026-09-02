@@ -1,12 +1,23 @@
-# Relatório de Testes — 31/08/2026 (atualizado, Rodada 17 — 02/09/2026: confirmação automática da Etapa 1, sem clicar em "Iniciar análise documental"; Rodada 18 — 02/09/2026: validação local sem IA/orientação de documento correto/menos texto repetido; Rodada 19 — 02/09/2026: sincronização automática de CNPJ; Rodada 20 — 02/09/2026: Cartão CNPJ confirma e trava a situação cadastral contra a reversão automática; Rodada 21 — 02/09/2026: leitura automática sem clique, falso positivo de nome para Empresário Individual, telefone/e-mail via Cartão CNPJ; Rodada 22 — 02/09/2026: refinamento com os documentos reais, janela de 5 dias, trava de edição manual; Rodada 23 — 02/09/2026: leitura visível ao anexar Cartão CNPJ/QSA/Enquadramento; Rodada 24 — 02/09/2026: falha já pendente/travada passa a se resolver sozinha na tela, sem F5)
+# Relatório de Testes — 31/08/2026 (atualizado, Rodada 17 — 02/09/2026: confirmação automática da Etapa 1, sem clicar em "Iniciar análise documental"; Rodada 18 — 02/09/2026: validação local sem IA/orientação de documento correto/menos texto repetido; Rodada 19 — 02/09/2026: sincronização automática de CNPJ; Rodada 20 — 02/09/2026: Cartão CNPJ confirma e trava a situação cadastral contra a reversão automática; Rodada 21 — 02/09/2026: leitura automática sem clique, falso positivo de nome para Empresário Individual, telefone/e-mail via Cartão CNPJ; Rodada 22 — 02/09/2026: refinamento com os documentos reais, janela de 5 dias, trava de edição manual; Rodada 23 — 02/09/2026: leitura visível ao anexar Cartão CNPJ/QSA/Enquadramento; Rodada 24 — 02/09/2026: falha já pendente/travada passa a se resolver sozinha na tela, sem F5; Rodada 25 — 02/09/2026: todos os campos do checklist sempre visíveis, para qualquer empresa/regime)
 
 ## Resultado final
 
 ```
 Test Files  99 passed (99)
      Tests  876 passed (876)
-  Duration  ~50-55s
+  Duration  ~50-58s
 ```
+
+## Rodada 25 — sem testes novos (mudança de frontend, remoção de uma filtragem de exibição -- nenhuma lógica pura nova)
+
+Esta rodada só altera `client/src/components/documentos/DocumentosEntidade.tsx` (nenhum arquivo de backend), removendo a filtragem `slotsVisiveis`/o estado `mostrarComplementares` e o botão que os controlava -- não introduz nenhuma função pura nova para testar isoladamente, só simplifica o que já existia (a lista de slots visíveis passa a ser, sempre, a lista completa da seção). Mesmo motivo já documentado nas rodadas anteriores: o projeto não tem infraestrutura de teste de componente React.
+
+**Verificação feita por leitura completa do trecho alterado:**
+1. Confirmado, por busca em todo o arquivo, que `mostrarComplementares`, `liberarComplementares`, `temObrigatorios` e `ocultos` não aparecem mais em nenhum outro lugar do arquivo depois da remoção -- nenhuma referência órfã, nenhum erro de variável não definida.
+2. Confirmado que `regimeAConfirmar`/`tiposConfirmacaoRegime` (usadas para o destaque especial de ECF/DCTF/DARF/Livro Caixa e para o aviso de ordem recomendada Atos da Junta → Contrato Social, mais abaixo no mesmo bloco) foram preservadas -- só a filtragem de `slotsVisiveis` foi removida, essas duas variáveis continuam com a mesma leitura de `mapaCredito?.regime_identificado`.
+3. Confirmado que a montagem do checklist por regime/tipo de empresa (`slotsDaTela`/`secoesDaTela`/`tiposPermitidos`, que decidem QUAIS campos existem no checklist de cada empresa) não foi tocada -- esta rodada muda só a exibição dentro do que já é montado, nunca o conjunto de campos disponíveis por regime.
+4. Confirmado que o toggle "Dados da análise" por arquivo (`laudosExpandidos`, dentro de cada card) não foi alterado -- continua sendo o único nível de colapso, exatamente como pedido ("deixe só pra poder encolher, no card, com a análise documental").
+5. `npx tsc --noEmit` limpo, `npx vitest run` com os mesmos 99 arquivos / 876 testes de antes (nenhuma alteração de expectativa), e `pnpm run build` limpo, com o chunk `DocumentosEntidade` na verdade encolhendo (150.42 kB → 149.82 kB gzip 35.55 kB → 35.36 kB, já que mais código foi removido do que comentário foi acrescentado).
 
 ## Rodada 24 — sem testes novos (mudança de frontend, reaproveitando uma rota de status já existente e já testada indiretamente pelo próprio backend desde a Rodada 21)
 

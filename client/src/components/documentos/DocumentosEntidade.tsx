@@ -694,10 +694,6 @@ export default function DocumentosEntidade({
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   const [previewDoc, setPreviewDoc] = useState<DocumentoArquivo | null>(null);
   const [secaoAtiva, setSecaoAtiva] = useState<string | null>(secaoInicial);
-  // Mostra só os campos obrigatórios de cada categoria por padrão -- evita os 44 campos
-  // de uma vez. "Ver documentos complementares" revela o resto, sem esconder nada
-  // permanentemente, só evita abrir tudo de cara.
-  const [mostrarComplementares, setMostrarComplementares] = useState(false);
   // Quais campos têm a lista de arquivos expandida pra ver todos, não só os 3 primeiros --
   // antes "+N arquivo(s) neste mesmo campo" era só texto informativo, sem jeito nenhum
   // de realmente ver/abrir esses arquivos extras.
@@ -805,24 +801,22 @@ export default function DocumentosEntidade({
       setIdentidadeCnpj(dossieAtual?.identidade_cnpj || null);
       const societariaAtual = dossieAtual?.documentacao_societaria || null;
       setSocietaria(societariaAtual);
-      // Depois que os Atos da Junta forem aprovados, o acervo deixa de esconder
-      // os documentos complementares: eles ficam disponíveis para anexação conforme
-      // o mapa do regime tributário, sem exigir outra navegação ou criar nova trava.
-      //
-      // CORREÇÃO (2026-09-01, pedido explícito do usuário -- "não vamos deixá-los
-      // escondidos, vamos só pra poder clicar pra aparecê-los" + "não recarregue a
-      // página... e tenha que procurar o local de novo"): antes desta correção, esta
-      // checagem rodava a CADA `carregar()` (ou seja, a cada upload, a cada exclusão)
-      // e sempre FORÇAVA `mostrarComplementares` de volta para `false` quando o
-      // marco (Atos da Junta aprovados/dispensados por MEI) ainda não tinha sido
-      // atingido -- descartando o clique manual do usuário em "Ver documentos
-      // complementares" toda vez que a lista era recarregada. Agora a revelação
-      // automática pelo marco societário é só de mão única (nunca re-esconde
-      // nada que já esteja visível, seja pelo marco ou por um clique manual do
-      // usuário) -- uma vez mostrado, um campo complementar nunca some sozinho.
-      if (societariaAtual?.atos_junta_aprovados === true || societariaAtual?.atos_dispensados_por_mei === true) {
-        setMostrarComplementares(true);
-      }
+      // Rodada 25 (02/09/2026, pedido explícito do usuário -- "eu quero que os
+      // cards pra anexar a documentação fiquem sempre visíveis, não é mais pra
+      // ter que ficar escondido... deixe só pra poder encolher, no card, com a
+      // análise documental" -- reportado ao abrir uma empresa de outro
+      // regime/tipo e ver a tela com um conjunto diferente de campos visíveis
+      // em relação a outra empresa): os campos complementares (não
+      // obrigatórios na Etapa 1) deixaram de ficar escondidos atrás de "Ver
+      // documentos complementares"/do marco societário (Atos da Junta
+      // aprovados ou dispensados por MEI) -- ver histórico da correção de
+      // 2026-09-01 logo abaixo, agora superada por este pedido mais amplo.
+      // Todos os campos do checklist ficam sempre visíveis, para qualquer
+      // empresa/regime/porte, desde a primeira carga da tela; o que continua
+      // colapsável é só o bloco de resultado da leitura DENTRO de cada card
+      // ("Dados da análise" por arquivo), nunca o card de anexo em si. Ver
+      // `slotsVisiveis` (removido) mais abaixo, onde a filtragem por
+      // obrigatório/complementar existia.
       setMapaCredito(dossieAtual?.mapa_documental_credito || null);
       const analisesPorArquivo = new Map<string, any>(
         (Array.isArray(dossieAtual?.blocos) ? dossieAtual.blocos : [])
@@ -1903,36 +1897,30 @@ export default function DocumentosEntidade({
 
           {/* Cada grupo de abas pode reunir mais de uma seção interna (ex.: "Documentos
               da empresa" = Identidade do CNPJ + Documentação da Empresa + Outros) --
-              elas aparecem todas empilhadas aqui, na mesma ordem de sempre, cada uma
-              com sua própria checagem de obrigatório/complementar. Uma legenda discreta
-              só aparece quando há mais de uma seção nesta aba, pra não repetir "Identidade
-              do CNPJ" sozinha quando é a única coisa na tela (ex.: aba de sócios). */}
+              elas aparecem todas empilhadas aqui, na mesma ordem de sempre. Uma legenda
+              discreta só aparece quando há mais de uma seção nesta aba, pra não repetir
+              "Identidade do CNPJ" sozinha quando é a única coisa na tela (ex.: aba de
+              sócios).
+              Rodada 25 (02/09/2026, pedido explícito do usuário -- "os cards pra anexar
+              a documentação fiquem sempre visíveis... deixe só pra poder encolher, no
+              card, com a análise documental" -- reportado como inconsistente entre
+              empresas de regimes diferentes): todos os campos do checklist (`slots`)
+              agora ficam sempre visíveis, para qualquer empresa/regime/porte -- a
+              filtragem por obrigatório/complementar (`slotsVisiveis`, condicionada ao
+              marco de Atos da Junta aprovados/dispensados por MEI) e o botão "Ver
+              documentos complementares" foram removidos. O que continua colapsável é
+              só o bloco de resultado da leitura DENTRO de cada card ("Dados da
+              análise" por arquivo, ver `laudosExpandidos`/`temResultadoInline` mais
+              abaixo) -- nunca o card de anexo em si. */}
           {secoesDoGrupoAtivo.map((secaoAtivaObj) => {
-            const temObrigatorios = secaoAtivaObj.slots.some((s) => s.obrigatorio);
-            const liberarComplementares = societaria?.atos_junta_aprovados === true
-              || societaria?.atos_dispensados_por_mei === true;
             const regimeAConfirmar = mapaCredito?.regime_identificado === "nao_optante_regime_a_confirmar";
             const tiposConfirmacaoRegime = new Set(["ecf", "dctf", "darf", "livro_caixa"]);
-            const slotsVisiveis = temObrigatorios && !mostrarComplementares && !liberarComplementares
-              ? secaoAtivaObj.slots.filter((s) => s.obrigatorio || (regimeAConfirmar && tiposConfirmacaoRegime.has(s.tipoUpload)))
-              : secaoAtivaObj.slots;
-            const ocultos = secaoAtivaObj.slots.length - slotsVisiveis.length;
+            const slotsVisiveis = secaoAtivaObj.slots;
             return (
             <Fragment key={secaoAtivaObj.titulo}>
             <div className="rounded-lg border border-border bg-muted p-3">
               {secoesDoGrupoAtivo.length > 1 && (
                 <p className="mb-2 text-[10px] font-black uppercase tracking-wide text-muted-foreground">{secaoAtivaObj.titulo}</p>
-              )}
-              {temObrigatorios && !liberarComplementares && (
-                <button
-                  type="button"
-                  onClick={() => setMostrarComplementares((v) => !v)}
-                  className="mb-3 inline-flex items-center gap-1.5 text-[11px] font-semibold text-primary hover:text-primary"
-                >
-                  {mostrarComplementares
-                    ? "Mostrar só os obrigatórios"
-                    : ocultos > 0 ? `Ver documentos complementares (${ocultos})` : "Todos os campos já são obrigatórios"}
-                </button>
               )}
               {/* CORREÇÃO (2026-09-01, pedido explícito do usuário -- "diminuir o
                   acervo documental... diminuir os modais, pra que caiba quatro ou
