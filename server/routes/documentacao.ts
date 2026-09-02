@@ -1475,7 +1475,15 @@ async function buscarFalhaAnaliseEspecializada(
   return { mensagem, processado_em: row.processado_em || null };
 }
 
-async function persistirAnaliseEspecializada(
+// CORREÇÃO (2026-09-02, Rodada 17 -- pedido explícito do usuário -- "eu quero
+// que... as confirmações já apareçam sem precisar iniciar a análise
+// documental"): exportada para que a leitura automática disparada no upload
+// (`agendarAnaliseRegraDocumental`, server/routes/documentos.ts) grave o
+// resultado no MESMO lugar (`documentos_extracoes_ia`) que a Etapa 1
+// (`montarQsaDocumentalDados`/`montarEnquadramentoDados`, via
+// `obterAnaliseEspecializada` acima) já consulta em toda carga de página --
+// ver comentário completo na chamada em documentos.ts.
+export async function persistirAnaliseEspecializada(
   arquivoId: string,
   promptCodigo: string,
   resultado: AnaliseDocumentalResult,

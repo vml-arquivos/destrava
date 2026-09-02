@@ -360,3 +360,30 @@ TEST_REPORT.md).
 
 Total desta rodada: 3 arquivos de código alterados + 6 arquivos de
 documentação alterados = 9 arquivos.
+
+======================================================================
+Rodada 17 (esta entrega) -- confirmação da Etapa 1 (QSA + Enquadramento
+Tributário) passa a aparecer sozinha, sem precisar clicar em "Iniciar
+análise documental"
+======================================================================
+
+Arquivos existentes ALTERADOS nesta rodada (ambos de backend; nenhum
+arquivo de frontend foi tocado):
+
+server/routes/documentacao.ts   (persistirAnaliseEspecializada passa a ser export -- sem mudança de comportamento)
+server/routes/documentos.ts     (agendarAnaliseRegraDocumental também grava em documentos_extracoes_ia via persistirAnaliseEspecializada, para QSA/Enquadramento Tributário/Simples Nacional)
+CHANGELOG_CORRECOES.md
+ROLLBACK_PLAN.md
+PENDENCIAS_REAIS.md
+TEST_REPORT.md
+BUILD_REPORT.md
+FILES_CHANGED.txt (este arquivo)
+SHA256SUMS.txt
+
+Arquivos NOVOS -- testes:
+
+tests/leituraAutomaticaQsaEnquadramentoAlimentaEtapa1.test.ts
+tests/uploadDispensaCliqueAnaliseDocumentalEtapa1.test.ts
+
+Total desta rodada: 2 arquivos de código alterados + 6 arquivos de
+documentação alterados + 2 arquivos de teste novos = 10 arquivos.

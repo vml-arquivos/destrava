@@ -1,12 +1,21 @@
-# Relatório de Testes — 31/08/2026 (atualizado, Rodada 16 — 01/09/2026: upload sem recarregar a tela, validação manual removida, acervo mais compacto)
+# Relatório de Testes — 31/08/2026 (atualizado, Rodada 17 — 02/09/2026: confirmação automática da Etapa 1, sem clicar em "Iniciar análise documental")
 
 ## Resultado final
 
 ```
-Test Files  92 passed (92)
-     Tests  784 passed (784)
+Test Files  94 passed (94)
+     Tests  788 passed (788)
   Duration  ~34-49s
 ```
+
+## Testes novos ou alterados na Rodada 17 (4 testes: 2 arquivos novos)
+
+- `tests/leituraAutomaticaQsaEnquadramentoAlimentaEtapa1.test.ts` (novo, 2 testes): prova, com `montarQsaDocumentalDados` e `persistirAnaliseEspecializada` diretamente (mockando `pg`, incluindo `pool.connect()` para o client de transação com advisory lock que `registrarExtracaoEspecializada` usa), que (1) antes de qualquer laudo persistido, a Etapa 1 continua pedindo a análise normalmente (`analisado: false`, pendência `qsa_aguardando_analise`) -- comportamento pré-existente, sem regressão; (2) depois que `persistirAnaliseEspecializada` grava um laudo concluído -- a MESMA chamada que a leitura automática do upload agora faz -- `montarQsaDocumentalDados(empresaId, false)` (leitura sem `processar`, ou seja, sem nenhum clique manual) já retorna `analisado: true` e a pendência de "aguardando análise" desaparece.
+- `tests/uploadDispensaCliqueAnaliseDocumentalEtapa1.test.ts` (novo, 2 testes): prova, subindo a rota real `POST /api/documentos/upload` (`server/routes/documentos.ts`, com `pg`, `analiseDocumentalService` e `persistirAnaliseEspecializada` mockados), que o upload de um documento QSA dispara `analisarQSA` e, na sequência, `persistirAnaliseEspecializada(documentoId, 'qsa_extract', <laudo>)`; e que o upload de um documento de Enquadramento Tributário (`enquadramento_tributario_cnpj`) dispara `analisarSimplesNacional` e `persistirAnaliseEspecializada(documentoId, 'simples_extract', <laudo>)` -- os dois tipos de documento envolvidos no print da tela em produção que motivou esta rodada.
+- **Prova de causa raiz por reversão temporária:** comentando o bloco `const promptCodigoEtapa1 = TIPOS_ETAPA1_PROMPT_CODIGO[tipo]; if (promptCodigoEtapa1) { await persistirAnaliseEspecializada(...); }` em `agendarAnaliseRegraDocumental` (`server/routes/documentos.ts`), os dois testes de `tests/uploadDispensaCliqueAnaliseDocumentalEtapa1.test.ts` falharam exatamente como esperado (`expected "spy" to be called ... Number of calls: 0`) -- provando que, sem essa chamada, a leitura automática do upload nunca chega a `documentos_extracoes_ia`, reproduzindo o sintoma relatado (Etapa 1 presa em "aguardando análise" mesmo com o documento já lido). Restaurado o bloco, os dois testes voltam a passar, e a suíte completa (94 arquivos / 788 testes) permanece 100% verde.
+- `persistirAnaliseEspecializada` (`server/routes/documentacao.ts`) foi exportada nesta rodada, mesmo padrão já usado para outras funções internas em rodadas anteriores, especificamente para ser reaproveitada por `server/routes/documentos.ts` (não só para teste unitário, desta vez -- é a própria correção de produto) -- nenhuma mudança de comportamento para os chamadores existentes (`obterAnaliseEspecializada`, `resolverComprovacaoRegime`).
+- **Sem teste de renderização dedicado** (não seria aplicável aqui de qualquer forma): esta rodada não altera nenhum arquivo de frontend -- `DocumentosEntidade.tsx` já exibia corretamente qualquer laudo presente em `documentos_extracoes_ia`, a correção é inteiramente sobre onde esse laudo passa a ser gravado.
+- **Confirmação sem alteração de código nem de teste**: investigado se o "Documento incompatível" do Enquadramento Tributário (arquivo "CCMEI" anexado no campo errado, no print do usuário) seria um bug -- não é: CCMEI é um documento diferente do comprovante de Simples Nacional/Enquadramento, e o catálogo já tem um campo dedicado só para CCMEI, separado. A regra que isenta MEI de contrato social/atos da Junta (`mapaDocumentalCreditoService.ts`, `nao_aplicavel_contrato_social_mei`) também já existia e já está correta, sem necessidade de nenhuma mudança -- ver `CHANGELOG_CORRECOES.md`, seção "Rodada 17".
 
 ## Rodada 16 (0 testes novos -- mudanças de frontend, sem alteração de backend)
 

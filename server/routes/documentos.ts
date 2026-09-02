@@ -11,9 +11,18 @@ import {
   resolveDocumentPath,
   saveDocumentBuffer,
 } from '../services/documentStorage';
-import { analiseDocumentalService } from '../services/analiseDocumentalEspecializada';
+import { analiseDocumentalService, type AnaliseDocumentalResult } from '../services/analiseDocumentalEspecializada';
 import { analisarCnpjReceitaCartaoEmpresa } from '../services/analiseCnpjReceitaCartao';
 import { TIPOS_DOCUMENTO as TIPOS_DOCUMENTO_CATALOGO, getDocumentCatalogEntry, isKnownDocumentType } from '../../shared/documentTypes';
+// CORREÇÃO (2026-09-02, Rodada 17 -- pedido explícito do usuário -- "eu quero
+// que... as confirmações já apareçam sem precisar iniciar a análise
+// documental... essa primeira confirmação... já é pra ser feita de forma
+// automática"): `persistirAnaliseEspecializada` é a MESMA função que
+// `server/routes/documentacao.ts` usa quando alguém clica em "Iniciar análise
+// documental" (POST /analise-inicial/iniciar) para gravar o laudo do
+// QSA/Enquadramento em `documentos_extracoes_ia` -- ver uso completo logo
+// abaixo, em `agendarAnaliseRegraDocumental`.
+import { persistirAnaliseEspecializada } from './documentacao';
 
 const { Pool } = pkg;
 const pool = new Pool({
@@ -517,6 +526,47 @@ const TIPOS_COM_ANALISE_AUTOMATICA = [
   'cartao_cnpj', 'qsa', 'simples_nacional', 'enquadramento_tributario_cnpj', 'darf',
 ] as const;
 
+// CORREÇÃO (2026-09-02, Rodada 17 -- pedido explícito do usuário, com print da
+// tela em produção -- "eu quero que... a leitura dos documentos, as
+// confirmações já apareçam sem precisar iniciar a análise documental. Então
+// essa primeira confirmação só pra validar documentação, ver as datas, ver os
+// regimes, ela já é pra ser feita de forma automática"):
+//
+// Causa raiz encontrada: QSA e Enquadramento Tributário JÁ eram lidos
+// automaticamente no upload (ver `TIPOS_COM_ANALISE_AUTOMATICA` acima), e o
+// card de cada documento no Acervo já mostrava o resultado dessa leitura --
+// mas o resultado era gravado só em `documentos_arquivos.resultado_validacao`
+// (`analise_regra_documental`, logo abaixo). O agregador da Etapa 1
+// (`montarQsaDocumentalDados`/`montarEnquadramentoDados`, chamado pelo GET
+// /dossie a cada carregamento da tela) nunca olha esse campo -- ele só
+// consulta `documentos_extracoes_ia` (via `obterAnaliseEspecializada` em
+// server/routes/documentacao.ts), que só recebia uma gravação quando alguém
+// clicava manualmente em "Iniciar análise documental". Ou seja: o documento
+// já tinha sido lido, mas o banner "Etapa 1 pendente" e a pendência "QSA
+// anexado e aguardando o início da análise documental" continuavam
+// aparecendo até o clique manual -- mesmo a leitura já estando pronta.
+//
+// A correção grava o MESMO resultado também em `documentos_extracoes_ia`
+// (`persistirAnaliseEspecializada`, exportada de documentacao.ts -- é a
+// função exata que o clique manual já usa), então na próxima vez que a tela
+// carregar (sem precisar clicar em nada) a Etapa 1 já enxerga a leitura como
+// concluída. Isto é uma correção de infraestrutura (onde o resultado da
+// leitura automática é gravado) -- não muda nenhuma regra de qual documento é
+// exigido por tipo de empresa/regime (isso continua em
+// mapaDocumentalCreditoService.ts, inalterado) nem o conteúdo do laudo em si.
+// Escopo deliberadamente restrito a QSA e Enquadramento Tributário/Simples
+// Nacional -- os dois blocos da Etapa 1 que o print mostrou parados em
+// "aguardando análise" (Cartão CNPJ já tem motor próprio, que já grava e já
+// aparecia automaticamente antes desta correção; DARF entra em
+// TIPOS_COM_ANALISE_AUTOMATICA por outro motivo -- comprovação de regime via
+// `resolverComprovacaoRegime`, um fluxo à parte -- e não faz parte da Etapa 1,
+// por isso fica de fora aqui).
+const TIPOS_ETAPA1_PROMPT_CODIGO: Partial<Record<string, string>> = {
+  qsa: 'qsa_extract',
+  simples_nacional: 'simples_extract',
+  enquadramento_tributario_cnpj: 'simples_extract',
+};
+
 function agendarAnaliseRegraDocumental(documento: any) {
   const empresaId = documento?.empresa_id || (documento?.entidade_tipo === 'empresa' ? documento?.entidade_id : null);
   const tipo = String(documento?.tipo_documento || '');
@@ -546,6 +596,22 @@ function agendarAnaliseRegraDocumental(documento: any) {
           WHERE id=$1`,
         [documento.id, JSON.stringify({ analise_regra_documental: resultado }), resultado.revisao_humana_necessaria],
       );
+
+      // Ver comentário completo acima de `TIPOS_ETAPA1_PROMPT_CODIGO`: além do
+      // UPDATE de resultado_validacao (que já existia e continua alimentando
+      // o card por documento), grava também em documentos_extracoes_ia -- é
+      // isso que faz a Etapa 1 (QSA/Enquadramento) parar de pedir o clique
+      // manual em "Iniciar análise documental" quando a leitura automática já
+      // rodou no upload. Best-effort: uma falha aqui não derruba a leitura
+      // automática nem o upload -- só significa que a Etapa 1 vai continuar
+      // pedindo o clique manual para este documento específico, exatamente
+      // como já se comportava antes desta correção.
+      const promptCodigoEtapa1 = TIPOS_ETAPA1_PROMPT_CODIGO[tipo];
+      if (promptCodigoEtapa1) {
+        await persistirAnaliseEspecializada(String(documento.id), promptCodigoEtapa1, resultado as AnaliseDocumentalResult).catch((error: any) => {
+          console.warn('[documentos] Não foi possível refletir a leitura automática na Etapa 1 (documentos_extracoes_ia); "Iniciar análise documental" continua disponível como alternativa:', documento.id, error?.message || error);
+        });
+      }
     } catch (error: any) {
       console.warn('[documentos] Análise documental assíncrona não interrompeu o upload:', documento.id, error?.message || error);
       await pool.query(

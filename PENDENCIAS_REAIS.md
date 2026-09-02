@@ -1,4 +1,8 @@
-# Pendências Reais — 31/08/2026 (atualizado, Rodada 16 — 01/09/2026: upload sem recarregar a tela, validação manual removida, acervo mais compacto)
+# Pendências Reais — 31/08/2026 (atualizado, Rodada 17 — 02/09/2026: confirmação automática da Etapa 1, sem clicar em "Iniciar análise documental")
+
+## 0-D. Confirmação da Etapa 1 só aparece na próxima carga de tela, não instantaneamente após o upload -- decisão de escopo consciente
+
+A Rodada 17 corrigiu a causa raiz de a Etapa 1 (QSA/Enquadramento Tributário) continuar pedindo o clique manual em "Iniciar análise documental" mesmo depois de a leitura automática do upload já ter concluído -- ver `CHANGELOG_CORRECOES.md`, seção "Rodada 17". A correção grava o resultado da leitura automática no mesmo lugar (`documentos_extracoes_ia`) que a Etapa 1 já consulta em toda carga de página, então a confirmação passa a aparecer sozinha na PRÓXIMA vez que a tela carregar (reabrir a página, navegar de volta) -- não instantaneamente, no mesmo segundo em que o upload termina, sem nenhum recarregamento. O pedido do usuário foi literal ("sem precisar iniciar a análise documental"), não sobre latência; implementar a instantaneidade completa exigiria algum tipo de polling/recarregamento automático depois do upload, o que entraria em tensão direta com a correção da Rodada 16 (upload não recarrega mais a tela). Fica registrado aqui para confirmação explícita, caso o usuário queira esse refinamento adicional numa rodada futura.
 
 **Nota sobre a Rodada 16:** quatro melhorias de UX pedidas para o Acervo Documental da empresa -- upload sem recarregar a tela inteira, remoção do botão de validação manual, grid mais compacto (4-5 campos por linha) e correção de um bug que fazia o toggle "Ver documentos complementares" perder o estado a cada anexo -- ver `CHANGELOG_CORRECOES.md`, seção "Rodada 16".
 
