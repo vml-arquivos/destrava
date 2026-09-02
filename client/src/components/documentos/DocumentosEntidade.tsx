@@ -2081,8 +2081,38 @@ export default function DocumentosEntidade({
                       const resultadoInlineDoc = doc.resultado_analise || laudoDoc || laudoErroDoc || null;
                       return Boolean(resultadoInlineDoc) && estadoVisualDocumento(resultadoInlineDoc, doc) === "incompativel";
                     });
+                    // CORREÇÃO (Rodada 30, 02/09/2026, print real da tela em produção,
+                    // pedido explícito do usuário: "na visualização, com todos
+                    // encolhidos, fechado, tem que estar tudo mesmo padrão, tudo
+                    // nivelado, nada torto, nada um maior do que o outro" -- mas "na
+                    // hora que clicar pra expandir... pode estar com mais dados, maior
+                    // que os outros"): este card usava `self-start` -- que, numa grade
+                    // CSS Grid (a grade acima, `grid-cols-[repeat(auto-fit,minmax(230px,1fr))]`),
+                    // faz cada card manter só a PRÓPRIA altura de conteúdo, em vez de
+                    // esticar para preencher a altura da linha da grade (o padrão
+                    // `align-items: stretch` do CSS Grid). O tamanho de cada LINHA da
+                    // grade já é sempre determinado pelo card mais alto dela,
+                    // independentemente de `self-start` -- então o `self-start` nunca
+                    // evitava uma linha ficar mais alta; só fazia os cards mais curtos
+                    // da mesma linha (ex.: "Relatório SCR/Registro", sem selo
+                    // "OBRIGATÓRIO NA ETAPA" nem "Dados da análise") pararem no meio
+                    // do caminho, com um vão em branco por baixo deles até o card mais
+                    // alto da linha (ex.: "Atos da Junta Comercial")/o início da
+                    // próxima linha -- exatamente o "torto"/"um maior que o outro"
+                    // relatado no print, mesmo com todos os cards fechados/encolhidos.
+                    // Removido `self-start`: agora, quando todos os cards de uma linha
+                    // estão no estado padrão (fechado), a grade já tende a ficar
+                    // nivelada (menos diferença de conteúdo entre eles); quando um
+                    // deles cresce de verdade (documento com aviso mais longo, "Dados
+                    // da análise" aberto para um arquivo específico dentro do card),
+                    // a linha inteira já ia ficar daquela altura de qualquer forma --
+                    // a única mudança visível é que os cards vizinhos, mais curtos,
+                    // agora esticam a própria caixa (borda/fundo) até preencher esse
+                    // mesmo espaço, em vez de deixá-lo em branco fora da caixa --
+                    // exatamente o "nivelado, nada torto" pedido, sem impedir nenhum
+                    // card específico de crescer quando há mais dado para mostrar.
                     return (
-                      <div key={tipo} className={`rounded-lg border p-2.5 space-y-2 self-start ${satisfeitoPorOutro ? "border-success/20 bg-success/10/40" : "border-border bg-card shadow-sm shadow-slate-100/30"}`}>
+                      <div key={tipo} className={`rounded-lg border p-2.5 space-y-2 ${satisfeitoPorOutro ? "border-success/20 bg-success/10/40" : "border-border bg-card shadow-sm shadow-slate-100/30"}`}>
                         <div className="flex items-center justify-between gap-2">
                           <div className="min-w-0">
                             <div className="flex items-center gap-1.5 flex-wrap">

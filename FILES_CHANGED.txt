@@ -734,3 +734,27 @@ Arquivos de teste NOVOS ou AMPLIADOS: tests/isEmpresaIndividualSemNomeDaEmpresa.
 Total desta rodada: 3 arquivos de código alterados + 2 arquivos de teste
 ampliados + 1 arquivo de teste novo + 7 arquivos de documentação
 alterados = 13 arquivos.
+
+======================================================================
+Rodada 30 (esta entrega) -- cards do Acervo Documental ("Documentação
+da Empresa"/"Identidade do CNPJ"/"Documentação dos Sócios") deixam de
+ficar com alturas desiguais dentro da mesma linha da grade quando
+fechados/encolhidos (print real da tela)
+======================================================================
+
+Arquivos existentes ALTERADOS nesta rodada:
+
+client/src/components/documentos/DocumentosEntidade.tsx   (removida a classe self-start do card do checklist dentro de slotsVisiveis.map -- volta a valer align-items:stretch do CSS Grid, cards da mesma linha esticam a própria caixa até a altura comum da linha em vez de flutuar com altura própria)
+CHANGELOG_CORRECOES.md
+PENDENCIAS_REAIS.md
+ROLLBACK_PLAN.md
+TEST_REPORT.md
+BUILD_REPORT.md
+FILES_CHANGED.txt (este arquivo)
+SHA256SUMS.txt
+
+Arquivos NOVOS: nenhum.
+Arquivos de teste NOVOS ou AMPLIADOS: nenhum (correção puramente de CSS/layout, sem nenhuma função pura nova para testar isoladamente -- projeto sem infraestrutura de teste de componente React, mesmo motivo já documentado em toda correção de frontend puro desta sessão -- ver TEST_REPORT.md).
+
+Total desta rodada: 1 arquivo de código alterado + 6 arquivos de
+documentação alterados = 7 arquivos.

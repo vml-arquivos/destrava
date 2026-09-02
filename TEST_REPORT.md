@@ -1,12 +1,26 @@
-# Relatório de Testes — 31/08/2026 (atualizado, Rodada 17 — 02/09/2026: confirmação automática da Etapa 1, sem clicar em "Iniciar análise documental"; Rodada 18 — 02/09/2026: validação local sem IA/orientação de documento correto/menos texto repetido; Rodada 19 — 02/09/2026: sincronização automática de CNPJ; Rodada 20 — 02/09/2026: Cartão CNPJ confirma e trava a situação cadastral contra a reversão automática; Rodada 21 — 02/09/2026: leitura automática sem clique, falso positivo de nome para Empresário Individual, telefone/e-mail via Cartão CNPJ; Rodada 22 — 02/09/2026: refinamento com os documentos reais, janela de 5 dias, trava de edição manual; Rodada 23 — 02/09/2026: leitura visível ao anexar Cartão CNPJ/QSA/Enquadramento; Rodada 24 — 02/09/2026: falha já pendente/travada passa a se resolver sozinha na tela, sem F5; Rodada 25 — 02/09/2026: todos os campos do checklist sempre visíveis, para qualquer empresa/regime; Rodada 26 — 02/09/2026: Cartão CNPJ também corrige o nome empresarial/razão social; Rodada 27 — 02/09/2026: botão "Reler" manual em cada card da Etapa 1; Rodada 28 — 02/09/2026: grade de campos ilegível corrigida, botão "Reler" do Contrato Social confronta contra o Ato da Junta; Rodada 29 — 02/09/2026: auditoria própria de consistência entre tipos de empresa, três inconsistências corrigidas)
+# Relatório de Testes — 31/08/2026 (atualizado, Rodada 17 — 02/09/2026: confirmação automática da Etapa 1, sem clicar em "Iniciar análise documental"; Rodada 18 — 02/09/2026: validação local sem IA/orientação de documento correto/menos texto repetido; Rodada 19 — 02/09/2026: sincronização automática de CNPJ; Rodada 20 — 02/09/2026: Cartão CNPJ confirma e trava a situação cadastral contra a reversão automática; Rodada 21 — 02/09/2026: leitura automática sem clique, falso positivo de nome para Empresário Individual, telefone/e-mail via Cartão CNPJ; Rodada 22 — 02/09/2026: refinamento com os documentos reais, janela de 5 dias, trava de edição manual; Rodada 23 — 02/09/2026: leitura visível ao anexar Cartão CNPJ/QSA/Enquadramento; Rodada 24 — 02/09/2026: falha já pendente/travada passa a se resolver sozinha na tela, sem F5; Rodada 25 — 02/09/2026: todos os campos do checklist sempre visíveis, para qualquer empresa/regime; Rodada 26 — 02/09/2026: Cartão CNPJ também corrige o nome empresarial/razão social; Rodada 27 — 02/09/2026: botão "Reler" manual em cada card da Etapa 1; Rodada 28 — 02/09/2026: grade de campos ilegível corrigida, botão "Reler" do Contrato Social confronta contra o Ato da Junta; Rodada 29 — 02/09/2026: auditoria própria de consistência entre tipos de empresa, três inconsistências corrigidas; Rodada 30 — 02/09/2026: cards do Acervo Documental nivelados quando fechados)
 
 ## Resultado final
 
 ```
 Test Files  101 passed (101)
      Tests  910 passed (910)
-  Duration  ~49-58s
+  Duration  ~46-65s
 ```
+
+## Rodada 30 — correção puramente de CSS (remoção de `self-start`), sem teste automatizado dedicado, contagem de testes inalterada (910)
+
+Print real da tela em produção mostrando cards do Acervo Documental ("Documentação da Empresa") com alturas desiguais na mesma linha da grade quando fechados. Causa raiz: a classe `self-start` no card do checklist (`DocumentosEntidade.tsx`) fazia cada card manter só a própria altura de conteúdo, em vez de esticar para preencher a altura da linha (padrão `align-items: stretch` do CSS Grid) -- a altura da linha já era determinada pelo card mais alto de qualquer forma, `self-start` só decidia se os vizinhos mais baixos esticavam a caixa até lá ou ficavam flutuando com um vão em branco por baixo. Removida a classe.
+
+**Sem teste automatizado dedicado, mesmo motivo já documentado em toda correção de frontend puro desta sessão**: o projeto não tem infraestrutura de teste de componente React, e esta correção não introduz nenhuma função pura nova para testar isoladamente (é a remoção de uma única classe CSS). Verificado por leitura completa do trecho alterado e do restante da grade (confirmando que nenhum outro elemento do card depende de `self-start` para se posicionar) e pela suíte completa/typecheck/build permanecendo limpos.
+
+**Verificação completa da suíte, executada depois de reinstalar `node_modules`:**
+```
+Test Files  101 passed (101)
+     Tests  910 passed (910)
+  Duration  65.21s
+```
+Contagem de testes inalterada (910) -- esperado para uma correção puramente de CSS/layout, sem nenhuma lógica nova. Nenhuma expectativa de teste pré-existente mudou.
 
 ## Rodada 29 — auditoria própria de consistência entre tipos de empresa; 12 testes novos, um arquivo novo (898 → 910 testes, 100 → 101 arquivos)
 
