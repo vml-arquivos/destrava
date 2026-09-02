@@ -75,6 +75,8 @@ type ExtracaoCartao = {
   municipio?: string | null;
   uf?: string | null;
   situacao_cadastral?: string | null;
+  email?: string | null;
+  telefone?: string | null;
   data_emissao?: string | null;
   data_situacao_cadastral?: string | null;
   data_emissao_texto?: string | null;
@@ -299,6 +301,8 @@ Responda SOMENTE JSON válido, sem markdown, sem comentários, com exatamente es
   "uf": "UF ou null",
   "situacao_cadastral": "texto ou null",
   "data_situacao_cadastral": "YYYY-MM-DD ou null",
+  "email": "texto do campo ENDEREÇO ELETRÔNICO ou null",
+  "telefone": "texto do campo TELEFONE ou null",
   "data_emissao": "YYYY-MM-DD ou null",
   "data_emissao_texto": "texto completo encontrado no rodapé ou null",
   "horario_emissao": "HH:MM:SS ou null",
@@ -333,6 +337,8 @@ function adaptarExtracaoCartaoLocal(dados: Record<string, any>, confianca: numbe
     municipio: firstNonEmpty(dados.municipio, dados.cidade),
     uf: firstNonEmpty(dados.uf),
     situacao_cadastral: firstNonEmpty(dados.situacao_cadastral),
+    email: firstNonEmpty(dados.email),
+    telefone: firstNonEmpty(dados.telefone),
     data_situacao_cadastral: parseDate(dados.data_situacao_cadastral),
     data_emissao: parseDate(dados.data_emissao),
     data_emissao_texto: firstNonEmpty(dados.data_emissao_texto),
@@ -390,6 +396,8 @@ async function gerarGeminiCartao(modelName: string, doc: DocCartao, buffer: Buff
     uf: firstNonEmpty(json.uf),
     situacao_cadastral: firstNonEmpty(json.situacao_cadastral, json.situacaoCadastral),
     data_situacao_cadastral: parseDate(json.data_situacao_cadastral || json.dataSituacaoCadastral),
+    email: firstNonEmpty(json.email, json.endereco_eletronico, json.enderecoEletronico)?.toLowerCase() || null,
+    telefone: firstNonEmpty(json.telefone),
     data_emissao: parseDate(json.data_emissao || json.dataEmissao),
     data_emissao_texto: firstNonEmpty(json.data_emissao_texto, json.texto_emissao, json.emitido_no_dia),
     modelo: modelName,
@@ -854,6 +862,108 @@ export async function aplicarConfirmacaoCadastralDocumentoEmpresa(args: {
   }
 }
 
+export type ResultadoAtualizacaoContatoDocumento = {
+  aplicado: boolean;
+  motivo: string;
+  telefoneAtualizado?: boolean;
+  emailAtualizado?: boolean;
+};
+
+/**
+ * CORREÇÃO (Rodada 21, 02/09/2026, pedido explícito do usuário -- "quando ler
+ * o cartão do cnpj e ver [...] se a emissão dele foi recente e puxar os dados
+ * [...] se tiver telefone atualizado, pegar o email e já atualizar
+ * automaticamente na [...] parte da receita. Substituir e não sincronizar e
+ * mudar automático"): decide (sem tocar banco/rede) se a leitura do Cartão
+ * CNPJ deve atualizar telefone/e-mail da empresa. Mesmo padrão de qualidade e
+ * validade documental de `deveConfirmarSituacaoCadastralViaCartao` -- só que
+ * sem exigir situação ATIVA, porque o contato impresso no documento é válido
+ * independentemente da situação cadastral da empresa. Regra geral, sem
+ * condição específica de nenhuma empresa/regime/porte.
+ */
+export function deveAtualizarContatoViaCartao(args: {
+  cartao: DocCartao | null;
+  camposCartao: ExtracaoCartao | null;
+  extracaoGemini: ExtracaoCartao | null;
+  statusValidadeCartao: string;
+}): { pode: boolean; motivo: string } {
+  const { cartao, camposCartao, extracaoGemini, statusValidadeCartao } = args;
+  if (!cartao) return { pode: false, motivo: 'sem_cartao_cnpj_anexado' };
+  if (!extracaoTemQualidade(extracaoGemini)) return { pode: false, motivo: 'leitura_do_documento_sem_qualidade_minima_confirmada' };
+  if (statusValidadeCartao !== 'valido') return { pode: false, motivo: 'cartao_cnpj_fora_do_prazo_de_validade_documental' };
+  if (!camposCartao?.telefone && !camposCartao?.email) return { pode: false, motivo: 'telefone_e_email_nao_extraidos_do_documento' };
+  return { pode: true, motivo: 'cartao_cnpj_valido_com_contato_extraido' };
+}
+
+/**
+ * Quando `deveAtualizarContatoViaCartao` autoriza, substitui
+ * `empresas.telefone`/`empresas.email` pelo valor lido no Cartão CNPJ --
+ * "substituir", como pedido explicitamente pelo usuário, não apenas
+ * preencher se estiver vazio. Só grava os campos que o documento realmente
+ * trouxe (telefone e email são independentes -- se só um dos dois foi lido,
+ * só esse é atualizado). Não interage com `EMPRESA_CAMPOS_PROTEGIDOS_SYNC`
+ * (`server/index.ts`): aquela proteção é específica da sincronização
+ * automática com as APIs gratuitas de CNPJ (que nunca trazem telefone/e-mail),
+ * feita por uma rota HTTP diferente (PATCH /api/empresas/:id) -- esta função
+ * grava direto no banco a partir da leitura do próprio documento oficial
+ * anexado pela empresa, um caso completamente diferente. Nunca lança -- uma
+ * falha aqui não pode derrubar a análise documental já calculada e
+ * persistida.
+ */
+export async function aplicarAtualizacaoContatoDocumentoEmpresa(args: {
+  empresaId: string;
+  empresaAtual: any;
+  cartao: DocCartao | null;
+  camposCartao: ExtracaoCartao;
+  extracaoGemini: ExtracaoCartao | null;
+  statusValidadeCartao: string;
+}): Promise<ResultadoAtualizacaoContatoDocumento> {
+  const { empresaId, empresaAtual, cartao, camposCartao, extracaoGemini, statusValidadeCartao } = args;
+
+  const decisao = deveAtualizarContatoViaCartao({ cartao, camposCartao, extracaoGemini, statusValidadeCartao });
+  if (!decisao.pode) return { aplicado: false, motivo: decisao.motivo };
+
+  try {
+    const colunas = await colunasDaTabela(pool, 'empresas');
+    const assignments: string[] = [];
+    const values: unknown[] = [empresaId];
+    let telefoneAtualizado = false;
+    let emailAtualizado = false;
+
+    if (camposCartao.telefone && colunas.has('telefone') && camposCartao.telefone !== empresaAtual?.telefone) {
+      values.push(camposCartao.telefone);
+      assignments.push(`"telefone" = $${values.length}`);
+      telefoneAtualizado = true;
+    }
+    if (camposCartao.email && colunas.has('email') && camposCartao.email !== empresaAtual?.email) {
+      values.push(camposCartao.email);
+      assignments.push(`"email" = $${values.length}`);
+      emailAtualizado = true;
+    }
+
+    if (!assignments.length) return { aplicado: false, motivo: 'contato_do_documento_igual_ao_ja_cadastrado' };
+
+    if (colunas.has('updated_at')) assignments.push('"updated_at" = NOW()');
+
+    await pool.query(`UPDATE public.empresas SET ${assignments.join(', ')} WHERE id = $1`, values);
+
+    const mensagemHistorico = [
+      telefoneAtualizado ? `telefone -> "${camposCartao.telefone}"` : null,
+      emailAtualizado ? `e-mail -> "${camposCartao.email}"` : null,
+    ].filter(Boolean).join('; ');
+    await registrarHistoricoSincronizacaoSeguro(
+      pool,
+      empresaId,
+      `Leitura do Cartão CNPJ anexado atualizou o contato cadastral a partir do documento oficial: ${mensagemHistorico}.`,
+    );
+
+    return { aplicado: true, motivo: 'contato_atualizado_via_cartao_cnpj', telefoneAtualizado, emailAtualizado };
+  } catch (error: any) {
+    console.warn('[analiseCnpjReceitaCartao] Falha ao aplicar atualização de contato via Cartão CNPJ (best-effort, não interrompe a análise):', error?.message || error);
+    return { aplicado: false, motivo: 'erro_ao_gravar_contato' };
+  }
+}
+
 export async function buscarUltimaAnaliseCnpjEmpresa(empresaId: string) {
   const exists = await tableExists('analises_cnpj_empresa');
   if (!exists) return null;
@@ -1053,6 +1163,16 @@ export async function analisarCnpjReceitaCartaoEmpresa(empresaId: string, criado
       extracaoGemini,
       dataEmissaoCartao,
       diasEmissaoCartao,
+      statusValidadeCartao,
+    });
+    // CORREÇÃO (Rodada 21): mesma regra -- só roda numa análise "de verdade",
+    // nunca na pré-visualização de `coletaDocumentos.ts` (`{ persistir: false }`).
+    await aplicarAtualizacaoContatoDocumentoEmpresa({
+      empresaId,
+      empresaAtual: empresa,
+      cartao,
+      camposCartao,
+      extracaoGemini,
       statusValidadeCartao,
     });
   }

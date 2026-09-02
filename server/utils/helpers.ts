@@ -84,7 +84,27 @@ export function normalizarBasico(value: unknown): string {
 }
 
 export function normalizarNomeEmpresarial(value: unknown): string {
-  return normalizeText(value)
+  const texto = normalizeText(value);
+  // CORREÇÃO (Rodada 21, 02/09/2026 -- print real mostrando "Cartão CNPJ diverge
+  // dos dados da Receita Federal" e "A razão social do QSA diverge da razão
+  // social sincronizada" para uma empresa Empresário Individual cujos dados
+  // batem exatamente com a Receita): por convenção oficial da Receita Federal,
+  // o campo "NOME EMPRESARIAL" impresso no Cartão CNPJ (e replicado no
+  // QSA/comprovante equivalente) de um Empresário Individual traz o radical do
+  // CNPJ (os 8 primeiros dígitos, formatados como XX.XXX.XXX) na frente do nome
+  // da pessoa física -- ex.: "29.705.345 VILSON MARCIO DE LIMA". As APIs
+  // gratuitas de CNPJ (BrasilAPI/OpenCNPJ), por outro lado, normalmente
+  // sincronizam a razão social SEM esse prefixo (só "VILSON MARCIO DE LIMA").
+  // Sem remover esse radical antes de comparar, toda empresa Empresário
+  // Individual cujo Cartão CNPJ/QSA seja lido corretamente aparece como
+  // "divergente" -- um falso positivo estrutural do formato do documento
+  // oficial, não uma divergência cadastral real. Regra geral, válida para
+  // qualquer empresa (não depende de nenhum CNPJ específico nem verifica a
+  // natureza jurídica): remove um prefixo de 8 dígitos (com ou sem pontuação)
+  // seguido de espaço no início do texto -- um nome empresarial legítimo nunca
+  // começa dessa forma.
+  const semRadicalCnpj = texto.replace(/^\d{2}\.?\d{3}\.?\d{3}\s+/, '');
+  return semRadicalCnpj
     .replace(/\b(ltda|limitada|me|epp|eireli)\b/g, (m) => m)
     .replace(/[^a-z0-9]/g, '');
 }

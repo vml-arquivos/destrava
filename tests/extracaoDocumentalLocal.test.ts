@@ -36,6 +36,57 @@ describe('extração documental local determinística', () => {
     expect(resultado.confianca).toBeGreaterThanOrEqual(0.8);
   });
 
+  // Rodada 21 (02/09/2026) -- pedido explícito do usuário: "quando ler o
+  // cartão do cnpj [...] se tiver telefone atualizado, pegar o email".
+  // Fixture baseada no texto real extraído (via pdftotext -layout) do Cartão
+  // CNPJ oficial anexado pelo usuário (CNPJ 29.705.345/0001-22): os rótulos
+  // "ENDEREÇO ELETRÔNICO" e "TELEFONE" ficam na mesma linha, e os dois
+  // valores também ficam juntos na linha seguinte -- por isso a extração usa
+  // regex dedicado, não `valorAposRotulo`.
+  it('extrai email e telefone do Cartão CNPJ mesmo com os dois campos lado a lado na mesma linha (layout real da Receita)', () => {
+    const texto = `
+      REPÚBLICA FEDERATIVA DO BRASIL
+      CADASTRO NACIONAL DA PESSOA JURÍDICA
+      NÚMERO DE INSCRIÇÃO
+      29.705.345/0001-22
+      COMPROVANTE DE INSCRIÇÃO E DE SITUAÇÃO DATA DE ABERTURA
+                                            17/02/2018
+      MATRIZ                                       CADASTRAL
+      NOME EMPRESARIAL
+      29.705.345 VILSON MARCIO DE LIMA
+      CÓDIGO E DESCRIÇÃO DA ATIVIDADE ECONÔMICA PRINCIPAL
+      73.19-0-02 - Promoção de vendas
+      CÓDIGO E DESCRIÇÃO DA NATUREZA JURÍDICA
+      213-5 - Empresário (Individual)
+      ENDEREÇO ELETRÔNICO                                        TELEFONE
+      VILSONMARCIO@GMAIL.COM                                     (61) 9145-9287
+      SITUAÇÃO CADASTRAL                                                                    DATA DA SITUAÇÃO CADASTRAL
+      ATIVA                                                                                 30/08/2026
+      Emitido no dia 30/08/2026 às 19:46:52 (data e hora de Brasília)
+    `;
+
+    const resultado = analisarTextoDocumentoLocal('cartao_cnpj', texto);
+
+    expect(resultado.dados.email).toBe('vilsonmarcio@gmail.com');
+    expect(resultado.dados.telefone).toBe('(61) 9145-9287');
+  });
+
+  it('não inventa email/telefone quando o Cartão CNPJ não traz esses campos', () => {
+    const texto = `
+      CADASTRO NACIONAL DA PESSOA JURÍDICA
+      NÚMERO DE INSCRIÇÃO
+      52.008.360/0001-33
+      NOME EMPRESARIAL
+      PALUMA BURGER LTDA
+      SITUAÇÃO CADASTRAL
+      ATIVA
+      Emitido no dia 05/08/2026 às 19:30:00
+    `;
+    const resultado = analisarTextoDocumentoLocal('cartao_cnpj', texto);
+    expect(resultado.dados.email).toBeNull();
+    expect(resultado.dados.telefone).toBeNull();
+  });
+
   it('extrai QSA, capital social e sócio administrador', () => {
     const texto = `
       QUADRO DE SÓCIOS E ADMINISTRADORES - QSA

@@ -478,3 +478,42 @@ tests/sincronizacaoReceitaAutomatica.test.ts (8 -> 11 testes: +3, describe "selo
 Total desta rodada: 2 arquivos de código alterados + 6 arquivos de
 documentação alterados + 1 arquivo de código novo + 1 arquivo de teste
 novo + 2 arquivos de teste ampliados = 12 arquivos.
+
+======================================================================
+Rodada 21 (esta entrega) -- Cartão CNPJ/QSA validados automaticamente (sem
+clicar em "Analisar documentos"), falso positivo de divergência de nome
+para Empresário Individual, e telefone/e-mail lidos do Cartão CNPJ
+atualizando o cadastro
+======================================================================
+
+Arquivos existentes ALTERADOS nesta rodada:
+
+server/routes/documentacao.ts                (montarDossieCreditoEmpresa reprocessa o Cartão CNPJ automaticamente numa visualização normal quando há falha persistida sem leitura de sucesso depois, respeitando um cooldown)
+server/utils/helpers.ts                       (normalizarNomeEmpresarial remove o radical do CNPJ de Empresário Individual antes de comparar)
+server/services/extracaoDocumentalLocal.ts    (extrai email/telefone do Cartão CNPJ via regex dedicado, nova função extrairContatoCartaoCnpj)
+server/services/analiseCnpjReceitaCartao.ts   (ExtracaoCartao ganha email/telefone; deveAtualizarContatoViaCartao + aplicarAtualizacaoContatoDocumentoEmpresa; prompt e mapeador do Gemini capturam os dois campos novos)
+CHANGELOG_CORRECOES.md
+PENDENCIAS_REAIS.md
+ROLLBACK_PLAN.md
+TEST_REPORT.md
+BUILD_REPORT.md
+FILES_CHANGED.txt (este arquivo)
+SHA256SUMS.txt
+
+Arquivos NOVOS -- código de produção:
+
+server/utils/retentativaAutomaticaAnaliseDocumental.ts
+
+Arquivos NOVOS -- teste:
+
+tests/normalizarNomeEmpresarial.test.ts
+tests/retentativaAutomaticaAnaliseDocumental.test.ts
+
+Arquivos existentes com testes AMPLIADOS (mesmo arquivo, mais casos):
+
+tests/analiseCnpjReceitaCartao.test.ts     (11 -> 18 testes: +7, describe deveAtualizarContatoViaCartao)
+tests/extracaoDocumentalLocal.test.ts      (+2 testes, extração de email/telefone do Cartão CNPJ)
+
+Total desta rodada: 4 arquivos de código alterados + 6 arquivos de
+documentação alterados + 1 arquivo de código novo + 2 arquivos de teste
+novos + 2 arquivos de teste ampliados = 15 arquivos.

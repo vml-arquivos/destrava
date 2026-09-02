@@ -145,6 +145,32 @@ function limparValor(value: string | null): string | null {
   return clean && clean !== '-' ? clean : null;
 }
 
+// CORREÇÃO (Rodada 21, 02/09/2026 -- pedido explícito do usuário: "quando ler
+// o cartão do cnpj [...] se tiver telefone atualizado, pegar o email"): o
+// Cartão CNPJ oficial imprime "ENDEREÇO ELETRÔNICO" e "TELEFONE" lado a lado
+// na mesma linha de rótulos, com os dois valores também lado a lado na linha
+// seguinte (ex.: "VILSONMARCIO@GMAIL.COM                     (61) 9145-9287").
+// `valorAposRotulo` devolve a linha inteira como um valor só, misturando os
+// dois campos -- por isso o e-mail e o telefone são extraídos aqui por conta
+// própria, com regex direto numa janela pequena de linhas ao redor do rótulo
+// (não no documento inteiro, para não capturar por engano outro e-mail/telefone
+// de rodapé/cabeçalho). Regra geral: vale para qualquer Cartão CNPJ nesse
+// layout oficial, não depende de nenhuma empresa específica.
+function extrairContatoCartaoCnpj(linhas: string[]): { email: string | null; telefone: string | null } {
+  const idx = linhas.findIndex((linha) => {
+    const n = textoNormalizado(linha);
+    return n.includes('endereco eletronico') || n === 'telefone' || n.startsWith('telefone ') || n.startsWith('telefone:');
+  });
+  if (idx < 0) return { email: null, telefone: null };
+  const janela = linhas.slice(idx, idx + 3).join(' ');
+  const emailMatch = janela.match(/[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}/);
+  const telefoneMatch = janela.match(/\(\d{2}\)\s?\d{4,5}-?\d{4}/);
+  return {
+    email: emailMatch ? emailMatch[0].toLowerCase() : null,
+    telefone: telefoneMatch ? telefoneMatch[0].replace(/\s+/g, ' ').trim() : null,
+  };
+}
+
 function parseCartaoCnpj(texto: string): { dados: Record<string, any>; confianca: number } {
   const linhas = linhasTexto(texto);
   const norm = textoNormalizado(texto);
@@ -168,6 +194,7 @@ function parseCartaoCnpj(texto: string): { dados: Record<string, any>; confianca
   const bairro = limparValor(valorAposRotulo(linhas, ['bairro/distrito', 'bairro distrito']));
   const municipio = limparValor(valorAposRotulo(linhas, ['município', 'municipio']));
   const uf = limparValor(valorAposRotulo(linhas, ['uf']));
+  const { email, telefone } = extrairContatoCartaoCnpj(linhas);
   const emissaoMatch = texto.match(/emitido\s+no\s+dia\s+(\d{2}\/\d{2}\/\d{4})(?:\s+às?\s+([\d:]+))?/i);
   const matrizFilial = /\bfilial\b/i.test(numeroInscricao || '') ? 'filial' : /\bmatriz\b/i.test(numeroInscricao || '') ? 'matriz' : null;
 
@@ -196,6 +223,8 @@ function parseCartaoCnpj(texto: string): { dados: Record<string, any>; confianca
       uf,
       situacao_cadastral: situacao,
       data_situacao_cadastral: dataSituacao,
+      email,
+      telefone,
       data_emissao: parseDate(emissaoMatch?.[1] || null),
       data_emissao_texto: emissaoMatch?.[0] || null,
       confianca,

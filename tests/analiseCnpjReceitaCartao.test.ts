@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { calcularScore, deveConfirmarSituacaoCadastralViaCartao, extracaoTemQualidade } from "../server/services/analiseCnpjReceitaCartao";
+import { calcularScore, deveAtualizarContatoViaCartao, deveConfirmarSituacaoCadastralViaCartao, extracaoTemQualidade } from "../server/services/analiseCnpjReceitaCartao";
 
 describe("calcularScore — leitura do Cartão CNPJ", () => {
   const camposReceitaCompletos = {
@@ -174,5 +174,106 @@ describe("deveConfirmarSituacaoCadastralViaCartao — trava a situação cadastr
       statusValidadeCartao: "valido",
     });
     expect(resultado.pode).toBe(false);
+  });
+});
+
+// Rodada 21 (02/09/2026) -- pedido explícito do usuário: "quando ler o cartão
+// do cnpj [...] se tiver telefone atualizado, pegar o email e já atualizar
+// automaticamente na [...] parte da receita. Substituir e não sincronizar e
+// mudar automático". `deveAtualizarContatoViaCartao` é a decisão pura (sem
+// banco/rede) usada por `aplicarAtualizacaoContatoDocumentoEmpresa`. Ao
+// contrário de `deveConfirmarSituacaoCadastralViaCartao`, NÃO exige situação
+// ATIVA -- o contato impresso no documento é válido independentemente da
+// situação cadastral da empresa.
+describe("deveAtualizarContatoViaCartao — atualiza telefone/e-mail da empresa a partir do Cartão CNPJ", () => {
+  const cartao = { id: "cartao-vilson-1" };
+  const extracaoComContato = {
+    cnpj: "29705345000122",
+    nome_empresarial: "29.705.345 VILSON MARCIO DE LIMA",
+    cnae_principal: "7319002",
+    natureza_juridica: "2135",
+    situacao_cadastral: "ATIVA",
+    data_abertura: "2018-02-17",
+    email: "vilsonmarcio@gmail.com",
+    telefone: "(61) 9145-9287",
+    confianca: 0.92,
+  };
+
+  it("autoriza quando o Cartão CNPJ está anexado, lido com qualidade, dentro da validade e com telefone/email extraídos", () => {
+    const resultado = deveAtualizarContatoViaCartao({
+      cartao,
+      camposCartao: extracaoComContato,
+      extracaoGemini: extracaoComContato,
+      statusValidadeCartao: "valido",
+    });
+    expect(resultado.pode).toBe(true);
+  });
+
+  it("autoriza mesmo quando a situação cadastral NÃO é ativa -- o contato do documento vale independentemente da situação", () => {
+    const resultado = deveAtualizarContatoViaCartao({
+      cartao,
+      camposCartao: { ...extracaoComContato, situacao_cadastral: "INAPTA" },
+      extracaoGemini: { ...extracaoComContato, situacao_cadastral: "INAPTA" },
+      statusValidadeCartao: "valido",
+    });
+    expect(resultado.pode).toBe(true);
+  });
+
+  it("nega quando não há Cartão CNPJ anexado", () => {
+    const resultado = deveAtualizarContatoViaCartao({
+      cartao: null,
+      camposCartao: extracaoComContato,
+      extracaoGemini: extracaoComContato,
+      statusValidadeCartao: "valido",
+    });
+    expect(resultado).toEqual({ pode: false, motivo: "sem_cartao_cnpj_anexado" });
+  });
+
+  it('nega quando o Cartão CNPJ está fora do prazo de validade documental (mesmo com telefone/email extraídos)', () => {
+    const resultado = deveAtualizarContatoViaCartao({
+      cartao,
+      camposCartao: extracaoComContato,
+      extracaoGemini: extracaoComContato,
+      statusValidadeCartao: "vencido",
+    });
+    expect(resultado).toEqual({ pode: false, motivo: "cartao_cnpj_fora_do_prazo_de_validade_documental" });
+  });
+
+  it("nega quando a leitura não teve qualidade mínima confirmada", () => {
+    const resultado = deveAtualizarContatoViaCartao({
+      cartao,
+      camposCartao: extracaoComContato,
+      extracaoGemini: { cnpj: "29705345000122", confianca: 0.1 },
+      statusValidadeCartao: "valido",
+    });
+    expect(resultado).toEqual({ pode: false, motivo: "leitura_do_documento_sem_qualidade_minima_confirmada" });
+  });
+
+  it("nega quando nem telefone nem email foram extraídos do documento", () => {
+    const resultado = deveAtualizarContatoViaCartao({
+      cartao,
+      camposCartao: { ...extracaoComContato, email: null, telefone: null },
+      extracaoGemini: { ...extracaoComContato, email: null, telefone: null },
+      statusValidadeCartao: "valido",
+    });
+    expect(resultado).toEqual({ pode: false, motivo: "telefone_e_email_nao_extraidos_do_documento" });
+  });
+
+  it("autoriza quando só um dos dois (telefone OU email) foi extraído", () => {
+    const soTelefone = deveAtualizarContatoViaCartao({
+      cartao,
+      camposCartao: { ...extracaoComContato, email: null },
+      extracaoGemini: { ...extracaoComContato, email: null },
+      statusValidadeCartao: "valido",
+    });
+    expect(soTelefone.pode).toBe(true);
+
+    const soEmail = deveAtualizarContatoViaCartao({
+      cartao,
+      camposCartao: { ...extracaoComContato, telefone: null },
+      extracaoGemini: { ...extracaoComContato, telefone: null },
+      statusValidadeCartao: "valido",
+    });
+    expect(soEmail.pode).toBe(true);
   });
 });

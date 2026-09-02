@@ -4,6 +4,7 @@ import { Router, Request, Response } from 'express';
 import pkg from 'pg';
 import { auth } from '../middleware/auth';
 import { analisarCnpjReceitaCartaoEmpresa, buscarUltimaAnaliseCnpjEmpresa, limparAnalisesCnpjEmpresa } from '../services/analiseCnpjReceitaCartao';
+import { deveReprocessarCartaoCnpjAutomaticamente, cooldownRetentativaAutomaticaMinutos } from '../utils/retentativaAutomaticaAnaliseDocumental';
 import { analiseDocumentalService, type AnaliseDocumentalResult, type TipoAnaliseDocumental } from '../services/analiseDocumentalEspecializada';
 import { calcularCadeiaComprovacaoSocietaria } from '../services/cadeiaSocietariaService';
 import { InsufficientHistoricalPeriodException, validateTwelveMonthContractHistory } from '../services/documentPipelineService';
@@ -2667,8 +2668,37 @@ export async function montarValidacaoSocietaria(
 
 export async function montarDossieCreditoEmpresa(empresaId: string, options: { processarDocumentos?: boolean; processarSocietario?: boolean; usuarioId?: string | null } = {}) {
   await ensureBlocosCatalogo();
+
+  // CORREÇÃO (Rodada 21, 02/09/2026 -- pedido explícito do usuário: "eu quero
+  // que os dados do cartão cnpj [...] já apareça aqui validado [...] sem
+  // precisar clicar em botão de análise"): as rotas de simples visualização da
+  // tela chamam esta função SEM `processarDocumentos: true`, então uma falha
+  // de leitura antiga (persistida em `analise_inicial_erro`) ficava sendo
+  // reexibida para sempre -- a leitura só era tentada de novo com um clique
+  // manual em "Analisar documentos"/"Forçar nova leitura". Regra geral (não
+  // depende de nenhuma empresa específica): quando existe uma falha
+  // persistida e nenhuma leitura bem-sucedida aconteceu depois dela, a leitura
+  // é tentada de novo automaticamente na próxima visualização -- respeitando
+  // um intervalo mínimo (`deveRetentarAnaliseFalhaAutomaticamente`) desde a
+  // última tentativa, para não repetir chamadas ao OCR local/IA externa a cada
+  // carregamento de tela quando o documento é genuinamente ilegível.
+  let deveReprocessarCartaoAutomaticamente = false;
+  if (!options.processarDocumentos) {
+    const docsCartaoAntesDoProcessamento = await listarDocumentosEmpresaPorTipos(empresaId, ['cartao_cnpj', 'cnpj_cartao']).catch(() => []);
+    const falhaCartaoPersistidaAntes = docsCartaoAntesDoProcessamento[0]?.resultado_validacao?.analise_inicial_erro || null;
+    const analiseCartaoAntesDoProcessamento = falhaCartaoPersistidaAntes?.mensagem
+      ? await buscarUltimaAnaliseCnpjEmpresa(empresaId).catch(() => null)
+      : null;
+    deveReprocessarCartaoAutomaticamente = deveReprocessarCartaoCnpjAutomaticamente({
+      falhaPersistida: falhaCartaoPersistidaAntes,
+      analiseAtual: analiseCartaoAntesDoProcessamento,
+      cooldownMinutos: cooldownRetentativaAutomaticaMinutos(),
+    });
+  }
+  const processarCartaoNestaExecucao = !!options.processarDocumentos || deveReprocessarCartaoAutomaticamente;
+
   let erroProcessamentoCartao: string | null = null;
-  if (options.processarDocumentos) {
+  if (processarCartaoNestaExecucao) {
     try {
       await analisarCnpjReceitaCartaoEmpresa(empresaId, options.usuarioId || null);
     } catch (error: any) {
@@ -2681,7 +2711,7 @@ export async function montarDossieCreditoEmpresa(empresaId: string, options: { p
   const socios = await getSociosEmpresa(empresaId);
   const docsCnpj = await listarDocumentosEmpresaPorTipos(empresaId, ['cartao_cnpj', 'cnpj_cartao', 'certidao', 'consulta_receita']);
   const docsCartao = docsCnpj.filter((doc: any) => ['cartao_cnpj', 'cnpj_cartao'].includes(String(doc.tipo_documento || '')));
-  if (options.processarDocumentos && docsCartao[0]?.id) {
+  if (processarCartaoNestaExecucao && docsCartao[0]?.id) {
     if (erroProcessamentoCartao) {
       await pool.query(
         `UPDATE public.documentos_arquivos
@@ -2700,7 +2730,7 @@ export async function montarDossieCreditoEmpresa(empresaId: string, options: { p
       ).catch(() => undefined);
     }
   }
-  const erroCartaoPersistido = options.processarDocumentos && !erroProcessamentoCartao
+  const erroCartaoPersistido = processarCartaoNestaExecucao && !erroProcessamentoCartao
     ? null
     : (erroProcessamentoCartao || docsCartao[0]?.resultado_validacao?.analise_inicial_erro?.mensagem || null);
   const cnpjPendencias = pendenciasCnpj(empresa, docsCartao);
