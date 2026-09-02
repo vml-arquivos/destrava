@@ -25,20 +25,29 @@
  *
  * Regra geral, válida para qualquer empresa/regime/porte e para qualquer um
  * dos campos que a leitura documental automática pode escrever
- * (`situacao_cadastral`, `data_situacao_cadastral`, `telefone`, `email`) --
- * nunca condicionada a uma empresa ou campo específico.
+ * (`situacao_cadastral`, `data_situacao_cadastral`, `telefone`, `email`,
+ * `razao_social`) -- nunca condicionada a uma empresa ou campo específico.
+ *
+ * CORREÇÃO (Rodada 26, 02/09/2026, pedido explícito do usuário -- "esse caso
+ * é igual [à situação cadastral], os dados da receita vêm desatualizado pela
+ * api, e o cartão anexado tá certo, tem que atualizar os dados faltantes
+ * automático"): `razao_social` foi adicionado à lista de campos rastreáveis
+ * para que a correção automática via Cartão CNPJ (ver
+ * `deveConfirmarNomeEmpresarialViaCartao`/`aplicarConfirmacaoNomeEmpresarialDocumentoEmpresa`
+ * em `analiseCnpjReceitaCartao.ts`) também respeite uma edição manual prévia
+ * do colaborador, no mesmo padrão já usado para os quatro campos originais.
  *
  * Quem GRAVA o selo: `PATCH /api/empresas/:id` quando a edição não é a
  * sincronização automática (`_origem !== "sincronizacao_receita"`) e o valor
  * de um campo rastreado realmente muda.
  * Quem LÊ o selo: `analiseCnpjReceitaCartao.ts`, antes de aplicar a
- * confirmação de situação cadastral ou a atualização de contato lidas do
- * Cartão CNPJ.
+ * confirmação de situação cadastral, nome empresarial, ou a atualização de
+ * contato lidas do Cartão CNPJ.
  */
 
 export const CHAVE_CAMPOS_EDITADOS_MANUALMENTE = 'campos_editados_manualmente_pelo_usuario' as const;
 
-export const CAMPOS_RASTREAVEIS_EDICAO_MANUAL = ['situacao_cadastral', 'data_situacao_cadastral', 'telefone', 'email'] as const;
+export const CAMPOS_RASTREAVEIS_EDICAO_MANUAL = ['situacao_cadastral', 'data_situacao_cadastral', 'telefone', 'email', 'razao_social'] as const;
 export type CampoRastreavelEdicaoManual = (typeof CAMPOS_RASTREAVEIS_EDICAO_MANUAL)[number];
 
 /**

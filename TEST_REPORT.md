@@ -1,12 +1,41 @@
-# Relatório de Testes — 31/08/2026 (atualizado, Rodada 17 — 02/09/2026: confirmação automática da Etapa 1, sem clicar em "Iniciar análise documental"; Rodada 18 — 02/09/2026: validação local sem IA/orientação de documento correto/menos texto repetido; Rodada 19 — 02/09/2026: sincronização automática de CNPJ; Rodada 20 — 02/09/2026: Cartão CNPJ confirma e trava a situação cadastral contra a reversão automática; Rodada 21 — 02/09/2026: leitura automática sem clique, falso positivo de nome para Empresário Individual, telefone/e-mail via Cartão CNPJ; Rodada 22 — 02/09/2026: refinamento com os documentos reais, janela de 5 dias, trava de edição manual; Rodada 23 — 02/09/2026: leitura visível ao anexar Cartão CNPJ/QSA/Enquadramento; Rodada 24 — 02/09/2026: falha já pendente/travada passa a se resolver sozinha na tela, sem F5; Rodada 25 — 02/09/2026: todos os campos do checklist sempre visíveis, para qualquer empresa/regime)
+# Relatório de Testes — 31/08/2026 (atualizado, Rodada 17 — 02/09/2026: confirmação automática da Etapa 1, sem clicar em "Iniciar análise documental"; Rodada 18 — 02/09/2026: validação local sem IA/orientação de documento correto/menos texto repetido; Rodada 19 — 02/09/2026: sincronização automática de CNPJ; Rodada 20 — 02/09/2026: Cartão CNPJ confirma e trava a situação cadastral contra a reversão automática; Rodada 21 — 02/09/2026: leitura automática sem clique, falso positivo de nome para Empresário Individual, telefone/e-mail via Cartão CNPJ; Rodada 22 — 02/09/2026: refinamento com os documentos reais, janela de 5 dias, trava de edição manual; Rodada 23 — 02/09/2026: leitura visível ao anexar Cartão CNPJ/QSA/Enquadramento; Rodada 24 — 02/09/2026: falha já pendente/travada passa a se resolver sozinha na tela, sem F5; Rodada 25 — 02/09/2026: todos os campos do checklist sempre visíveis, para qualquer empresa/regime; Rodada 26 — 02/09/2026: Cartão CNPJ também corrige o nome empresarial/razão social)
 
 ## Resultado final
 
 ```
 Test Files  99 passed (99)
-     Tests  876 passed (876)
+     Tests  888 passed (888)
   Duration  ~50-58s
 ```
+
+## Rodada 26 — 12 testes novos para `deveConfirmarNomeEmpresarialViaCartao` (876 → 888 testes, 99 arquivos inalterados)
+
+Nova função pura em `server/services/analiseCnpjReceitaCartao.ts`, testada isoladamente (sem banco/rede) no mesmo describe-por-função já usado para `deveConfirmarSituacaoCadastralViaCartao` (Rodada 20). Novo describe `deveConfirmarNomeEmpresarialViaCartao` acrescentado ao final de `tests/analiseCnpjReceitaCartao.test.ts`, com a função importada no topo do arquivo. Casos cobertos:
+
+1. Nega sem Cartão CNPJ anexado.
+2. Nega quando a razão social já foi editada manualmente pelo colaborador (trava de `edicaoManualCamposEmpresa.ts`, estendida nesta rodada para incluir `razao_social`).
+3. Nega quando o nome empresarial não foi extraído do documento.
+4. Nega quando o Cartão CNPJ está fora da validade documental de 30 dias ("vencido"/"pendente"/"nao_verificado").
+5. Nega quando a leitura do documento não teve qualidade mínima confirmada.
+6. **Nega quando o CNPJ do documento diverge do CNPJ do cadastro** (trava de segurança nova desta rodada) -- reproduz o cenário exato do print que motivou esta rodada (Cartão CNPJ "OFICINA DA BELEZA LTDA" com CNPJ diferente do cadastro "ANA AMELIA DA SILVA FREITAS").
+7. Autoriza quando o CNPJ do documento é igual ao do cadastro, mesmo com o nome divergente e documento recente -- é a mesma empresa, API desatualizada.
+8. Continua autorizando normalmente quando o CNPJ do documento não pôde ser lido (não é razoável exigir um dado que o documento não forneceu).
+9. Sem correção pendente (nomes já batem após normalização), autoriza na janela de 30 dias já existente.
+10. Com correção pendente, só autoriza com documento emitido há no máximo 5 dias (mesma janela apertada da Rodada 22 para situação cadastral).
+11. Compatibilidade: continua autorizando quando os argumentos novos (`razaoSocialAtualEmpresa`/`diasEmissaoCartao`/CNPJs) não são informados.
+12. **PROVA DE REVERSÃO**: reproduzindo o cenário do teste 6 sem passar os CNPJs, o resultado passa a autorizar -- confirma que é exclusivamente o novo gate de CNPJ que produz a recusa no teste correspondente.
+
+**Verificação completa da suíte, executada depois de reinstalar `node_modules` (`pnpm install --frozen-lockfile`, sem nenhuma dependência nova/removida):**
+```
+Test Files  99 passed (99)
+     Tests  888 passed (888)
+  Duration  57.68s
+```
+Nenhuma expectativa de teste pré-existente mudou -- os 12 testes novos são estritamente aditivos.
+
+**`aplicarConfirmacaoNomeEmpresarialDocumentoEmpresa` (função impura, grava no banco) não tem teste unitário direto**, mesma convenção já usada para `aplicarConfirmacaoCadastralDocumentoEmpresa`/`aplicarAtualizacaoContatoDocumentoEmpresa` neste arquivo -- verificado por leitura completa do código: usa `colunasDaTabela`/`pool.query` no mesmo padrão já testado indiretamente pelos testes de integração de outras rotas, delega toda a decisão para a função pura já coberta acima, e nunca lança (bloco `try/catch` cobrindo toda a gravação).
+
+**Verificação do reordenamento dentro de `analisarCnpjReceitaCartaoEmpresa` feita por leitura direta do código** (não há teste de integração ponta a ponta para essa função no arquivo): confirmado que a chamada a `aplicarConfirmacaoNomeEmpresarialDocumentoEmpresa` está posicionada ANTES de `const comparacao = {...}` ser montada, e que `camposReceita.nome_empresarial`/`empresa.razao_social` são reatribuídos em memória imediatamente quando a correção é aplicada -- garantindo que a comparação da mesma leitura já usa o nome corrigido, exatamente como pedido ("aparecer no modal a análise").
 
 ## Rodada 25 — sem testes novos (mudança de frontend, remoção de uma filtragem de exibição -- nenhuma lógica pura nova)
 

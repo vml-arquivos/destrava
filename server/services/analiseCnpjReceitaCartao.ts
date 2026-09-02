@@ -905,6 +905,160 @@ export async function aplicarConfirmacaoCadastralDocumentoEmpresa(args: {
   }
 }
 
+export type ResultadoConfirmacaoNomeEmpresarialDocumento = {
+  aplicado: boolean;
+  motivo: string;
+  nomeAnterior?: string | null;
+  nomeAtual?: string | null;
+};
+
+/**
+ * CORREÇÃO (Rodada 26, 02/09/2026, pedido explícito do usuário, sobre um
+ * segundo caso concreto -- Cartão CNPJ mostrando "OFICINA DA BELEZA LTDA"
+ * para uma empresa cadastrada como "43.843.322 ANA AMELIA DA SILVA
+ * FREITAS": "esse caso é igual [ao da situação cadastral], os dados da
+ * receita vêm desatualizado pela api, e o cartão anexado tá certo, tem que
+ * atualizar os dados faltantes automático e aparecer no modal a análise"):
+ * mesmo padrão de `deveConfirmarSituacaoCadastralViaCartao` (Rodada 20),
+ * agora para o NOME EMPRESARIAL -- quando o Cartão CNPJ oficial mostra um
+ * nome empresarial genuinamente diferente do que está sincronizado (depois
+ * de `normalizarNomeEmpresarial` já ter removido diferenças de
+ * formatação/radical de CNPJ/CPF -- ou seja, uma divergência REAL, não um
+ * falso positivo dos já cobertos pelas Rodadas 21/22), o cadastro é
+ * corrigido automaticamente. Mesmos quatro requisitos objetivos do padrão já
+ * estabelecido: (a) Cartão CNPJ anexado; (b) leitura com qualidade mínima
+ * confirmada; (c) documento dentro do prazo de validade documental de 30
+ * dias; e (d) quando há uma correção de fato pendente (nome divergente),
+ * documento emitido há no máximo 5 dias -- para não deixar um Cartão CNPJ
+ * antigo, ele mesmo desatualizado, substituir um nome já correto por um nome
+ * antigo. Sem exigir situação ATIVA (o nome empresarial impresso no Cartão
+ * CNPJ vale independentemente da situação cadastral da empresa). Se o
+ * colaborador já editou manualmente a razão social
+ * (`campoFoiEditadoManualmente(..., 'razao_social')`), a leitura automática
+ * nunca mais sobrescreve esse campo -- mesma trava da Rodada 22, agora
+ * também aplicada a este campo (`edicaoManualCamposEmpresa.ts`).
+ *
+ * Regra geral, válida para qualquer empresa/regime/porte -- nunca
+ * condicionada a nenhum nome/CNPJ específico: a decisão depende só de fatos
+ * objetivos sobre o documento e a comparação normalizada dos dois nomes.
+ *
+ * TRAVA DE SEGURANÇA ADICIONAL (mesmo CNPJ exigido): um nome divergente
+ * sozinho não distingue "esta empresa mudou de razão social e a API
+ * gratuita ainda não atualizou" de "foi anexado por engano o Cartão CNPJ de
+ * OUTRA empresa". Os dois números de CNPJ (cadastro e documento), quando
+ * ambos legíveis, precisam ser o MESMO número -- se divergirem, isso é sinal
+ * objetivo de que o documento é de uma empresa diferente, e a correção de
+ * nome não é aplicada (a divergência de CNPJ já é sinalizada separadamente,
+ * sem alteração desta rodada). Quando o CNPJ do documento não pôde ser lido,
+ * a correção segue os demais requisitos normalmente -- não é razoável exigir
+ * um dado que o documento não forneceu.
+ */
+export function deveConfirmarNomeEmpresarialViaCartao(args: {
+  cartao: DocCartao | null;
+  camposCartao: ExtracaoCartao | null;
+  extracaoGemini: ExtracaoCartao | null;
+  statusValidadeCartao: string;
+  razaoSocialAtualEmpresa?: string | null;
+  diasEmissaoCartao?: number | null;
+  nomeEditadoManualmente?: boolean;
+  cnpjEmpresaLimpo?: string | null;
+  cnpjCartaoLimpo?: string | null;
+}): { pode: boolean; motivo: string } {
+  const { cartao, camposCartao, extracaoGemini, statusValidadeCartao, razaoSocialAtualEmpresa, diasEmissaoCartao, nomeEditadoManualmente, cnpjEmpresaLimpo, cnpjCartaoLimpo } = args;
+  if (!cartao) return { pode: false, motivo: 'sem_cartao_cnpj_anexado' };
+  if (nomeEditadoManualmente) return { pode: false, motivo: 'razao_social_editada_manualmente_pelo_usuario' };
+  if (!camposCartao?.nome_empresarial) return { pode: false, motivo: 'nome_empresarial_nao_extraido_do_documento' };
+  if (statusValidadeCartao !== 'valido') return { pode: false, motivo: 'cartao_cnpj_fora_do_prazo_de_validade_documental' };
+  if (!extracaoTemQualidade(extracaoGemini)) return { pode: false, motivo: 'leitura_do_documento_sem_qualidade_minima_confirmada' };
+  if (cnpjEmpresaLimpo && cnpjCartaoLimpo && cnpjEmpresaLimpo !== cnpjCartaoLimpo) {
+    return { pode: false, motivo: 'cnpj_do_documento_diverge_do_cadastro_provavel_empresa_diferente' };
+  }
+
+  const haCorrecaoPendente = !!razaoSocialAtualEmpresa
+    && normalizarNomeEmpresarial(razaoSocialAtualEmpresa) !== normalizarNomeEmpresarial(camposCartao.nome_empresarial);
+  if (haCorrecaoPendente) {
+    const documentoRecenteOSuficiente = typeof diasEmissaoCartao === 'number' && diasEmissaoCartao <= 5;
+    if (!documentoRecenteOSuficiente) return { pode: false, motivo: 'correcao_de_nome_exige_documento_emitido_ha_no_maximo_5_dias' };
+  }
+  return { pode: true, motivo: haCorrecaoPendente ? 'correcao_de_nome_aplicada_com_documento_recente' : 'nome_ja_confere_documento_valido_e_com_qualidade_confirmada' };
+}
+
+/**
+ * Quando `deveConfirmarNomeEmpresarialViaCartao` autoriza, grava
+ * `empresas.razao_social` com o nome lido no Cartão CNPJ e registra o evento
+ * em `empresa_historico` quando o valor de fato mudou. Diferente da
+ * confirmação de situação cadastral (Rodada 20), NÃO precisa de nenhum selo
+ * de trava contra a sincronização automática com as APIs gratuitas: essa
+ * sincronização (`sincronizacaoReceitaAutomaticaService.ts`,
+ * `montarCamposRegistroReceita`) nunca escreve `razao_social` -- confirmado
+ * por leitura direta do código --, então não há nenhum job em segundo plano
+ * que possa reverter esta correção. Nunca lança -- uma falha aqui não pode
+ * derrubar a análise documental já calculada e persistida.
+ */
+export async function aplicarConfirmacaoNomeEmpresarialDocumentoEmpresa(args: {
+  empresaId: string;
+  empresaAtual: any;
+  cartao: DocCartao | null;
+  camposCartao: ExtracaoCartao;
+  extracaoGemini: ExtracaoCartao | null;
+  dataEmissaoCartao: string | null;
+  diasEmissaoCartao: number | null;
+  statusValidadeCartao: string;
+}): Promise<ResultadoConfirmacaoNomeEmpresarialDocumento> {
+  const { empresaId, empresaAtual, cartao, camposCartao, extracaoGemini, diasEmissaoCartao, statusValidadeCartao } = args;
+
+  const decisao = deveConfirmarNomeEmpresarialViaCartao({
+    cartao,
+    camposCartao,
+    extracaoGemini,
+    statusValidadeCartao,
+    razaoSocialAtualEmpresa: empresaAtual?.razao_social ?? null,
+    diasEmissaoCartao,
+    nomeEditadoManualmente: campoFoiEditadoManualmente(empresaAtual?.dados_extra_receita, 'razao_social'),
+    cnpjEmpresaLimpo: onlyDigits(empresaAtual?.cnpj) || null,
+    cnpjCartaoLimpo: onlyDigits(camposCartao?.cnpj) || null,
+  });
+  const nomeEmpresarialConfirmado = camposCartao?.nome_empresarial;
+  if (!decisao.pode || !cartao || !nomeEmpresarialConfirmado) return { aplicado: false, motivo: decisao.motivo };
+
+  // No-op idempotente: o nome já confere (normalizado) -- nada a gravar/registrar.
+  if (empresaAtual?.razao_social
+    && normalizarNomeEmpresarial(empresaAtual.razao_social) === normalizarNomeEmpresarial(nomeEmpresarialConfirmado)) {
+    return { aplicado: true, motivo: 'nome_ja_correto', nomeAnterior: empresaAtual.razao_social, nomeAtual: empresaAtual.razao_social };
+  }
+
+  try {
+    const colunas = await colunasDaTabela(pool, 'empresas');
+    if (!colunas.has('razao_social')) return { aplicado: false, motivo: 'coluna_razao_social_ausente' };
+
+    const assignments: string[] = [];
+    const values: unknown[] = [empresaId];
+
+    values.push(nomeEmpresarialConfirmado);
+    assignments.push(`"razao_social" = $${values.length}`);
+    if (colunas.has('updated_at')) assignments.push('"updated_at" = NOW()');
+
+    const { rows } = await pool.query(
+      `UPDATE public.empresas SET ${assignments.join(', ')} WHERE id = $1 RETURNING razao_social`,
+      values,
+    );
+
+    const nomeAnterior = empresaAtual?.razao_social ?? null;
+    const nomeAtual = rows[0]?.razao_social ?? nomeEmpresarialConfirmado;
+
+    await registrarHistoricoSincronizacaoSeguro(
+      pool,
+      empresaId,
+      `Leitura do Cartão CNPJ anexado corrigiu o nome empresarial (a API gratuita da Receita ainda não tinha refletido a atualização): "${nomeAnterior || 'não informado'}" -> "${nomeAtual}".`,
+    );
+
+    return { aplicado: true, motivo: 'nome_empresarial_corrigido', nomeAnterior, nomeAtual };
+  } catch (error: any) {
+    console.warn('[analiseCnpjReceitaCartao] Falha ao aplicar confirmação de nome empresarial via Cartão CNPJ (best-effort, não interrompe a análise):', error?.message || error);
+    return { aplicado: false, motivo: 'erro_ao_gravar_confirmacao' };
+  }
+}
+
 export type ResultadoAtualizacaoContatoDocumento = {
   aplicado: boolean;
   motivo: string;
@@ -1117,6 +1271,38 @@ export async function analisarCnpjReceitaCartaoEmpresa(empresaId: string, criado
       statusValidadeCartao = extracaoGemini ? 'nao_verificado' : 'pendente';
       alertas.push({ codigo: 'cartao_cnpj_emissao_nao_confirmada', mensagem: 'O Cartão CNPJ foi lido, mas a data de emissão não pôde ser confirmada no arquivo.', severidade: 'alta', recomendacao: 'Confirmar visualmente a data de emissão ou anexar um Cartão CNPJ atualizado e legível.' });
       pontosAtencao.push('Data de emissão do Cartão CNPJ não confirmada; o documento foi analisado, mas exige correção antes do avanço.');
+    }
+  }
+
+  // CORREÇÃO (Rodada 26, 02/09/2026, pedido explícito do usuário -- "esse caso
+  // é igual [à situação cadastral], os dados da receita vêm desatualizado
+  // pela api, e o cartão anexado tá certo, tem que atualizar os dados
+  // faltantes automático e aparecer no modal a análise"): diferente da
+  // confirmação de situação cadastral (Rodada 20, que roda só DEPOIS de
+  // persistir esta análise -- ver bloco `if (persistir)` mais abaixo), a
+  // correção do nome empresarial roda AQUI, ANTES de montar `comparacao` --
+  // se rodasse só depois (como a de situação cadastral), o alerta "Nome
+  // empresarial divergente" já teria sido calculado e persistido com o nome
+  // ANTIGO, e o card de identidade só mostraria o resultado correto na
+  // PRÓXIMA análise (upload novo, retentativa de 15 min, ou F5) -- exatamente
+  // o "aparecer no modal a análise" que o usuário pediu para acontecer já
+  // nesta mesma leitura. Corrigindo e sobrescrevendo `camposReceita.nome_empresarial`
+  // em memória ANTES da comparação, o card já nasce consistente na mesma
+  // leitura que corrigiu o cadastro -- sem exigir uma segunda análise.
+  if (persistir) {
+    const resultadoNome = await aplicarConfirmacaoNomeEmpresarialDocumentoEmpresa({
+      empresaId,
+      empresaAtual: empresa,
+      cartao,
+      camposCartao,
+      extracaoGemini,
+      dataEmissaoCartao,
+      diasEmissaoCartao,
+      statusValidadeCartao,
+    });
+    if (resultadoNome.aplicado && resultadoNome.nomeAtual) {
+      camposReceita.nome_empresarial = resultadoNome.nomeAtual;
+      empresa.razao_social = resultadoNome.nomeAtual;
     }
   }
 

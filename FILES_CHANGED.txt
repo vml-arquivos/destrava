@@ -626,3 +626,29 @@ Arquivos de teste NOVOS ou AMPLIADOS: nenhum (mudança de frontend, remoção de
 
 Total desta rodada: 1 arquivo de código alterado + 6 arquivos de
 documentação alterados = 7 arquivos.
+
+======================================================================
+Rodada 26 (esta entrega) -- Cartão CNPJ também corrige o nome
+empresarial/razão social desatualizado na API gratuita, no mesmo
+padrão já usado para a situação cadastral (Rodada 20); resultado já
+aparece correto na mesma análise
+======================================================================
+
+Arquivos existentes ALTERADOS nesta rodada:
+
+server/services/analiseCnpjReceitaCartao.ts   (novo type ResultadoConfirmacaoNomeEmpresarialDocumento, nova função pura deveConfirmarNomeEmpresarialViaCartao, nova função aplicarConfirmacaoNomeEmpresarialDocumentoEmpresa; dentro de analisarCnpjReceitaCartaoEmpresa, novo bloco que chama a correção de nome ANTES de montar `comparacao`, atualizando camposReceita.nome_empresarial/empresa.razao_social em memória quando aplicada)
+server/utils/edicaoManualCamposEmpresa.ts   ('razao_social' acrescentado a CAMPOS_RASTREAVEIS_EDICAO_MANUAL)
+tests/analiseCnpjReceitaCartao.test.ts   (novo describe "deveConfirmarNomeEmpresarialViaCartao", 12 testes novos; import de deveConfirmarNomeEmpresarialViaCartao acrescentado)
+CHANGELOG_CORRECOES.md
+PENDENCIAS_REAIS.md
+ROLLBACK_PLAN.md
+TEST_REPORT.md
+BUILD_REPORT.md
+FILES_CHANGED.txt (este arquivo)
+SHA256SUMS.txt
+
+Arquivos NOVOS: nenhum.
+Arquivos de teste NOVOS ou AMPLIADOS: tests/analiseCnpjReceitaCartao.test.ts ampliado (novo describe, 12 testes novos cobrindo deveConfirmarNomeEmpresarialViaCartao isoladamente -- ver TEST_REPORT.md).
+
+Total desta rodada: 2 arquivos de código alterados + 1 arquivo de teste
+ampliado + 7 arquivos de documentação alterados = 10 arquivos.

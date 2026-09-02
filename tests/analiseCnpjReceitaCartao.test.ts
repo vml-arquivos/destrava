@@ -3,6 +3,7 @@ import {
   calcularScore,
   deveAtualizarCampoContatoViaCartao,
   deveAtualizarContatoViaCartao,
+  deveConfirmarNomeEmpresarialViaCartao,
   deveConfirmarSituacaoCadastralViaCartao,
   extracaoTemQualidade,
 } from "../server/services/analiseCnpjReceitaCartao";
@@ -421,5 +422,193 @@ describe("deveAtualizarCampoContatoViaCartao — respeita edição manual do col
       editadoManualmente: false,
     });
     expect(semEdicaoManual).toBe(true);
+  });
+});
+
+// Rodada 26 (02/09/2026) -- pedido explícito do usuário, sobre um segundo caso
+// concreto (Cartão CNPJ mostrando "OFICINA DA BELEZA LTDA" para uma empresa
+// cadastrada como "43.843.322 ANA AMELIA DA SILVA FREITAS"): "esse caso é
+// igual [à situação cadastral], os dados da receita vêm desatualizado pela
+// api, e o cartão anexado tá certo, tem que atualizar os dados faltantes
+// automático e aparecer no modal a análise". `deveConfirmarNomeEmpresarialViaCartao`
+// é a decisão pura (sem banco/rede) usada por
+// `aplicarConfirmacaoNomeEmpresarialDocumentoEmpresa` para decidir se a leitura
+// do Cartão CNPJ deve corrigir o nome empresarial/razão social do cadastro --
+// mesmo padrão de `deveConfirmarSituacaoCadastralViaCartao` (Rodada 20), mais
+// uma trava nova de segurança: os números de CNPJ (cadastro x documento)
+// precisam bater, para distinguir "a mesma empresa mudou de nome e a API
+// gratuita está desatualizada" de "foi anexado por engano o Cartão CNPJ de
+// outra empresa".
+describe("deveConfirmarNomeEmpresarialViaCartao — corrige o nome empresarial/razão social a partir do Cartão CNPJ", () => {
+  const cartao = { id: "cartao-vilson-1" };
+
+  // Fixture baseada no Cartão CNPJ real anexado pelo usuário (CNPJ
+  // 29.705.345/0001-22): leitura com qualidade mínima confirmada.
+  const extracaoConfiavel = {
+    cnpj: "29705345000122",
+    nome_empresarial: "29.705.345 VILSON MARCIO DE LIMA",
+    cnae_principal: "7319002",
+    natureza_juridica: "2135",
+    situacao_cadastral: "ATIVA",
+    data_abertura: "2018-02-17",
+    data_situacao_cadastral: "2026-08-30",
+    data_emissao: "2026-08-30",
+    data_emissao_texto: "Emitido no dia 30/08/2026 às 19:46:52",
+    confianca: 0.92,
+  };
+
+  it("nega quando não há Cartão CNPJ anexado", () => {
+    const resultado = deveConfirmarNomeEmpresarialViaCartao({
+      cartao: null,
+      camposCartao: extracaoConfiavel,
+      extracaoGemini: extracaoConfiavel,
+      statusValidadeCartao: "valido",
+    });
+    expect(resultado).toEqual({ pode: false, motivo: "sem_cartao_cnpj_anexado" });
+  });
+
+  it("nega quando a razão social já foi editada manualmente pelo colaborador -- nunca mais sobrescrita pela leitura automática do documento", () => {
+    const resultado = deveConfirmarNomeEmpresarialViaCartao({
+      cartao,
+      camposCartao: extracaoConfiavel,
+      extracaoGemini: extracaoConfiavel,
+      statusValidadeCartao: "valido",
+      razaoSocialAtualEmpresa: "ANA AMELIA DA SILVA FREITAS",
+      diasEmissaoCartao: 1,
+      nomeEditadoManualmente: true,
+    });
+    expect(resultado).toEqual({ pode: false, motivo: "razao_social_editada_manualmente_pelo_usuario" });
+  });
+
+  it("nega quando o nome empresarial não foi extraído do documento", () => {
+    const resultado = deveConfirmarNomeEmpresarialViaCartao({
+      cartao,
+      camposCartao: { ...extracaoConfiavel, nome_empresarial: null },
+      extracaoGemini: extracaoConfiavel,
+      statusValidadeCartao: "valido",
+    });
+    expect(resultado).toEqual({ pode: false, motivo: "nome_empresarial_nao_extraido_do_documento" });
+  });
+
+  it('nega quando o Cartão CNPJ está fora do prazo de validade documental ("vencido"/"pendente"/"nao_verificado")', () => {
+    for (const status of ["vencido", "pendente", "nao_verificado"]) {
+      const resultado = deveConfirmarNomeEmpresarialViaCartao({
+        cartao,
+        camposCartao: extracaoConfiavel,
+        extracaoGemini: extracaoConfiavel,
+        statusValidadeCartao: status,
+      });
+      expect(resultado).toEqual({ pode: false, motivo: "cartao_cnpj_fora_do_prazo_de_validade_documental" });
+    }
+  });
+
+  it("nega quando a leitura do documento não teve qualidade mínima confirmada (resultado degradado de fallback)", () => {
+    const resultado = deveConfirmarNomeEmpresarialViaCartao({
+      cartao,
+      camposCartao: extracaoConfiavel,
+      extracaoGemini: { cnpj: "29705345000122", nome_empresarial: extracaoConfiavel.nome_empresarial, confianca: 0.1 },
+      statusValidadeCartao: "valido",
+    });
+    expect(resultado).toEqual({ pode: false, motivo: "leitura_do_documento_sem_qualidade_minima_confirmada" });
+  });
+
+  // TRAVA DE SEGURANÇA NOVA desta rodada: um nome divergente sozinho não
+  // distingue "a empresa mudou de nome" de "documento de outra empresa
+  // anexado por engano" -- os números de CNPJ precisam bater.
+  it("nega quando o CNPJ do documento diverge do CNPJ do cadastro -- provável documento de outra empresa anexado por engano", () => {
+    const resultado = deveConfirmarNomeEmpresarialViaCartao({
+      cartao,
+      camposCartao: { ...extracaoConfiavel, nome_empresarial: "OFICINA DA BELEZA LTDA" },
+      extracaoGemini: { ...extracaoConfiavel, nome_empresarial: "OFICINA DA BELEZA LTDA" },
+      statusValidadeCartao: "valido",
+      razaoSocialAtualEmpresa: "ANA AMELIA DA SILVA FREITAS",
+      diasEmissaoCartao: 1,
+      cnpjEmpresaLimpo: "43843322000199",
+      cnpjCartaoLimpo: "29705345000122",
+    });
+    expect(resultado).toEqual({ pode: false, motivo: "cnpj_do_documento_diverge_do_cadastro_provavel_empresa_diferente" });
+  });
+
+  it("autoriza quando o CNPJ do documento é igual ao do cadastro, mesmo com o nome divergente e documento recente -- é a mesma empresa, a API gratuita está desatualizada", () => {
+    const resultado = deveConfirmarNomeEmpresarialViaCartao({
+      cartao,
+      camposCartao: extracaoConfiavel,
+      extracaoGemini: extracaoConfiavel,
+      statusValidadeCartao: "valido",
+      razaoSocialAtualEmpresa: "NOME ANTIGO DESATUALIZADO NA API GRATUITA",
+      diasEmissaoCartao: 2,
+      cnpjEmpresaLimpo: "29705345000122",
+      cnpjCartaoLimpo: "29705345000122",
+    });
+    expect(resultado).toEqual({ pode: true, motivo: "correcao_de_nome_aplicada_com_documento_recente" });
+  });
+
+  it("continua autorizando normalmente quando o CNPJ do documento não pôde ser lido -- não é razoável exigir um dado que o documento não forneceu", () => {
+    const resultado = deveConfirmarNomeEmpresarialViaCartao({
+      cartao,
+      camposCartao: extracaoConfiavel,
+      extracaoGemini: extracaoConfiavel,
+      statusValidadeCartao: "valido",
+      razaoSocialAtualEmpresa: "NOME ANTIGO DESATUALIZADO NA API GRATUITA",
+      diasEmissaoCartao: 2,
+      cnpjEmpresaLimpo: "29705345000122",
+      cnpjCartaoLimpo: null,
+    });
+    expect(resultado).toEqual({ pode: true, motivo: "correcao_de_nome_aplicada_com_documento_recente" });
+  });
+
+  it("quando NÃO há correção pendente (nome do cadastro já bate com o documento, após normalização), a janela de 30 dias já existente continua suficiente -- não exige documento com no máximo 5 dias", () => {
+    const resultado = deveConfirmarNomeEmpresarialViaCartao({
+      cartao,
+      camposCartao: extracaoConfiavel,
+      extracaoGemini: extracaoConfiavel,
+      statusValidadeCartao: "valido",
+      razaoSocialAtualEmpresa: extracaoConfiavel.nome_empresarial,
+      diasEmissaoCartao: 20,
+      cnpjEmpresaLimpo: "29705345000122",
+      cnpjCartaoLimpo: "29705345000122",
+    });
+    expect(resultado).toEqual({ pode: true, motivo: "nome_ja_confere_documento_valido_e_com_qualidade_confirmada" });
+  });
+
+  it("quando HÁ correção pendente (nome do cadastro diverge do documento), só autoriza com documento emitido há no máximo 5 dias", () => {
+    const negaComDocumentoDeMaisDeCincoDias = deveConfirmarNomeEmpresarialViaCartao({
+      cartao,
+      camposCartao: extracaoConfiavel,
+      extracaoGemini: extracaoConfiavel,
+      statusValidadeCartao: "valido",
+      razaoSocialAtualEmpresa: "NOME ANTIGO DESATUALIZADO NA API GRATUITA",
+      diasEmissaoCartao: 6,
+      cnpjEmpresaLimpo: "29705345000122",
+      cnpjCartaoLimpo: "29705345000122",
+    });
+    expect(negaComDocumentoDeMaisDeCincoDias).toEqual({ pode: false, motivo: "correcao_de_nome_exige_documento_emitido_ha_no_maximo_5_dias" });
+  });
+
+  it("continua autorizando normalmente quando `razaoSocialAtualEmpresa`/`diasEmissaoCartao`/CNPJs não são informados (compatibilidade com quem ainda não passa esses argumentos)", () => {
+    const resultado = deveConfirmarNomeEmpresarialViaCartao({
+      cartao,
+      camposCartao: extracaoConfiavel,
+      extracaoGemini: extracaoConfiavel,
+      statusValidadeCartao: "valido",
+    });
+    expect(resultado.pode).toBe(true);
+  });
+
+  it("PROVA DE REVERSÃO: se a checagem de CNPJ fosse removida, um documento de outra empresa com nome divergente corrigiria o cadastro mesmo assim -- reversão manual confirma que o gate está de fato em vigor", () => {
+    // Com a mesma entrada do teste "nega quando o CNPJ do documento diverge",
+    // mas SEM passar `cnpjEmpresaLimpo`/`cnpjCartaoLimpo` (simulando a
+    // checagem removida), o resultado passa a autorizar -- prova de que é
+    // exclusivamente o gate de CNPJ que muda o resultado para `false` no
+    // teste correspondente.
+    const semChecagemDeCnpj = deveConfirmarNomeEmpresarialViaCartao({
+      cartao,
+      camposCartao: { ...extracaoConfiavel, nome_empresarial: "OFICINA DA BELEZA LTDA" },
+      extracaoGemini: { ...extracaoConfiavel, nome_empresarial: "OFICINA DA BELEZA LTDA" },
+      statusValidadeCartao: "valido",
+      razaoSocialAtualEmpresa: "ANA AMELIA DA SILVA FREITAS",
+      diasEmissaoCartao: 1,
+    });
+    expect(semChecagemDeCnpj.pode).toBe(true);
   });
 });
