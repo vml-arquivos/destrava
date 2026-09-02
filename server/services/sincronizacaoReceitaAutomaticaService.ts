@@ -48,10 +48,31 @@
  * empresa nunca impede a sincronização das demais nem derruba o servidor
  * (mesmo padrão de tolerância a falha já usado no scheduler de automação,
  * `server/services/automation/scheduler.ts`).
+ *
+ * CORREÇÃO (2026-09-02, Rodada 20, regressão causada pela própria Rodada 19,
+ * relatada pelo usuário): esta sincronização automática podia reverter de
+ * volta para "inapta" uma empresa cuja situação cadastral já havia sido
+ * confirmada como ATIVA pela leitura do Cartão CNPJ oficial anexado --
+ * porque as fontes gratuitas usadas aqui podem estar até 45 dias atrasadas
+ * (ver acima) e o job anterior sobrescrevia `situacao_cadastral` de forma
+ * incondicional sempre que a consulta trouxesse qualquer valor. Agora, antes
+ * de aplicar os campos de registro de uma empresa, verifica-se
+ * `deveIgnorarSincronizacaoAutomaticaSituacao` (`../utils/confirmacaoCadastralDocumento`):
+ * se a empresa tiver esse selo de confirmação documental, os campos
+ * `situacao_cadastral`/`data_situacao_cadastral` são removidos do lote antes
+ * da atualização -- todos os demais campos (natureza jurídica, CNAE, capital
+ * social, matriz/filial) e o carimbo de "última sincronização" continuam
+ * sendo atualizados normalmente, então a empresa não trava fora da rotina de
+ * reforço periódico, só deixa de ter esse campo específico sobrescrito. Quem
+ * grava esse selo é a leitura do Cartão CNPJ
+ * (`server/services/analiseCnpjReceitaCartao.ts`); o botão manual "Atualizar
+ * cadastral" não foi alterado, pois o pedido do usuário foi especificamente
+ * sobre a sincronização automática, sem clique.
  */
 import type { Pool } from 'pg';
 import { consultarCnpj } from '../routes/cnpj';
 import { isSituacaoAtiva, normalizarSituacaoCadastral } from '../utils/situacaoCadastral';
+import { deveIgnorarSincronizacaoAutomaticaSituacao } from '../utils/confirmacaoCadastralDocumento';
 
 /** Lote padrão por ciclo -- pequeno de propósito, para caber com folga no
  * limite de 5 consultas/minuto da camada gratuita da CNPJá Open mesmo
@@ -69,6 +90,11 @@ export type EmpresaParaSincronizar = {
   cnpj: string;
   situacao_cadastral: string | null;
   ultima_sincronizacao_receita: string | null;
+  /** JSONB de `empresas.dados_extra_receita` -- pode conter o selo de
+   * confirmação documental gravado pela leitura do Cartão CNPJ (ver
+   * `../utils/confirmacaoCadastralDocumento`). Opcional para não quebrar
+   * nenhum teste/uso existente que ainda não informa este campo. */
+  dados_extra_receita?: unknown;
 };
 
 export type CamposRegistroReceita = {
@@ -129,7 +155,7 @@ export async function buscarEmpresasParaSincronizacaoAutomatica(
   const agora = new Date();
 
   const { rows } = await pool.query(
-    `SELECT id, cnpj, situacao_cadastral, ultima_sincronizacao_receita
+    `SELECT id, cnpj, situacao_cadastral, ultima_sincronizacao_receita, dados_extra_receita
        FROM empresas
       WHERE regexp_replace(COALESCE(cnpj, ''), '[^0-9]', '', 'g') ~ '^[0-9]{14}$'
         AND COALESCE(arquivado_por_duplicidade, false) = false
@@ -184,7 +210,9 @@ export function montarCamposRegistroReceita(dados: Record<string, any> | null | 
   return campos;
 }
 
-async function colunasDaTabela(pool: Pool, tabela: string): Promise<Set<string>> {
+/** Exportada para reaproveitamento em `analiseCnpjReceitaCartao.ts` (mesmo
+ * padrão de checagem defensiva de coluna, sem duplicar a query). */
+export async function colunasDaTabela(pool: Pool, tabela: string): Promise<Set<string>> {
   const { rows } = await pool.query(
     `SELECT column_name FROM information_schema.columns WHERE table_schema = 'public' AND table_name = $1`,
     [tabela],
@@ -192,8 +220,11 @@ async function colunasDaTabela(pool: Pool, tabela: string): Promise<Set<string>>
   return new Set(rows.map((r: { column_name: string }) => r.column_name));
 }
 
-/** Best-effort, nunca lança -- mesmo princípio de `registrarHistoricoEmpresaSeguro` (server/index.ts). */
-async function registrarHistoricoSincronizacaoSeguro(pool: Pool, empresaId: string, descricao: string): Promise<void> {
+/** Best-effort, nunca lança -- mesmo princípio de `registrarHistoricoEmpresaSeguro` (server/index.ts).
+ * Exportada para reaproveitamento em `analiseCnpjReceitaCartao.ts`, que também
+ * precisa registrar em `empresa_historico` quando a leitura do Cartão CNPJ
+ * corrige a situação cadastral -- mesmo formato de auditoria, um único lugar. */
+export async function registrarHistoricoSincronizacaoSeguro(pool: Pool, empresaId: string, descricao: string): Promise<void> {
   try {
     const colunas = await colunasDaTabela(pool, 'empresa_historico');
     if (!colunas.has('empresa_id') || !colunas.has('descricao')) return;
@@ -229,9 +260,27 @@ export async function aplicarSincronizacaoEmpresa(
   campos: CamposRegistroReceita,
   colunas: ReadonlySet<string>,
 ): Promise<ResultadoSincronizacaoEmpresa> {
+  // Regra geral (Rodada 20, vale para qualquer empresa/regime -- nunca
+  // condicionada a uma empresa específica): quando já existe uma confirmação
+  // documental via Cartão CNPJ oficial (selo em `dados_extra_receita`), a
+  // sincronização automática nunca sobrescreve `situacao_cadastral`/
+  // `data_situacao_cadastral` com o que as fontes gratuitas devolverem --
+  // elas já provaram, para este caso, que podem estar desatualizadas. Os
+  // demais campos de registro (natureza jurídica, CNAE, capital social,
+  // matriz/filial) e o carimbo de "última sincronização" continuam sendo
+  // atualizados normalmente logo abaixo.
+  let camposEfetivos = campos;
+  if (deveIgnorarSincronizacaoAutomaticaSituacao(empresa.dados_extra_receita)) {
+    const { situacao_cadastral, data_situacao_cadastral, motivo_situacao_cadastral, ...resto } = campos;
+    if (situacao_cadastral !== undefined || data_situacao_cadastral !== undefined || motivo_situacao_cadastral !== undefined) {
+      console.log(`[sincronizacao-receita-automatica] empresa ${empresa.id}: situação cadastral confirmada via Cartão CNPJ -- ignorando sobrescrita automática vinda da API gratuita nesta sincronização.`);
+    }
+    camposEfetivos = resto;
+  }
+
   const assignments: string[] = [];
   const values: unknown[] = [];
-  for (const [coluna, valor] of Object.entries(campos)) {
+  for (const [coluna, valor] of Object.entries(camposEfetivos)) {
     if (!colunas.has(coluna) || valor === undefined) continue;
     values.push(valor);
     assignments.push(`"${coluna}" = $${values.length}`);

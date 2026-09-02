@@ -1,7 +1,9 @@
 import fs from 'fs/promises';
 import pkg from 'pg';
 import { GoogleGenerativeAI } from '@google/generative-ai';
-import { isSituacaoAtiva, isSituacaoIrregular } from '../utils/situacaoCadastral';
+import { isSituacaoAtiva, isSituacaoIrregular, normalizarSituacaoCadastral } from '../utils/situacaoCadastral';
+import { montarPatchConfirmacaoCadastralDocumento } from '../utils/confirmacaoCadastralDocumento';
+import { colunasDaTabela, registrarHistoricoSincronizacaoSeguro } from './sincronizacaoReceitaAutomaticaService';
 import {
   codigoCnae,
   codigoNatureza,
@@ -224,7 +226,7 @@ function normalizarConfianca(value: unknown): number | null {
   return Math.max(0, Math.min(1, n));
 }
 
-function extracaoTemQualidade(extracao: ExtracaoCartao | null): boolean {
+export function extracaoTemQualidade(extracao: ExtracaoCartao | null): boolean {
   if (!extracao) return false;
   const confianca = normalizarConfianca(extracao.confianca);
   const camposIdentidade = [
@@ -720,6 +722,138 @@ function sanitizarAnaliseCnpjPersistida(row: any) {
   };
 }
 
+export type ResultadoConfirmacaoCadastralDocumento = {
+  aplicado: boolean;
+  motivo: string;
+  situacaoAnterior?: string | null;
+  situacaoAtual?: string | null;
+};
+
+/**
+ * Decide (sem tocar banco/rede) se a leitura do Cartão CNPJ deve confirmar e
+ * travar a situação cadastral da empresa contra a sincronização automática.
+ * Extraída como função pura -- mesmo padrão já usado em `precisaSincronizar`
+ * (`sincronizacaoReceitaAutomaticaService.ts`) -- para ser diretamente
+ * testável sem precisar simular banco de dados.
+ *
+ * Regra geral, sem nenhuma condição específica a uma empresa/regime/porte:
+ * só autoriza quando (a) existe Cartão CNPJ anexado, (b) a leitura teve
+ * qualidade mínima confirmada -- não é um resultado degradado de fallback --,
+ * (c) o documento mostra a empresa ATIVA (pedido explícito do usuário: "se o
+ * status da situação estiver apta... vai alterar no cadastro"), e (d) o
+ * documento está dentro do prazo de validade documental de 30 dias já usado
+ * no resto da análise, contado a partir da data de emissão/consulta impressa
+ * no rodapé do Cartão CNPJ ("Emitido no dia... às...") -- NUNCA a partir da
+ * data de abertura da empresa, que é permanente e não indica atualidade.
+ */
+export function deveConfirmarSituacaoCadastralViaCartao(args: {
+  cartao: DocCartao | null;
+  camposCartao: ExtracaoCartao | null;
+  extracaoGemini: ExtracaoCartao | null;
+  statusValidadeCartao: string;
+}): { pode: boolean; motivo: string } {
+  const { cartao, camposCartao, extracaoGemini, statusValidadeCartao } = args;
+  if (!cartao) return { pode: false, motivo: 'sem_cartao_cnpj_anexado' };
+  if (!camposCartao?.situacao_cadastral) return { pode: false, motivo: 'situacao_nao_extraida_do_documento' };
+  if (!isSituacaoAtiva(camposCartao.situacao_cadastral)) return { pode: false, motivo: 'documento_nao_confirma_situacao_ativa' };
+  if (statusValidadeCartao !== 'valido') return { pode: false, motivo: 'cartao_cnpj_fora_do_prazo_de_validade_documental' };
+  if (!extracaoTemQualidade(extracaoGemini)) return { pode: false, motivo: 'leitura_do_documento_sem_qualidade_minima_confirmada' };
+  return { pode: true, motivo: 'documento_ativo_valido_e_com_qualidade_confirmada' };
+}
+
+/**
+ * CORREÇÃO (Rodada 20, 2026-09-02, pedido explícito do usuário -- "quando
+ * colocar o cartão do CNPJ, ele vai ler o cartão do CNPJ e se o status da
+ * situação estiver apta... vai alterar no cadastro da empresa... e não vai
+ * sincronizar automaticamente alterando novamente pra inapta"): quando
+ * `deveConfirmarSituacaoCadastralViaCartao` autoriza, esta função grava a
+ * confirmação em `empresas.situacao_cadastral`/`data_situacao_cadastral` e
+ * registra um selo em `dados_extra_receita`
+ * (`../utils/confirmacaoCadastralDocumento`) que a sincronização automática
+ * com as APIs gratuitas passa a respeitar
+ * (`sincronizacaoReceitaAutomaticaService.ts`), parando de reverter o valor
+ * para uma leitura potencialmente desatualizada (até 45 dias de atraso
+ * documentado nas fontes gratuitas). Fora dos quatro requisitos da função de
+ * decisão, esta função é um no-op seguro: nenhuma outra situação cadastral
+ * lida do documento é gravada automaticamente nesta correção, por não ter
+ * sido pedida e para manter o escopo cirúrgico. Nunca lança -- uma falha
+ * aqui não pode derrubar a análise documental que já foi calculada e
+ * persistida.
+ */
+export async function aplicarConfirmacaoCadastralDocumentoEmpresa(args: {
+  empresaId: string;
+  empresaAtual: any;
+  cartao: DocCartao | null;
+  camposCartao: ExtracaoCartao;
+  extracaoGemini: ExtracaoCartao | null;
+  dataEmissaoCartao: string | null;
+  diasEmissaoCartao: number | null;
+  statusValidadeCartao: string;
+}): Promise<ResultadoConfirmacaoCadastralDocumento> {
+  const { empresaId, empresaAtual, cartao, camposCartao, extracaoGemini, dataEmissaoCartao, diasEmissaoCartao, statusValidadeCartao } = args;
+
+  const decisao = deveConfirmarSituacaoCadastralViaCartao({ cartao, camposCartao, extracaoGemini, statusValidadeCartao });
+  const situacaoCadastralConfirmada = camposCartao?.situacao_cadastral;
+  if (!decisao.pode || !cartao || !situacaoCadastralConfirmada) return { aplicado: false, motivo: decisao.motivo };
+
+  try {
+    const colunas = await colunasDaTabela(pool, 'empresas');
+    if (!colunas.has('situacao_cadastral')) return { aplicado: false, motivo: 'coluna_situacao_cadastral_ausente' };
+
+    const assignments: string[] = [];
+    const values: unknown[] = [empresaId];
+
+    values.push(situacaoCadastralConfirmada);
+    assignments.push(`"situacao_cadastral" = $${values.length}`);
+
+    const dataSituacaoDocumento = parseDate(camposCartao.data_situacao_cadastral) || dataEmissaoCartao;
+    if (colunas.has('data_situacao_cadastral') && dataSituacaoDocumento) {
+      values.push(dataSituacaoDocumento);
+      assignments.push(`"data_situacao_cadastral" = $${values.length}`);
+    }
+
+    if (colunas.has('dados_extra_receita')) {
+      const patch = montarPatchConfirmacaoCadastralDocumento({
+        situacaoCadastral: situacaoCadastralConfirmada,
+        cartaoCnpjArquivoId: cartao.id,
+        dataEmissaoCartao,
+        diasEmissaoCartao,
+      });
+      values.push(JSON.stringify(patch));
+      assignments.push(`"dados_extra_receita" = COALESCE("dados_extra_receita", '{}'::jsonb) || $${values.length}::jsonb`);
+    }
+
+    if (colunas.has('updated_at')) assignments.push('"updated_at" = NOW()');
+
+    const { rows } = await pool.query(
+      `UPDATE public.empresas SET ${assignments.join(', ')} WHERE id = $1 RETURNING situacao_cadastral`,
+      values,
+    );
+
+    const situacaoAnterior = empresaAtual?.situacao_cadastral ?? null;
+    const situacaoAtual = rows[0]?.situacao_cadastral ?? situacaoCadastralConfirmada;
+    const mudou = normalizarSituacaoCadastral(situacaoAnterior) !== normalizarSituacaoCadastral(situacaoAtual);
+
+    if (mudou) {
+      await registrarHistoricoSincronizacaoSeguro(
+        pool,
+        empresaId,
+        `Leitura do Cartão CNPJ anexado confirmou a situação cadastral ATIVA e corrigiu o cadastro: "${situacaoAnterior || 'não informada'}" -> "${situacaoAtual || 'não informada'}". Esse valor não será mais revertido automaticamente pela sincronização com as APIs gratuitas.`,
+      );
+    }
+
+    return {
+      aplicado: true,
+      motivo: mudou ? 'situacao_corrigida_e_travada' : 'situacao_ja_ativa_travada_contra_sincronizacao_automatica',
+      situacaoAnterior,
+      situacaoAtual,
+    };
+  } catch (error: any) {
+    console.warn('[analiseCnpjReceitaCartao] Falha ao aplicar confirmação cadastral via Cartão CNPJ (best-effort, não interrompe a análise):', error?.message || error);
+    return { aplicado: false, motivo: 'erro_ao_gravar_confirmacao' };
+  }
+}
+
 export async function buscarUltimaAnaliseCnpjEmpresa(empresaId: string) {
   const exists = await tableExists('analises_cnpj_empresa');
   if (!exists) return null;
@@ -731,6 +865,7 @@ export async function analisarCnpjReceitaCartaoEmpresa(empresaId: string, criado
   const empresa = await buscarEmpresa(empresaId);
   if (!empresa) return null;
 
+  const persistir = opcoes?.persistir !== false;
   const socios = await buscarSocios(empresaId);
   const cartao = await buscarUltimoCartaoCnpj(empresaId, overrideArquivoId);
   const camposReceita = montarCamposReceita(empresa);
@@ -836,7 +971,6 @@ export async function analisarCnpjReceitaCartaoEmpresa(empresaId: string, criado
     diagnostico,
   };
 
-  const persistir = opcoes?.persistir !== false;
   let persistedRow: any = null;
   if (persistir) {
     await ensureAnalisesCnpjSchema();
@@ -903,6 +1037,24 @@ export async function analisarCnpjReceitaCartaoEmpresa(empresaId: string, criado
         WHERE id = $1`,
       [cartao.id, statusValidadeCartao, dataEmissaoCartao, JSON.stringify({ analise_cnpj_empresa_id: persistedRow?.id || null, dias_emissao_cartao: diasEmissaoCartao, divergencias: divergencias.length })]
     ).catch(() => undefined);
+  }
+
+  // CORREÇÃO (Rodada 20): só aplica a confirmação/trava cadastral quando esta
+  // é uma análise "de verdade" (persistir !== false) -- a checagem de
+  // qualidade documental feita durante a coleta de documentos (`coletaDocumentos.ts`,
+  // `{ persistir: false }`) é só uma pré-visualização antes de o documento
+  // ser aceito no acervo, e não deve gravar nada em `empresas` ainda.
+  if (persistir) {
+    await aplicarConfirmacaoCadastralDocumentoEmpresa({
+      empresaId,
+      empresaAtual: empresa,
+      cartao,
+      camposCartao,
+      extracaoGemini,
+      dataEmissaoCartao,
+      diasEmissaoCartao,
+      statusValidadeCartao,
+    });
   }
 
   return persistedRow || {
