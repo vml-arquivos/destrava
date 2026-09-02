@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { gerarMapaDocumentalCredito, identificarRegimeCredito, montarHistoricoRegimeTributarioParaMapa } from '../server/services/mapaDocumentalCreditoService';
+import { documentosSocietariosPorNatureza, gerarMapaDocumentalCredito, identificarRegimeCredito, montarHistoricoRegimeTributarioParaMapa } from '../server/services/mapaDocumentalCreditoService';
 
 describe('mapa documental de crédito', () => {
   it('identifica Simples Nacional e monta PGDAS/DEFIS', () => {
@@ -219,5 +219,52 @@ describe('montarHistoricoRegimeTributarioParaMapa', () => {
       { regime: 'Lucro Presumido', data_inicio: '2025-01-01', data_fim: '2025-12-31' } as any,
     ]);
     expect(resultado.regime_vigente_desde).toBe('2025-01-01');
+  });
+});
+
+// CORREÇÃO (Rodada 29, 02/09/2026, auditoria própria de consistência entre
+// tipos de empresa, pedido explícito do usuário: "vão garantir que o
+// visual... vai ser totalmente iguais, só a única diferença vai ser
+// carregamento dos dados, do tipo da empresa"): `documentosSocietariosPorNatureza`
+// dispensava a exigência de Atos da Junta/Contrato Social para QUALQUER
+// empresa cuja natureza jurídica contivesse o texto "empresario individual",
+// mesmo quando o regime tributário real não era MEI -- conflando um tipo
+// societário (natureza jurídica) com um regime tributário. Só o MEI de fato
+// usa CCMEI e fica dispensado desse fluxo; um Empresário Individual não-MEI
+// continua registrado por Requerimento de Empresário na Junta Comercial e
+// deveria exigir a mesma comprovação de qualquer outra natureza jurídica.
+describe('documentosSocietariosPorNatureza (Rodada 29 -- MEI é regime tributário, "Empresário Individual" é natureza jurídica, não são a mesma coisa)', () => {
+  it('MEI (pelo regime) não exige nenhum documento societário -- comportamento inalterado', () => {
+    expect(documentosSocietariosPorNatureza({ natureza_juridica: 'Empresário Individual' }, 'mei')).toEqual([]);
+  });
+
+  it('natureza jurídica com "MEI"/"microempreendedor" no texto não exige nenhum documento societário, independentemente do regime devolvido -- reforço para quando o regime não foi identificado por outra via', () => {
+    expect(documentosSocietariosPorNatureza({ natureza_juridica: 'Microempreendedor Individual' }, 'nao_identificado')).toEqual([]);
+  });
+
+  it('CORREÇÃO: Empresário Individual que NÃO é MEI (regime Simples Nacional comum, por exemplo) continua exigindo Contrato Social/Atos da Junta, como qualquer outra natureza jurídica -- antes desta rodada, isto devolvia [] indevidamente', () => {
+    const resultado = documentosSocietariosPorNatureza({ natureza_juridica: 'Empresário Individual' }, 'simples_nacional');
+    expect(resultado.some((d) => d.codigo === 'atos_junta')).toBe(true);
+    expect(resultado.some((d) => d.codigo === 'contrato_social_vigente')).toBe(true);
+  });
+
+  it('CORREÇÃO: Empresário Individual em Lucro Presumido também continua exigindo a documentação societária padrão', () => {
+    const resultado = documentosSocietariosPorNatureza({ natureza_juridica: 'Empresário Individual' }, 'lucro_presumido');
+    expect(resultado.some((d) => d.codigo === 'atos_junta')).toBe(true);
+  });
+
+  it('Sociedade Anônima continua com a trilha própria (estatuto + atos da Junta), sem relação com este ponto', () => {
+    const resultado = documentosSocietariosPorNatureza({ natureza_juridica: 'Sociedade Anônima' }, 'lucro_real');
+    expect(resultado.some((d) => d.codigo === 'estatuto_ata_natureza')).toBe(true);
+    expect(resultado.some((d) => d.codigo === 'atos_junta')).toBe(true);
+    expect(resultado.some((d) => d.codigo === 'contrato_social_vigente')).toBe(false);
+  });
+
+  it('LTDA (natureza jurídica padrão, sem nenhum texto especial) exige a documentação societária universal, para qualquer regime', () => {
+    for (const regime of ['simples_nacional', 'lucro_presumido', 'lucro_real', 'lucro_arbitrado'] as const) {
+      const resultado = documentosSocietariosPorNatureza({ natureza_juridica: 'Sociedade Empresária Limitada' }, regime);
+      expect(resultado.some((d) => d.codigo === 'atos_junta')).toBe(true);
+      expect(resultado.some((d) => d.codigo === 'contrato_social_vigente')).toBe(true);
+    }
   });
 });

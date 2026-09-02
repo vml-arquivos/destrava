@@ -1012,14 +1012,33 @@ function firstValue(obj: any, keys: string[]) {
   return null;
 }
 
-function isEmpresaIndividual(empresa: any): boolean {
-  const texto = [empresa?.natureza_juridica, empresa?.porte, empresa?.porte_receita, empresa?.razao_social, empresa?.nome_fantasia]
+// CORRE\u00c7\u00c3O (Rodada 29, 02/09/2026, auditoria pr\u00f3pria de consist\u00eancia entre
+// tipos de empresa, pedido expl\u00edcito do usu\u00e1rio: garantir que o sistema
+// "saiba entender e separar e analisar... corretamente" cada tipo de
+// empresa): esta fun\u00e7\u00e3o decidia se uma empresa \u00e9 Empres\u00e1rio Individual/MEI
+// (para inferir um "s\u00f3cio" \u00fanico a partir do respons\u00e1vel/nome da empresa,
+// s\u00f3 usado quando nenhum s\u00f3cio real foi encontrado -- ver `montarProprietarioInferido`
+// e `sociosCadastro.length === 0 && sociosReceitaMapeados.length === 0` mais
+// abaixo) varrendo um texto que inclu\u00eda `razao_social`/`nome_fantasia` -- ou
+// seja, o NOME DA EMPRESA, texto livre escolhido pelo pr\u00f3prio empreendedor,
+// n\u00e3o um campo estruturado da Receita. Um `.includes('individual')` solto
+// tamb\u00e9m casava qualquer substring (ex.: uma raz\u00e3o social contendo a palavra
+// "individualizado"), n\u00e3o s\u00f3 a frase "empres\u00e1rio individual". Isso \u00e9
+// exatamente o tipo de decis\u00e3o condicionada ao nome espec\u00edfico de uma
+// empresa que este projeto tem a regra expl\u00edcita de nunca fazer -- qualquer
+// empresa (de qualquer natureza jur\u00eddica) cujo nome fantasia ou raz\u00e3o social
+// contivesse coincidentemente esse texto seria classificada incorretamente.
+// Corrigido para usar s\u00f3 campos estruturados vindos da Receita/cadastro
+// (`natureza_juridica`, `porte`, `porte_receita`, `opcao_mei`) e limites de
+// palavra nas frases reconhecidas, nunca o nome da empresa.
+export function isEmpresaIndividual(empresa: any): boolean {
+  const texto = [empresa?.natureza_juridica, empresa?.porte, empresa?.porte_receita]
     .filter(Boolean)
     .join(' ')
     .normalize('NFD')
     .replace(/[\u0300-\u036f]/g, '')
     .toLowerCase();
-  return !!empresa?.opcao_mei || texto.includes('microempreendedor individual') || texto.includes('mei') || texto.includes('empresario individual') || texto.includes('individual');
+  return !!empresa?.opcao_mei || /\bmicroempreendedor individual\b|\bmei\b|\bsimei\b|\bempresario individual\b/.test(texto);
 }
 
 function mapSocioReceita(item: any, index: number) {

@@ -578,7 +578,22 @@ export function slotCompativelComRegimeTributario(params: {
 
   const regimeSimples = regime === "simples_nacional" || regime === "mei";
   const regimeAConfirmar = regime === "nao_optante_regime_a_confirmar";
-  const regimeEcf = regimeAConfirmar || regime === "nao_optante_simples" || regime === "lucro_presumido" || regime === "lucro_real" || regime === "imune_isenta";
+  // CORREÇÃO (Rodada 29, 02/09/2026, auditoria própria de consistência entre
+  // empresas de todo tipo/regime, pedido explícito do usuário: "vão garantir
+  // que o visual... os modais vão ser totalmente iguais, só a única diferença
+  // vai ser carregamento dos dados, do tipo da empresa"): faltavam
+  // `lucro_arbitrado`, `imune` e `isenta` aqui -- só `imune_isenta` (o valor
+  // combinado, usado quando o texto bruto da natureza jurídica não permite
+  // distinguir os dois) estava coberto. O comentário de `bucketDoRegimeTributarioHistorico`,
+  // logo abaixo, já deixa explícito que esta função, aquela e `identificarRegimeCredito`
+  // (mapaDocumentalCreditoService.ts) "descrevem o mesmo conjunto fechado de
+  // regimes" -- e `identificarRegimeCredito` de fato devolve `lucro_arbitrado`/
+  // `imune`/`isenta` como valores próprios, não só a forma combinada. Sem os
+  // três aqui, uma empresa diagnosticada com um desses três regimes via
+  // `RegimeCredito` tinha os slots fiscais do grupo ECF/DCTF/DARF/Livro Caixa
+  // ainda não anexados escondidos da tela, exatamente o tipo de inconsistência
+  // visual entre tipos de empresa que esta rodada foi pedida para eliminar.
+  const regimeEcf = regimeAConfirmar || regime === "nao_optante_simples" || regime === "lucro_presumido" || regime === "lucro_real" || regime === "lucro_arbitrado" || regime === "imune" || regime === "isenta" || regime === "imune_isenta";
   if (matchTipos.some((tipo) => tiposFiscaisSimplificados.has(tipo))) return regimeSimples;
   if (matchTipos.some((tipo) => tiposFiscaisEcf.has(tipo))) return regimeEcf;
   return true;

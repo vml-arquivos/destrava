@@ -466,8 +466,28 @@ function marcarAnexados(documentos: DocumentoMapa[], tiposAnexados: Set<string>)
   });
 }
 
-function documentosSocietariosPorNatureza(empresa: any, regime: RegimeCredito): DocumentoMapa[] {
-  if (regime === 'mei' || /microempreendedor|mei|empresario individual/.test(normalizar(empresa?.natureza_juridica))) return [];
+export function documentosSocietariosPorNatureza(empresa: any, regime: RegimeCredito): DocumentoMapa[] {
+  // CORREÇÃO (Rodada 29, 02/09/2026, auditoria própria de consistência entre
+  // tipos de empresa): a checagem original também dispensava a exigência de
+  // Atos da Junta/Contrato Social sempre que a NATUREZA JURÍDICA continha o
+  // texto "empresario individual" -- mesmo quando o REGIME tributário não era
+  // MEI. "Empresário Individual" é um tipo societário (natureza jurídica);
+  // "MEI" é um regime tributário -- nem todo Empresário Individual é MEI (ex.:
+  // um Empresário Individual que ultrapassou o teto do MEI e hoje é optante
+  // do Simples Nacional comum, ou até Lucro Presumido). Só o MEI de fato usa
+  // CCMEI e fica dispensado do fluxo de Junta Comercial (documentado em
+  // `DOCUMENTOS_NAO_APLICAVEIS_POR_REGIME.mei` logo abaixo); um Empresário
+  // Individual não-MEI continua registrado por Requerimento de Empresário na
+  // Junta Comercial e deveria continuar exigindo a mesma comprovação de
+  // continuidade societária que qualquer outra natureza jurídica -- a
+  // checagem por natureza sozinha estava dispensando esse caso indevidamente,
+  // só por causa do texto da natureza jurídica, não do regime tributário real
+  // da empresa. Mantido `\bmei\b|\bsimei\b` (limites de palavra, mesmo padrão
+  // já usado por `bucketDoRegimeTributarioHistorico` em
+  // `shared/documentalPresentation.ts`) como reforço para o caso em que o
+  // regime não foi identificado corretamente por outra via, mas removido
+  // "empresario individual" do texto reconhecido aqui.
+  if (regime === 'mei' || /microempreendedor|\bmei\b|\bsimei\b/.test(normalizar(empresa?.natureza_juridica))) return [];
   const natureza = normalizar(empresa?.natureza_juridica);
   const base = DOCUMENTOS_UNIVERSAIS_EMPRESA.filter((item) => item.fase === 2);
   if (/sociedade anonima|companhia|s a\b/.test(natureza)) {

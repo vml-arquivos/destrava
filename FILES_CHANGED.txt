@@ -702,3 +702,35 @@ Arquivos de teste NOVOS ou AMPLIADOS: tests/documentacaoAnaliseEspecializada.int
 
 Total desta rodada: 2 arquivos de código alterados + 1 arquivo de teste
 ampliado + 7 arquivos de documentação alterados = 10 arquivos.
+
+======================================================================
+Rodada 29 (esta entrega) -- auditoria própria de consistência
+visual/diagnóstica entre TODOS os tipos de empresa/regime (sem print
+desta vez, pedido genérico do usuário); três inconsistências reais
+encontradas e corrigidas
+======================================================================
+
+Arquivos existentes ALTERADOS nesta rodada:
+
+shared/documentalPresentation.ts   (slotCompativelComRegimeTributario: regimeEcf passa a incluir lucro_arbitrado/imune/isenta, além da forma combinada imune_isenta já existente -- fecha o mesmo conjunto de regimes já usado por bucketDoRegimeTributarioHistorico)
+server/services/mapaDocumentalCreditoService.ts   (documentosSocietariosPorNatureza exportada; checagem de dispensa por natureza jurídica restrita a microempreendedor/mei/simei com limites de palavra, removido "empresario individual" isolado -- MEI é regime tributário, Empresário Individual é natureza jurídica, não são a mesma coisa)
+server/routes/documentacao.ts   (isEmpresaIndividual exportada; texto varrido deixa de incluir razao_social/nome_fantasia -- só natureza_juridica/porte/porte_receita/opcao_mei; frases reconhecidas passam a exigir limite de palavra)
+tests/slotCompativelComRegimeTributario.test.ts   (+1 teste, cobrindo lucro_arbitrado/imune/isenta/imune_isenta)
+tests/mapaDocumentalCredito.test.ts   (+6 testes, novo describe documentosSocietariosPorNatureza; import ampliado)
+CHANGELOG_CORRECOES.md
+PENDENCIAS_REAIS.md
+ROLLBACK_PLAN.md
+TEST_REPORT.md
+BUILD_REPORT.md
+FILES_CHANGED.txt (este arquivo)
+SHA256SUMS.txt
+
+Arquivos NOVOS -- testes:
+
+tests/isEmpresaIndividualSemNomeDaEmpresa.test.ts   (+5 testes -- prova de que uma LTDA com "individual" no nome fantasia/razão social nunca é classificada como Empresário Individual, e que substrings soltas como "individualizado" não enganam mais a detecção)
+
+Arquivos de teste NOVOS ou AMPLIADOS: tests/isEmpresaIndividualSemNomeDaEmpresa.test.ts (novo, 5 testes); tests/slotCompativelComRegimeTributario.test.ts (+1 teste); tests/mapaDocumentalCredito.test.ts (+6 testes) -- ver TEST_REPORT.md.
+
+Total desta rodada: 3 arquivos de código alterados + 2 arquivos de teste
+ampliados + 1 arquivo de teste novo + 7 arquivos de documentação
+alterados = 13 arquivos.

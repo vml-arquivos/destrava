@@ -1,12 +1,30 @@
-# Relatório de Testes — 31/08/2026 (atualizado, Rodada 17 — 02/09/2026: confirmação automática da Etapa 1, sem clicar em "Iniciar análise documental"; Rodada 18 — 02/09/2026: validação local sem IA/orientação de documento correto/menos texto repetido; Rodada 19 — 02/09/2026: sincronização automática de CNPJ; Rodada 20 — 02/09/2026: Cartão CNPJ confirma e trava a situação cadastral contra a reversão automática; Rodada 21 — 02/09/2026: leitura automática sem clique, falso positivo de nome para Empresário Individual, telefone/e-mail via Cartão CNPJ; Rodada 22 — 02/09/2026: refinamento com os documentos reais, janela de 5 dias, trava de edição manual; Rodada 23 — 02/09/2026: leitura visível ao anexar Cartão CNPJ/QSA/Enquadramento; Rodada 24 — 02/09/2026: falha já pendente/travada passa a se resolver sozinha na tela, sem F5; Rodada 25 — 02/09/2026: todos os campos do checklist sempre visíveis, para qualquer empresa/regime; Rodada 26 — 02/09/2026: Cartão CNPJ também corrige o nome empresarial/razão social; Rodada 27 — 02/09/2026: botão "Reler" manual em cada card da Etapa 1; Rodada 28 — 02/09/2026: grade de campos ilegível corrigida, botão "Reler" do Contrato Social confronta contra o Ato da Junta)
+# Relatório de Testes — 31/08/2026 (atualizado, Rodada 17 — 02/09/2026: confirmação automática da Etapa 1, sem clicar em "Iniciar análise documental"; Rodada 18 — 02/09/2026: validação local sem IA/orientação de documento correto/menos texto repetido; Rodada 19 — 02/09/2026: sincronização automática de CNPJ; Rodada 20 — 02/09/2026: Cartão CNPJ confirma e trava a situação cadastral contra a reversão automática; Rodada 21 — 02/09/2026: leitura automática sem clique, falso positivo de nome para Empresário Individual, telefone/e-mail via Cartão CNPJ; Rodada 22 — 02/09/2026: refinamento com os documentos reais, janela de 5 dias, trava de edição manual; Rodada 23 — 02/09/2026: leitura visível ao anexar Cartão CNPJ/QSA/Enquadramento; Rodada 24 — 02/09/2026: falha já pendente/travada passa a se resolver sozinha na tela, sem F5; Rodada 25 — 02/09/2026: todos os campos do checklist sempre visíveis, para qualquer empresa/regime; Rodada 26 — 02/09/2026: Cartão CNPJ também corrige o nome empresarial/razão social; Rodada 27 — 02/09/2026: botão "Reler" manual em cada card da Etapa 1; Rodada 28 — 02/09/2026: grade de campos ilegível corrigida, botão "Reler" do Contrato Social confronta contra o Ato da Junta; Rodada 29 — 02/09/2026: auditoria própria de consistência entre tipos de empresa, três inconsistências corrigidas)
 
 ## Resultado final
 
 ```
-Test Files  100 passed (100)
-     Tests  898 passed (898)
-  Duration  ~50-58s
+Test Files  101 passed (101)
+     Tests  910 passed (910)
+  Duration  ~49-58s
 ```
+
+## Rodada 29 — auditoria própria de consistência entre tipos de empresa; 12 testes novos, um arquivo novo (898 → 910 testes, 100 → 101 arquivos)
+
+Sem print desta vez -- pedido genérico do usuário para garantir consistência visual/diagnóstica entre todos os tipos de empresa. Investigação dirigida (não uma varredura de componente automatizada, que este projeto não tem infraestrutura para fazer) encontrou três inconsistências reais em funções puras já existentes, cada uma coberta por teste direto:
+
+1. **`tests/slotCompativelComRegimeTributario.test.ts` (+1 teste)**: prova que `lucro_arbitrado`/`imune`/`isenta`/`imune_isenta` agora veem os slots do grupo ECF/DCTF ainda não anexados (antes só `nao_optante_simples`/`lucro_presumido`/`lucro_real`/`imune_isenta` viam), e que continuam sem ver o grupo Simples -- simétrico ao comportamento já provado para Lucro Presumido/Real.
+2. **`tests/mapaDocumentalCredito.test.ts` (+6 testes, novo describe `documentosSocietariosPorNatureza`)**: MEI pelo regime dispensa documentação societária (comportamento inalterado); natureza jurídica com texto de MEI/microempreendedor também dispensa, mesmo com regime não identificado (reforço, inalterado); **prova de correção**: Empresário Individual com regime Simples Nacional comum, e separadamente com Lucro Presumido, agora EXIGE Contrato Social/Atos da Junta (antes retornava `[]` indevidamente); Sociedade Anônima continua com a trilha própria (não afetada); LTDA continua exigindo a documentação universal para qualquer regime (prova de não-regressão, iterando sobre 4 regimes).
+3. **`tests/isEmpresaIndividualSemNomeDaEmpresa.test.ts` (novo arquivo, +5 testes, mesmo padrão de mock de `pg`/`auth`/serviços de análise já usado por `tests/releituraManualIdentidadeEtapa1.test.ts`)**: reconhecimento correto por natureza jurídica e por `opcao_mei` (comportamento mantido); **prova de correção**: uma LTDA com a palavra "individual" no nome fantasia ou na razão social nunca mais é classificada como Empresário Individual; uma substring solta como "individualizado" na razão social não engana mais a detecção; Sociedade Anônima/Cooperativa comuns continuam `false`.
+
+`documentosSocietariosPorNatureza` (`mapaDocumentalCreditoService.ts`) e `isEmpresaIndividual` (`documentacao.ts`) foram exportados -- eram funções privadas -- especificamente para viabilizar esses testes diretos, mesma convenção já usada em rodadas anteriores (`tipoIdentidadeTemReleituraManual`, Rodada 27).
+
+**Verificação completa da suíte, executada depois de reinstalar `node_modules`:**
+```
+Test Files  101 passed (101)
+     Tests  910 passed (910)
+  Duration  49.11s
+```
+Nenhuma expectativa de teste pré-existente mudou -- os 12 testes novos são estritamente aditivos, e todos os 898 testes pré-existentes continuam passando sem nenhuma alteração (confirmando que as três correções não mudam nenhum comportamento já coberto para MEI, Simples Nacional, Lucro Presumido, Lucro Real, LTDA ou Sociedade Anônima).
 
 ## Rodada 28 — 3 testes novos para o crosscheck do Contrato Social via botão "Reler" (895 → 898 testes, 100 arquivos inalterados)
 

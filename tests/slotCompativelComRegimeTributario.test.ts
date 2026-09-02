@@ -144,6 +144,33 @@ describe("slotCompativelComRegimeTributario", () => {
   it("linha do tempo com um único grupo histórico (sem transição real) não muda o comportamento normal", () => {
     expect(slotPgdas({ bucketsHistoricos: ["ecf"] })).toBe(false);
   });
+
+  // CORREÇÃO (Rodada 29, 02/09/2026, auditoria própria de consistência entre
+  // tipos de empresa -- pedido explícito do usuário: "vão garantir que o
+  // visual... vai ser totalmente iguais, só a única diferença vai ser
+  // carregamento dos dados, do tipo da empresa"): `lucro_arbitrado`, `imune`
+  // e `isenta` são valores próprios de `RegimeCredito` (mapaDocumentalCreditoService.ts),
+  // não só a forma combinada `imune_isenta` -- e faltavam aqui, então uma
+  // empresa diagnosticada com um desses três regimes tinha os slots fiscais
+  // do grupo ECF/DCTF/DARF/Livro Caixa ainda não anexados escondidos da
+  // tela, enquanto o mesmo documento ainda não anexado aparecia normalmente
+  // para Lucro Presumido/Lucro Real -- uma inconsistência visual entre tipos
+  // de empresa, não uma diferença de dado.
+  it("CORREÇÃO: empresas em Lucro Arbitrado, Imune ou Isenta também veem os slots do grupo ECF/DCTF (ainda não anexados), igual a Lucro Presumido/Real", () => {
+    for (const regime of ["lucro_arbitrado", "imune", "isenta", "imune_isenta"]) {
+      expect(slotCompativelComRegimeTributario({
+        regime,
+        matchTipos: ["ecf"],
+        tiposFiscaisSimplificados: TIPOS_FISCAIS_SIMPLIFICADOS,
+        tiposFiscaisEcf: TIPOS_FISCAIS_ECF,
+        jaAnexado: false,
+        bucketsHistoricos: [],
+      })).toBe(true);
+      // E, simetricamente, continuam sem ver os slots do grupo Simples (ainda
+      // não anexados) -- mesmo comportamento já valido para Presumido/Real.
+      expect(slotPgdas({ regime })).toBe(false);
+    }
+  });
 });
 
 describe("transicaoDeRegimeRecente", () => {
