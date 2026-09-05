@@ -7,6 +7,7 @@ import {
   calcularAssinaturaAnalise,
   decidirVersaoLaudo,
   statusLaudoPodeSatisfazer,
+  versaoPromptDocumental,
 } from '../server/services/documentalLaudoVersioning';
 import { classificarDocumentoDeterministico } from '../server/services/classificadorDocumentalCentral';
 import { janela12Meses, obterFaturamentoRolling12Meses } from '../server/services/faturamentoRolling12MesesService';
@@ -15,6 +16,12 @@ import { detectarRequisitosCobertosPeloTexto, detectarStatusCertidaoDebitos, sta
 import { analisarTextoDocumentoLocal } from '../server/services/extracaoDocumentalLocal';
 
 describe('P0 — laudos, classificação e evidência temporal', () => {
+  it('mantém a mesma versão de prompt no upload, no leitor e no backfill', () => {
+    expect(versaoPromptDocumental('qsa_extract')).toBe('5.1.0');
+    expect(versaoPromptDocumental('simples_extract')).toBe('1.0.0');
+    expect(versaoPromptDocumental('catalogo_foto_fachada_extract')).toBe('2.0.0');
+  });
+
   it('inclui todas as versões na assinatura e invalida laudo antigo', () => {
     const base = calcularAssinaturaAnalise({
       arquivoId: 'arquivo-1',

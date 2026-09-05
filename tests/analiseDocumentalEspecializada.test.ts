@@ -376,14 +376,11 @@ describe('AnaliseDocumentalService com dependências isoladas', () => {
   });
 
   // NOVA CAPACIDADE (2026-08-30, Missão de evolução do Acervo Documental):
-  // EFD-Contribuições (registros M400/M800 de PIS/COFINS) não tem leitura
-  // especializada de receita bruta implementada neste sistema. Antes desta
-  // correção, o documento era tratado pelo analisador genérico em silêncio
-  // total sobre essa limitação (ver CHANGELOG_CORRECOES.md, rodada 1). Agora
-  // o sistema nunca inventa uma fórmula de receita a partir dele e sinaliza
-  // explicitamente ANALISE_ESPECIALIZADA_PENDENTE.
+  // A leitura especializada de EFD-Contribuições exige os registros M400 e
+  // M800 e só conclui quando os totais conciliam. Na ausência deles, mantém
+  // revisão humana fail-closed e nunca inventa receita bruta.
   describe('AnaliseDocumentalService.analisarDocumentoCatalogado -- EFD-Contribuições', () => {
-    it('nunca calcula receita bruta a partir de EFD-Contribuições -- fica marcado como análise especializada pendente', async () => {
+    it('nunca calcula receita bruta sem M400/M800 -- fica em revisão humana explícita', async () => {
       const empresa = { id: 'empresa-1', cnpj: '12.345.678/0001-90', razao_social: 'Empresa Teste Ltda' };
       const db = criarDbMock(empresa, [], { tipo_documento: 'efd_contribuicoes' });
       const extrator = async () => ({
@@ -395,9 +392,8 @@ describe('AnaliseDocumentalService com dependências isoladas', () => {
 
       const resultado = await service.analisarDocumentoCatalogado('empresa-1', 'doc-1', 'efd_contribuicoes');
 
-      expect(resultado.dados_extraidos.status_analise).toBe('ANALISE_ESPECIALIZADA_PENDENTE');
-      expect(resultado.dados_extraidos.motivo_status_analise).toMatch(/M400\/M800/);
-      expect(resultado.alertas.some((a) => a.codigo === 'efd_contribuicoes_analise_especializada_pendente')).toBe(true);
+      expect(resultado.dados_extraidos.status_analise).toBe('REVISAO_HUMANA');
+      expect(resultado.alertas.some((a) => a.codigo === 'efd_contribuicoes_m400_m800_incompletos')).toBe(true);
       expect(resultado.dados_extraidos.receita_bruta).toBeUndefined();
       // O documento continua sendo aceito e arquivado normalmente -- a
       // limitação é sobre a FÓRMULA, não sobre a compatibilidade do arquivo.
@@ -411,7 +407,7 @@ describe('AnaliseDocumentalService com dependências isoladas', () => {
 
       const resultado = await service.analisarDocumentoCatalogado('empresa-1', 'doc-1', 'efd');
 
-      expect(resultado.dados_extraidos.status_analise).toBe('ANALISE_ESPECIALIZADA_PENDENTE');
+      expect(resultado.dados_extraidos.status_analise).toBe('REVISAO_HUMANA');
     });
 
     it('outros documentos catalogados não recebem o status pendente da EFD (sem regressão)', async () => {

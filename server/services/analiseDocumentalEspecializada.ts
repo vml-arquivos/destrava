@@ -21,6 +21,7 @@ import { classificarResultadoPersistido, type ClassificacaoDocumentalResult } fr
 import { registrarPeriodoRegime } from './regimeTributarioTemporalService';
 import { registrarFaturamentoCompetencia } from './faturamentoRolling12MesesService';
 import { detectarRequisitosCobertosPeloTexto, detectarStatusCertidaoDebitos, registrarCoberturaEvidencia } from './coberturaEvidenciaBureauService';
+import { descricaoPerfilParaPrompt, obterPerfilAnaliseDocumental } from './documentAnalysisProfiles';
 
 const { Pool } = pkg;
 
@@ -37,6 +38,33 @@ const { Pool } = pkg;
 // usado diretamente, sem esperar confirmação da IA (ver comentário no local
 // de uso).
 const TIPOS_COMPROVANTE_REGIME_DETERMINISTICO = new Set<TipoDocumentoLocal>(['ecf', 'pgdas_d', 'dctf_mit', 'darf', 'ecd', 'livro_caixa']);
+
+const TIPOS_SOCIETARIOS_COM_LEITOR_LOCAL = new Set([
+  'contrato_social', 'alteracao_contratual', 'requerimento_empresario',
+  'estatuto', 'ata', 'nire',
+]);
+
+/** Seleciona um parser local compatível; nunca reutiliza contrato como parser genérico. */
+export function tipoLeitorLocalDocumentoCatalogado(tipoDocumento: string): TipoDocumentoLocal {
+  const tipoCanonico = canonicalizeDocumentType(tipoDocumento);
+  if (tipoCanonico === 'cartao_cnpj') return 'cartao_cnpj';
+  if (tipoDocumento === 'qsa') return 'qsa';
+  if (tipoDocumento === 'atos_junta_comercial') return 'atos_junta_comercial';
+  if (['simples_nacional', 'enquadramento_tributario_cnpj', 'comprovante_regime_outro'].includes(tipoDocumento)) return 'simples_nacional';
+  if (tipoCanonico === 'comprovante_residencia') return 'comprovante_residencia';
+  if (tipoCanonico === 'faturamento_12_meses') return 'faturamento_12_meses';
+  if (tipoCanonico === 'extrato_bancario') return 'extrato_bancario';
+  if (['ecf', 'recibo_ecf'].includes(tipoDocumento)) return 'ecf';
+  if (['pgdas', 'pgdas_d', 'recibo_pgdas'].includes(tipoDocumento)) return 'pgdas_d';
+  if (['dctf', 'dctfweb', 'mit'].includes(tipoDocumento)) return 'dctf_mit';
+  if (tipoDocumento === 'darf') return 'darf';
+  if (['ecd', 'recibo_ecd'].includes(tipoDocumento)) return 'ecd';
+  if (tipoDocumento === 'livro_caixa') return 'livro_caixa';
+  if (tipoCanonico === 'efd_contribuicoes') return 'efd_contribuicoes';
+  if (tipoCanonico === 'efd_icms_ipi') return 'efd_icms_ipi';
+  if (TIPOS_SOCIETARIOS_COM_LEITOR_LOCAL.has(tipoCanonico)) return 'contrato_social_alteracao';
+  return 'documento_generico';
+}
 
 export type SeveridadeDocumental = 'baixa' | 'media' | 'alta' | 'critica';
 export type TipoAnaliseDocumental =
@@ -1152,6 +1180,9 @@ function mimePorExtensao(filePath: string): string | null {
   if (ext === '.png') return 'image/png';
   if (ext === '.jpg' || ext === '.jpeg') return 'image/jpeg';
   if (ext === '.webp') return 'image/webp';
+  if (ext === '.csv') return 'text/csv';
+  if (ext === '.docx') return 'application/vnd.openxmlformats-officedocument.wordprocessingml.document';
+  if (ext === '.xlsx') return 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet';
   return null;
 }
 
@@ -1465,7 +1496,8 @@ function promptDocumentoCatalogado(tipoDocumento: string, nome: string, categori
   const exigenciaSituacaoCertidao = promptCodigo === 'cnd_cpend_extract'
     ? ' Além dos campos padrão, este documento é uma certidão/relatório de regularidade (CND, CPEND, PGFN ou CADIN): identifique explicitamente o RESULTADO declarado e retorne em "situacao_certidao" exatamente um destes valores -- "negativa" (nada consta / não há pendência / não está incluído), "positiva_com_efeito_negativo" (certidão positiva com efeito de negativa / CPEND), "positiva" (há pendência, débito ou inclusão ativa -- inclui qualquer CADIN que declare o CNPJ/CPF "incluído" ou "incluído pela RFB"), ou null se o resultado não estiver legível. NUNCA retorne "negativa" só porque o documento é do tipo certo -- "negativa" exige que o texto afirme expressamente ausência de pendência; um documento que declara o contribuinte incluído/positivo é "positiva" mesmo que estruturalmente pareça um relatório oficial válido.'
     : '';
-  return `Você é um analista documental de crédito empresarial. Um arquivo foi anexado no campo "${nome}" (${tipoDocumento}), categoria ${categoria} -- mas o nome desse campo é apenas a intenção de quem fez o upload, nunca uma prova do que o arquivo realmente é. Identifique o tipo do documento exclusivamente pelo conteúdo real do arquivo (título, cabeçalho, órgão emissor, campos preenchidos), de forma totalmente independente do nome do campo em que foi anexado -- nunca presuma que o documento é "${nome}" só porque foi anexado nesse campo. Só depois de identificar o tipo real do conteúdo, compare com o tipo esperado ("${nome}" / ${tipoDocumento}) para decidir documento_compativel: documento_compativel deve ser false sempre que o conteúdo real for de um tipo diferente do esperado, mesmo que os dois pertençam à mesma categoria (${categoria}) ou sirvam a propósitos relacionados. Retorne somente JSON válido e não tome decisão final de crédito. Separe rigorosamente campos_comprovados (valor, campo, página/trecho e confiança) de campos_inferidos; se algo não estiver legível, use null e registre pendencia. Identifique documento_compativel, competencia (inicio/fim), validade (inicio/fim), cnpj, cpf, razão social, nomes, valores financeiros, órgão emissor, número, situação, assinaturas e evidencias quando existirem.${exigenciaSituacaoCertidao} Nunca invente dados, não trate ausência de evidência como confirmação e indique revisao_humana_necessaria para divergência, baixa confiança ou documento incompatível. Prompt ${promptCodigo}.`;
+  const perfil = descricaoPerfilParaPrompt(tipoDocumento);
+  return `Você é um analista documental de crédito empresarial. Um arquivo foi anexado no campo "${nome}" (${tipoDocumento}), categoria ${categoria} -- mas o nome desse campo é apenas a intenção de quem fez o upload, nunca uma prova do que o arquivo realmente é. Identifique o tipo do documento exclusivamente pelo conteúdo real do arquivo (título, cabeçalho, órgão emissor, campos preenchidos), de forma totalmente independente do nome do campo em que foi anexado -- nunca presuma que o documento é "${nome}" só porque foi anexado nesse campo. Só depois de identificar o tipo real do conteúdo, compare com o tipo esperado ("${nome}" / ${tipoDocumento}) para decidir documento_compativel: documento_compativel deve ser false sempre que o conteúdo real for de um tipo diferente do esperado, mesmo que os dois pertençam à mesma categoria (${categoria}) ou sirvam a propósitos relacionados. Retorne somente JSON válido e não tome decisão final de crédito. ${perfil} Separe rigorosamente campos_comprovados (valor, campo, página/trecho e confiança) de campos_inferidos; se algo não estiver legível, use null e registre pendencia. Identifique documento_compativel, tipo_detectado, competencia (inicio/fim), validade (inicio/fim), data_emissao, cnpj, cpf, razão social, nomes, valores financeiros, órgão emissor, número, situação, assinaturas e evidencias quando existirem.${exigenciaSituacaoCertidao} Nunca invente dados, não trate ausência de evidência como confirmação e indique revisao_humana_necessaria para divergência, baixa confiança, data ausente quando exigida ou documento incompatível. Prompt ${promptCodigo}.`;
 }
 
 // CORREÇÃO (2026-08-31, "não é mais aceitável falha... tire esse texto
@@ -1514,42 +1546,27 @@ function normalizarDocumentoCatalogado(extraidos: any, tipoDocumento: string): {
     confianca: normalizarConfianca(evidencia?.confianca),
   }));
   const alertas: AlertaDocumental[] = [];
-  // Conjunto de tipos com classificação central (`classificadorDocumentalCentral.ts`)
-  // -- movido para antes do bloco de `documento_compativel` (era declarado só
-  // mais abaixo) porque agora os dois sinais de incompatibilidade (o local/IA
-  // aqui e o classificador central mais adiante) são consolidados num ÚNICO
-  // alerta para esses tipos, em vez de dois alertas quase idênticos ("duplicidade"
-  // relatada pelo usuário: o mesmo problema descrito duas vezes, com palavras
-  // diferentes).
-  const tiposCriticos = new Set([
-    'ecf', 'recibo_ecf', 'pgdas', 'pgdas_d', 'recibo_pgdas', 'dctf', 'dctfweb', 'mit', 'darf', 'ecd', 'recibo_ecd', 'livro_caixa',
-    'cnd', 'cnd_cnpj', 'cnd_cpf', 'cnd_cpend', 'cadin_cnpj', 'cadin_cpf', 'pgfn_cnpj', 'pgfn_cpf',
-    'cenprot_cnpj', 'cenprot_cpf', 'situacao_fiscal_cnpj', 'situacao_fiscal_cpf',
-  ]);
   // Dados lidos do próprio arquivo (independente de ele ser ou não o
   // documento esperado) -- usados para responder à segunda pergunta exigida
   // pelo usuário ("o que o documento diz": enquadramento/regime/tipo de
-  // empresa), tanto no alerta genérico abaixo quanto no alerta consolidado
-  // mais adiante (bloco `tiposCriticos`).
+  // empresa) no alerta consolidado mais adiante.
   const situacaoSimplesLida = String(bruto.situacao_simples ?? comprovados.situacao_simples ?? '').trim();
   const regimeLido = String(bruto.regime_tributario ?? comprovados.regime_tributario ?? '').trim();
   const enquadramentoLido = bruto.opcao_mei === true
     ? 'MEI/SIMEI'
     : regimeLido || (situacaoSimplesLida ? `Simples Nacional (${situacaoSimplesLida})` : null);
   const brutoIncompativel = bruto.documento_compativel === false;
-  if (brutoIncompativel && !tiposCriticos.has(tipoDocumento)) {
-    // CORREÇÃO (2026-08-31, "não é mais aceitável falha... tire esse texto
-    // enorme, não precisa dessa explicação"): a única informação exigida é
-    // (1) que o documento não é o esperado e (2) o que ele diz sobre
-    // enquadramento/regime -- nada de explicação longa ou recomendação.
-    const mensagem = `Documento incorreto para "${documentLabel(tipoDocumento)}" -- não validado.${enquadramentoLido ? ` Enquadramento indicado no arquivo: ${enquadramentoLido}.` : ''}`;
-    alertas.push({ codigo: 'documento_catalogado_incompativel', mensagem, severidade: 'alta' });
-  }
   const confianca = normalizarConfianca(bruto.confianca ?? bruto.nivel_confianca);
   if (confianca !== null && confianca < 0.72) {
     alertas.push({ codigo: 'documento_catalogado_baixa_confianca', mensagem: 'A leitura automática ficou abaixo do limiar de confiança.', severidade: 'media', valor_documento: confianca, recomendacao: 'Conferir o arquivo inteiro e confirmar os campos extraídos.' });
   }
-  if (!evidencias.length && Object.keys(comprovados).length === 0) {
+  const chavesTecnicas = new Set(['documento_compativel', 'confianca', 'nivel_confianca', 'fonte_extracao', 'mecanismo_extracao', 'tipo_detectado']);
+  const haDadosExtraidos = Object.entries(brutoPersistivel).some(([chave, valor]) => (
+    !chavesTecnicas.has(chave)
+    && valor !== null && valor !== undefined && valor !== ''
+    && !(Array.isArray(valor) && valor.length === 0)
+  ));
+  if (!evidencias.length && Object.keys(comprovados).length === 0 && !haDadosExtraidos) {
     alertas.push({ codigo: 'documento_catalogado_sem_evidencia', mensagem: 'Não foram encontrados campos comprovados nem evidências suficientes.', severidade: 'alta', recomendacao: 'Solicitar novo arquivo legível e encaminhar para revisão humana.' });
   }
 
@@ -1619,7 +1636,7 @@ function normalizarDocumentoCatalogado(extraidos: any, tipoDocumento: string): {
   // independente desta classificação pela checagem de `tiposComprovacaoRegime`
   // acima (`regimeFoiComprovado`, usada em `satisfazRequisito` mais abaixo).
   const identidadeFlexivel = tipoDocumento === 'comprovante_regime_outro';
-  const classificacao: ClassificacaoDocumentalResult = identidadeFlexivel
+  const classificacaoBase: ClassificacaoDocumentalResult = identidadeFlexivel
     ? {
         tipo_esperado: tipoDocumento,
         tipo_detectado: tipoDocumento as unknown as ClassificacaoDocumentalResult['tipo_detectado'],
@@ -1636,8 +1653,30 @@ function normalizarDocumentoCatalogado(extraidos: any, tipoDocumento: string): {
         resultado: { ...brutoPersistivel, campos_comprovados: comprovados },
         texto: textoLocal,
         competencia: bruto.competencia || { inicio: bruto.competencia_inicio || null, fim: bruto.competencia_fim || null },
+        validade: bruto.validade || { inicio: bruto.validade_inicio || null, fim: bruto.validade_fim || null },
       });
-  if (tiposCriticos.has(tipoDocumento)) {
+  const haEvidenciaEstruturada = evidencias.length > 0 || haDadosExtraidos || Object.values(comprovados).some((valor) => valor !== null && valor !== undefined && String(valor).trim() !== '');
+  const confirmacaoAssistidaConfiavel = !identidadeFlexivel
+    && classificacaoBase.identidade_status === 'NAO_IDENTIFICADO'
+    && bruto.documento_compativel === true
+    && (confianca ?? 0) >= 0.75
+    && haEvidenciaEstruturada;
+  const temporalidadeAceita = classificacaoBase.temporalidade_status === 'ATUAL' || classificacaoBase.temporalidade_status === 'NAO_APLICAVEL';
+  const classificacao: ClassificacaoDocumentalResult = confirmacaoAssistidaConfiavel
+    ? {
+        ...classificacaoBase,
+        tipo_detectado: String(bruto.tipo_detectado || canonicalizeDocumentType(tipoDocumento)).toUpperCase(),
+        identidade_status: 'IDENTIFICADO',
+        satisfaz_requisito: temporalidadeAceita,
+        cobertura_status: temporalidadeAceita ? 'SATISFAZ' : 'NAO_SATISFAZ',
+        confianca: confianca ?? 0,
+        motivo: temporalidadeAceita
+          ? 'Identidade confirmada pela leitura assistida com evidências estruturadas; temporalidade compatível.'
+          : classificacaoBase.motivo,
+      }
+    : classificacaoBase;
+  const exigeIdentidadeFixa = !identidadeFlexivel && !['outros', 'outro'].includes(tipoDocumento);
+  if (exigeIdentidadeFixa) {
     if (classificacao.identidade_status === 'INCOMPATIVEL' || brutoIncompativel) {
       // CORREÇÃO (2026-08-31, "não é mais aceitável falha... não ler um outro
       // documento junto com duplicidade"): antes, este bloco e o bloco de
@@ -1669,28 +1708,26 @@ function normalizarDocumentoCatalogado(extraidos: any, tipoDocumento: string): {
     }
   }
 
-  // NOVA CAPACIDADE (2026-08-30): EFD-Contribuições (registros M400/M800 de
-  // apuração de PIS/COFINS, usados para declarar a receita bruta mensal fora
-  // do Simples Nacional) não tem, neste sistema, uma leitura especializada
-  // capaz de calcular a receita bruta com segurança a partir desses
-  // registros. Construir uma fórmula às pressas correria o mesmo risco que
-  // motivou a correção do catálogo de códigos de receita do DARF: uma conta
-  // sutilmente errada é pior do que nenhuma conta. Antes desta correção, o
-  // documento era tratado pelo analisador genérico em silêncio total sobre
-  // essa limitação (auditoria em CHANGELOG_CORRECOES.md, rodada 1) -- agora
-  // fica explicitamente sinalizado como ANALISE_ESPECIALIZADA_PENDENTE, para
-  // que a limitação seja visível em vez de escondida atrás de um documento
-  // "compatível" sem mais nenhuma informação.
   const dadosEfd: Record<string, any> = {};
   if (canonicalizeDocumentType(tipoDocumento) === 'efd_contribuicoes') {
-    dadosEfd.status_analise = 'ANALISE_ESPECIALIZADA_PENDENTE';
-    dadosEfd.motivo_status_analise = 'A leitura especializada dos registros M400/M800 da EFD-Contribuições (PIS/COFINS) ainda não foi implementada neste sistema. O documento foi recebido e arquivado como evidência, mas nenhuma receita bruta foi calculada ou inferida automaticamente a partir dele -- isso evita adivinhar uma fórmula sem confirmação técnica.';
-    alertas.push({
-      codigo: 'efd_contribuicoes_analise_especializada_pendente',
-      mensagem: 'Este documento (EFD-Contribuições) ainda não tem leitura especializada implementada; nenhuma receita bruta foi calculada automaticamente a partir dos registros M400/M800.',
-      severidade: 'media',
-      recomendacao: 'Usar outro comprovante de faturamento já suportado (ex.: extrato bancário, PGDAS, declaração de faturamento) enquanto a leitura especializada de M400/M800 não é implementada; este documento continua arquivado como evidência do dossiê.',
-    });
+    const m400 = Array.isArray(bruto.registros_m400) ? bruto.registros_m400 : [];
+    const m800 = Array.isArray(bruto.registros_m800) ? bruto.registros_m800 : [];
+    const conciliado = bruto.totais_m400_m800_conciliados === true;
+    dadosEfd.status_analise = m400.length && m800.length && conciliado ? 'CONCLUIDA' : 'REVISAO_HUMANA';
+    dadosEfd.registros_m400 = m400;
+    dadosEfd.registros_m800 = m800;
+    dadosEfd.totais_m400_m800_conciliados = conciliado;
+    dadosEfd.receita_nao_tributada_confirmada = conciliado ? bruto.receita_nao_tributada_confirmada ?? null : null;
+    if (!m400.length || !m800.length || !conciliado) {
+      alertas.push({
+        codigo: 'efd_contribuicoes_m400_m800_incompletos',
+        mensagem: !m400.length || !m800.length
+          ? 'A EFD-Contribuições foi identificada, mas os registros M400 e M800 não foram ambos localizados com segurança.'
+          : 'Os totais M400 (PIS) e M800 (COFINS) divergem; nenhum valor consolidado foi assumido.',
+        severidade: 'alta',
+        recomendacao: 'Conferir o arquivo SPED completo e os registros M400/M800 antes de usar os valores na análise de crédito.',
+      });
+    }
   }
 
   // CORREÇÃO (2026-08-31, bug real reportado em produção -- ver
@@ -1739,7 +1776,28 @@ function normalizarDocumentoCatalogado(extraidos: any, tipoDocumento: string): {
   const certidaoExigeMerito = documentAnalysisConfig(tipoDocumento)?.tipo === 'cnd_cpend';
   const situacaoCertidao = String(dadosCertidao.situacao_certidao || '');
   const certidaoFoiComprovada = !certidaoExigeMerito || ['negativa', 'positiva_com_efeito_negativo'].includes(situacaoCertidao);
-  const satisfazRequisito = classificacao.satisfaz_requisito && regimeFoiComprovado && certidaoFoiComprovada;
+  const perfil = obterPerfilAnaliseDocumental(tipoDocumento);
+  const valorExtraido = (campo: string): unknown => {
+    if (campo === 'periodo') return bruto.periodo ?? bruto.competencia ?? comprovados.periodo ?? comprovados.competencia;
+    if (campo === 'valores') return bruto.valores ?? bruto.competencias_mensais ?? bruto.valor ?? comprovados.valores;
+    return comprovados[campo] ?? bruto[campo];
+  };
+  const camposObrigatoriosAusentes = perfil.camposObrigatorios.filter((campo) => {
+    const valor = valorExtraido(campo);
+    return valor === null || valor === undefined || valor === '' || (Array.isArray(valor) && valor.length === 0);
+  });
+  if (camposObrigatoriosAusentes.length > 0) {
+    alertas.push({
+      codigo: 'campos_essenciais_nao_comprovados',
+      mensagem: `Campos essenciais não comprovados: ${camposObrigatoriosAusentes.join(', ')}.`,
+      severidade: 'alta',
+      recomendacao: 'Conferir a legibilidade e completar o documento; campos ausentes não são inferidos.',
+    });
+  }
+  const satisfazRequisito = classificacao.satisfaz_requisito
+    && regimeFoiComprovado
+    && certidaoFoiComprovada
+    && camposObrigatoriosAusentes.length === 0;
   const identidadeComprovada = classificacao.identidade_status === 'IDENTIFICADO'
     || (classificacao.identidade_status === 'NAO_IDENTIFICADO' && bruto.documento_compativel === true);
   const dados = {
@@ -1750,7 +1808,7 @@ function normalizarDocumentoCatalogado(extraidos: any, tipoDocumento: string): {
     campos_comprovados: comprovados,
     campos_inferidos: camposInferidos,
     evidencias,
-    documento_compativel: tiposCriticos.has(tipoDocumento)
+    documento_compativel: exigeIdentidadeFixa
       ? bruto.documento_compativel !== false && identidadeComprovada && regimeFoiComprovado
       : bruto.documento_compativel !== false,
     confianca,
@@ -1764,6 +1822,7 @@ function normalizarDocumentoCatalogado(extraidos: any, tipoDocumento: string): {
     identidade_status: classificacao.identidade_status,
     temporalidade_status: classificacao.temporalidade_status,
     cobertura_status: satisfazRequisito ? classificacao.cobertura_status : 'NAO_SATISFAZ',
+    campos_essenciais_ausentes: camposObrigatoriosAusentes,
     classificacao_motivo: classificacao.motivo,
   };
   return { dados, evidencias, camposInferidos, alertas, classificacao, textoFonte: textoLocal || null };
@@ -1874,7 +1933,7 @@ export class AnaliseDocumentalService {
     private readonly extratorInjetado?: ExtratorInjetado,
   ) {}
 
-  private async extrairComIA(arquivoPath: string, prompt: string, mimeType: string): Promise<any> {
+  private async extrairComIA(arquivoPath: string, prompt: string, mimeType: string, textoExtraido?: string | null): Promise<any> {
     if (this.extratorInjetado) {
       this.ultimaFonteExtracao = 'injetada';
       return this.extratorInjetado(arquivoPath, prompt, mimeType);
@@ -1895,9 +1954,9 @@ export class AnaliseDocumentalService {
 
     const effectiveMime = String(mimeType || '').toLowerCase().split(';')[0].trim();
     const inferredMime = (!effectiveMime || effectiveMime === 'application/octet-stream') ? mimePorExtensao(resolvedPath) : effectiveMime;
-    if (!inferredMime || !(inferredMime === 'application/pdf' || inferredMime.startsWith('image/'))) {
-      throw new Error(`Tipo de arquivo não suportado pela análise documental: ${inferredMime || 'desconhecido'}.`);
-    }
+    const suportaInline = Boolean(inferredMime && (inferredMime === 'application/pdf' || inferredMime.startsWith('image/')));
+    const textoEstruturado = String(textoExtraido || '').trim();
+    if (!suportaInline && !textoEstruturado) throw new Error(`Tipo de arquivo não suportado pela análise documental: ${inferredMime || 'desconhecido'}.`);
 
     const principal = process.env.GEMINI_MODEL || 'gemini-2.5-flash';
     const fallback = process.env.GEMINI_MODEL_FALLBACK || 'gemini-2.5-pro';
@@ -1913,10 +1972,10 @@ export class AnaliseDocumentalService {
           model: modelName,
           generationConfig: { temperature: 0, responseMimeType: 'application/json' } as any,
         });
-        const request = model.generateContent([
-          { text: prompt },
-          { inlineData: { mimeType: inferredMime, data: buffer.toString('base64') } },
-        ] as any);
+        const conteudo = suportaInline
+          ? [{ text: prompt }, { inlineData: { mimeType: inferredMime!, data: buffer.toString('base64') } }]
+          : [{ text: `${prompt}\n\nCONTEÚDO TEXTUAL EXTRAÍDO DO ARQUIVO ESTRUTURADO:\n${textoEstruturado.slice(0, 250_000)}` }];
+        const request = model.generateContent(conteudo as any);
         const result = await Promise.race([
           request,
           new Promise<never>((_, reject) => setTimeout(() => reject(new Error(`Timeout Gemini após ${timeoutMs}ms`)), timeoutMs)),
@@ -1989,7 +2048,7 @@ export class AnaliseDocumentalService {
     }
 
     try {
-      const resultadoIa = await this.extrairComIA(arquivoPath, prompt, mimeType);
+      const resultadoIa = await this.extrairComIA(arquivoPath, prompt, mimeType, local?.texto || null);
       // CORREÇÃO (2026-08-31): antes, o texto local só era propagado para a IA
       // quando `tipo === 'qsa'`, mesmo quando a extração local tinha texto de
       // sobra para os demais tipos críticos (ECF, DCTF/MIT, DARF, Livro Caixa,
@@ -2075,6 +2134,21 @@ export class AnaliseDocumentalService {
     return { empresa, socios: sociosSincronizados, documento };
   }
 
+  /**
+   * Despacho único usado por upload e reprocessamento. Manter a escolha do
+   * motor aqui impede que o backfill produza um laudo genérico diferente do
+   * laudo especializado gerado para o mesmo tipo no upload.
+   */
+  async analisarDocumentoAutomatico(empresaId: string, arquivoId: string, tipoDocumento: string): Promise<AnaliseDocumentalResult> {
+    const tipoCanonico = canonicalizeDocumentType(tipoDocumento);
+    if (tipoCanonico === 'comprovante_residencia') return this.analisarComprovanteResidencia(empresaId, arquivoId);
+    if (tipoDocumento === 'qsa') return this.analisarQSA(empresaId, arquivoId);
+    if (['simples_nacional', 'enquadramento_tributario_cnpj'].includes(tipoDocumento)) return this.analisarSimplesNacional(empresaId, arquivoId);
+    if (tipoCanonico === 'faturamento_12_meses') return this.analisarFaturamento(empresaId, arquivoId);
+    if (tipoDocumento === 'atos_junta_comercial') return this.analisarAtosJuntaComercial(empresaId, arquivoId);
+    return this.analisarDocumentoCatalogado(empresaId, arquivoId, tipoDocumento);
+  }
+
   async analisarQSA(empresaId: string, arquivoId: string): Promise<AnaliseDocumentalResult> {
     this.ultimoModeloUsado = null;
     this.ultimaFonteExtracao = null;
@@ -2107,6 +2181,8 @@ export class AnaliseDocumentalService {
     }
 
     const alertas = validarQsaExtraida(empresa, socios, dados);
+    await persistirEvidenciasP0(this.db, empresaId, arquivoId, 'qsa', dados, [], extraidos?.__texto_local || null)
+      .catch((error: any) => console.warn('[P0] Evidências do QSA indisponíveis; laudo preservado:', error?.message || error));
     return criarResultado('qsa', empresaId, arquivoId, dados, alertas, this.ultimoModeloUsado);
   }
 
@@ -2114,8 +2190,11 @@ export class AnaliseDocumentalService {
     this.ultimoModeloUsado = null;
     this.ultimaFonteExtracao = null;
     const { empresa, documento } = await this.carregarContexto(empresaId, arquivoId);
-    const dados = normalizarDadosSimples(await this.extrairHibrido(documento.caminho_arquivo!, promptSimples(), documento.mime_type || 'application/pdf', 'simples_nacional'));
+    const extraidos = await this.extrairHibrido(documento.caminho_arquivo!, promptSimples(), documento.mime_type || 'application/pdf', 'simples_nacional');
+    const dados = normalizarDadosSimples(extraidos);
     const alertas = validarSimplesExtraido(empresa, dados);
+    await persistirEvidenciasP0(this.db, empresaId, arquivoId, 'simples_nacional', dados, [], extraidos?.__texto_local || null)
+      .catch((error: any) => console.warn('[P0] Evidências de enquadramento indisponíveis; laudo preservado:', error?.message || error));
     return criarResultado('simples_nacional', empresaId, arquivoId, dados, alertas, this.ultimoModeloUsado);
   }
 
@@ -2123,8 +2202,11 @@ export class AnaliseDocumentalService {
     this.ultimoModeloUsado = null;
     this.ultimaFonteExtracao = null;
     const { empresa, documento } = await this.carregarContexto(empresaId, arquivoId);
-    const dados = normalizarDadosAtos(await this.extrairHibrido(documento.caminho_arquivo!, promptAtosJunta(), documento.mime_type || 'application/pdf', 'atos_junta_comercial'));
+    const extraidos = await this.extrairHibrido(documento.caminho_arquivo!, promptAtosJunta(), documento.mime_type || 'application/pdf', 'atos_junta_comercial');
+    const dados = normalizarDadosAtos(extraidos);
     const alertas = validarAtosJuntaExtraidos(empresa, dados);
+    await persistirEvidenciasP0(this.db, empresaId, arquivoId, 'atos_junta_comercial', dados, [], extraidos?.__texto_local || null)
+      .catch((error: any) => console.warn('[P0] Evidências societárias indisponíveis; laudo preservado:', error?.message || error));
     return criarResultado('atos_junta_comercial', empresaId, arquivoId, dados, alertas, this.ultimoModeloUsado);
   }
 
@@ -2134,6 +2216,8 @@ export class AnaliseDocumentalService {
     const { empresa, socios, documento } = await this.carregarContexto(empresaId, arquivoId);
     const extraidos = await this.extrairHibrido(documento.caminho_arquivo!, promptFaturamento12Meses(), documento.mime_type || 'application/pdf', 'faturamento_12_meses');
     const validacao = validarFaturamentoExtraido(empresa, socios, extraidos);
+    await persistirEvidenciasP0(this.db, empresaId, arquivoId, 'faturamento_12_meses', validacao.dados, [], extraidos?.__texto_local || null)
+      .catch((error: any) => console.warn('[P0] Faturamento rolling 12 indisponível; laudo preservado:', error?.message || error));
     return criarResultado('faturamento_12_meses', empresaId, arquivoId, validacao.dados, validacao.alertas, this.ultimoModeloUsado);
   }
 
@@ -2143,6 +2227,8 @@ export class AnaliseDocumentalService {
     const { socios, documento } = await this.carregarContexto(empresaId, arquivoId);
     const extraidos = await this.extrairHibrido(documento.caminho_arquivo!, promptComprovanteResidencia(), documento.mime_type || 'application/pdf', 'comprovante_residencia');
     const validacao = validarComprovanteEnderecoExtraido(socios, extraidos, documento.socio_id || null);
+    await persistirEvidenciasP0(this.db, empresaId, arquivoId, 'comprovante_residencia', validacao.dados, [], extraidos?.__texto_local || null)
+      .catch((error: any) => console.warn('[P0] Evidências de endereço indisponíveis; laudo preservado:', error?.message || error));
     return criarResultado('comprovante_residencia', empresaId, arquivoId, validacao.dados, validacao.alertas, this.ultimoModeloUsado);
   }
 
@@ -2155,31 +2241,8 @@ export class AnaliseDocumentalService {
     const promptConfig = documentAnalysisConfig(tipoDocumento);
     const prompt = promptDocumentoCatalogado(tipoDocumento, catalogo.nome, catalogo.categoria, promptConfig?.promptCodigo || `catalogo_${tipoCanonico}`);
     const { documento } = await this.carregarContexto(empresaId, arquivoId);
-      const tipoLocal: TipoDocumentoLocal = tipoDocumento === 'ecf' || tipoDocumento === 'recibo_ecf'
-      ? 'ecf'
-      : ['pgdas', 'pgdas_d', 'recibo_pgdas'].includes(tipoDocumento)
-        ? 'pgdas_d'
-        : ['dctf', 'dctfweb', 'mit'].includes(tipoDocumento)
-          ? 'dctf_mit'
-          : tipoDocumento === 'darf'
-            ? 'darf'
-            : ['ecd', 'recibo_ecd'].includes(tipoDocumento)
-              ? 'ecd'
-              : tipoDocumento === 'livro_caixa'
-                ? 'livro_caixa'
-                // 'comprovante_regime_outro' (rodada 12) não tem um formato
-                // fixo esperado como ECF/DCTF/DARF/Livro Caixa, então não
-                // pode usar `parseComprovanteRegime` (que exige um marcador
-                // textual específico de um desses quatro tipos). O parser de
-                // 'simples_nacional' já é o detector determinístico local de
-                // regime tributário mais genérico do sistema -- identifica
-                // Simples/MEI e também lê Presumido/Real/Arbitrado via
-                // `detectarRegimeTributarioDeclarado` -- sem exigir que o
-                // documento seja de um formulário oficial específico.
-                : tipoDocumento === 'comprovante_regime_outro'
-                  ? 'simples_nacional'
-                  : 'contrato_social_alteracao';
-    const extraidos = await this.extrairHibrido(documento.caminho_arquivo!, prompt, documento.mime_type || 'application/pdf', tipoLocal, tipoLocal !== 'contrato_social_alteracao');
+    const tipoLocal = tipoLeitorLocalDocumentoCatalogado(tipoDocumento);
+    const extraidos = await this.extrairHibrido(documento.caminho_arquivo!, prompt, documento.mime_type || 'application/pdf', tipoLocal, true);
     const normalizado = normalizarDocumentoCatalogado(extraidos, tipoDocumento);
     const resultadoBase = criarResultado('documento_generico', empresaId, arquivoId, normalizado.dados, normalizado.alertas, this.ultimoModeloUsado);
     await persistirEvidenciasP0(this.db, empresaId, arquivoId, tipoDocumento, normalizado.dados, normalizado.evidencias, normalizado.textoFonte)

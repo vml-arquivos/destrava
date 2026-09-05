@@ -1,4 +1,11 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import {
+  CLASSIFIER_VERSION,
+  EXTRACTOR_VERSION,
+  RULE_VERSION,
+  SCHEMA_VERSION,
+  calcularAssinaturaAnalise,
+} from '../server/services/documentalLaudoVersioning';
 
 // CORREÇÃO (2026-08-31, feedback do usuário sobre a Rodada 7 -- "não é mais
 // aceitável que um documento fique no local de outro documento... como um
@@ -76,8 +83,33 @@ function dossieComDocumento(documento: Record<string, any>) {
 function mockDocumentosExtracoesIa(resultado: any) {
   mocks.poolQuery.mockImplementation(async (text: string, params?: any[]) => {
     if (String(text).includes('FROM information_schema.tables')) return { rows: [{ '?column?': 1 }] };
+    if (String(text).includes('FROM information_schema.columns')) return { rows: [{ '?column?': 1 }] };
     if (String(text).includes('FROM public.documentos_extracoes_ia')) {
-      if (params?.[0] === 'ecf-doc-1' && params?.[1] === 'ecf_extract') return { rows: [{ resultado, status: resultado.status, prompt_versao: '5.1.0' }] };
+      if (params?.[0] === 'ecf-doc-1' && params?.[1] === 'ecf_extract') {
+        const promptVersao = '1.0.0';
+        return {
+          rows: [{
+            id: 'extracao-ecf-1',
+            resultado,
+            status: resultado.status,
+            prompt_versao: promptVersao,
+            hash_arquivo: null,
+            analysis_signature: calcularAssinaturaAnalise({
+              arquivoId: 'ecf-doc-1',
+              arquivoHash: null,
+              promptCodigo: 'ecf_extract',
+              promptVersao,
+            }),
+            classifier_version: CLASSIFIER_VERSION,
+            extractor_version: EXTRACTOR_VERSION,
+            rule_version: RULE_VERSION,
+            schema_version: SCHEMA_VERSION,
+            analysis_status: 'ATIVO',
+            stale_at: null,
+            satisfaz_requisito: resultado?.dados_extraidos?.satisfaz_requisito ?? resultado.status === 'concluido',
+          }],
+        };
+      }
       return { rows: [] };
     }
     return { rows: [] };

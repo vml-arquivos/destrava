@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   calcularExigibilidadeEcf,
   competenciaEhAtual,
+  dataLimiteRegularEcf,
   obterLinhaDoTempoRegime,
   obterRegimeVigenteEm,
   registrarPeriodoRegime,
@@ -85,9 +86,15 @@ describe("regimeTributarioTemporalService — funções puras", () => {
     expect(calcularExigibilidadeEcf(2025, new Date("2026-08-30T12:00:00Z"))).toBe("EXIGIVEL");
   });
 
-  it("ECF exatamente no prazo (31/07) ainda não é exigível; no dia seguinte já é", () => {
+  it("ECF exatamente no prazo ainda não é exigível; só vence após 23:59 em Brasília", () => {
     expect(calcularExigibilidadeEcf(2025, new Date("2026-07-31T20:00:00Z"))).toBe("AINDA_NAO_EXIGIVEL");
-    expect(calcularExigibilidadeEcf(2025, new Date("2026-08-01T00:00:00Z"))).toBe("EXIGIVEL");
+    expect(calcularExigibilidadeEcf(2025, new Date("2026-08-01T02:59:59.999Z"))).toBe("AINDA_NAO_EXIGIVEL");
+    expect(calcularExigibilidadeEcf(2025, new Date("2026-08-01T03:00:00Z"))).toBe("EXIGIVEL");
+  });
+
+  it("recua o prazo regular da ECF quando 31 de julho cai no fim de semana", () => {
+    // 31/07/2027 cai em sábado: prazo regular encerra sexta, 30/07, em Brasília.
+    expect(dataLimiteRegularEcf(2026).toISOString()).toBe("2027-07-31T02:59:59.999Z");
   });
 
   it("competência até 12/2024 usa DCTF (PGD); 01/2025 em diante usa DCTFWeb/MIT", () => {
@@ -118,6 +125,21 @@ describe("regimeTributarioTemporalService — linha do tempo (banco falso)", () 
 
     const vigente = await obterRegimeVigenteEm(db, EMPRESA_ID, new Date("2025-06-01T12:00:00Z"));
     expect(vigente?.regime).toBe("Simples Nacional");
+  });
+
+  it("primeira evidência com fim no passado é histórica e não cria regime vigente", async () => {
+    const { db } = criarBancoFalso();
+    const resultado = await registrarPeriodoRegime(db, {
+      empresaId: EMPRESA_ID,
+      regime: "Simples Nacional",
+      dataEvidenciaInicio: "2024-12-01",
+      dataEvidenciaFim: "2024-12-31",
+      fonte: "pgdas",
+      confianca: 0.95,
+    });
+    expect(resultado.acao).toBe("inserido_historico");
+    expect(resultado.periodo).toMatchObject({ data_fim: "2024-12-31" });
+    expect(await obterRegimeVigenteEm(db, EMPRESA_ID, new Date("2026-08-30T12:00:00Z"))).toMatchObject({ data_fim: "2024-12-31" });
   });
 
   // Cenário exato descrito na missão (seção 51/10): empresa era Simples Nacional

@@ -1,6 +1,6 @@
 import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { apiFetch, apiFetchBlob } from "@/lib/api";
-import { DOCUMENT_TYPE_CATALOG, documentLabel } from "@shared/documentTypes";
+import { DOCUMENT_TYPE_CATALOG, documentAnalysisConfig, documentLabel } from "@shared/documentTypes";
 import { bucketDoRegimeTributarioHistorico, estadoVisualDocumento, slotCompativelComRegimeTributario, transicaoDeRegimeRecente, type BucketRegimeFiscal } from "@shared/documentalPresentation";
 import { ResultadoAnaliseDocumento } from "./ResultadoAnaliseDocumento";
 import { ProntidaoIdentidadeCard, type IdentidadeCnpj } from "../documentacao/DossieCreditoEmpresa";
@@ -187,6 +187,10 @@ export const SECOES_DOCUMENTAIS: SecaoDocumento[] = [
     slots: [
       slot("Atos da Junta Comercial", "atos_junta_comercial", [], { obrigatorio: true, descricao: "Primeiro documento da Etapa 2. A IA identifica todos os atos e define quais contratos/alterações devem ser anexados até comprovar 12 meses. Para MEI, a dispensa é registrada automaticamente." }),
       slot("Contrato social e alterações contratuais", "contrato_social", ["alteracao_contratual"], { obrigatorio: true, descricao: "Lido depois dos Atos da Junta e conferido por número do ato, data de registro, NIRE, CNPJ e sócios do QSA." }),
+      slot("Requerimento de Empresário / Instrumento de Inscrição", "requerimento_empresario", ["alteracao_contratual"], { descricao: "Ato registral próprio do Empresário Individual não enquadrado como MEI." }),
+      slot("Estatuto e atas vigentes", "estatuto", ["ata"], { descricao: "Atos de constituição, governança e representação de S.A., cooperativa, associação ou fundação, conforme a natureza jurídica." }),
+      slot("Registro no RCPJ / Cartório de Pessoas Jurídicas", "registro_cartorio_pj", [], { descricao: "Registro civil do estatuto, ato constitutivo e alterações de associação ou fundação; não substitua por ato da Junta Comercial." }),
+      slot("Registro/ato da OAB", "registro_oab", [], { descricao: "Registro do ato constitutivo e das alterações da sociedade de advocacia perante a OAB Seccional." }),
       slot("Relatório SCR/Registrato (CNPJ)", "rating_bacen_cnpj", ["scr_cnpj", "relatorio_scr"], { descricao: "Sequência de análise: SCR, CCS e CCF." }),
       slot("Relatório CCS do CNPJ", "ccs_cnpj"),
       slot("Relatório CCF do CNPJ", "ccf_cnpj"),
@@ -243,7 +247,7 @@ export const SECOES_DOCUMENTAIS: SecaoDocumento[] = [
       slot("Compartilhamento eCAC por banco", "compartilhamento_ecac", [], { exigeNome: true, placeholderNome: "Banco/destinatário eCAC" }),
       slot("Fotos da empresa", "foto_fachada", ["foto_interna_1", "foto_interna_2", "foto_interna_3"], { descricao: "Anexe fachada e fotos internas no mesmo local." }),
       slot("Campo outros / Documento nomeado", "outros", [
-        "comprovante_endereco", "procuracao", "nire", "estatuto",
+        "comprovante_endereco", "procuracao", "nire",
       ], {
         exigeNome: true,
         placeholderNome: "Nome do documento",
@@ -319,7 +323,9 @@ function grupoDaSecao(tituloSecao: string): string {
 // sistema" assim que um contrato assinado fosse anexado -- o arquivo continua
 // 100% acessível pela aba Contratos Firmados, só não é exibido nesta tela.
 const TIPOS_FORA_DO_CHECKLIST_CREDITO = new Set(["contrato_prestacao_servicos", "contrato_assessoria", "enquadramento_tributario_cpf"]);
-const TIPOS_COM_ANALISE_AUTOMATICA = new Set(["faturamento_12_meses", "comprovante_faturamento", "declaracao_faturamento", "comprovante_residencia"]);
+const TIPOS_COM_ANALISE_AUTOMATICA = new Set(
+  DOCUMENT_TYPE_CATALOG.filter((item) => item.uploadavel && documentAnalysisConfig(item.tipo)).map((item) => item.tipo),
+);
 const TIPOS_FISCAIS_SIMPLIFICADOS = new Set(["pgdas", "pgdas_d", "pgmei", "das_mei", "ccmei", "recibo_pgdas", "recibo_pgmei", "defis", "dasn_simei", "recibo_defis", "recibo_dasn_simei", "relatorio_receitas_mei"]);
 const TIPOS_FISCAIS_ECF = new Set(["ecf", "recibo_ecf", "ecd", "recibo_ecd", "dctf", "dctfweb", "mit", "darf", "livro_caixa", "efd_contribuicoes", "efd_icms_ipi", "efd"]);
 

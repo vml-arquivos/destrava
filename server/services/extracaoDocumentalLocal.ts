@@ -1,5 +1,5 @@
 import { execFile } from 'node:child_process';
-import { mkdtemp, readdir, rm } from 'node:fs/promises';
+import { mkdtemp, readFile, readdir, rm } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import { promisify } from 'node:util';
@@ -21,13 +21,16 @@ export type TipoDocumentoLocal =
   | 'dctf_mit'
   | 'darf'
   | 'ecd'
-  | 'livro_caixa';
+  | 'livro_caixa'
+  | 'efd_contribuicoes'
+  | 'efd_icms_ipi'
+  | 'documento_generico';
 
 export interface ExtracaoDocumentalLocalResult {
   tipo: TipoDocumentoLocal;
   disponivel: boolean;
   legivel: boolean;
-  mecanismo: 'pdftotext' | 'tesseract';
+  mecanismo: 'pdftotext' | 'tesseract' | 'texto_estruturado';
   texto: string;
   dados: Record<string, any>;
   confianca: number;
@@ -1118,6 +1121,205 @@ export function parseComprovanteRegime(tipoEsperado: TipoDocumentoLocal, texto: 
   };
 }
 
+function numeroSped(value: unknown): number | null {
+  const raw = String(value ?? '').trim();
+  if (!raw) return null;
+  const normalizado = raw.includes(',') ? raw.replace(/\./g, '').replace(',', '.') : raw;
+  const numero = Number(normalizado);
+  return Number.isFinite(numero) ? numero : null;
+}
+
+function periodoSped(texto: string): { inicio: string | null; fim: string | null } {
+  const datas = Array.from(String(texto || '').matchAll(/\b(\d{2})(\d{2})(20\d{2})\b/g))
+    .map((match) => parseDate(`${match[1]}/${match[2]}/${match[3]}`))
+    .filter((value): value is string => Boolean(value));
+  return { inicio: datas[0] || null, fim: datas[1] || datas[0] || null };
+}
+
+function parseEfdContribuicoes(texto: string): { dados: Record<string, any>; confianca: number } {
+  const linhas = String(texto || '').split(/\r?\n/).map((linha) => linha.trim()).filter(Boolean);
+  const parseRegistro = (codigo: 'M400' | 'M800') => linhas
+    .filter((linha) => linha.startsWith(`|${codigo}|`))
+    .map((linha) => {
+      const campos = linha.split('|');
+      return {
+        codigo_natureza_receita: campos[2] || null,
+        valor_total_receita: numeroSped(campos[3]),
+        codigo_conta: campos[4] || null,
+        descricao_complementar: campos[5] || null,
+      };
+    })
+    .filter((registro) => registro.valor_total_receita !== null);
+  const m400 = parseRegistro('M400');
+  const m800 = parseRegistro('M800');
+  const totalM400 = m400.reduce((total, item) => total + Number(item.valor_total_receita || 0), 0);
+  const totalM800 = m800.reduce((total, item) => total + Number(item.valor_total_receita || 0), 0);
+  const possuiAmbos = m400.length > 0 && m800.length > 0;
+  const tolerancia = Math.max(0.01, Math.max(totalM400, totalM800) * 0.005);
+  const conciliado = possuiAmbos ? Math.abs(totalM400 - totalM800) <= tolerancia : null;
+  const periodo = periodoSped(texto);
+  const compativel = /\|m400\||\|m800\||efd[- ]?contribui[cç][oõ]es/i.test(texto);
+  const confianca = clamp((compativel ? 0.4 : 0) + (m400.length ? 0.2 : 0) + (m800.length ? 0.2 : 0) + (periodo.inicio ? 0.1 : 0) + (conciliado === true ? 0.1 : 0));
+  return {
+    dados: {
+      documento_compativel: compativel,
+      tipo_detectado: compativel ? 'efd_contribuicoes' : null,
+      competencia: periodo,
+      registros_m400: m400,
+      registros_m800: m800,
+      total_receitas_nao_tributadas_pis_m400: totalM400,
+      total_receitas_nao_tributadas_cofins_m800: totalM800,
+      totais_m400_m800_conciliados: conciliado,
+      // M400 e M800 representam blocos distintos (PIS e COFINS) da mesma
+      // base econômica. Nunca são somados entre si como se fossem receitas
+      // diferentes; quando conciliados, o valor é exposto uma única vez.
+      receita_nao_tributada_confirmada: conciliado === true ? totalM400 : null,
+      revisao_humana_necessaria: !m400.length || !m800.length || conciliado !== true,
+      motivo_revisao_humana: !m400.length || !m800.length
+        ? 'A EFD-Contribuições não contém ambos os registros M400 e M800 legíveis.'
+        : conciliado !== true
+          ? 'Os totais dos registros M400 e M800 divergem além da tolerância de 0,5%.'
+          : null,
+      confianca,
+      fonte_extracao: 'local_deterministica',
+    },
+    confianca,
+  };
+}
+
+function parseEfdIcmsIpi(texto: string): { dados: Record<string, any>; confianca: number } {
+  const linhas = String(texto || '').split(/\r?\n/).map((linha) => linha.trim()).filter(Boolean);
+  const registros = linhas.filter((linha) => linha.startsWith('|E110|')).map((linha) => {
+    const campos = linha.split('|');
+    return {
+      total_debitos: numeroSped(campos[2]),
+      ajustes_debitos: numeroSped(campos[4]),
+      estornos_creditos: numeroSped(campos[5]),
+      total_creditos: numeroSped(campos[6]),
+      ajustes_creditos: numeroSped(campos[8]),
+      estornos_debitos: numeroSped(campos[9]),
+      saldo_credor_anterior: numeroSped(campos[10]),
+      saldo_devedor: numeroSped(campos[11]),
+      deducoes: numeroSped(campos[12]),
+      icms_recolher: numeroSped(campos[13]),
+      saldo_credor_transportar: numeroSped(campos[14]),
+      debitos_especiais: numeroSped(campos[15]),
+    };
+  });
+  const periodo = periodoSped(texto);
+  const compativel = registros.length > 0 || /efd.{0,30}icms.{0,10}ipi|escrituracao fiscal digital.{0,80}(?:icms|ipi)/i.test(texto);
+  const confianca = clamp((compativel ? 0.5 : 0) + (registros.length ? 0.35 : 0) + (periodo.inicio ? 0.15 : 0));
+  return {
+    dados: {
+      documento_compativel: compativel,
+      tipo_detectado: compativel ? 'efd_icms_ipi' : null,
+      competencia: periodo,
+      registros_e110: registros,
+      revisao_humana_necessaria: registros.length === 0,
+      motivo_revisao_humana: registros.length ? null : 'Nenhum registro E110 legível foi localizado.',
+      confianca,
+      fonte_extracao: 'local_deterministica',
+    },
+    confianca,
+  };
+}
+
+/**
+ * Extração local neutra para tipos que não têm parser determinístico próprio.
+ *
+ * Só promove valores precedidos por rótulos explícitos e nunca afirma que o
+ * documento é compatível com o slot. A identidade continua sendo decidida
+ * pelo classificador central usando o texto integral; se ele não a comprovar,
+ * o laudo permanece em revisão. Isso evita executar o parser de contrato
+ * social em arquivos de outra natureza quando a IA externa está indisponível.
+ */
+function parseDocumentoGenerico(texto: string): { dados: Record<string, any>; confianca: number } {
+  const linhas = linhasTexto(texto);
+  const cnpj = formatarCnpj(primeiroCnpj(texto));
+  const cpf = texto.match(/\b\d{3}\.?\d{3}\.?\d{3}-?\d{2}\b/)?.[0] || null;
+  const razaoSocial = limparValor(valorAposRotulo(linhas, ['razão social', 'razao social', 'nome empresarial']));
+  const entidadeConsultada = limparValor(valorAposRotulo(linhas, ['entidade consultada', 'contribuinte consultado', 'titular consultado'])) || razaoSocial;
+  const orgaoEmissor = limparValor(valorAposRotulo(linhas, ['órgão emissor', 'orgao emissor', 'órgão expedidor', 'orgao expedidor']));
+  const numeroDocumento = limparValor(valorAposRotulo(linhas, ['número do documento', 'numero do documento', 'número da certidão', 'numero da certidao']));
+  const protocolo = limparValor(valorAposRotulo(linhas, ['recibo ou protocolo', 'número do recibo', 'numero do recibo', 'protocolo']));
+  const orgaoRegistro = limparValor(valorAposRotulo(linhas, ['órgão de registro', 'orgao de registro', 'cartório', 'cartorio', 'serventia']));
+  const numeroRegistro = limparValor(valorAposRotulo(linhas, ['número do registro', 'numero do registro', 'registro nº', 'registro n°', 'número de ordem', 'numero de ordem']));
+  const secionalOab = limparValor(valorAposRotulo(linhas, ['seccional da oab', 'seccional oab', 'conselho seccional']));
+  const situacaoRegistro = limparValor(valorAposRotulo(linhas, ['situação do registro', 'situacao do registro', 'status do registro']));
+  const dataEmissao = dataProximaDe(
+    texto,
+    /(?:data\s+(?:de|da)\s+emiss[aã]o|emitid[oa]\s+em|data\s+da\s+consulta)\D{0,45}(\d{2}\/\d{2}\/\d{4})/i,
+  );
+  const dataValidade = dataProximaDe(
+    texto,
+    /(?:data\s+(?:de|da)\s+validade|v[aá]lid[oa]\s+at[eé]|vencimento)\D{0,45}(\d{2}\/\d{2}\/\d{4})/i,
+  );
+  const dataRegistro = dataProximaDe(
+    texto,
+    /(?:data\s+(?:do|de)\s+registro|registrad[oa]\s+em)\D{0,45}(\d{2}\/\d{2}\/\d{4})/i,
+  );
+  const competenciaMatch = texto.match(/(?:compet[eê]ncia|per[ií]odo\s+de\s+apura[cç][aã]o|m[eê]s\s+de\s+refer[eê]ncia)\D{0,30}(0?[1-9]|1[0-2])\s*[\/\-]\s*(20\d{2})/i);
+  let competencia: { inicio: string; fim: string } | null = null;
+  if (competenciaMatch) {
+    const mes = Number(competenciaMatch[1]);
+    const ano = Number(competenciaMatch[2]);
+    const ultimoDia = new Date(Date.UTC(ano, mes, 0)).getUTCDate();
+    competencia = {
+      inicio: `${ano}-${String(mes).padStart(2, '0')}-01`,
+      fim: `${ano}-${String(mes).padStart(2, '0')}-${String(ultimoDia).padStart(2, '0')}`,
+    };
+  }
+  const situacaoCertidao = /positiva\s+com\s+efeito(?:s)?\s+de\s+negativa/i.test(texto)
+    ? 'positiva_com_efeito_negativo'
+    : /certid[aã]o\s+positiva|situa[cç][aã]o\D{0,20}positiv[ao]/i.test(texto)
+      ? 'positiva'
+      : /certid[aã]o\s+negativa|nada\s+consta|situa[cç][aã]o\D{0,20}negativ[ao]/i.test(texto)
+        ? 'negativa'
+        : null;
+  const resultadoConsulta = limparValor(valorAposRotulo(linhas, ['resultado da consulta', 'resultado', 'situação', 'situacao']));
+  const valorRotulado = limparValor(valorAposRotulo(linhas, ['valor total', 'total geral', 'valor da operação', 'valor da operacao']));
+  const valorTotal = valorRotulado ? numeroMonetario(valorRotulado) : null;
+
+  const camposComprovados = Object.fromEntries(Object.entries({
+    cnpj,
+    cpf,
+    razao_social: razaoSocial,
+    entidade_consultada: entidadeConsultada,
+    orgao_emissor: orgaoEmissor,
+    numero_documento: numeroDocumento,
+    recibo_ou_protocolo: protocolo,
+    orgao_registro: orgaoRegistro,
+    numero_registro: numeroRegistro,
+    secional_oab: secionalOab,
+    situacao_registro: situacaoRegistro,
+    data_registro: dataRegistro,
+    data_emissao: dataEmissao,
+    data_validade: dataValidade,
+    competencia,
+    situacao_certidao: situacaoCertidao,
+    resultado_consulta: resultadoConsulta,
+    valor_total: valorTotal,
+  }).filter(([, valor]) => valor !== null && valor !== undefined && valor !== ''));
+
+  const evidencias = Object.entries(camposComprovados).map(([campo, valor]) => {
+    const valorTexto = typeof valor === 'object' ? JSON.stringify(valor) : String(valor);
+    const linha = linhas.find((item) => item.toLocaleLowerCase('pt-BR').includes(valorTexto.toLocaleLowerCase('pt-BR')));
+    return { campo, valor, pagina: null, trecho: (linha || valorTexto).slice(0, 1000), confianca: 0.72 };
+  });
+  const confianca = clamp(0.15 + Math.min(0.5, Object.keys(camposComprovados).length * 0.07));
+  return {
+    dados: {
+      ...camposComprovados,
+      campos_comprovados: camposComprovados,
+      evidencias,
+      validade: { inicio: dataEmissao, fim: dataValidade },
+      confianca,
+      fonte_extracao: 'local_deterministica_generica',
+    },
+    confianca,
+  };
+}
+
 export function analisarTextoDocumentoLocal(tipo: TipoDocumentoLocal, texto: string): { dados: Record<string, any>; confianca: number } {
   if (tipo === 'cartao_cnpj') return parseCartaoCnpj(texto);
   if (tipo === 'qsa') return parseQsa(texto);
@@ -1126,10 +1328,61 @@ export function analisarTextoDocumentoLocal(tipo: TipoDocumentoLocal, texto: str
   if (tipo === 'faturamento_12_meses') return parseFaturamento12Meses(texto);
   if (tipo === 'comprovante_residencia') return parseComprovanteResidencia(texto);
   if (tipo === 'extrato_bancario') return parseExtratoBancario(texto);
+  if (tipo === 'efd_contribuicoes') return parseEfdContribuicoes(texto);
+  if (tipo === 'efd_icms_ipi') return parseEfdIcmsIpi(texto);
+  if (tipo === 'documento_generico') return parseDocumentoGenerico(texto);
   // ECF, DCTF/DCTFWeb, DARF e Livro Caixa compartilham a detecção
   // conservadora de regime, mas preservam sua própria compatibilidade documental.
   if (tipo === 'ecf' || tipo === 'pgdas_d' || tipo === 'dctf_mit' || tipo === 'darf' || tipo === 'ecd' || tipo === 'livro_caixa') return parseComprovanteRegime(tipo, texto);
   return parseContratoSocialAlteracao(texto);
+}
+
+function decodificarXml(value: string): string {
+  return value
+    .replace(/<w:tab\s*\/?>/g, '\t')
+    .replace(/<w:br\s*\/?>|<\/w:p>|<\/row>/g, '\n')
+    .replace(/<[^>]+>/g, ' ')
+    .replace(/&amp;/g, '&')
+    .replace(/&lt;/g, '<')
+    .replace(/&gt;/g, '>')
+    .replace(/&quot;/g, '"')
+    .replace(/&#39;|&apos;/g, "'")
+    .replace(/[ \t]+/g, ' ')
+    .replace(/\n\s+/g, '\n')
+    .trim();
+}
+
+async function unzipEntry(arquivoPath: string, entry: string, timeout: number, maxBuffer: number): Promise<string> {
+  const { stdout } = await execFileAsync('unzip', ['-p', arquivoPath, entry], { timeout, maxBuffer, encoding: 'utf8' });
+  return String(stdout || '');
+}
+
+async function extrairTextoEstruturado(arquivoPath: string, extension: string, timeout: number, maxBuffer: number): Promise<string> {
+  if (extension === '.csv') return String(await readFile(arquivoPath, 'utf8')).replace(/\u0000/g, '').trim();
+  if (extension === '.docx') return decodificarXml(await unzipEntry(arquivoPath, 'word/document.xml', timeout, maxBuffer));
+  if (extension !== '.xlsx') return '';
+
+  const sharedXml = await unzipEntry(arquivoPath, 'xl/sharedStrings.xml', timeout, maxBuffer).catch(() => '');
+  const compartilhadas = Array.from(sharedXml.matchAll(/<si[^>]*>([\s\S]*?)<\/si>/g)).map((match) => decodificarXml(match[1]));
+  const { stdout: listaRaw } = await execFileAsync('unzip', ['-Z1', arquivoPath], { timeout, maxBuffer, encoding: 'utf8' });
+  const planilhas = String(listaRaw || '').split(/\r?\n/).filter((nome) => /^xl\/worksheets\/sheet\d+\.xml$/i.test(nome));
+  const linhas: string[] = [];
+  for (const planilha of planilhas.slice(0, 50)) {
+    const xml = await unzipEntry(arquivoPath, planilha, timeout, maxBuffer);
+    for (const row of xml.matchAll(/<row[^>]*>([\s\S]*?)<\/row>/g)) {
+      const valores = Array.from(row[1].matchAll(/<c([^>]*)>([\s\S]*?)<\/c>/g)).map((cell) => {
+        const attrs = cell[1];
+        const body = cell[2];
+        const inline = body.match(/<t[^>]*>([\s\S]*?)<\/t>/)?.[1];
+        if (inline != null) return decodificarXml(inline);
+        const value = body.match(/<v[^>]*>([\s\S]*?)<\/v>/)?.[1] || '';
+        if (/\bt=["']s["']/.test(attrs)) return compartilhadas[Number(value)] ?? value;
+        return decodificarXml(value);
+      });
+      if (valores.some(Boolean)) linhas.push(valores.join(' | '));
+    }
+  }
+  return linhas.join('\n').trim();
 }
 
 async function executarTesseract(arquivo: string, timeout: number, maxBuffer: number): Promise<string> {
@@ -1200,9 +1453,7 @@ export async function extrairDocumentoLocal(
   const extension = path.extname(arquivoPath).toLowerCase();
   const isPdf = effectiveMime === 'application/pdf' || extension === '.pdf';
   const isImage = effectiveMime.startsWith('image/') || ['.png', '.jpg', '.jpeg', '.webp', '.tif', '.tiff', '.bmp'].includes(extension);
-  if (!isPdf && !isImage) {
-    return { tipo, disponivel: true, legivel: false, mecanismo: 'pdftotext', texto: '', dados: {}, confianca: 0, motivo: 'Formato não suportado pelo leitor interno.' };
-  }
+  const isStructured = ['.csv', '.docx', '.xlsx'].includes(extension);
 
   const timeout = Number(process.env.LOCAL_PDF_TEXT_TIMEOUT_MS || 15000);
   const ocrTimeout = Number(process.env.LOCAL_OCR_TIMEOUT_MS || 120000);
@@ -1210,6 +1461,28 @@ export async function extrairDocumentoLocal(
   const timeoutTexto = Number.isFinite(timeout) && timeout > 0 ? timeout : 15000;
   const timeoutOcr = Number.isFinite(ocrTimeout) && ocrTimeout > 0 ? ocrTimeout : 120000;
   const bufferMaximo = Number.isFinite(maxBuffer) && maxBuffer > 0 ? maxBuffer : 16 * 1024 * 1024;
+
+  if (isStructured) {
+    try {
+      const texto = await extrairTextoEstruturado(arquivoPath, extension, timeoutTexto, bufferMaximo);
+      const { dados, confianca } = analisarTextoDocumentoLocal(tipo, texto);
+      return {
+        tipo,
+        disponivel: true,
+        legivel: texto.length >= 20,
+        mecanismo: 'texto_estruturado',
+        texto,
+        dados: { ...dados, fonte_extracao: 'texto_estruturado_local' },
+        confianca,
+        motivo: texto.length >= 20 ? undefined : 'Arquivo estruturado sem conteúdo textual legível.',
+      };
+    } catch (error: any) {
+      return { tipo, disponivel: error?.code !== 'ENOENT', legivel: false, mecanismo: 'texto_estruturado', texto: '', dados: {}, confianca: 0, motivo: String(error?.message || 'Falha na leitura do arquivo estruturado.') };
+    }
+  }
+  if (!isPdf && !isImage) {
+    return { tipo, disponivel: true, legivel: false, mecanismo: 'pdftotext', texto: '', dados: {}, confianca: 0, motivo: 'Formato não suportado pelo leitor interno.' };
+  }
 
   if (isPdf) {
     try {

@@ -43,6 +43,72 @@ function limitarEvidencia(value: unknown): string {
   return evidencia.length > 420 ? `${evidencia.slice(0, 417).trim()}...` : evidencia;
 }
 
+function rotuloCampoGenerico(chave: string): string {
+  const especiais: Record<string, string> = {
+    cnpj: 'CNPJ', cpf: 'CPF', nire: 'NIRE', cnae: 'CNAE', crc: 'CRC',
+    razao_social: 'Razão social', nome_fantasia: 'Nome fantasia', capital_social: 'Capital social',
+    data_emissao: 'Data de emissão', data_validade: 'Data de validade', situacao_cadastral: 'Situação cadastral',
+    data_registro: 'Data do registro', numero_registro: 'Número do registro', orgao_registro: 'Órgão de registro',
+    secional_oab: 'Seccional da OAB', situacao_registro: 'Situação do registro',
+    situacao_certidao: 'Situação da certidão', regime_tributario: 'Regime tributário',
+    tipo_detectado: 'Tipo detectado', identidade_status: 'Identidade documental',
+    temporalidade_status: 'Situação temporal', cobertura_status: 'Cobertura do requisito',
+    campos_essenciais_ausentes: 'Campos essenciais ausentes',
+  };
+  if (especiais[chave]) return especiais[chave];
+  const base = chave.replace(/_/g, ' ').trim();
+  return base ? base.charAt(0).toUpperCase() + base.slice(1) : 'Campo';
+}
+
+function valorCampoGenerico(value: unknown): string {
+  if (value === null || value === undefined || value === '') return '';
+  if (typeof value === 'boolean') return value ? 'Sim' : 'Não';
+  if (typeof value === 'number') return numero(value);
+  if (typeof value === 'string') return value.replace(/\s+/g, ' ').trim().slice(0, 500);
+  if (Array.isArray(value)) {
+    const resumidos = value.slice(0, 20).map((item) => {
+      if (item && typeof item === 'object') {
+        const registro = item as Record<string, unknown>;
+        return texto(registro.nome || registro.razao_social || registro.competencia || registro.valor || registro.descricao || registro.mensagem);
+      }
+      return texto(item);
+    }).filter(Boolean);
+    return resumidos.join(', ');
+  }
+  if (typeof value === 'object') {
+    const registro = value as Record<string, unknown>;
+    const intervalo = [registro.inicio, registro.fim].map(texto).filter(Boolean);
+    if (intervalo.length) return intervalo.join(' a ');
+    const pares = Object.entries(registro).slice(0, 8)
+      .map(([chave, item]) => {
+        const formatado = valorCampoGenerico(item);
+        return formatado ? `${rotuloCampoGenerico(chave)}: ${formatado}` : '';
+      })
+      .filter(Boolean);
+    return pares.join(' · ');
+  }
+  return texto(value);
+}
+
+function camposExtraidosGenericos(resultado: any): DocumentoAnaliseCampo[] {
+  const dados = resultado?.dados_extraidos && typeof resultado.dados_extraidos === 'object' ? resultado.dados_extraidos : {};
+  const comprovados = dados?.campos_comprovados && typeof dados.campos_comprovados === 'object' ? dados.campos_comprovados : {};
+  const tecnicos = new Set([
+    'texto', 'ocr_texto', 'campos_comprovados', 'campos_inferidos', 'evidencias', 'alertas', 'divergencias',
+    'fonte_extracao', 'mecanismo_extracao', 'separacao_comprovado_inferido', 'documento_compativel',
+    'confianca', 'nivel_confianca', 'satisfaz_requisito', 'tipo_documento', 'tipo_esperado',
+  ]);
+  const candidatos = new Map<string, unknown>();
+  for (const [chave, valor] of Object.entries(comprovados)) candidatos.set(chave, valor);
+  for (const [chave, valor] of Object.entries(dados)) {
+    if (!tecnicos.has(chave) && !candidatos.has(chave)) candidatos.set(chave, valor);
+  }
+  return Array.from(candidatos.entries()).flatMap(([chave, valor]) => {
+    const formatado = valorCampoGenerico(valor);
+    return formatado ? [{ label: rotuloCampoGenerico(chave), valor: formatado }] : [];
+  }).slice(0, 30);
+}
+
 function itens(value: unknown): string[] {
   if (!Array.isArray(value)) return [];
   return value
@@ -401,9 +467,10 @@ export function construirSecoesAnaliseDocumento(resultado: any = {}, documento: 
       itens: alertasCriticos.map((alerta: any) => alerta.recomendacao ? `${texto(alerta.mensagem)} — ${texto(alerta.recomendacao)}` : texto(alerta.mensagem)),
     });
   }
-  const campos = Array.isArray(resultado?.campos)
+  const camposDeclarados = Array.isArray(resultado?.campos)
     ? resultado.campos.map((campo: any) => ({ label: texto(campo?.label) || "Campo", valor: texto(campo?.valor) })).filter((campo: DocumentoAnaliseCampo) => campo.valor)
     : [];
+  const campos = camposDeclarados.length ? camposDeclarados : camposExtraidosGenericos(resultado);
   if (campos.length) secoes.push({ id: "campos", titulo: "Amostra objetiva dos dados lidos", campos });
   const validacoesRealizadas = validacoes(resultado, documento, false, [], campos);
   if (validacoesRealizadas.length) secoes.push({ id: "validacoes", titulo: "Checklist técnico de validação", itens: validacoesRealizadas, colapsavel: true });

@@ -56,19 +56,35 @@ function diaAnterior(dataIso: string): string {
 
 // ---------------------------------------------------------------------------
 // Seção 13: ECF é anual, entregue no ano seguinte ao ano-calendário. O prazo
-// legal de entrega é o último dia útil de julho do ano seguinte; usamos 31/07
-// como referência (constante nomeada, fácil de ajustar caso a RFB publique
-// prazo diferente em algum ano, algo que este módulo não tenta prever).
+// legal de entrega é o último dia útil de julho do ano seguinte. O cálculo
+// abaixo recua sábados e domingos e encerra às 23:59:59.999 de Brasília.
+// Exceções extraordinárias publicadas pela RFB continuam dependendo de regra
+// versionada específica; o motor nunca tenta prevê-las.
 // Antes de existir esta função, o motor não tinha como distinguir "ECF ainda
 // não é exigível" de "ECF pendente/vencida" para o ano-calendário corrente.
 // ---------------------------------------------------------------------------
 const ECF_MES_PRAZO = 7; // julho
-const ECF_DIA_PRAZO = 31;
 
 export type ExigibilidadeEcf = 'AINDA_NAO_EXIGIVEL' | 'EXIGIVEL';
 
+export function dataLimiteRegularEcf(anoCalendario: number): Date {
+  const anoEntrega = anoCalendario + 1;
+  const ultimoDiaJulho = new Date(Date.UTC(anoEntrega, ECF_MES_PRAZO - 1, 31, 12));
+  while (ultimoDiaJulho.getUTCDay() === 0 || ultimoDiaJulho.getUTCDay() === 6) {
+    ultimoDiaJulho.setUTCDate(ultimoDiaJulho.getUTCDate() - 1);
+  }
+  // 23:59:59.999 no horário de Brasília (UTC-03:00) corresponde a
+  // 02:59:59.999 UTC do dia seguinte.
+  return new Date(Date.UTC(
+    ultimoDiaJulho.getUTCFullYear(),
+    ultimoDiaJulho.getUTCMonth(),
+    ultimoDiaJulho.getUTCDate() + 1,
+    3, 0, 0, 0,
+  ) - 1);
+}
+
 export function calcularExigibilidadeEcf(anoCalendario: number, hoje: Date = new Date()): ExigibilidadeEcf {
-  const prazo = new Date(Date.UTC(anoCalendario + 1, ECF_MES_PRAZO - 1, ECF_DIA_PRAZO, 23, 59, 59));
+  const prazo = dataLimiteRegularEcf(anoCalendario);
   return hoje.getTime() > prazo.getTime() ? 'EXIGIVEL' : 'AINDA_NAO_EXIGIVEL';
 }
 
@@ -194,7 +210,13 @@ export async function registrarPeriodoRegime(
   const periodos = await obterLinhaDoTempoRegime(db, empresaId);
   const vigente = periodos.find((periodo) => periodo.data_fim === null) || null;
 
-  const evidenciaEhAtualOuFutura = !vigente || !vigente.data_inicio || dataEvidenciaInicio >= vigente.data_inicio;
+  const evidenciaTemFimHistorico = Boolean(dataEvidenciaFim) && !competenciaEhAtual(dataEvidenciaFim);
+  // Sem um período vigente prévio, uma evidência que declara explicitamente
+  // um fim já passado continua sendo histórica. O comportamento anterior
+  // abria esse primeiro registro como vigente só porque a tabela estava vazia,
+  // fazendo um PGDAS/ECF antigo representar incorretamente a situação atual.
+  const evidenciaEhAtualOuFutura = !evidenciaTemFimHistorico
+    && (!vigente || !vigente.data_inicio || dataEvidenciaInicio >= vigente.data_inicio);
 
   if (evidenciaEhAtualOuFutura) {
     if (vigente && vigente.regime === regime) {

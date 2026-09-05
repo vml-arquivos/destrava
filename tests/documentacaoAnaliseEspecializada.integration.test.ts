@@ -39,6 +39,17 @@ vi.mock('../server/services/analiseDocumentalEspecializada', () => ({
     analisarAtosJuntaComercial: mocks.analisarAtos,
     analisarDocumentoCatalogado: mocks.analisarGenerico,
     analisarContratoComAtosJunta: mocks.analisarContrato,
+    analisarDocumentoAutomatico: (empresaId: string, arquivoId: string, tipoDocumento: string) => {
+      if (tipoDocumento === 'qsa') return mocks.analisarQSA(empresaId, arquivoId);
+      if (tipoDocumento === 'simples_nacional' || tipoDocumento === 'enquadramento_tributario_cnpj') {
+        return mocks.analisarSimples(empresaId, arquivoId);
+      }
+      if (tipoDocumento === 'atos_junta_comercial') return mocks.analisarAtos(empresaId, arquivoId);
+      if (tipoDocumento === 'contrato_social' || tipoDocumento === 'alteracao_contratual') {
+        return mocks.analisarContrato(empresaId, arquivoId);
+      }
+      return mocks.analisarGenerico(empresaId, arquivoId, tipoDocumento);
+    },
   },
 }));
 

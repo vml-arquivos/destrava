@@ -1,7 +1,7 @@
 import crypto from 'node:crypto';
 
-export const CLASSIFIER_VERSION = '2026.09.01';
-export const EXTRACTOR_VERSION = 'local-2026.09.01';
+export const CLASSIFIER_VERSION = '2026.09.05';
+export const EXTRACTOR_VERSION = 'local-2026.09.04';
 // CORREÇÃO (2026-08-31, caso real ZR CONSTRUCOES -- PGDAS aceito no slot de
 // ECF): bump obrigatório sempre que `extrairHibrido`/`normalizarDocumentoCatalogado`
 // mudam como um documento é classificado. Sem este bump, um laudo já
@@ -35,14 +35,30 @@ export const EXTRACTOR_VERSION = 'local-2026.09.01';
 // `validarQsaExtraida` sem bump nenhum, então TODO QSA já analisado antes do
 // deploy da Rodada 13 está na mesma situação -- não é possível bumpar de forma
 // seletiva só para QSA com a infraestrutura de assinatura única hoje existente.
-export const RULE_VERSION = 'rules-2026.09.01.2';
-export const PROMPT_VERSION = 'prompt-1.0.0';
-export const SCHEMA_VERSION = 'laudo-103';
+export const RULE_VERSION = 'rules-2026.09.05.1';
+export const PROMPT_VERSION = 'prompt-2.0.0';
+export const SCHEMA_VERSION = 'laudo-104';
+
+const VERSOES_PROMPT_DOCUMENTAL: Readonly<Record<string, string>> = {
+  qsa_extract: '5.1.0',
+  simples_extract: '1.0.0',
+  atos_junta_extract: '1.0.0',
+  faturamento_12m_extract: '1.0.0',
+  comprovante_residencia_extract: '1.0.0',
+};
+
+/** Fonte única da versão que entra na linha persistida e na assinatura. */
+export function versaoPromptDocumental(promptCodigo: string): string {
+  const codigo = String(promptCodigo || '').trim();
+  if (VERSOES_PROMPT_DOCUMENTAL[codigo]) return VERSOES_PROMPT_DOCUMENTAL[codigo];
+  if (codigo.startsWith('catalogo_')) return '2.0.0';
+  return '1.0.0';
+}
 
 export type AnalysisLifecycleStatus = 'ATIVO' | 'STALE' | 'REANALISE_NECESSARIA' | 'SUPERSEDED';
 export type ProcessingStatus = 'PENDENTE' | 'PROCESSANDO' | 'CONCLUIDO' | 'FALHOU';
 export type IdentityStatus = 'IDENTIFICADO' | 'INCOMPATIVEL' | 'AMBIGUO' | 'NAO_IDENTIFICADO';
-export type TemporalStatus = 'ATUAL' | 'HISTORICO' | 'FORA_JANELA' | 'AINDA_NAO_EXIGIVEL';
+export type TemporalStatus = 'ATUAL' | 'HISTORICO' | 'FORA_JANELA' | 'AINDA_NAO_EXIGIVEL' | 'FUTURO' | 'NAO_VERIFICADO' | 'NAO_APLICAVEL';
 export type CoverageStatus = 'SATISFAZ' | 'NAO_SATISFAZ' | 'PARCIAL' | 'EQUIVALENTE';
 
 export interface AnalysisSignatureInput {

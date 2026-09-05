@@ -19,6 +19,7 @@ import type { Pool } from "pg";
 import { executarVarreduraOutbox } from "./dispatcher";
 import { publishEvent } from "./eventBus";
 import { executarSincronizacaoReceitaAutomatica } from "../sincronizacaoReceitaAutomaticaService";
+import { backfillLaudosService } from "../backfillLaudosService";
 
 const INTERVALO_RETRY_MS = Number(process.env.AUTOMATION_RETRY_INTERVAL_MS || 60_000);
 const INTERVALO_ROTINAS_MS = Number(process.env.AUTOMATION_ROTINAS_INTERVAL_MS || 15 * 60_000);
@@ -29,6 +30,20 @@ const INTERVALO_ROTINAS_MS = Number(process.env.AUTOMATION_ROTINAS_INTERVAL_MS |
 // para a justificativa completa (por que nenhuma API gratuita resolveria isso
 // sozinha) e CHANGELOG_CORRECOES.md, seção "Rodada 19".
 const INTERVALO_SINCRONIZACAO_RECEITA_MS = Number(process.env.SINCRONIZACAO_RECEITA_INTERVAL_MS || 30 * 60_000);
+const INTERVALO_RETRY_DOCUMENTAL_MS = Number(process.env.DOCUMENT_ANALYSIS_RETRY_INTERVAL_MS || 5 * 60_000);
+let retryDocumentalEmAndamento = false;
+
+async function executarRetryDocumental(): Promise<void> {
+  if (retryDocumentalEmAndamento) return;
+  retryDocumentalEmAndamento = true;
+  try {
+    const limite = Number(process.env.DOCUMENT_ANALYSIS_RETRY_BATCH || 25);
+    await backfillLaudosService.enqueueDueRetries(limite);
+    await backfillLaudosService.run({ limit: limite });
+  } finally {
+    retryDocumentalEmAndamento = false;
+  }
+}
 
 interface ContratoAtivoRow {
   id: string;
@@ -133,6 +148,10 @@ async function avaliarRotinas(pool: Pool): Promise<void> {
 }
 
 export function iniciarAutomationScheduler(pool: Pool): void {
+  setImmediate(() => executarRetryDocumental().catch((err) => {
+    console.warn("[automation-engine] Retry documental indisponível:", err?.message || err);
+  }));
+
   setInterval(() => {
     executarVarreduraOutbox(pool).catch((err) => {
       console.error("[automation-engine] Erro na varredura do outbox:", err);
@@ -159,7 +178,13 @@ export function iniciarAutomationScheduler(pool: Pool): void {
       });
   }, INTERVALO_SINCRONIZACAO_RECEITA_MS);
 
+  setInterval(() => {
+    executarRetryDocumental().catch((err) => {
+      console.error("[automation-engine] Erro na retentativa documental:", err);
+    });
+  }, INTERVALO_RETRY_DOCUMENTAL_MS);
+
   console.log(
-    `[automation-engine] Scheduler iniciado (retry a cada ${INTERVALO_RETRY_MS}ms, rotinas a cada ${INTERVALO_ROTINAS_MS}ms, sincronização de CNPJ a cada ${INTERVALO_SINCRONIZACAO_RECEITA_MS}ms)`
+    `[automation-engine] Scheduler iniciado (retry a cada ${INTERVALO_RETRY_MS}ms, documentos a cada ${INTERVALO_RETRY_DOCUMENTAL_MS}ms, rotinas a cada ${INTERVALO_ROTINAS_MS}ms, sincronização de CNPJ a cada ${INTERVALO_SINCRONIZACAO_RECEITA_MS}ms)`
   );
 }

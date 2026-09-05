@@ -208,7 +208,7 @@ function doc(codigo: string, nome: string, tipos: string[], fase: number, finali
     tipo_exigencia: tipoExigencia,
     aplicabilidade,
     status,
-    regra_versao: '2026.08.29',
+    regra_versao: '2026.09.05',
     ...extras,
   };
 }
@@ -496,16 +496,28 @@ export function documentosSocietariosPorNatureza(empresa: any, regime: RegimeCre
       ...base.filter((item) => item.codigo === 'atos_junta'),
     ];
   }
-  if (/cooperativa|associacao|fundacao/.test(natureza)) {
+  if (/cooperativa/.test(natureza)) {
     return [
       doc('estatuto_ata_natureza', 'Estatuto e atas vigentes', ['estatuto', 'ata'], 2, 'Comprovar governança, poderes de representação e registro da entidade.', { tipo_exigencia: 'obrigacao_legal' }),
       ...base.filter((item) => item.codigo === 'atos_junta'),
     ];
   }
+  if (/associacao|fundacao/.test(natureza)) {
+    return [
+      doc('estatuto_ata_natureza', 'Estatuto e atas vigentes', ['estatuto', 'ata'], 2, 'Comprovar governança e poderes de representação da entidade.', { tipo_exigencia: 'obrigacao_legal' }),
+      doc('registro_cartorio_pj', 'Registro no RCPJ / Cartório de Pessoas Jurídicas', ['registro_cartorio_pj'], 2, 'Comprovar o registro do ato constitutivo e das alterações no Registro Civil de Pessoas Jurídicas.', { tipo_exigencia: 'obrigacao_legal' }),
+    ];
+  }
   if (/advogad|oab/.test(natureza)) {
     return [
-      ...base,
+      doc('ato_constitutivo_oab', 'Ato constitutivo e alterações da sociedade de advocacia', ['contrato_social', 'alteracao_contratual'], 2, 'Comprovar a constituição, composição e administração vigentes da sociedade.', { tipo_exigencia: 'obrigacao_legal' }),
       doc('registro_oab', 'Registro/ato da OAB', ['registro_oab'], 2, 'Comprovar registro da sociedade e poderes de representação perante a OAB.', { tipo_exigencia: 'obrigacao_legal' }),
+    ];
+  }
+  if (/empresario individual|empresa individual|\bei\b/.test(natureza)) {
+    return [
+      doc('requerimento_empresario_vigente', 'Requerimento de Empresário ou Instrumento de Inscrição vigente', ['requerimento_empresario', 'alteracao_contratual'], 2, 'Comprovar registro, objeto, capital e titularidade vigentes do Empresário Individual.', { tipo_exigencia: 'obrigacao_legal' }),
+      ...base.filter((item) => item.codigo === 'atos_junta'),
     ];
   }
   return base;

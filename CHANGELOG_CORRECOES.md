@@ -1,5 +1,20 @@
 # Changelog de Correções — 30/08/2026 (Rodada 14: 31/08/2026, Rodada 15: 31/08/2026, Rodada 16: 01/09/2026, Rodada 17: 02/09/2026, Rodada 18: 02/09/2026, Rodada 19: 02/09/2026, Rodada 20: 02/09/2026, Rodada 21: 02/09/2026, Rodada 22: 02/09/2026, Rodada 23: 02/09/2026, Rodada 24: 02/09/2026, Rodada 25: 02/09/2026, Rodada 26: 02/09/2026, Rodada 27: 02/09/2026, Rodada 28: 02/09/2026, Rodada 29: 02/09/2026, Rodada 30: 02/09/2026)
 
+## Continuidade 05/09/2026 — leitura automática integral e operação segura
+
+- Todo tipo uploadável do catálogo passa a ter configuração efetiva de análise e prompt; tipos sem extrator dedicado usam leitura genérica orientada pelo perfil documental.
+- O fallback local genérico é neutro: extrai somente campos explicitamente rotulados e não reaproveita mais o parser de contrato social para arquivos de outras famílias.
+- PDF, imagens, CSV, DOCX e XLSX entram no pipeline automático; conteúdo e assinatura do arquivo são conferidos antes da persistência.
+- A tela exibe campos comprovados de qualquer laudo atual, além dos painéis especializados já existentes para CNPJ, QSA, societário, enquadramento e faturamento.
+- Identidade, campos essenciais, competência, emissão e validade operam em modo fail-closed: ausência, incompatibilidade, vencimento, data futura ou laudo antigo exigem revisão/reprocessamento e nunca satisfazem o requisito silenciosamente.
+- EFD-Contribuições lê e reconcilia M400/M800 sem somar duas vezes a mesma base; EFD ICMS/IPI lê E110. Divergência ou bloco ausente encaminha para revisão humana.
+- Upload, execução manual e backfill usam o mesmo despachante de analisadores especializados. As versões de prompt também foram centralizadas para impedir que um laudo reprocessado nasça imediatamente obsoleto.
+- Migração 104 adiciona fila rearmável/versionada, retentativa automática e o tipo Requerimento de Empresário; o container não migra o banco por padrão.
+- A matriz societária diferencia MEI de Empresário Individual não-MEI e preserva as trilhas de LTDA, S.A., cooperativa/associação/fundação e sociedade de advogados.
+- Console SQL administrativo bloqueado por padrão; quando explicitamente habilitado, aceita somente leitura com transação read-only, timeout e limite de linhas.
+
+Detalhes de implantação, matriz documental, política temporal e limitações estão em `DOCUMENTACAO_LEITURA_AUTOMATICA_2026-09-05.md`.
+
 ## Rodada 30 — cards do Acervo Documental ("Documentação da Empresa") deixam de ficar com alturas desiguais/desalinhadas quando fechados
 
 Print real da tela em produção ("OFICINA DA BELEZA LTDA"), pedido explícito do usuário, verbatim: **"Analise o que que está anexado, e, vamos ter um padrão, de visualização. Na hora que clicar pra expandir, pra abrir os dados, ele pode, né, estar né com mais dados maior do que o [outro/os outros]. Mas na visualização, com todos, encolhidos né, fechado, tem que estar tudo, mesmo padrão, mesmo, tudo nivelado, nada, torto, né, nada um maior do que o outro."** O print mostra a seção "DOCUMENTAÇÃO DA EMPRESA": os cards "Atos da Junta Comercial" e "Contrato social e alterações contratuais" (que têm selo "OBRIGATÓRIO NA ETAPA", ícone de descrição e o link "Dados da análise") visivelmente mais altos que os vizinhos da mesma linha ("Relatório SCR/Registro", "Relatório CCS/CCF do CNPJ", sem nenhum desses elementos) -- criando linhas com bordas de cards terminando em alturas diferentes, exatamente o "torto"/"um maior que o outro" relatado.

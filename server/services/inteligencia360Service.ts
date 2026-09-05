@@ -410,19 +410,22 @@ export async function buscarAnalisesDocumentaisAvancadas(
               dei.id, dei.arquivo_id, dei.status, dei.prompt_codigo, dei.modelo,
               dei.resultado, dei.campos_extraidos, dei.pendencias, dei.erros,
               dei.nivel_confianca, dei.processado_em, dei.atualizado_em,
+              dei.analysis_signature, dei.analysis_status, dei.identidade_status,
+              dei.temporalidade_status, dei.cobertura_status, dei.satisfaz_requisito,
               da.tipo_documento
          FROM public.documentos_extracoes_ia dei
          JOIN public.documentos_arquivos da ON da.id = dei.arquivo_id
         WHERE (da.empresa_id = $1 OR (da.entidade_tipo = 'empresa' AND da.entidade_id = $1))
           AND da.excluido_em IS NULL
-          AND dei.prompt_codigo = ANY($2::text[])
-          AND dei.status IN ('concluido', 'revisao_humana', 'falhou')
+          AND dei.status IN ('concluido', 'revisao_humana')
+          AND dei.analysis_status = 'ATIVO'
+          AND dei.analysis_signature IS NOT NULL
         ORDER BY dei.prompt_codigo, dei.processado_em DESC NULLS LAST, dei.atualizado_em DESC`,
-      [empresaId, ["qsa_extract", "simples_extract", "atos_junta_extract"]],
+      [empresaId],
     );
     return { analises: safeArray<any>(rows), falhaConsulta: false };
   } catch (error: any) {
-    if (eTabelaDocumentalAusente(error)) {
+    if (eTabelaDocumentalAusente(error) || error?.code === '42703') {
       // Instalações antigas podem não ter a tabela; isso é indisponibilidade esperada,
       // não uma falha de consulta que deva ser exibida ao operador.
       return { analises: [], falhaConsulta: false };
@@ -1164,7 +1167,42 @@ export function calcularInteligencia360(params: {
   const linha_tempo_regime = safeArray<any>(params.linhaTempoRegime);
   const faturamento_rolling_12 = params.faturamentoRolling12 ?? null;
   const cobertura_evidencia_bureau = safeArray<any>(params.coberturaEvidenciaBureau);
-  const consistencia_documental_avancada = consolidarConsistenciaDocumental(analisesDocumentais);
+  const alertasP0: AlertaDocumental360[] = [];
+  if (faturamento_rolling_12?.meses_com_dado > 0 && faturamento_rolling_12?.completo !== true) {
+    alertasP0.push({
+      codigo: 'faturamento_rolling_12_incompleto',
+      mensagem: `Faturamento de 12 meses incompleto: ${Number(faturamento_rolling_12.meses_faltantes?.length || 0)} competência(s) sem evidência.`,
+      severidade: 'media',
+      recomendacao: 'Anexar ou validar os comprovantes das competências faltantes; o total parcial não é anualizado.',
+      tipo_analise: 'faturamento_rolling_12',
+    });
+  }
+  for (const cobertura of cobertura_evidencia_bureau) {
+    if (cobertura?.resolvido === true || cobertura?.coverage_status === 'NAO_APLICAVEL') continue;
+    const positiva = cobertura?.coverage_status === 'CERTIDAO_POSITIVA';
+    alertasP0.push({
+      codigo: `cobertura_${String(cobertura?.requirement_code || 'bureau').toLowerCase()}_${String(cobertura?.coverage_status || 'pendente').toLowerCase()}`,
+      mensagem: `${String(cobertura?.requirement_code || 'Consulta de bureau')}: evidência com situação ${String(cobertura?.coverage_status || 'PENDENTE')}.`,
+      severidade: positiva ? 'alta' : 'media',
+      recomendacao: positiva ? 'Regularizar a pendência ou anexar certidão com efeito de negativa.' : 'Concluir a consulta ou revisão da evidência.',
+      tipo_analise: 'cobertura_bureau',
+    });
+  }
+  const periodoRegimeAberto = linha_tempo_regime.find((periodo) => periodo?.data_fim == null);
+  if (periodoRegimeAberto?.regime && empresa?.regime_tributario
+      && String(periodoRegimeAberto.regime).trim().toLowerCase() !== String(empresa.regime_tributario).trim().toLowerCase()) {
+    alertasP0.push({
+      codigo: 'regime_vigente_diverge_cadastro',
+      mensagem: `Regime vigente comprovado (${periodoRegimeAberto.regime}) diverge do cadastro (${empresa.regime_tributario}).`,
+      severidade: 'alta',
+      recomendacao: 'Reconciliar o cadastro com a evidência vigente sem substituir o histórico.',
+      tipo_analise: 'linha_tempo_regime',
+    });
+  }
+  const analisesParaConsistencia = alertasP0.length > 0
+    ? [...analisesDocumentais, { resultado: { tipo_analise: 'evidencias_p0', alertas: alertasP0 } }]
+    : analisesDocumentais;
+  const consistencia_documental_avancada = consolidarConsistenciaDocumental(analisesParaConsistencia);
   const etapa_identidade_documental = consolidarEtapaIdentidadeDocumental({
     empresa,
     documentos,
@@ -1179,17 +1217,20 @@ export function calcularInteligencia360(params: {
   const contsArr = safeArray<any>(contratos);
   const histArr = safeArray<any>(historico);
   const followsArr = safeArray<any>(followups);
+  const empresaAnalise = faturamento_rolling_12?.completo === true && Number(faturamento_rolling_12?.total) > 0
+    ? { ...empresa, faturamento_anual: Number(faturamento_rolling_12.total) }
+    : empresa;
 
   // Cálculos principais
-  const saude_cadastral = classificarSaudeCadastral(empresa);
+  const saude_cadastral = classificarSaudeCadastral(empresaAnalise);
   const saude_documental = classificarSaudeDocumental(docsArr);
-  let risco_documental = classificarRiscoDocumental(empresa, docsArr, socsArr);
-  let risco_credito = classificarRiscoCredito(empresa, socsArr);
-  const prontidao_contrato = calcularProntidaoContrato(empresa, socsArr, docsArr);
-  const prontidao_proposta_bancaria = calcularProntidaoProposta(empresa, docsArr, simsArr);
+  let risco_documental = classificarRiscoDocumental(empresaAnalise, docsArr, socsArr);
+  let risco_credito = classificarRiscoCredito(empresaAnalise, socsArr);
+  const prontidao_contrato = calcularProntidaoContrato(empresaAnalise, socsArr, docsArr);
+  const prontidao_proposta_bancaria = calcularProntidaoProposta(empresaAnalise, docsArr, simsArr);
 
   const scoreBase = calcularScoreDestrava({
-    empresa,
+    empresa: empresaAnalise,
     socios: socsArr,
     documentos: docsArr,
     simulacoes: simsArr,
@@ -1204,7 +1245,7 @@ export function calcularInteligencia360(params: {
   const documentos_sem_arquivo = docsArr.length - documentos_com_arquivo;
   const documentos_validados = docsArr.filter(d => d?.status === "validado").length;
   const documentos_pendentes_validacao = docsArr.filter(d => d?.status === "pendente_validacao").length;
-  const indicadores_financeiros = calcularIndicadoresFinanceiros({ empresa, documentos: docsArr, extracoes: analisesDocumentais });
+  const indicadores_financeiros = calcularIndicadoresFinanceiros({ empresa: empresaAnalise, documentos: docsArr, extracoes: analisesDocumentais });
 
   // Sócios
   const socios_com_cpf = socsArr.filter(s => s?.cpf_cnpj && String(s.cpf_cnpj).replace(/\D/g, "").length >= 11).length;
@@ -1213,7 +1254,7 @@ export function calcularInteligencia360(params: {
 
   // Pendências
   const { pendencias, pendencias_contrato, pendencias_credito, pendencias_faturamento, pendencias_cadastrais } =
-    gerarPendencias(empresa, socsArr, docsArr);
+    gerarPendencias(empresaAnalise, socsArr, docsArr);
 
   const pontos_atencao = consistencia_documental_avancada.alertas.map((alerta) => alerta.mensagem);
   for (const alerta of consistencia_documental_avancada.alertas) {
@@ -1221,13 +1262,13 @@ export function calcularInteligencia360(params: {
       pendencias.push({ tipo: "documental", descricao: alerta.mensagem, severidade: alerta.severidade });
     }
   }
-  const rating_interno = calcularRatingInterno({ empresa, indicadores: indicadores_financeiros, documentos: docsArr, pendencias });
+  const rating_interno = calcularRatingInterno({ empresa: empresaAnalise, indicadores: indicadores_financeiros, documentos: docsArr, pendencias });
   const programasElegibilidade = [
     { codigo: 'credito_bancario_padrao', nome: 'Crédito empresarial — bancos e cooperativas', requisitos_chave: ['Cadastro empresarial atualizado', 'Faturamento comprovado', 'Endividamento e fluxo de caixa conciliados'] },
     { codigo: 'pronampe', nome: 'PRONAMPE e programas garantidos', requisitos_chave: ['Cadastro empresarial atualizado', 'Compartilhamento eletrônico de faturamento no e-CAC', 'Faturamento comprovado'] },
     { codigo: 'bndes_indireto', nome: 'BNDES — operação indireta', requisitos_chave: ['Projeto de investimento', 'Capacidade financeira', 'Regularidade cadastral'] },
   ];
-  const elegibilidade_credito = construirElegibilidadeCredito({ empresa, indicadores: indicadores_financeiros, documentos: docsArr, programas: programasElegibilidade });
+  const elegibilidade_credito = construirElegibilidadeCredito({ empresa: empresaAnalise, indicadores: indicadores_financeiros, documentos: docsArr, programas: programasElegibilidade });
   const plano_adequacao_credito = construirPlanoAdequacao({ indicadores: indicadores_financeiros, rating: rating_interno, elegibilidade: elegibilidade_credito });
 
   const { status_aptidao, motivos_aptidao } = calcularStatusAptidao({
@@ -1250,7 +1291,7 @@ export function calcularInteligencia360(params: {
 
   // Recomendações
   const recomendacoes = gerarRecomendacoes({
-    empresa,
+    empresa: empresaAnalise,
     socios: socsArr,
     documentos: docsArr,
     simulacoes: simsArr,
@@ -1302,7 +1343,7 @@ export function calcularInteligencia360(params: {
     segmento: empresa?.segmento ?? null,
     cnae: empresa?.cnae_principal ?? null,
     capital_social: safeNumber(empresa?.capital_social),
-    faturamento: safeNumber(empresa?.faturamento_anual),
+    faturamento: safeNumber(empresaAnalise?.faturamento_anual),
     score_interno: safeNumber(empresa?.score_interno),
     documentos_disponiveis: documentos_com_arquivo,
     pendencias_count: pendencias.length,

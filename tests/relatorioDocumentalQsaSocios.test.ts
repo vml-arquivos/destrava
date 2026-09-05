@@ -1,4 +1,11 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import {
+  CLASSIFIER_VERSION,
+  EXTRACTOR_VERSION,
+  RULE_VERSION,
+  SCHEMA_VERSION,
+  calcularAssinaturaAnalise,
+} from '../server/services/documentalLaudoVersioning';
 
 // Bug relatado pelo usuário (zip 10): um QSA anexado, com a flag manual
 // `documentos_arquivos.validado = true`, aparecia no relatório documental como
@@ -55,8 +62,33 @@ function dossieComQsa(documentoQsa: Record<string, any>) {
 function mockDocumentosExtracoesIa(resultado: any) {
   mocks.poolQuery.mockImplementation(async (text: string, params?: any[]) => {
     if (String(text).includes('FROM information_schema.tables')) return { rows: [{ '?column?': 1 }] };
+    if (String(text).includes('FROM information_schema.columns')) return { rows: [{ '?column?': 1 }] };
     if (String(text).includes('FROM public.documentos_extracoes_ia')) {
-      if (params?.[0] === 'qsa-doc-1' && params?.[1] === 'qsa_extract') return { rows: [{ resultado, status: resultado.status, prompt_versao: '5.1.0' }] };
+      if (params?.[0] === 'qsa-doc-1' && params?.[1] === 'qsa_extract') {
+        const promptVersao = '5.1.0';
+        return {
+          rows: [{
+            id: 'extracao-qsa-1',
+            resultado,
+            status: resultado.status,
+            prompt_versao: promptVersao,
+            hash_arquivo: null,
+            analysis_signature: calcularAssinaturaAnalise({
+              arquivoId: 'qsa-doc-1',
+              arquivoHash: null,
+              promptCodigo: 'qsa_extract',
+              promptVersao,
+            }),
+            classifier_version: CLASSIFIER_VERSION,
+            extractor_version: EXTRACTOR_VERSION,
+            rule_version: RULE_VERSION,
+            schema_version: SCHEMA_VERSION,
+            analysis_status: 'ATIVO',
+            stale_at: null,
+            satisfaz_requisito: resultado.status === 'concluido',
+          }],
+        };
+      }
       return { rows: [] };
     }
     return { rows: [] };

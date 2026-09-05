@@ -28,6 +28,7 @@ import {
   PROMPT_VERSION,
   calcularAssinaturaAnalise,
   decidirVersaoLaudo,
+  versaoPromptDocumental,
   type AnalysisLifecycleStatus,
 } from '../services/documentalLaudoVersioning';
 import { obterLinhaDoTempoRegime, obterRegimeVigenteEm } from '../services/regimeTributarioTemporalService';
@@ -51,18 +52,6 @@ const router = Router();
 // integrações existentes.
 const analisesIniciaisEmAndamento = new Map<string, Promise<void>>();
 const analisesSocietariasEmAndamento = new Map<string, Promise<void>>();
-
-// Versão específica do motor QSA da Fase 1. A troca de versão invalida somente
-// resultados persistidos do QSA que foram produzidos por regras antigas, sem
-// apagar arquivo, cadastro, bloco ou qualquer outra análise documental.
-const VERSAO_ANALISE_DOCUMENTAL: Record<string, string> = {
-  qsa_extract: '5.1.0',
-  simples_extract: '1.0.0',
-  atos_junta_extract: '1.0.0',
-  faturamento_12m_extract: '1.0.0',
-  comprovante_residencia_extract: '1.0.0',
-};
-const versaoPromptDocumental = (promptCodigo: string) => VERSAO_ANALISE_DOCUMENTAL[promptCodigo] || '1.0.0';
 
 const BLOCO_CODIGOS = [
   'cnpj_receita',
@@ -1427,11 +1416,9 @@ async function buscarAnaliseEspecializadaPersistida(
     ruleVersion: RULE_VERSION,
     schemaVersion: SCHEMA_VERSION,
   });
-  // Antes da migration 103 não existem colunas de ciclo de vida para provar
-  // que um laudo legado é stale. Nesse caso de schema antigo, preservamos o
-  // comportamento operacional anterior; depois que as colunas existem, a
-  // decisão abaixo é obrigatoriamente estrita e valores ausentes/divergentes
-  // tornam o laudo inelegível até o reprocessamento.
+  // Fail-closed: sem as colunas de versionamento não existe evidência de que
+  // o laudo foi produzido pelas regras atuais. O conteúdo histórico continua
+  // visível, mas nunca satisfaz requisito até a migration e o reprocessamento.
   const decision = temVersionamento
     ? decidirVersaoLaudo(row, {
         arquivoId,
@@ -1443,7 +1430,7 @@ async function buscarAnaliseEspecializadaPersistida(
         ruleVersion: RULE_VERSION,
         schemaVersion: SCHEMA_VERSION,
       })
-    : { expectedSignature: assinaturaEsperada, isCurrent: true, lifecycleStatus: 'ATIVO' as AnalysisLifecycleStatus, shouldReprocess: false };
+    : { expectedSignature: assinaturaEsperada, isCurrent: false, lifecycleStatus: 'REANALISE_NECESSARIA' as AnalysisLifecycleStatus, shouldReprocess: true };
 
   if (!decision.isCurrent) {
     if (temVersionamento && row?.id) {
@@ -1525,8 +1512,19 @@ export async function persistirAnaliseEspecializada(
     blocoEntidadeId: null,
     promptCodigo,
   });
+  const versionado = await columnExists('documentos_extracoes_ia', 'analysis_signature');
+  const satisfazRequisito = resultado?.dados_extraidos?.satisfaz_requisito === true;
   await pool.query(
-    `UPDATE public.documentos_extracoes_ia
+    versionado
+      ? `UPDATE public.documentos_extracoes_ia
+          SET status = $2, modelo = $3, campos_extraidos = $4::jsonb,
+              resultado = $5::jsonb, nivel_confianca = $6, pendencias = $7::jsonb,
+              erros = '[]'::jsonb, processado_em = NOW(), analysis_status = 'ATIVO',
+              tipo_esperado = $8, tipo_detectado = $9, identidade_status = $10,
+              temporalidade_status = $11, cobertura_status = $12, satisfaz_requisito = $13,
+              stale_at = NULL, superseded_at = NULL, last_error_at = NULL, next_retry_at = NULL
+        WHERE id = $1`
+      : `UPDATE public.documentos_extracoes_ia
         SET status = $2,
             modelo = $3,
             campos_extraidos = $4::jsonb,
@@ -1536,16 +1534,25 @@ export async function persistirAnaliseEspecializada(
             erros = '[]'::jsonb,
             processado_em = NOW()
       WHERE id = $1`,
-    [
-      extracao.id,
-      resultado.status,
-      resultado.modelo_ia,
-      JSON.stringify(resultado.dados_extraidos || {}),
-      JSON.stringify(resultado),
-      resultado.nivel_confianca,
-      JSON.stringify(resultado.alertas || []),
-    ],
+    versionado
+      ? [
+          extracao.id, resultado.status, resultado.modelo_ia,
+          JSON.stringify(resultado.dados_extraidos || {}), JSON.stringify(resultado),
+          resultado.nivel_confianca, JSON.stringify(resultado.alertas || []),
+          resultado.dados_extraidos?.tipo_esperado || null,
+          resultado.dados_extraidos?.tipo_detectado || null,
+          resultado.dados_extraidos?.identidade_status || null,
+          resultado.dados_extraidos?.temporalidade_status || null,
+          resultado.dados_extraidos?.cobertura_status || null,
+          satisfazRequisito,
+        ]
+      : [
+          extracao.id, resultado.status, resultado.modelo_ia,
+          JSON.stringify(resultado.dados_extraidos || {}), JSON.stringify(resultado),
+          resultado.nivel_confianca, JSON.stringify(resultado.alertas || []),
+        ],
   );
+  await persistirMetadadosExtracaoCatalogada(extracao.id, resultado);
 }
 
 async function persistirFalhaAnaliseEspecializada(
@@ -3839,14 +3846,9 @@ async function executarAnaliseDocumentalEspecializada(params: {
       [extracaoId],
     );
 
-    let resultado: any;
-    if (tipo === 'qsa') resultado = await analiseDocumentalService.analisarQSA(empresaId, arquivoId);
-    else if (tipo === 'simples_nacional') resultado = await analiseDocumentalService.analisarSimplesNacional(empresaId, arquivoId);
-    else if (tipo === 'atos_junta_comercial') resultado = await analiseDocumentalService.analisarAtosJuntaComercial(empresaId, arquivoId);
-    else if (tipo === 'faturamento_12_meses') resultado = await analiseDocumentalService.analisarFaturamento(empresaId, arquivoId);
-    else if (tipo === 'comprovante_residencia') resultado = await analiseDocumentalService.analisarComprovanteResidencia(empresaId, arquivoId);
-    else if (tipo === 'documento_generico' && tipoDocumento) resultado = await analiseDocumentalService.analisarDocumentoCatalogado(empresaId, arquivoId, tipoDocumento);
-    else throw new Error(`Tipo de análise documental sem executor: ${tipo}`);
+    const tipoParaDespacho = tipoDocumento || tipo;
+    if (tipo === 'documento_generico' && !tipoDocumento) throw new Error('Análise genérica sem tipo documental catalogado.');
+    const resultado: any = await analiseDocumentalService.analisarDocumentoAutomatico(empresaId, arquivoId, tipoParaDespacho);
 
     const satisfazRequisito = resultado?.dados_extraidos?.satisfaz_requisito === true;
     const assinatura = versionado
