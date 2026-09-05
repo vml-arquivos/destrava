@@ -139,7 +139,13 @@ describe('cobertura integral da leitura automática documental', () => {
     });
 
     expect(agosto).toMatchObject({ satisfaz_requisito: true, temporalidade_status: 'ATUAL' });
-    expect(julho).toMatchObject({ satisfaz_requisito: false, temporalidade_status: 'HISTORICO' });
+    // CORREÇÃO (Rodada 33, 05/09/2026): julho (2 meses atrás) não é mais
+    // rotulado `HISTORICO` -- ainda está dentro da janela rolling de 12
+    // meses, então passa a ser `WINDOW_SUPPORT` (ver `TemporalStatus` em
+    // documentalLaudoVersioning.ts). O ponto original deste teste --
+    // "2 meses atrás não é confundido com ATUAL" -- continua garantido por
+    // `satisfaz_requisito: false`.
+    expect(julho).toMatchObject({ satisfaz_requisito: false, temporalidade_status: 'WINDOW_SUPPORT' });
   });
 
   it('reconcilia M400 e M800 sem somar a mesma base econômica duas vezes', () => {
@@ -153,5 +159,82 @@ describe('cobertura integral da leitura automática documental', () => {
     expect(dados.receita_nao_tributada_confirmada).toBe(1000);
     expect(dados.total_receitas_nao_tributadas_pis_m400).toBe(1000);
     expect(dados.total_receitas_nao_tributadas_cofins_m800).toBe(1000);
+  });
+
+  // CORREÇÃO (Rodada 33, 05/09/2026, diagnóstico cruzado de duas pesquisas
+  // independentes -- Manus AI e GPT): ECD, DEFIS e DASN-SIMEI passam a ter
+  // prazo de exigibilidade preciso por data (mesmo padrão já usado pela ECF),
+  // em vez da regra genérica que só olhava o ano.
+  it('CORREÇÃO Rodada 33: ECD do ano-calendário anterior ainda não é exigível antes do prazo (último dia útil de junho), mesmo já sendo "ano anterior"', () => {
+    const antesDoPrazo = classificarDocumentoDeterministico({
+      tipoEsperado: 'ecd',
+      texto: 'ESCRITURAÇÃO CONTÁBIL DIGITAL',
+      competenciaInicio: '2026-01-01', competenciaFim: '2026-12-31',
+      hoje: new Date('2027-03-01T12:00:00.000Z'),
+    });
+    const depoisDoPrazo = classificarDocumentoDeterministico({
+      tipoEsperado: 'ecd',
+      texto: 'ESCRITURAÇÃO CONTÁBIL DIGITAL',
+      competenciaInicio: '2026-01-01', competenciaFim: '2026-12-31',
+      hoje: new Date('2027-08-01T12:00:00.000Z'),
+    });
+    expect(antesDoPrazo.temporalidade_status).toBe('AINDA_NAO_EXIGIVEL');
+    expect(depoisDoPrazo.temporalidade_status).toBe('ATUAL');
+  });
+
+  it('CORREÇÃO Rodada 33: DEFIS do ano-calendário anterior segue a mesma regra de prazo preciso (31/03)', () => {
+    const antesDoPrazo = classificarDocumentoDeterministico({
+      tipoEsperado: 'defis',
+      texto: 'DECLARAÇÃO DE INFORMAÇÕES SOCIOECONÔMICAS E FISCAIS',
+      competenciaInicio: '2026-01-01', competenciaFim: '2026-12-31',
+      hoje: new Date('2027-02-01T12:00:00.000Z'),
+    });
+    const depoisDoPrazo = classificarDocumentoDeterministico({
+      tipoEsperado: 'defis',
+      texto: 'DECLARAÇÃO DE INFORMAÇÕES SOCIOECONÔMICAS E FISCAIS',
+      competenciaInicio: '2026-01-01', competenciaFim: '2026-12-31',
+      hoje: new Date('2027-04-15T12:00:00.000Z'),
+    });
+    expect(antesDoPrazo.temporalidade_status).toBe('AINDA_NAO_EXIGIVEL');
+    expect(depoisDoPrazo.temporalidade_status).toBe('ATUAL');
+  });
+
+  it('CORREÇÃO Rodada 33: DASN-SIMEI do ano-calendário anterior segue a mesma regra de prazo preciso (31/05)', () => {
+    const antesDoPrazo = classificarDocumentoDeterministico({
+      tipoEsperado: 'dasn_simei',
+      texto: 'DECLARAÇÃO ANUAL DO SIMEI',
+      competenciaInicio: '2026-01-01', competenciaFim: '2026-12-31',
+      hoje: new Date('2027-04-01T12:00:00.000Z'),
+    });
+    const depoisDoPrazo = classificarDocumentoDeterministico({
+      tipoEsperado: 'dasn_simei',
+      texto: 'DECLARAÇÃO ANUAL DO SIMEI',
+      competenciaInicio: '2026-01-01', competenciaFim: '2026-12-31',
+      hoje: new Date('2027-06-15T12:00:00.000Z'),
+    });
+    expect(antesDoPrazo.temporalidade_status).toBe('AINDA_NAO_EXIGIVEL');
+    expect(depoisDoPrazo.temporalidade_status).toBe('ATUAL');
+  });
+
+  // CORREÇÃO (Rodada 33, 05/09/2026): novo estado `WINDOW_SUPPORT` -- um
+  // documento de competência mensal com mais de 1 mês (deixa de ser `ATUAL`)
+  // mas ainda dentro dos últimos 12 meses fechados não é mais rotulado com o
+  // mesmo `HISTORICO` genérico de um documento de anos atrás.
+  it('CORREÇÃO Rodada 33: PGDAS-D de 3 meses atrás (dentro da janela de 12 meses) é WINDOW_SUPPORT, não HISTORICO; PGDAS-D de 14 meses atrás continua HISTORICO', () => {
+    const dentroDaJanela = classificarDocumentoDeterministico({
+      tipoEsperado: 'pgdas',
+      texto: 'PGDAS-D — Programa Gerador do Documento de Arrecadação do Simples Nacional',
+      competenciaInicio: '2026-06-01', competenciaFim: '2026-06-30',
+      hoje: new Date('2026-09-05T12:00:00.000Z'),
+    });
+    const foraDaJanela = classificarDocumentoDeterministico({
+      tipoEsperado: 'pgdas',
+      texto: 'PGDAS-D — Programa Gerador do Documento de Arrecadação do Simples Nacional',
+      competenciaInicio: '2025-06-01', competenciaFim: '2025-06-30',
+      hoje: new Date('2026-09-05T12:00:00.000Z'),
+    });
+    expect(dentroDaJanela).toMatchObject({ satisfaz_requisito: false, temporalidade_status: 'WINDOW_SUPPORT' });
+    expect(foraDaJanela).toMatchObject({ satisfaz_requisito: false, temporalidade_status: 'HISTORICO' });
+    expect(dentroDaJanela.motivo).toMatch(/janela de faturamento/);
   });
 });

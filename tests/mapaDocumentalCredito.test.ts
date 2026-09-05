@@ -288,4 +288,16 @@ describe('documentosSocietariosPorNatureza (Rodada 29 -- MEI é regime tributár
     expect(resultado.some((d) => d.codigo === 'registro_oab')).toBe(true);
     expect(resultado.some((d) => d.codigo === 'atos_junta')).toBe(false);
   });
+
+  // CORREÇÃO (Rodada 33, 05/09/2026, diagnóstico cruzado de duas pesquisas
+  // independentes -- Manus AI e GPT -- que citam, de forma idêntica, a Lei nº
+  // 8.906/1994 (arts. 15-16) como fonte de que sociedade de advocacia se
+  // registra na OAB, nunca em Junta/RCPJ.
+  it('CORREÇÃO Rodada 33: exigências de sociedade de advocacia carregam a citação legal (Lei 8.906/1994) em fonte_normativa', () => {
+    const resultado = documentosSocietariosPorNatureza({ natureza_juridica: 'Sociedade Unipessoal de Advocacia - OAB' }, 'simples_nacional');
+    const ato = resultado.find((d) => d.codigo === 'ato_constitutivo_oab');
+    const registro = resultado.find((d) => d.codigo === 'registro_oab');
+    expect(ato?.fonte_normativa).toMatch(/8\.906\/1994/);
+    expect(registro?.fonte_normativa).toMatch(/8\.906\/1994/);
+  });
 });

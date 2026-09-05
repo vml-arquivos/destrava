@@ -62,29 +62,93 @@ function diaAnterior(dataIso: string): string {
 // versionada específica; o motor nunca tenta prevê-las.
 // Antes de existir esta função, o motor não tinha como distinguir "ECF ainda
 // não é exigível" de "ECF pendente/vencida" para o ano-calendário corrente.
+//
+// CORREÇÃO (Rodada 33, 05/09/2026, diagnóstico cruzado de duas pesquisas
+// independentes -- Manus AI e GPT): as duas pesquisas confirmam, com fonte,
+// que ECD (último dia útil de junho do ano seguinte) também tem prazo preciso
+// por dia útil, igual à ECF -- e que DEFIS (último dia de março) e
+// DASN-SIMEI (31 de maio) têm prazo por DIA FIXO do calendário, sem nenhuma
+// das duas pesquisas mencionar ajuste de dia útil para essas duas. Antes desta
+// correção, só a ECF tinha exigibilidade calculada com essa precisão -- ECD,
+// DEFIS e DASN-SIMEI caíam na regra genérica de `competencia_anual` em
+// `classificadorDocumentalCentral.ts` (só olha o ano, não o mês/dia exato),
+// que continua existindo como o comportamento padrão de qualquer OUTRO tipo
+// anual sem prazo próprio -- as três exceções abaixo passam a ter prazo
+// preciso, no mesmo padrão já usado pela ECF.
 // ---------------------------------------------------------------------------
 const ECF_MES_PRAZO = 7; // julho
+const ECD_MES_PRAZO = 6; // junho
 
 export type ExigibilidadeEcf = 'AINDA_NAO_EXIGIVEL' | 'EXIGIVEL';
 
-export function dataLimiteRegularEcf(anoCalendario: number): Date {
-  const anoEntrega = anoCalendario + 1;
-  const ultimoDiaJulho = new Date(Date.UTC(anoEntrega, ECF_MES_PRAZO - 1, 31, 12));
-  while (ultimoDiaJulho.getUTCDay() === 0 || ultimoDiaJulho.getUTCDay() === 6) {
-    ultimoDiaJulho.setUTCDate(ultimoDiaJulho.getUTCDate() - 1);
+// Último instante (23:59:59.999 de Brasília, convertido para UTC) do último
+// dia útil do mês/ano informado -- fábrica reutilizada por ECF e ECD, as duas
+// obrigações cujo prazo as pesquisas confirmam ser por dia útil.
+function limiteUltimoDiaUtilDoMes(ano: number, mesIndiceUm: number): Date {
+  const ultimoDiaDoMes = new Date(Date.UTC(ano, mesIndiceUm, 0, 12));
+  while (ultimoDiaDoMes.getUTCDay() === 0 || ultimoDiaDoMes.getUTCDay() === 6) {
+    ultimoDiaDoMes.setUTCDate(ultimoDiaDoMes.getUTCDate() - 1);
   }
   // 23:59:59.999 no horário de Brasília (UTC-03:00) corresponde a
   // 02:59:59.999 UTC do dia seguinte.
   return new Date(Date.UTC(
-    ultimoDiaJulho.getUTCFullYear(),
-    ultimoDiaJulho.getUTCMonth(),
-    ultimoDiaJulho.getUTCDate() + 1,
+    ultimoDiaDoMes.getUTCFullYear(),
+    ultimoDiaDoMes.getUTCMonth(),
+    ultimoDiaDoMes.getUTCDate() + 1,
     3, 0, 0, 0,
   ) - 1);
 }
 
+// Último instante (23:59:59.999 de Brasília) de um dia FIXO do calendário --
+// usada por DEFIS e DASN-SIMEI, cujas fontes não mencionam ajuste de dia útil
+// (diferente de ECF/ECD).
+function limiteDiaFixo(ano: number, mesIndiceUm: number, dia: number): Date {
+  return new Date(Date.UTC(ano, mesIndiceUm - 1, dia + 1, 3, 0, 0, 0) - 1);
+}
+
+export function dataLimiteRegularEcf(anoCalendario: number): Date {
+  return limiteUltimoDiaUtilDoMes(anoCalendario + 1, ECF_MES_PRAZO);
+}
+
 export function calcularExigibilidadeEcf(anoCalendario: number, hoje: Date = new Date()): ExigibilidadeEcf {
   const prazo = dataLimiteRegularEcf(anoCalendario);
+  return hoje.getTime() > prazo.getTime() ? 'EXIGIVEL' : 'AINDA_NAO_EXIGIVEL';
+}
+
+// ECD: mesma mecânica de dia útil da ECF, mês de junho (fonte: "prazo
+// regular: último dia útil de junho do ano subsequente" -- confirmado pelas
+// duas pesquisas independentes desta rodada).
+export function dataLimiteRegularEcd(anoCalendario: number): Date {
+  return limiteUltimoDiaUtilDoMes(anoCalendario + 1, ECD_MES_PRAZO);
+}
+
+export function calcularExigibilidadeEcd(anoCalendario: number, hoje: Date = new Date()): ExigibilidadeEcf {
+  const prazo = dataLimiteRegularEcd(anoCalendario);
+  return hoje.getTime() > prazo.getTime() ? 'EXIGIVEL' : 'AINDA_NAO_EXIGIVEL';
+}
+
+// DEFIS: último dia de março do ano seguinte (dia fixo do calendário; as duas
+// pesquisas não mencionam ajuste de dia útil para esta declaração -- só para
+// ECF/ECD). Regras especiais de incorporação/cisão/extinção citadas pelas
+// pesquisas ficam fora desta função (dependem de evento específico da
+// empresa, não só do ano-calendário) e continuam exigindo revisão humana.
+export function dataLimiteRegularDefis(anoCalendario: number): Date {
+  return limiteDiaFixo(anoCalendario + 1, 3, 31);
+}
+
+export function calcularExigibilidadeDefis(anoCalendario: number, hoje: Date = new Date()): ExigibilidadeEcf {
+  const prazo = dataLimiteRegularDefis(anoCalendario);
+  return hoje.getTime() > prazo.getTime() ? 'EXIGIVEL' : 'AINDA_NAO_EXIGIVEL';
+}
+
+// DASN-SIMEI: 31 de maio do ano seguinte (dia fixo do calendário; mesma
+// observação de não haver ajuste de dia útil confirmado pelas pesquisas).
+export function dataLimiteRegularDasnSimei(anoCalendario: number): Date {
+  return limiteDiaFixo(anoCalendario + 1, 5, 31);
+}
+
+export function calcularExigibilidadeDasnSimei(anoCalendario: number, hoje: Date = new Date()): ExigibilidadeEcf {
+  const prazo = dataLimiteRegularDasnSimei(anoCalendario);
   return hoje.getTime() > prazo.getTime() ? 'EXIGIVEL' : 'AINDA_NAO_EXIGIVEL';
 }
 

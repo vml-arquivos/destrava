@@ -79,7 +79,14 @@ describe('P0 — laudos, classificação e evidência temporal', () => {
     expect(pgdasNoEcf.tipo_detectado).toBe('PGDAS_D');
     expect(pgdasNoEcf.satisfaz_requisito).toBe(false);
     expect(pgdasNoEcf.identidade_status).toBe('INCOMPATIVEL');
-    expect(pgdasNoEcf.temporalidade_status).toBe('HISTORICO');
+    // CORREÇÃO (Rodada 33, 05/09/2026): a competência 12/2025, vista de
+    // 08/2026, está a 8 meses -- dentro da janela rolling de 12 meses --
+    // então passa a ser `WINDOW_SUPPORT`, não mais `HISTORICO` genérico (ver
+    // `TemporalStatus` em documentalLaudoVersioning.ts). O ponto original
+    // deste teste -- identidade incompatível reprova o documento -- continua
+    // garantido por `identidade_status: 'INCOMPATIVEL'` e
+    // `satisfaz_requisito: false`, que não dependem do rótulo temporal.
+    expect(pgdasNoEcf.temporalidade_status).toBe('WINDOW_SUPPORT');
 
     const reciboNoReciboEcf = classificarDocumentoDeterministico({
       tipoEsperado: 'recibo_ecf',
@@ -92,7 +99,9 @@ describe('P0 — laudos, classificação e evidência temporal', () => {
     expect(reciboNoReciboEcf.tipo_detectado).toBe('RECIBO_PGDAS');
     expect(reciboNoReciboEcf.satisfaz_requisito).toBe(false);
     expect(reciboNoReciboEcf.identidade_status).toBe('INCOMPATIVEL');
-    expect(reciboNoReciboEcf.temporalidade_status).toBe('HISTORICO');
+    // CORREÇÃO (Rodada 33): mesma razão do caso acima (8 meses -- dentro da
+    // janela rolling de 12 meses).
+    expect(reciboNoReciboEcf.temporalidade_status).toBe('WINDOW_SUPPORT');
   });
 
   it('classifica documento fiscal errado como incompatível e texto ausente como fail-closed', () => {

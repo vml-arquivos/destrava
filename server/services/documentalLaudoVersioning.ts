@@ -58,7 +58,24 @@ export function versaoPromptDocumental(promptCodigo: string): string {
 export type AnalysisLifecycleStatus = 'ATIVO' | 'STALE' | 'REANALISE_NECESSARIA' | 'SUPERSEDED';
 export type ProcessingStatus = 'PENDENTE' | 'PROCESSANDO' | 'CONCLUIDO' | 'FALHOU';
 export type IdentityStatus = 'IDENTIFICADO' | 'INCOMPATIVEL' | 'AMBIGUO' | 'NAO_IDENTIFICADO';
-export type TemporalStatus = 'ATUAL' | 'HISTORICO' | 'FORA_JANELA' | 'AINDA_NAO_EXIGIVEL' | 'FUTURO' | 'NAO_VERIFICADO' | 'NAO_APLICAVEL';
+// CORREÇÃO (Rodada 33, 05/09/2026, diagnóstico cruzado de duas pesquisas
+// independentes -- Manus AI e GPT -- sobre a matriz documental de crédito):
+// `WINDOW_SUPPORT` acrescentado aos 7 estados que já existiam. A pesquisa da
+// Manus AI propõe 5 estados novos (`WINDOW_SUPPORT`, `REGIME_NAO_CONFIRMADO`,
+// `HISTORICO_INSUFICIENTE_POR_IDADE`, `PARTIAL`, `AUTENTICIDADE_NAO_VALIDADA`);
+// a pesquisa do GPT, de forma independente, lista os mesmos 7 estados que já
+// existiam como sua própria recomendação, sem pedir nenhum a mais -- as duas
+// pesquisas divergem entre si nesse ponto (ver diagnóstico da Rodada 33).
+// Decisão desta rodada: adotar só `WINDOW_SUPPORT`, o único dos 5 que resolve
+// diretamente um problema concreto já corrigido nesta mesma rodada (ver
+// `shared/documentalPresentation.ts`, `transicaoDeRegimeRecente`) -- um
+// documento histórico (ex.: PGDAS-D de mais de 2 meses atrás) cuja
+// competência ainda está dentro da janela rolling de 12 meses deixa de ser
+// rotulado com o mesmo `HISTORICO` genérico de um documento de anos atrás.
+// Os outros 4 estados propostos pela Manus AI ficam deliberadamente fora
+// desta rodada -- nenhum deles tinha, no diagnóstico, um ponto concreto do
+// código já pronto para consumi-los sem inventar lógica nova do zero.
+export type TemporalStatus = 'ATUAL' | 'HISTORICO' | 'WINDOW_SUPPORT' | 'FORA_JANELA' | 'AINDA_NAO_EXIGIVEL' | 'FUTURO' | 'NAO_VERIFICADO' | 'NAO_APLICAVEL';
 export type CoverageStatus = 'SATISFAZ' | 'NAO_SATISFAZ' | 'PARCIAL' | 'EQUIVALENTE';
 
 export interface AnalysisSignatureInput {

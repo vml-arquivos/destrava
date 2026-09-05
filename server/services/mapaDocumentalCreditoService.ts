@@ -38,6 +38,12 @@ export type DocumentoMapa = {
   regra_versao?: string;
   vigencia_inicio?: string | null;
   vigencia_fim?: string | null;
+  // CORREÇÃO (Rodada 33, 05/09/2026): mesmo campo/mesmo motivo de
+  // `RegraDocumentalCredito.fonte_normativa` em `regrasDocumentaisCredito.ts`
+  // -- citação da lei/norma/serviço oficial, preenchida só onde as duas
+  // pesquisas independentes (Manus AI e GPT) convergem para uma fonte
+  // específica; ausente nas demais entradas por disciplina (não inferir).
+  fonte_normativa?: string | null;
 };
 
 export type EtapaMapa = {
@@ -510,8 +516,12 @@ export function documentosSocietariosPorNatureza(empresa: any, regime: RegimeCre
   }
   if (/advogad|oab/.test(natureza)) {
     return [
-      doc('ato_constitutivo_oab', 'Ato constitutivo e alterações da sociedade de advocacia', ['contrato_social', 'alteracao_contratual'], 2, 'Comprovar a constituição, composição e administração vigentes da sociedade.', { tipo_exigencia: 'obrigacao_legal' }),
-      doc('registro_oab', 'Registro/ato da OAB', ['registro_oab'], 2, 'Comprovar registro da sociedade e poderes de representação perante a OAB.', { tipo_exigencia: 'obrigacao_legal' }),
+      // CORREÇÃO (Rodada 33): `fonte_normativa` preenchida aqui porque as duas
+      // pesquisas independentes (Manus AI e GPT) citam, de forma idêntica, a
+      // mesma lei: sociedade de advocacia se registra na OAB, não em
+      // Junta/RCPJ -- Junta/RCPJ nunca deve ser aceito como substituto.
+      doc('ato_constitutivo_oab', 'Ato constitutivo e alterações da sociedade de advocacia', ['contrato_social', 'alteracao_contratual'], 2, 'Comprovar a constituição, composição e administração vigentes da sociedade.', { tipo_exigencia: 'obrigacao_legal', fonte_normativa: 'Lei nº 8.906/1994 (Estatuto da OAB), arts. 15 e 16 -- o registro constitutivo da sociedade de advogados/sociedade unipessoal de advocacia é feito na OAB Seccional; Junta Comercial e RCPJ são vedados como registro dessa atividade.' }),
+      doc('registro_oab', 'Registro/ato da OAB', ['registro_oab'], 2, 'Comprovar registro da sociedade e poderes de representação perante a OAB.', { tipo_exigencia: 'obrigacao_legal', fonte_normativa: 'Lei nº 8.906/1994 (Estatuto da OAB), arts. 15 e 16 -- registro constitutivo e de alterações no Conselho Seccional da OAB.' }),
     ];
   }
   if (/empresario individual|empresa individual|\bei\b/.test(natureza)) {

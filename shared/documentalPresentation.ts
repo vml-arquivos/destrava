@@ -573,6 +573,24 @@ export type BucketRegimeFiscal = "simples" | "ecf";
 // `secoesSocietariasCompactas` para "Completa 12 meses de histórico" -- prazo
 // que o resto do sistema já trata como o necessário para reunir um ano fiscal
 // completo de documentação (a mesma janela de um ECF/DCTF anual).
+// CORREÇÃO (Rodada 33, 05/09/2026, diagnóstico cruzado de duas pesquisas
+// independentes sobre a matriz documental de crédito -- uma delas assinada
+// "Manus AI", a outra encomendada ao GPT -- que chegaram, cada uma por conta
+// própria, à mesma conclusão: "não foi encontrada base normativa específica
+// que sustente a regra interna de manter, por exatamente 366 dias após a
+// mudança de regime, os documentos do regime anterior como obrigatórios".
+// Este número continua existindo como PISO de segurança (nunca reduz a
+// janela que já existia antes desta correção -- ver `transicaoRecentePorPrazoFixo`
+// abaixo), mas deixa de ser o ÚNICO critério: a partir de agora, o slot do
+// regime anterior também continua oferecido enquanto a janela corrente de
+// faturamento (rolling 12 meses -- `faturamentoRolling12MesesService.ts`)
+// ainda alcançar competências anteriores ao início do regime hoje vigente,
+// mesmo que já tenham se passado mais de 366 dias -- porque, nesse caso, a
+// própria janela de crédito ainda precisa daquela competência antiga, com ou
+// sem prazo. As duas pesquisas concordam que esse é o critério correto:
+// "documentos do regime anterior continuam exigíveis enquanto comprovarem
+// competências ainda necessárias à análise" (GPT); "conservar o histórico
+// enquanto necessário à janela de faturamento" (Manus AI).
 const LIMITE_DIAS_TRANSICAO_REGIME_RECENTE = 366;
 
 function diasDesdeInicioRegimeVigente(regimeVigenteDesde: string | null | undefined, agora: Date): number | null {
@@ -583,6 +601,49 @@ function diasDesdeInicioRegimeVigente(regimeVigenteDesde: string | null | undefi
   const inicio = new Date(`${match[1]}-${match[2]}-${match[3]}T00:00:00.000Z`);
   if (Number.isNaN(inicio.getTime())) return null;
   return Math.floor((agora.getTime() - inicio.getTime()) / (24 * 60 * 60 * 1000));
+}
+
+// Primeiro dia da janela rolling de 12 meses vigente em `agora`, na mesma
+// definição já usada em produção por `faturamentoRolling12MesesService.ts`
+// (`ultimoMesFechado`/`janela12Meses`): o mês corrente nunca fecha sozinho,
+// então o último mês fechado é sempre o mês anterior ao mês corrente, e a
+// janela cobre os 12 meses que terminam nele. Reimplementada aqui (em vez de
+// importada) porque este arquivo é compartilhado com o bundle do cliente
+// (`DocumentosEntidade.tsx` importa `transicaoDeRegimeRecente` diretamente) e
+// `faturamentoRolling12MesesService.ts` é um serviço de servidor -- as duas
+// funções precisam continuar batendo exatamente; qualquer mudança na regra de
+// "último mês fechado" de um lado deve ser replicada no outro.
+function inicioJanelaFaturamentoRolling12Meses(agora: Date): Date {
+  const anoAtual = agora.getUTCFullYear();
+  const mesAtualIndice0 = agora.getUTCMonth(); // 0-11
+  // Último mês fechado = mês anterior ao corrente; início da janela de 12
+  // meses que termina nele = 11 meses antes desse mês fechado.
+  return new Date(Date.UTC(anoAtual, mesAtualIndice0 - 1 - 11, 1));
+}
+
+// Verdadeiro quando a transição ainda está dentro do piso fixo de segurança
+// (mesma regra que existia antes desta correção, preservada para nunca
+// esconder um slot que já ficava visível).
+function transicaoRecentePorPrazoFixo(regimeVigenteDesde: string | null | undefined, agora: Date): boolean {
+  const dias = diasDesdeInicioRegimeVigente(regimeVigenteDesde, agora);
+  return dias === null || dias < LIMITE_DIAS_TRANSICAO_REGIME_RECENTE;
+}
+
+// Verdadeiro quando o início do regime hoje vigente é mais recente do que o
+// início da janela rolling de 12 meses -- ou seja, quando a janela de
+// faturamento corrente ainda alcança competências de antes da mudança de
+// regime, não importa há quantos dias ela ocorreu. `regimeVigenteDesde`
+// desconhecido/inválido não ativa este critério (ele já é coberto, com
+// resultado "recente", pelo piso fixo acima).
+function janelaFaturamentoAindaAlcancaRegimeAnterior(regimeVigenteDesde: string | null | undefined, agora: Date): boolean {
+  const raw = texto(regimeVigenteDesde);
+  if (!raw) return false;
+  const match = raw.match(/^(\d{4})-(\d{2})-(\d{2})/);
+  if (!match) return false;
+  const inicioRegime = new Date(`${match[1]}-${match[2]}-${match[3]}T00:00:00.000Z`);
+  if (Number.isNaN(inicioRegime.getTime())) return false;
+  const inicioJanela = inicioJanelaFaturamentoRolling12Meses(agora);
+  return inicioRegime.getTime() > inicioJanela.getTime();
 }
 
 // Única fonte de verdade para "a empresa mudou de regime tributário e a
@@ -597,8 +658,8 @@ export function transicaoDeRegimeRecente(
 ): boolean {
   const buckets = new Set(bucketsHistoricos || []);
   if (!buckets.has("simples") || !buckets.has("ecf")) return false;
-  const dias = diasDesdeInicioRegimeVigente(regimeVigenteDesde, agora);
-  return dias === null || dias < LIMITE_DIAS_TRANSICAO_REGIME_RECENTE;
+  return transicaoRecentePorPrazoFixo(regimeVigenteDesde, agora)
+    || janelaFaturamentoAindaAlcancaRegimeAnterior(regimeVigenteDesde, agora);
 }
 
 export function slotCompativelComRegimeTributario(params: {

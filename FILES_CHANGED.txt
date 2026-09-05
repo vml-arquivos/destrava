@@ -829,3 +829,52 @@ tests/relerQsaEnquadramentoAposVersaoMudar.test.ts   (+2 testes -- mock de banco
 Total desta rodada: 2 arquivos de código alterados + 2 arquivos de
 teste novos (6 testes) + 7 arquivos de documentação alterados = 11
 arquivos.
+
+======================================================================
+Rodada 33 (esta entrega, 05/09/2026) -- implementação das correções
+derivadas do diagnóstico cruzado de duas pesquisas independentes
+(Manus AI e GPT) sobre a matriz documental de crédito por tipo de
+empresa/regime tributário (DIAGNOSTICO_SINTESE_MATRIZ_DOCUMENTAL_
+RODADA_33.md): critério de competência substitui/complementa o prazo
+fixo de 366 dias; classificação [LEI/NORMA]/[ÓRGÃO OFICIAL]/[PRÁTICA
+DE MERCADO] por tipo documental (grauFonte); comprovante_residencia
+deixa de ser rotulado como obrigação legal; campo fonte_normativa
+(citação legal rastreável) em RegraDocumentalCredito e DocumentoMapa;
+prazos de exigibilidade anual precisos para ECD/DEFIS/DASN-SIMEI;
+estado WINDOW_SUPPORT em TemporalStatus
+======================================================================
+
+Arquivos existentes ALTERADOS nesta rodada:
+
+shared/documentalPresentation.ts   (transicaoDeRegimeRecente passa a considerar também a janela rolling de 12 meses de faturamento, não só o prazo fixo de 366 dias -- nova função inicioJanelaFaturamentoRolling12Meses/janelaFaturamentoAindaAlcancaRegimeAnterior; a lógica antiga foi preservada como piso em transicaoRecentePorPrazoFixo)
+server/services/documentAnalysisProfiles.ts   (novo tipo GrauFonteRegraDocumental ('LEI_NORMA'|'ORGAO_OFICIAL'|'PRATICA_MERCADO'); campo grauFonte em DocumentAnalysisProfile e em cada entrada de POLITICA_POR_TIPO; obterPerfilAnaliseDocumental propaga grauFonte; descricaoPerfilParaPrompt acrescenta aviso quando grauFonte === 'PRATICA_MERCADO')
+server/services/regrasDocumentaisCredito.ts   (import de obterPerfilAnaliseDocumental; novo campo opcional fonte_normativa em RegraDocumentalCredito; regra de fallback socio_comprovante_residencia passa de tipo_exigencia: 'obrigacao_legal' para 'politica_bancaria' e validade_dias vem de documentAnalysisProfiles; fonte_normativa preenchido em empresa_pgdas/empresa_defis/empresa_dasn_simei/empresa_ecf; normalizarRegraBanco propaga fonte_normativa)
+server/services/mapaDocumentalCreditoService.ts   (novo campo opcional fonte_normativa em DocumentoMapa; preenchido em ato_constitutivo_oab/registro_oab citando a Lei nº 8.906/1994)
+server/services/regimeTributarioTemporalService.ts   (novas funções limiteUltimoDiaUtilDoMes/limiteDiaFixo, generalizando o cálculo antes exclusivo de dataLimiteRegularEcf; novas dataLimiteRegularEcd/calcularExigibilidadeEcd, dataLimiteRegularDefis/calcularExigibilidadeDefis, dataLimiteRegularDasnSimei/calcularExigibilidadeDasnSimei; dataLimiteRegularEcf refatorado para usar limiteUltimoDiaUtilDoMes, com saída numérica idêntica à anterior, verificada byte a byte)
+server/services/classificadorDocumentalCentral.ts   (temporalidade() passa a checar exigibilidade anual precisa para ECF/ECD/DEFIS/DASN_SIMEI via EXIGIBILIDADE_ANUAL_POR_TIPO, não só ECF; branch final de competência mensal passa a devolver WINDOW_SUPPORT para documentos de 2 a 12 meses atrás, em vez de HISTORICO genérico; novo motivo explicativo em classificarDocumentoDeterministico para WINDOW_SUPPORT)
+server/services/documentalLaudoVersioning.ts   (TemporalStatus ganha o valor WINDOW_SUPPORT, com comentário explicando por que só este e não os outros 4 estados propostos pela pesquisa Manus AI foram adotados)
+
+Arquivos de teste NOVOS ou AMPLIADOS:
+
+tests/slotCompativelComRegimeTributario.test.ts   (+3 testes, novo describe "Rodada 33 -- critério de competência substitui/complementa o prazo fixo de 366 dias")
+tests/documentAnalysisProfilesGrauFonte.test.ts   (NOVO ARQUIVO, +6 testes -- classificação grauFonte por tipo documental e o aviso de prompt para PRATICA_MERCADO)
+tests/regrasDocumentaisCredito.test.ts   (+4 testes -- tipo_exigencia/validade_dias de comprovante_residencia, presença/ausência de fonte_normativa)
+tests/mapaDocumentalCredito.test.ts   (+1 teste -- fonte_normativa da OAB)
+tests/regimeTributarioTemporalService.test.ts   (+4 testes, novo describe "Rodada 33 -- ECD, DEFIS e DASN-SIMEI com prazo de exigibilidade preciso")
+tests/leituraAutomaticaCatalogoCompleto.test.ts   (+3 testes para ECD/DEFIS/DASN-SIMEI, +1 teste para WINDOW_SUPPORT; 1 expectativa pré-existente ajustada de HISTORICO para WINDOW_SUPPORT, ver TEST_REPORT.md)
+tests/p0LaudosBackfill.test.ts   (2 expectativas pré-existentes ajustadas de HISTORICO para WINDOW_SUPPORT no teste "reproduz o caso ZR", ver TEST_REPORT.md -- nenhum teste novo neste arquivo)
+
+Arquivos de documentação ALTERADOS nesta rodada:
+
+CHANGELOG_CORRECOES.md
+PENDENCIAS_REAIS.md
+ROLLBACK_PLAN.md
+TEST_REPORT.md
+BUILD_REPORT.md
+FILES_CHANGED.txt (este arquivo)
+SHA256SUMS.txt
+
+Total desta rodada: 7 arquivos de código alterados + 1 arquivo de
+teste novo (6 testes) + 5 arquivos de teste ampliados/ajustados (15
+testes novos + 3 expectativas ajustadas) + 7 arquivos de documentação
+alterados = 20 arquivos.

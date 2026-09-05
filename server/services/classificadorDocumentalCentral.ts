@@ -1,7 +1,12 @@
 import { normalizeText, onlyDigits } from '../utils/helpers';
 import { canonicalizeDocumentType } from '../../shared/documentTypes';
 import { obterPerfilAnaliseDocumental } from './documentAnalysisProfiles';
-import { calcularExigibilidadeEcf } from './regimeTributarioTemporalService';
+import {
+  calcularExigibilidadeDasnSimei,
+  calcularExigibilidadeDefis,
+  calcularExigibilidadeEcd,
+  calcularExigibilidadeEcf,
+} from './regimeTributarioTemporalService';
 import {
   IdentityStatus,
   TemporalStatus,
@@ -275,7 +280,20 @@ function temporalidade(input: ClassificacaoDocumentalInput): TemporalStatus {
   if ((inicio || fim).getTime() > hojeDia.getTime() + 24 * 60 * 60 * 1000) return 'FUTURO';
   const anoAtual = hoje.getUTCFullYear();
   const ano = fim.getUTCFullYear();
-  if (tipoEsperadoCanonico(input.tipoEsperado) === 'ECF' && calcularExigibilidadeEcf(ano, hoje) === 'AINDA_NAO_EXIGIVEL') {
+  // CORREÇÃO (Rodada 33, 05/09/2026, diagnóstico cruzado de duas pesquisas
+  // independentes -- Manus AI e GPT): as duas confirmam prazo preciso por
+  // dia (ECD: último dia útil de junho; DEFIS: 31/03; DASN-SIMEI: 31/05),
+  // igual em espírito ao que já existia só para a ECF -- antes desta
+  // correção, essas três obrigações caíam direto na regra genérica de
+  // `competencia_anual` logo abaixo (só considera o ano, não o mês/dia).
+  const EXIGIBILIDADE_ANUAL_POR_TIPO: Record<string, (ano: number, hoje: Date) => 'AINDA_NAO_EXIGIVEL' | 'EXIGIVEL'> = {
+    ECF: calcularExigibilidadeEcf,
+    ECD: calcularExigibilidadeEcd,
+    DEFIS: calcularExigibilidadeDefis,
+    DASN_SIMEI: calcularExigibilidadeDasnSimei,
+  };
+  const calculoExigibilidadeAnual = EXIGIBILIDADE_ANUAL_POR_TIPO[tipoEsperadoCanonico(input.tipoEsperado)];
+  if (calculoExigibilidadeAnual && calculoExigibilidadeAnual(ano, hoje) === 'AINDA_NAO_EXIGIVEL') {
     return 'AINDA_NAO_EXIGIVEL';
   }
   if (perfil.politicaTemporal === 'competencia_anual') {
@@ -288,8 +306,17 @@ function temporalidade(input: ClassificacaoDocumentalInput): TemporalStatus {
   }
   const diferencaMeses = (hoje.getUTCFullYear() - fim.getUTCFullYear()) * 12 + hoje.getUTCMonth() - fim.getUTCMonth();
   // Mês corrente (quando o documento já existe) e último mês fechado são
-  // evidência atual. Dois ou mais meses atrás permanecem no histórico.
-  return diferencaMeses >= 0 && diferencaMeses <= 1 ? 'ATUAL' : 'HISTORICO';
+  // evidência atual. Dois ou mais meses atrás permanecem no histórico --
+  // EXCETO (CORREÇÃO Rodada 33, ver `TemporalStatus` em
+  // `documentalLaudoVersioning.ts`) quando a competência ainda está dentro da
+  // janela rolling de 12 meses: nesse caso é `WINDOW_SUPPORT`, não `HISTORICO`
+  // puro -- ainda pode ser necessário para completar a janela de faturamento
+  // corrente (esta função só olha a política deste tipo de documento, que
+  // aqui é sempre `competencia_mensal` -- PGDAS-D, DCTF/DCTFWeb, MIT, DARF,
+  // EFD-Contribuições, EFD ICMS/IPI etc.).
+  if (diferencaMeses >= 0 && diferencaMeses <= 1) return 'ATUAL';
+  if (diferencaMeses > 1 && diferencaMeses <= 12) return 'WINDOW_SUPPORT';
+  return 'HISTORICO';
 }
 
 export function classificarDocumentoDeterministico(input: ClassificacaoDocumentalInput): ClassificacaoDocumentalResult {
@@ -321,6 +348,8 @@ export function classificarDocumentoDeterministico(input: ClassificacaoDocumenta
             ? 'O documento está vencido ou fora da janela temporal exigida.'
             : temporalidade_status === 'HISTORICO'
               ? 'O documento foi preservado como evidência histórica, mas não comprova a situação atual.'
+              : temporalidade_status === 'WINDOW_SUPPORT'
+                ? 'O documento é histórico, mas a competência ainda está dentro da janela de faturamento dos últimos 12 meses -- pode continuar sendo necessário para completá-la.'
       : temporalidade_status === 'AINDA_NAO_EXIGIVEL'
         ? 'O documento pertence ao ano-calendário ainda corrente e não é exigível como atraso.'
         : satisfaz

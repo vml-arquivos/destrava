@@ -9,6 +9,25 @@ export type DocumentTemporalPolicy =
   | 'emissao_30_dias'
   | 'emissao_60_dias';
 
+// CORREÇÃO (Rodada 33, 05/09/2026, diagnóstico cruzado de duas pesquisas
+// independentes -- "Manus AI" e GPT -- sobre a matriz documental de crédito):
+// as duas pesquisas, cada uma com seu próprio vocabulário, pedem que toda
+// regra temporal/documental carregue o grau da fonte que a sustenta, porque
+// hoje o código trata com o MESMO peso (i) certidões com prazo de validade
+// definido em norma/serviço oficial (CND/PGFN: 180 dias; CRF/FGTS) e (ii)
+// consultas de cadastro/bureau que são só uma FOTO de um instante (Cartão
+// CNPJ, CADIN, SCR/rating Bacen, CCS, CCF, Cenprot, Serasa) -- para as quais
+// nenhuma das duas pesquisas encontrou fonte normativa que justifique um
+// prazo fixo de "vencimento" (CADIN é citado nominalmente pelas duas: "não é
+// sinônimo de CND federal"). Este campo não muda nenhum resultado de
+// classificação hoje calculado (`temporalidade()` em
+// `classificadorDocumentalCentral.ts` continua igual) -- é só a informação,
+// que faltava, de QUE TIPO de exigência cada prazo representa:
+//   LEI_NORMA        -- obrigação com prazo definido em lei/instrução normativa/resolução.
+//   ORGAO_OFICIAL     -- validade/serviço definido por órgão público competente (ex.: prazo do próprio certificado oficial).
+//   PRATICA_MERCADO   -- prazo operacional de política de crédito, sem fonte normativa própria encontrada nas duas pesquisas.
+export type GrauFonteRegraDocumental = 'LEI_NORMA' | 'ORGAO_OFICIAL' | 'PRATICA_MERCADO';
+
 export interface DocumentAnalysisProfile {
   tipo: string;
   categoria: string;
@@ -16,6 +35,10 @@ export interface DocumentAnalysisProfile {
   camposQuandoPresentes: string[];
   politicaTemporal: DocumentTemporalPolicy;
   validadePadraoDias: number | null;
+  // `null` quando o tipo não está na tabela `POLITICA_POR_TIPO` (perfil
+  // genérico por categoria) -- as duas pesquisas não cobriram esses tipos
+  // especificamente, então não há classificação a herdar sem inferência.
+  grauFonte: GrauFonteRegraDocumental | null;
 }
 
 const CAMPOS_POR_CATEGORIA: Record<string, { obrigatorios: string[]; adicionais: string[] }> = {
@@ -73,52 +96,70 @@ const CAMPOS_POR_CATEGORIA: Record<string, { obrigatorios: string[]; adicionais:
   },
 };
 
-const POLITICA_POR_TIPO: Record<string, { politica: DocumentTemporalPolicy; dias?: number }> = {
-  cartao_cnpj: { politica: 'emissao_30_dias', dias: 30 },
-  comprovante_residencia: { politica: 'emissao_60_dias', dias: 60 },
-  cnd_rfb_cnpj: { politica: 'validade_expressa' },
-  cnd_rfb_cpf: { politica: 'validade_expressa' },
-  pgfn_cnpj: { politica: 'validade_expressa' },
-  pgfn_cpf: { politica: 'validade_expressa' },
-  crf_fgts: { politica: 'validade_expressa' },
-  cndt: { politica: 'validade_expressa' },
-  cnd_estadual: { politica: 'validade_expressa' },
-  cnd_municipal: { politica: 'validade_expressa' },
-  certidao: { politica: 'validade_expressa' },
-  situacao_fiscal_cnpj: { politica: 'emissao_30_dias', dias: 30 },
-  situacao_fiscal_cpf: { politica: 'emissao_30_dias', dias: 30 },
-  rating_bacen_cnpj: { politica: 'emissao_30_dias', dias: 30 },
-  rating_bacen_cpf: { politica: 'emissao_30_dias', dias: 30 },
-  ccs_cnpj: { politica: 'emissao_30_dias', dias: 30 },
-  ccs_cpf: { politica: 'emissao_30_dias', dias: 30 },
-  ccf_cnpj: { politica: 'emissao_30_dias', dias: 30 },
-  ccf_cpf: { politica: 'emissao_30_dias', dias: 30 },
-  cenprot_cnpj: { politica: 'emissao_30_dias', dias: 30 },
-  cenprot_cpf: { politica: 'emissao_30_dias', dias: 30 },
-  cadin_cnpj: { politica: 'emissao_30_dias', dias: 30 },
-  cadin_cpf: { politica: 'emissao_30_dias', dias: 30 },
-  consulta_serasa_cnpj: { politica: 'emissao_30_dias', dias: 30 },
-  consulta_serasa_cpf: { politica: 'emissao_30_dias', dias: 30 },
-  pgdas: { politica: 'competencia_mensal' },
-  pgmei: { politica: 'competencia_mensal' },
-  das_mei: { politica: 'competencia_mensal' },
-  dctf: { politica: 'competencia_mensal' },
-  dctfweb: { politica: 'competencia_mensal' },
-  mit: { politica: 'competencia_mensal' },
-  darf: { politica: 'competencia_mensal' },
-  efd_contribuicoes: { politica: 'competencia_mensal' },
-  efd_icms_ipi: { politica: 'competencia_mensal' },
-  esocial: { politica: 'competencia_mensal' },
-  efd_reinf: { politica: 'competencia_mensal' },
-  ecf: { politica: 'competencia_anual' },
-  ecd: { politica: 'competencia_anual' },
-  defis: { politica: 'competencia_anual' },
-  dasn_simei: { politica: 'competencia_anual' },
-  imposto_renda: { politica: 'competencia_anual' },
-  faturamento_12_meses: { politica: 'ultimos_12_meses' },
-  extrato_bancario: { politica: 'competencia_mensal' },
-  relatorio_receitas_mei: { politica: 'competencia_mensal' },
-  balancete: { politica: 'competencia_mensal' },
+// CORREÇÃO (Rodada 33): `grauFonte` acrescentado a cada linha desta tabela --
+// nenhuma linha teve `politica`/`dias` alterados (o comportamento de
+// classificação hoje em produção continua idêntico), só a classificação da
+// fonte que faltava. Grupo "PRATICA_MERCADO" aqui reúne exatamente os tipos
+// que as duas pesquisas (Manus AI e GPT) descreveram como snapshot/consulta
+// de cadastro ou bureau, sem prazo de validade com fonte normativa própria --
+// CADIN em especial é citado nominalmente pelas duas como não equivalente a
+// uma CND. O Cartão CNPJ entra no mesmo grupo pelo mesmo motivo (é uma foto
+// do cadastro num instante; a Receita não define um "vencimento" de 30 dias
+// para o documento em si -- o sistema já prefere reconsulta automática via a
+// API gratuita de CNPJ nesses casos, ver Rodada 19).
+const POLITICA_POR_TIPO: Record<string, { politica: DocumentTemporalPolicy; dias?: number; grauFonte: GrauFonteRegraDocumental }> = {
+  cartao_cnpj: { politica: 'emissao_30_dias', dias: 30, grauFonte: 'PRATICA_MERCADO' },
+  comprovante_residencia: { politica: 'emissao_60_dias', dias: 60, grauFonte: 'PRATICA_MERCADO' },
+  cnd_rfb_cnpj: { politica: 'validade_expressa', grauFonte: 'ORGAO_OFICIAL' },
+  cnd_rfb_cpf: { politica: 'validade_expressa', grauFonte: 'ORGAO_OFICIAL' },
+  pgfn_cnpj: { politica: 'validade_expressa', grauFonte: 'ORGAO_OFICIAL' },
+  pgfn_cpf: { politica: 'validade_expressa', grauFonte: 'ORGAO_OFICIAL' },
+  crf_fgts: { politica: 'validade_expressa', grauFonte: 'ORGAO_OFICIAL' },
+  cndt: { politica: 'validade_expressa', grauFonte: 'ORGAO_OFICIAL' },
+  cnd_estadual: { politica: 'validade_expressa', grauFonte: 'ORGAO_OFICIAL' },
+  cnd_municipal: { politica: 'validade_expressa', grauFonte: 'ORGAO_OFICIAL' },
+  certidao: { politica: 'validade_expressa', grauFonte: 'ORGAO_OFICIAL' },
+  // Bureau/cadastro -- snapshot, não certidão com prazo legal (ver comentário
+  // acima). CADIN citado nominalmente pelas duas pesquisas.
+  situacao_fiscal_cnpj: { politica: 'emissao_30_dias', dias: 30, grauFonte: 'PRATICA_MERCADO' },
+  situacao_fiscal_cpf: { politica: 'emissao_30_dias', dias: 30, grauFonte: 'PRATICA_MERCADO' },
+  rating_bacen_cnpj: { politica: 'emissao_30_dias', dias: 30, grauFonte: 'PRATICA_MERCADO' },
+  rating_bacen_cpf: { politica: 'emissao_30_dias', dias: 30, grauFonte: 'PRATICA_MERCADO' },
+  ccs_cnpj: { politica: 'emissao_30_dias', dias: 30, grauFonte: 'PRATICA_MERCADO' },
+  ccs_cpf: { politica: 'emissao_30_dias', dias: 30, grauFonte: 'PRATICA_MERCADO' },
+  ccf_cnpj: { politica: 'emissao_30_dias', dias: 30, grauFonte: 'PRATICA_MERCADO' },
+  ccf_cpf: { politica: 'emissao_30_dias', dias: 30, grauFonte: 'PRATICA_MERCADO' },
+  cenprot_cnpj: { politica: 'emissao_30_dias', dias: 30, grauFonte: 'PRATICA_MERCADO' },
+  cenprot_cpf: { politica: 'emissao_30_dias', dias: 30, grauFonte: 'PRATICA_MERCADO' },
+  cadin_cnpj: { politica: 'emissao_30_dias', dias: 30, grauFonte: 'PRATICA_MERCADO' },
+  cadin_cpf: { politica: 'emissao_30_dias', dias: 30, grauFonte: 'PRATICA_MERCADO' },
+  consulta_serasa_cnpj: { politica: 'emissao_30_dias', dias: 30, grauFonte: 'PRATICA_MERCADO' },
+  consulta_serasa_cpf: { politica: 'emissao_30_dias', dias: 30, grauFonte: 'PRATICA_MERCADO' },
+  // Obrigações fiscais/acessórias com prazo em lei/instrução normativa/resolução.
+  pgdas: { politica: 'competencia_mensal', grauFonte: 'LEI_NORMA' },
+  pgmei: { politica: 'competencia_mensal', grauFonte: 'LEI_NORMA' },
+  das_mei: { politica: 'competencia_mensal', grauFonte: 'LEI_NORMA' },
+  dctf: { politica: 'competencia_mensal', grauFonte: 'LEI_NORMA' },
+  dctfweb: { politica: 'competencia_mensal', grauFonte: 'LEI_NORMA' },
+  mit: { politica: 'competencia_mensal', grauFonte: 'LEI_NORMA' },
+  darf: { politica: 'competencia_mensal', grauFonte: 'ORGAO_OFICIAL' },
+  efd_contribuicoes: { politica: 'competencia_mensal', grauFonte: 'LEI_NORMA' },
+  efd_icms_ipi: { politica: 'competencia_mensal', grauFonte: 'LEI_NORMA' },
+  esocial: { politica: 'competencia_mensal', grauFonte: 'LEI_NORMA' },
+  efd_reinf: { politica: 'competencia_mensal', grauFonte: 'LEI_NORMA' },
+  ecf: { politica: 'competencia_anual', grauFonte: 'LEI_NORMA' },
+  ecd: { politica: 'competencia_anual', grauFonte: 'LEI_NORMA' },
+  defis: { politica: 'competencia_anual', grauFonte: 'LEI_NORMA' },
+  dasn_simei: { politica: 'competencia_anual', grauFonte: 'LEI_NORMA' },
+  imposto_renda: { politica: 'competencia_anual', grauFonte: 'LEI_NORMA' },
+  // Evidência de crédito -- coletada por prática de mercado/política de
+  // crédito, não por obrigação fiscal (ambas as pesquisas: rolling 12 meses é
+  // política de análise de crédito coerente com a RBT12 oficial, não uma
+  // obrigação em si).
+  faturamento_12_meses: { politica: 'ultimos_12_meses', grauFonte: 'PRATICA_MERCADO' },
+  extrato_bancario: { politica: 'competencia_mensal', grauFonte: 'PRATICA_MERCADO' },
+  relatorio_receitas_mei: { politica: 'competencia_mensal', grauFonte: 'PRATICA_MERCADO' },
+  balancete: { politica: 'competencia_mensal', grauFonte: 'PRATICA_MERCADO' },
 };
 
 const CAMPOS_ESPECIFICOS: Record<string, string[]> = {
@@ -145,7 +186,7 @@ export function obterPerfilAnaliseDocumental(tipoDocumento: string): DocumentAna
   const item = getDocumentCatalogEntry(tipoDocumento) || getDocumentCatalogEntry(tipo);
   const categoria = item?.categoria || 'outros';
   const base = CAMPOS_POR_CATEGORIA[categoria] || CAMPOS_POR_CATEGORIA.outros;
-  const temporal = POLITICA_POR_TIPO[tipo] || { politica: 'sem_validade_formal' as const };
+  const temporal = POLITICA_POR_TIPO[tipo] || { politica: 'sem_validade_formal' as const, grauFonte: null };
   return {
     tipo,
     categoria,
@@ -153,15 +194,19 @@ export function obterPerfilAnaliseDocumental(tipoDocumento: string): DocumentAna
     camposQuandoPresentes: base.adicionais,
     politicaTemporal: temporal.politica,
     validadePadraoDias: temporal.dias ?? null,
+    grauFonte: temporal.grauFonte ?? null,
   };
 }
 
 export function descricaoPerfilParaPrompt(tipoDocumento: string): string {
   const perfil = obterPerfilAnaliseDocumental(tipoDocumento);
+  const notaFonte = perfil.grauFonte === 'PRATICA_MERCADO'
+    ? ' Este prazo é política de crédito/prática de mercado, não obrigação legal -- não apresente como exigência da lei.'
+    : '';
   return [
     `Campos essenciais deste tipo: ${perfil.camposObrigatorios.join(', ')}.`,
     `Também extraia, quando existirem: ${perfil.camposQuandoPresentes.join(', ')}.`,
-    `Política temporal: ${perfil.politicaTemporal}${perfil.validadePadraoDias ? ` (${perfil.validadePadraoDias} dias)` : ''}.`,
+    `Política temporal: ${perfil.politicaTemporal}${perfil.validadePadraoDias ? ` (${perfil.validadePadraoDias} dias)` : ''}.${notaFonte}`,
     'Para cada campo confirmado, informe evidência textual e confiança. Campo ausente ou ilegível deve ser null e gerar pendência; não inferir.',
   ].join(' ');
 }
