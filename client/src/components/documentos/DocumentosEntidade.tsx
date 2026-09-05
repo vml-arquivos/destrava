@@ -2422,15 +2422,18 @@ export default function DocumentosEntidade({
                                   <div className="flex items-center gap-0.5 shrink-0">
                                     <button type="button" title="Visualizar" onClick={() => visualizar(doc)} className="p-1 rounded-md hover:bg-primary/10 text-primary"><Eye className="w-3 h-3" /></button>
                                     <button type="button" title="Baixar" onClick={() => baixar(doc)} className="p-1 rounded-md hover:bg-muted text-muted-foreground"><Download className="w-3 h-3" /></button>
-                                    {temResultadoInline && (
+                                    {tipoTemAnaliseAutomatica && !TIPOS_GATILHO_ANALISE_IDENTIDADE.has(String(doc.tipo_documento || "")) && (
                                       <button
                                         type="button"
-                                        title="Forçar nova leitura deste documento (use depois de corrigir o arquivo, ou depois de uma atualização do motor de análise)"
+                                        title={temResultadoInline
+                                          ? "Reler este documento e atualizar os dados validados"
+                                          : "Ler este documento agora e extrair os dados para validação"}
                                         onClick={() => void reanalisar(doc)}
                                         disabled={reanalisandoId === doc.id}
-                                        className="p-1 rounded-md hover:bg-primary/10 text-primary disabled:opacity-50"
+                                        className="inline-flex items-center gap-0.5 rounded-md px-1 py-0.5 text-[8px] font-bold text-primary hover:bg-primary/10 disabled:opacity-50"
                                       >
-                                        <RefreshCw className={`w-3 h-3 ${reanalisandoId === doc.id ? "animate-spin" : ""}`} />
+                                        <RefreshCw className={`w-2.5 h-2.5 ${reanalisandoId === doc.id ? "animate-spin" : ""}`} />
+                                        {reanalisandoId === doc.id ? "Lendo..." : temResultadoInline ? "Reler" : "Ler"}
                                       </button>
                                     )}
                                     {permitirValidar && (
