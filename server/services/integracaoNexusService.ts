@@ -178,7 +178,12 @@ export function resolverUrlIntegracaoNexus(recurso: string): string | null {
 }
 
 function nexusIntegrationHeaders(): Record<string, string> {
-  const token = String(process.env.NEXUS_API_TOKEN || process.env.NEXUS_INTEGRATION_SECRET || "").trim();
+  const token = String(
+    process.env.NEXUS_API_TOKEN
+    || process.env.NEXUS_INTEGRATION_SECRET
+    || process.env.NEXUS_DESTRAVA_INTEGRATION_SECRET
+    || ""
+  ).trim();
   return {
     "Content-Type": "application/json",
     "X-Source": "destrava-credito",
