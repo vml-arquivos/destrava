@@ -274,16 +274,20 @@ export class BackfillLaudosService {
         await client.query('COMMIT');
         return { extractionId: String(current.id), signature, promptVersion };
       }
-      if (current?.id) {
-        await client.query(
-          `UPDATE public.documentos_extracoes_ia
-              SET analysis_status = CASE WHEN status IN ('concluido','revisao_humana') THEN 'SUPERSEDED' ELSE 'REANALISE_NECESSARIA' END,
-                  superseded_at = CASE WHEN status IN ('concluido','revisao_humana') THEN NOW() ELSE superseded_at END,
-                  satisfaz_requisito = FALSE
-            WHERE id = $1`,
-          [current.id],
-        );
+      if (current?.id
+        && String(current.analysis_signature || '') === signature
+        && ['pendente', 'processando', 'falhou'].includes(String(current.status || ''))) {
+        // Retentativa da MESMA leitura-alvo: reutiliza a linha pendente/falha
+        // em vez de criar infinitas versões. Importante: qualquer laudo
+        // concluído anterior continua ATIVO até esta tentativa terminar com
+        // sucesso.
+        await client.query('COMMIT');
+        return { extractionId: String(current.id), signature, promptVersion };
       }
+      // Continuidade documental: NÃO superseder a última conclusão antes de
+      // a nova leitura terminar. Um deploy, restart ou bump de versão só cria
+      // uma atualização em segundo plano; a validação já concluída continua
+      // sendo a fonte vigente até existir substituta bem-sucedida.
       const inserted = await client.query(
         `INSERT INTO public.documentos_extracoes_ia
           (arquivo_id, status, prompt_codigo, prompt_versao, resultado, campos_extraidos, pendencias, erros,
@@ -387,6 +391,20 @@ export class BackfillLaudosService {
           satisfaz,
         ],
       );
+      await this.db.query(
+        `UPDATE public.documentos_extracoes_ia
+            SET analysis_status='SUPERSEDED',
+                superseded_at=COALESCE(superseded_at, NOW()),
+                satisfaz_requisito=FALSE
+          WHERE arquivo_id=$1
+            AND prompt_codigo=$2
+            AND id<>$3
+            AND status IN ('concluido','revisao_humana')
+            AND COALESCE(analysis_status,'ATIVO') NOT IN ('SUPERSEDED','STALE')`,
+        [job.documento_id, job.prompt_codigo, extraction.extractionId],
+      ).catch((error: any) => {
+        console.warn('[BackfillLaudos] Nova leitura ficou ativa, mas não foi possível superseder laudos anteriores:', error?.message || error);
+      });
       await this.db.query(`UPDATE public.documentos_backfill_jobs SET status='CONCLUIDO', concluido_em=NOW(), ultimo_erro=NULL WHERE id=$1`, [job.id]);
       await this.db.query(
         `UPDATE public.documentos_arquivos
