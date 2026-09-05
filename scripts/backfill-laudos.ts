@@ -20,6 +20,7 @@ async function main(): Promise<void> {
     workerId: option('worker-id'),
     dryRun: hasFlag('dry-run'),
     includeCompleted: hasFlag('include-completed'),
+    retryFailed: hasFlag('retry-failed'),
   };
 
   if (action === 'status') {

@@ -1,7 +1,14 @@
 import { describe, expect, it } from "vitest";
 import {
+  calcularExigibilidadeDasnSimei,
+  calcularExigibilidadeDefis,
+  calcularExigibilidadeEcd,
   calcularExigibilidadeEcf,
   competenciaEhAtual,
+  dataLimiteRegularDasnSimei,
+  dataLimiteRegularDefis,
+  dataLimiteRegularEcd,
+  dataLimiteRegularEcf,
   obterLinhaDoTempoRegime,
   obterRegimeVigenteEm,
   registrarPeriodoRegime,
@@ -85,9 +92,53 @@ describe("regimeTributarioTemporalService — funções puras", () => {
     expect(calcularExigibilidadeEcf(2025, new Date("2026-08-30T12:00:00Z"))).toBe("EXIGIVEL");
   });
 
-  it("ECF exatamente no prazo (31/07) ainda não é exigível; no dia seguinte já é", () => {
+  it("ECF exatamente no prazo ainda não é exigível; só vence após 23:59 em Brasília", () => {
     expect(calcularExigibilidadeEcf(2025, new Date("2026-07-31T20:00:00Z"))).toBe("AINDA_NAO_EXIGIVEL");
-    expect(calcularExigibilidadeEcf(2025, new Date("2026-08-01T00:00:00Z"))).toBe("EXIGIVEL");
+    expect(calcularExigibilidadeEcf(2025, new Date("2026-08-01T02:59:59.999Z"))).toBe("AINDA_NAO_EXIGIVEL");
+    expect(calcularExigibilidadeEcf(2025, new Date("2026-08-01T03:00:00Z"))).toBe("EXIGIVEL");
+  });
+
+  it("recua o prazo regular da ECF quando 31 de julho cai no fim de semana", () => {
+    // 31/07/2027 cai em sábado: prazo regular encerra sexta, 30/07, em Brasília.
+    expect(dataLimiteRegularEcf(2026).toISOString()).toBe("2027-07-31T02:59:59.999Z");
+  });
+
+  // CORREÇÃO (Rodada 33, 05/09/2026, diagnóstico cruzado de duas pesquisas
+  // independentes -- Manus AI e GPT): as duas confirmam, com fonte, que ECD
+  // tem prazo por último dia útil de junho do ano seguinte (igual mecânica da
+  // ECF), e que DEFIS/DASN-SIMEI têm prazo por dia fixo do calendário (31/03 e
+  // 31/05, respectivamente), sem ajuste de dia útil mencionado em nenhuma das
+  // duas pesquisas. Antes desta correção, só a ECF tinha essa precisão -- as
+  // outras três caíam na regra genérica "o ano inteiro é AINDA_NAO_EXIGIVEL",
+  // sem olhar o mês/dia exato do prazo.
+  describe("Rodada 33 -- ECD, DEFIS e DASN-SIMEI com prazo de exigibilidade preciso (mesmo padrão da ECF)", () => {
+    it("ECD: último dia útil de junho do ano seguinte -- 30/06/2027 é quarta-feira, não recua", () => {
+      expect(dataLimiteRegularEcd(2026).toISOString()).toBe("2027-07-01T02:59:59.999Z");
+      expect(calcularExigibilidadeEcd(2026, new Date("2027-06-30T12:00:00Z"))).toBe("AINDA_NAO_EXIGIVEL");
+      expect(calcularExigibilidadeEcd(2026, new Date("2027-07-01T03:00:00Z"))).toBe("EXIGIVEL");
+    });
+
+    it("DEFIS: 31 de março do ano seguinte, sem ajuste de dia útil", () => {
+      expect(dataLimiteRegularDefis(2026).toISOString()).toBe("2027-04-01T02:59:59.999Z");
+      expect(calcularExigibilidadeDefis(2026, new Date("2027-03-31T20:00:00Z"))).toBe("AINDA_NAO_EXIGIVEL");
+      expect(calcularExigibilidadeDefis(2026, new Date("2027-04-01T03:00:00Z"))).toBe("EXIGIVEL");
+    });
+
+    it("DASN-SIMEI: 31 de maio do ano seguinte, sem ajuste de dia útil", () => {
+      expect(dataLimiteRegularDasnSimei(2026).toISOString()).toBe("2027-06-01T02:59:59.999Z");
+      expect(calcularExigibilidadeDasnSimei(2026, new Date("2027-05-31T20:00:00Z"))).toBe("AINDA_NAO_EXIGIVEL");
+      expect(calcularExigibilidadeDasnSimei(2026, new Date("2027-06-01T03:00:00Z"))).toBe("EXIGIVEL");
+    });
+
+    it("ano-calendário anterior já exigível, ano corrente ainda não -- mesmo comportamento da ECF, para as três obrigações novas", () => {
+      const referencia = new Date("2027-08-30T12:00:00Z");
+      expect(calcularExigibilidadeEcd(2026, referencia)).toBe("EXIGIVEL");
+      expect(calcularExigibilidadeEcd(2027, referencia)).toBe("AINDA_NAO_EXIGIVEL");
+      expect(calcularExigibilidadeDefis(2026, referencia)).toBe("EXIGIVEL");
+      expect(calcularExigibilidadeDefis(2027, referencia)).toBe("AINDA_NAO_EXIGIVEL");
+      expect(calcularExigibilidadeDasnSimei(2026, referencia)).toBe("EXIGIVEL");
+      expect(calcularExigibilidadeDasnSimei(2027, referencia)).toBe("AINDA_NAO_EXIGIVEL");
+    });
   });
 
   it("competência até 12/2024 usa DCTF (PGD); 01/2025 em diante usa DCTFWeb/MIT", () => {
@@ -118,6 +169,21 @@ describe("regimeTributarioTemporalService — linha do tempo (banco falso)", () 
 
     const vigente = await obterRegimeVigenteEm(db, EMPRESA_ID, new Date("2025-06-01T12:00:00Z"));
     expect(vigente?.regime).toBe("Simples Nacional");
+  });
+
+  it("primeira evidência com fim no passado é histórica e não cria regime vigente", async () => {
+    const { db } = criarBancoFalso();
+    const resultado = await registrarPeriodoRegime(db, {
+      empresaId: EMPRESA_ID,
+      regime: "Simples Nacional",
+      dataEvidenciaInicio: "2024-12-01",
+      dataEvidenciaFim: "2024-12-31",
+      fonte: "pgdas",
+      confianca: 0.95,
+    });
+    expect(resultado.acao).toBe("inserido_historico");
+    expect(resultado.periodo).toMatchObject({ data_fim: "2024-12-31" });
+    expect(await obterRegimeVigenteEm(db, EMPRESA_ID, new Date("2026-08-30T12:00:00Z"))).toMatchObject({ data_fim: "2024-12-31" });
   });
 
   // Cenário exato descrito na missão (seção 51/10): empresa era Simples Nacional

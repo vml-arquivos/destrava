@@ -28,6 +28,8 @@ import {
   PROMPT_VERSION,
   calcularAssinaturaAnalise,
   decidirVersaoLaudo,
+  laudoConcluidoPodePermanecerAtivo,
+  versaoPromptDocumental,
   type AnalysisLifecycleStatus,
 } from '../services/documentalLaudoVersioning';
 import { obterLinhaDoTempoRegime, obterRegimeVigenteEm } from '../services/regimeTributarioTemporalService';
@@ -51,18 +53,6 @@ const router = Router();
 // integrações existentes.
 const analisesIniciaisEmAndamento = new Map<string, Promise<void>>();
 const analisesSocietariasEmAndamento = new Map<string, Promise<void>>();
-
-// Versão específica do motor QSA da Fase 1. A troca de versão invalida somente
-// resultados persistidos do QSA que foram produzidos por regras antigas, sem
-// apagar arquivo, cadastro, bloco ou qualquer outra análise documental.
-const VERSAO_ANALISE_DOCUMENTAL: Record<string, string> = {
-  qsa_extract: '5.1.0',
-  simples_extract: '1.0.0',
-  atos_junta_extract: '1.0.0',
-  faturamento_12m_extract: '1.0.0',
-  comprovante_residencia_extract: '1.0.0',
-};
-const versaoPromptDocumental = (promptCodigo: string) => VERSAO_ANALISE_DOCUMENTAL[promptCodigo] || '1.0.0';
 
 const BLOCO_CODIGOS = [
   'cnpj_receita',
@@ -518,8 +508,52 @@ export async function enriquecerDocumentosAcervoComAnalise(blocos: any[]): Promi
       analisado,
       consistente,
     }, analiseEspecializada);
+    if (analiseEspecializada && !laudoStale) {
+      // Rodada 36: o Acervo também precisa carregar o estado de ciclo de vida
+      // do laudo que buscarAnaliseEspecializadaPersistida já decidiu manter
+      // ATIVO durante uma atualização de motor. Sem esta propagação, a
+      // validação permanecia correta no backend, mas o DTO visual perdia
+      // analysis_status/atualizacao_em_segundo_plano_pendente e podia voltar a
+      // parecer "aguardando" em consumidores que leem resultado_analise.
+      (resultadoAnalise as any).analysis_status = analiseEspecializada.analysis_status || 'ATIVO';
+      (resultadoAnalise as any).satisfaz_requisito = analiseEspecializada.satisfaz_requisito;
+      (resultadoAnalise as any).atualizacao_em_segundo_plano_pendente = analiseEspecializada.atualizacao_em_segundo_plano_pendente === true;
+      (resultadoAnalise as any).analysis_signature = analiseEspecializada.analysis_signature || null;
+      (resultadoAnalise as any).classifier_version = analiseEspecializada.classifier_version || null;
+      (resultadoAnalise as any).extractor_version = analiseEspecializada.extractor_version || null;
+      (resultadoAnalise as any).rule_version = analiseEspecializada.rule_version || null;
+      (resultadoAnalise as any).schema_version = analiseEspecializada.schema_version || null;
+    }
     if (laudoStale) {
       (resultadoAnalise as any).status = 'REANALISE_NECESSARIA';
+      // CORREÇÃO (2026-09-05, diagnóstico do estado "Aguardando análise"/
+      // "Documento incompatível" mostrado incorretamente para laudos apenas
+      // desatualizados após a correção do GPT): `estadoVisualDocumento`
+      // (shared/documentalPresentation.ts) é a ÚNICA fonte de verdade para o
+      // selo visual e lê `resultado.analysis_status` -- não `resultado.status`
+      // -- para decidir o estado "reanalisar" (ver seu próprio teste em
+      // tests/documentalPresentation.test.ts: `analysis_status:
+      // "REANALISE_NECESSARIA"` -> `"reanalisar"`). Sem popular este campo
+      // aqui, o guard de "reanalisar" (que tem que rodar ANTES de qualquer
+      // checagem de incompatibilidade, para nunca confundir "laudo antigo,
+      // precisa reler" com "documento errado para este campo") nunca disparava
+      // para nenhum laudo marcado como stale/superseded neste endpoint (o que
+      // alimenta o Acervo Documental) -- o documento caía em "aguardando" (se
+      // os dados antigos não tinham sinal de incompatibilidade) ou, pior, em
+      // "incompativel" (se os dados antigos do laudo desatualizado carregavam
+      // tipo/identidade que não batem mais com o catálogo atual), mostrando o
+      // selo enganoso "Documento incompatível" para um documento que só
+      // precisa ser relido -- exatamente o sintoma relatado pelo usuário para
+      // QSA, Enquadramento Tributário e CCMEI de uma empresa MEI logo após a
+      // correção do GPT (que renumerou/expandiu as versões de classificação e
+      // por isso marcou laudos antigos como stale em todo o sistema, por
+      // design -- ver CLASSIFIER_VERSION/RULE_VERSION em
+      // documentalLaudoVersioning.ts). Regra geral, sem exceção por tipo de
+      // documento/empresa/regime: qualquer laudo marcado stale/superseded por
+      // este mecanismo passa a ser identificado corretamente como
+      // "Reanálise necessária" pelo selo visual, em vez de cair em outro
+      // estado por acidente de nome de campo.
+      (resultadoAnalise as any).analysis_status = lifecycleStatus || 'REANALISE_NECESSARIA';
       resultadoAnalise.conclusao = 'Laudo antigo ou superseded; reanálise necessária antes de considerar o documento válido.';
       resultadoAnalise.diagnostico = analiseEspecializada?.mensagem_status || 'A versão do motor mudou ou a assinatura do arquivo não confere. O laudo histórico foi preservado e não satisfaz o requisito atual.';
     } else if (!analisado) {
@@ -1070,9 +1104,12 @@ function mapSocioReceita(item: any, index: number) {
   };
 }
 
-function montarProprietarioInferido(empresa: any) {
+function montarTitularEmpresaIndividual(empresa: any) {
   if (!isEmpresaIndividual(empresa)) return null;
-  const nome = empresa?.responsavel_nome || empresa?.nome_fantasia || empresa?.razao_social || null;
+  // Nome fantasia e razão social são dados da pessoa jurídica, não prova da
+  // identidade civil do titular. O titular só é exposto quando já existe em
+  // campo estruturado do cadastro; caso contrário permanece não verificado.
+  const nome = String(empresa?.responsavel_nome || '').trim() || null;
   if (!nome) return null;
   return {
     id: `proprietario-${empresa.id || 'empresa'}`,
@@ -1085,7 +1122,7 @@ function montarProprietarioInferido(empresa: any) {
     representante_legal: true,
     assina_contrato: true,
     data_entrada_sociedade: empresa?.data_abertura || null,
-    fonte_dados: 'inferido_empresa_individual',
+    fonte_dados: 'cadastro_responsavel_empresa_individual',
     cpfhub_status: null,
     pendencias_contrato: [],
     completo_para_contrato: false,
@@ -1273,7 +1310,7 @@ function pendenciasCnpj(empresa: any, docsCnpj: any[]): Pendencia[] {
   return pendencias;
 }
 
-function dadosQsa(empresa: any, socios: any[]) {
+export function dadosQsa(empresa: any, socios: any[]) {
   const sociosReceita = [
     ...normalizeArray(empresa.socios_receita),
     ...normalizeArray(empresa.dados_extra_receita),
@@ -1303,16 +1340,20 @@ function dadosQsa(empresa: any, socios: any[]) {
       fonte_dados: s.fonte_dados,
     }));
 
-  const proprietario = sociosCadastro.length === 0 && sociosReceitaMapeados.length === 0
-    ? montarProprietarioInferido(empresa)
+  const empresaIndividual = isEmpresaIndividual(empresa);
+  const titularCadastrado = empresaIndividual
+    ? (sociosCadastro.find((item) => item.administrador) || sociosCadastro[0]
+      || sociosReceitaMapeados.find((item) => item.administrador) || sociosReceitaMapeados[0]
+      || montarTitularEmpresaIndividual(empresa))
     : null;
-  let sociosConsolidados: any[] = sociosCadastro.length
-    ? sociosCadastro
-    : sociosReceitaMapeados.length
-      ? sociosReceitaMapeados
-      : proprietario
-        ? [{ id: proprietario.id, nome: proprietario.nome, qualificacao: proprietario.qualificacao, administrador: true, fonte_dados: proprietario.fonte_dados }]
-        : [];
+  // EI/MEI têm titular, não quadro de sócios. Mesmo que um cadastro legado
+  // tenha gravado o responsável em socios_empresa, ele é apresentado no campo
+  // próprio e nunca contado como sociedade fictícia.
+  let sociosConsolidados: any[] = empresaIndividual
+    ? []
+    : sociosCadastro.length
+      ? sociosCadastro
+      : sociosReceitaMapeados;
 
   if (sociosConsolidados.length === 1 && !sociosConsolidados[0].administrador) {
     sociosConsolidados = [{ ...sociosConsolidados[0], administrador: true }];
@@ -1322,9 +1363,17 @@ function dadosQsa(empresa: any, socios: any[]) {
     total_socios_cadastrados: sociosCadastro.length,
     total_socios_receita_json: sociosReceitaMapeados.length,
     total_socios_consolidados: sociosConsolidados.length,
-    empresa_individual_detectada: isEmpresaIndividual(empresa),
-    proprietario_inferido: !!proprietario,
-    origem_qsa_exibido: sociosCadastro.length > 0 ? 'socios_empresa' : sociosReceitaMapeados.length > 0 ? 'receita_json' : proprietario ? 'inferido_empresa_individual' : 'nao_disponivel',
+    empresa_individual_detectada: empresaIndividual,
+    proprietario_inferido: false,
+    titular_individual: titularCadastrado ? {
+      nome: titularCadastrado.nome,
+      qualificacao: titularCadastrado.qualificacao || (empresa?.opcao_mei ? 'Titular / Administrador (MEI)' : 'Titular / Administrador (EI)'),
+      administrador: true,
+      fonte_dados: titularCadastrado.fonte_dados || 'cadastro_estruturado',
+    } : null,
+    origem_qsa_exibido: empresaIndividual
+      ? (titularCadastrado ? 'titular_estruturado_empresa_individual' : 'qsa_nao_aplicavel')
+      : sociosCadastro.length > 0 ? 'socios_empresa' : sociosReceitaMapeados.length > 0 ? 'receita_json' : 'nao_disponivel',
     socios: sociosConsolidados,
   };
 }
@@ -1349,10 +1398,8 @@ const QSA_FASE1_CODIGOS_PERMITIDOS = new Set([
   'qsa_extracao_inconclusiva',
   'qsa_cnpj_nao_extraido',
   'qsa_cnpj_divergente',
-  'qsa_razao_social_nao_extraida',
-  'qsa_razao_social_divergente',
-  'qsa_capital_social_nao_extraido',
-  'qsa_capital_social_divergente',
+  'qsa_nao_aplicavel_divergente_natureza',
+  'qsa_integrantes_indevidos_empresa_individual',
   'qsa_socios_nao_extraidos',
   'qsa_socio_documento_nao_encontrado_receita',
   'qsa_socio_receita_ausente_documento',
@@ -1427,11 +1474,14 @@ async function buscarAnaliseEspecializadaPersistida(
     ruleVersion: RULE_VERSION,
     schemaVersion: SCHEMA_VERSION,
   });
-  // Antes da migration 103 não existem colunas de ciclo de vida para provar
-  // que um laudo legado é stale. Nesse caso de schema antigo, preservamos o
-  // comportamento operacional anterior; depois que as colunas existem, a
-  // decisão abaixo é obrigatoriamente estrita e valores ausentes/divergentes
-  // tornam o laudo inelegível até o reprocessamento.
+  // A assinatura continua indicando se o motor mudou, mas um deploy/restart
+  // não pode apagar uma validação documental já concluída. Quando a versão do
+  // motor diverge, o último laudo concluído permanece utilizável enquanto a
+  // releitura automática produz uma substituição. Só STALE/SUPERSEDED
+  // explícitos deixam de satisfazer o requisito imediatamente. Em bases sem
+  // as colunas de versionamento, preservamos o laudo concluído legado em vez
+  // de transformar todo o acervo em "Reanálise necessária" apenas pela
+  // ausência da migration.
   const decision = temVersionamento
     ? decidirVersaoLaudo(row, {
         arquivoId,
@@ -1443,7 +1493,36 @@ async function buscarAnaliseEspecializadaPersistida(
         ruleVersion: RULE_VERSION,
         schemaVersion: SCHEMA_VERSION,
       })
-    : { expectedSignature: assinaturaEsperada, isCurrent: true, lifecycleStatus: 'ATIVO' as AnalysisLifecycleStatus, shouldReprocess: false };
+    : { expectedSignature: assinaturaEsperada, isCurrent: false, lifecycleStatus: 'REANALISE_NECESSARIA' as AnalysisLifecycleStatus, shouldReprocess: true };
+
+  const podeManterValidacaoDuranteAtualizacao = laudoConcluidoPodePermanecerAtivo(row);
+
+  if (!decision.isCurrent && podeManterValidacaoDuranteAtualizacao) {
+    // Versões anteriores zeravam `satisfaz_requisito` na coluna de ciclo de
+    // vida assim que detectavam um bump global, antes de existir uma nova
+    // leitura. Para não transformar esse efeito colateral em perda permanente
+    // de validação, a verdade documental original do próprio laudo tem
+    // precedência quando ela estiver explicitamente registrada. Um documento
+    // realmente incompatível continua trazendo `false` no resultado e nunca é
+    // promovido por esta compatibilidade.
+    const satisfazPersistidoNoLaudo = typeof (resultado as any)?.dados_extraidos?.satisfaz_requisito === 'boolean'
+      ? (resultado as any).dados_extraidos.satisfaz_requisito
+      : typeof (resultado as any)?.satisfaz_requisito === 'boolean'
+        ? (resultado as any).satisfaz_requisito
+        : row?.satisfaz_requisito;
+    return {
+      ...(resultado as AnaliseDocumentalResult),
+      analysis_status: 'ATIVO',
+      analysis_signature: row?.analysis_signature || null,
+      classifier_version: row?.classifier_version || null,
+      extractor_version: row?.extractor_version || null,
+      rule_version: row?.rule_version || null,
+      schema_version: row?.schema_version || null,
+      satisfaz_requisito: satisfazPersistidoNoLaudo,
+      atualizacao_em_segundo_plano_pendente: temVersionamento === true && decision.shouldReprocess === true,
+      versao_legada_sem_assinatura: temVersionamento !== true,
+    } as AnaliseDocumentalResult;
+  }
 
   if (!decision.isCurrent) {
     if (temVersionamento && row?.id) {
@@ -1525,8 +1604,19 @@ export async function persistirAnaliseEspecializada(
     blocoEntidadeId: null,
     promptCodigo,
   });
+  const versionado = await columnExists('documentos_extracoes_ia', 'analysis_signature');
+  const satisfazRequisito = resultado?.dados_extraidos?.satisfaz_requisito === true;
   await pool.query(
-    `UPDATE public.documentos_extracoes_ia
+    versionado
+      ? `UPDATE public.documentos_extracoes_ia
+          SET status = $2, modelo = $3, campos_extraidos = $4::jsonb,
+              resultado = $5::jsonb, nivel_confianca = $6, pendencias = $7::jsonb,
+              erros = '[]'::jsonb, processado_em = NOW(), analysis_status = 'ATIVO',
+              tipo_esperado = $8, tipo_detectado = $9, identidade_status = $10,
+              temporalidade_status = $11, cobertura_status = $12, satisfaz_requisito = $13,
+              stale_at = NULL, superseded_at = NULL, last_error_at = NULL, next_retry_at = NULL
+        WHERE id = $1`
+      : `UPDATE public.documentos_extracoes_ia
         SET status = $2,
             modelo = $3,
             campos_extraidos = $4::jsonb,
@@ -1536,16 +1626,44 @@ export async function persistirAnaliseEspecializada(
             erros = '[]'::jsonb,
             processado_em = NOW()
       WHERE id = $1`,
-    [
-      extracao.id,
-      resultado.status,
-      resultado.modelo_ia,
-      JSON.stringify(resultado.dados_extraidos || {}),
-      JSON.stringify(resultado),
-      resultado.nivel_confianca,
-      JSON.stringify(resultado.alertas || []),
-    ],
+    versionado
+      ? [
+          extracao.id, resultado.status, resultado.modelo_ia,
+          JSON.stringify(resultado.dados_extraidos || {}), JSON.stringify(resultado),
+          resultado.nivel_confianca, JSON.stringify(resultado.alertas || []),
+          resultado.dados_extraidos?.tipo_esperado || null,
+          resultado.dados_extraidos?.tipo_detectado || null,
+          resultado.dados_extraidos?.identidade_status || null,
+          resultado.dados_extraidos?.temporalidade_status || null,
+          resultado.dados_extraidos?.cobertura_status || null,
+          satisfazRequisito,
+        ]
+      : [
+          extracao.id, resultado.status, resultado.modelo_ia,
+          JSON.stringify(resultado.dados_extraidos || {}), JSON.stringify(resultado),
+          resultado.nivel_confianca, JSON.stringify(resultado.alertas || []),
+        ],
   );
+  await persistirMetadadosExtracaoCatalogada(extracao.id, resultado);
+  if (versionado) {
+    // Só depois de a nova leitura ter sido persistida como ATIVO aposentamos
+    // as conclusões anteriores. Falha de releitura nunca apaga a última
+    // validação bem-sucedida.
+    await pool.query(
+      `UPDATE public.documentos_extracoes_ia
+          SET analysis_status = 'SUPERSEDED',
+              superseded_at = COALESCE(superseded_at, NOW()),
+              satisfaz_requisito = FALSE
+        WHERE arquivo_id = $1
+          AND prompt_codigo = $2
+          AND id <> $3
+          AND status IN ('concluido', 'revisao_humana')
+          AND COALESCE(analysis_status, 'ATIVO') NOT IN ('SUPERSEDED', 'STALE')`,
+      [arquivoId, promptCodigo, extracao.id],
+    ).catch((error: any) => {
+      console.warn('[Dossiê] Nova análise foi persistida, mas não foi possível superseder laudos anteriores:', error?.message || error);
+    });
+  }
 }
 
 async function persistirFalhaAnaliseEspecializada(
@@ -2065,6 +2183,12 @@ function pendenciasQsa(socios: any[], empresa?: any): Pendencia[] {
   const sociosAnalise = Array.isArray(qsa.socios) ? qsa.socios : [];
   const pendencias: Pendencia[] = [];
   if (sociosAnalise.length === 0) {
+    if (qsa.empresa_individual_detectada) {
+      if (!qsa.titular_individual) {
+        pendencias.push({ codigo: 'titular_empresa_individual_nao_identificado', mensagem: 'O QSA não se aplica a esta empresa individual; o titular ainda não está identificado no cadastro estruturado.', severidade: 'media', origem: 'empresas.responsavel_nome', recomendacao: 'Confirmar o titular no cadastro da empresa sem criar sócio fictício.' });
+      }
+      return pendencias;
+    }
     pendencias.push({ codigo: 'qsa_nao_importado', mensagem: 'Quadro societário ainda não sincronizado para conferência com o QSA.', severidade: 'alta', origem: 'socios_empresa', recomendacao: 'Atualizar os dados societários da Receita antes de iniciar a análise documental.' });
     return pendencias;
   }
@@ -2298,7 +2422,7 @@ export async function avaliarProntidaoIdentidadeCnpj(params: {
       addBloqueio('QSA tem divergências societárias relevantes.');
     }
   }
-  else pontosPositivos.push('QSA conferido: CNPJ, razão social, capital, sócios e administrador.');
+  else pontosPositivos.push('QSA conferido: vínculo com o CNPJ, integrantes e administrador/titular.');
 
   // A consulta da Receita identifica a situação no Simples, mas "não optante"
   // não identifica sozinha se o regime efetivo é Presumido, Real ou Arbitrado.
@@ -2359,9 +2483,33 @@ export async function avaliarProntidaoIdentidadeCnpj(params: {
   // aviso, para o time continuar vendo o que precisa de revisão sem travar o avanço.
   for (const pendencia of params.enquadramentoPendencias.filter((p) => p.severidade === 'alta' || p.severidade === 'media')) addAviso(pendencia.mensagem);
 
-  const statusDocumento = (anexado: boolean, analisado: boolean, consistente: boolean, falha: boolean) => {
+  // CORREÇÃO (2026-09-05, Rodada 32 -- print real da tela em produção, empresa
+  // MEI "VILSON MARCIO DE LIMA 70010668187", pedido explícito do usuário
+  // depois de já ter recebido a Rodada 31: "continua com a mesma mensagem no
+  // QSA... que não existia antes, que já identificava corretamente quando é
+  // MEI"): `montarQsaDocumentalDados`/`montarEnquadramentoDados` (mais acima
+  // neste arquivo) já calculam corretamente `status_leitura:
+  // 'reanalise_necessaria'` para um laudo marcado desatualizado pelo
+  // versionamento (`analiseDesatualizada`, também neste arquivo) -- mas esta
+  // função, que monta o card "Identidade do CNPJ" (StatusAnaliseSlot,
+  // DocumentosEntidade.tsx), jogava esse sinal fora: só verificava
+  // `status_leitura === 'falha_leitura'` explicitamente, e qualquer outro
+  // valor de `analisado === false` (incluindo `reanalise_necessaria`) caía no
+  // mesmo `'aguardando_analise'` genérico usado para um documento que nunca
+  // foi lido -- gerando o selo errado "Aguardando análise" ao lado do texto
+  // certo ("O motor de leitura foi atualizado... clique em Reler"), a mesma
+  // classe de inconsistência selo/texto já corrigida na Rodada 31 para o
+  // Acervo Documental (`estadoVisualDocumento`), só que num componente
+  // diferente que aquela correção não tocava. Corrigido acrescentando um
+  // parâmetro explícito para o valor de `status_leitura`, checado ANTES da
+  // falha/aguardando -- regra geral, vale para qualquer documento que passe
+  // pelo mesmo mecanismo de versionamento (hoje QSA e Enquadramento
+  // Tributário/Simples Nacional, os dois únicos que chamam esta função com um
+  // `statusLeitura` que pode valer `reanalise_necessaria`).
+  const statusDocumento = (anexado: boolean, analisado: boolean, consistente: boolean, falha: boolean, statusLeitura?: string | null) => {
     if (consistente) return 'ok';
     if (!anexado) return 'nao_anexado';
+    if (statusLeitura === 'reanalise_necessaria') return 'reanalise_necessaria';
     if (falha) return 'falha_leitura';
     if (!analisado) return 'aguardando_analise';
     return 'divergente';
@@ -2369,40 +2517,53 @@ export async function avaliarProntidaoIdentidadeCnpj(params: {
   const cartaoPendencia = alertasCnpj.find((item: any) => ['critica', 'alta'].includes(String(item?.severidade || '').toLowerCase())) || alertasCnpj[0];
   const qsaPendencia = primeiraPendencia(params.qsaPendencias);
   const enquadramentoPendencia = primeiraPendencia(params.enquadramentoPendencias);
+  const qsaSocios = Array.isArray(params.qsaDados?.socios) ? params.qsaDados.socios : [];
+  const qsaAdministradores = qsaSocios
+    .filter((socio: any) => socio?.administrador === true || /administrador|diretor|presidente|titular/i.test(String(socio?.qualificacao || '')))
+    .map((socio: any) => socio?.nome)
+    .filter(Boolean);
+  const qsaTitularCadastro = isEmpresaIndividual(params.empresa)
+    ? String(params.empresa?.responsavel_nome || '').trim() || null
+    : null;
+  const cnpjQsa = somenteDigitos(params.qsaDados?.cnpj);
+  const cnpjEmpresa = somenteDigitos(params.empresa?.cnpj);
+  const vinculoCnpjQsa = cnpjQsa && cnpjEmpresa
+    ? (cnpjQsa === cnpjEmpresa ? 'CONFIRMADO' : 'DIVERGENTE')
+    : 'NÃO VERIFICADO';
 
   const documentosIniciais = {
     cartao_cnpj: {
       codigo: 'cartao_cnpj', nome: 'Cartão CNPJ', anexado: cartaoAnexado, analisado: cartaoAnalisado, consistente: cartaoConsistente,
       status: statusDocumento(cartaoAnexado, cartaoAnalisado, cartaoConsistente, cartaoFalhou),
-      diagnostico: cartaoConsistente ? 'CNPJ, razão social, CNAE, natureza jurídica, porte e situação cadastral convergem com a Receita Federal.' : params.erroProcessamentoCartao || cartaoPendencia?.mensagem || (cartaoAnexado ? 'Documento anexado; a leitura automática ainda precisa ser concluída.' : 'Documento não anexado.'),
+      diagnostico: cartaoConsistente ? 'CNPJ validado: situação cadastral, unidade e localização conferidas.' : params.erroProcessamentoCartao || cartaoPendencia?.mensagem || (cartaoAnexado ? 'Documento anexado; a leitura automática ainda precisa ser concluída.' : 'Documento não anexado.'),
       fonte: camposCartao?.fonte_extracao || analiseCnpj?.fonte_receita || null, confianca: camposCartao?.confianca ?? null,
-      campos_principais: { cnpj: camposCartao?.cnpj || camposReceita?.cnpj || params.empresa?.cnpj || null, razao_social: camposCartao?.nome_empresarial || camposReceita?.razao_social || params.empresa?.razao_social || null, cnae: camposCartao?.cnae_principal || camposReceita?.cnae_principal || params.empresa?.cnae_principal || null, situacao_cadastral: camposCartao?.situacao_cadastral || camposReceita?.situacao_cadastral || params.empresa?.situacao_cadastral || null },
+      campos_principais: {
+        cnpj: camposCartao?.cnpj || camposReceita?.cnpj || params.empresa?.cnpj || null,
+        situacao_cadastral: camposCartao?.situacao_cadastral || camposReceita?.situacao_cadastral || params.empresa?.situacao_cadastral || null,
+        matriz_filial: camposCartao?.matriz_filial || null,
+        localizacao: [camposCartao?.municipio, camposCartao?.uf].filter(Boolean).join(' / ') || null,
+      },
     },
     qsa: {
       codigo: 'qsa', nome: 'QSA / Quadro Societário', anexado: qsaAnexado, analisado: qsaAnalisado, consistente: qsaConsistente,
-      status: statusDocumento(qsaAnexado, qsaAnalisado, qsaConsistente, params.qsaDados?.status_leitura === 'falha_leitura'),
+      status: statusDocumento(qsaAnexado, qsaAnalisado, qsaConsistente, params.qsaDados?.status_leitura === 'falha_leitura', params.qsaDados?.status_leitura),
       tipo_documento: 'qsa',
       tipo_leitura: 'qsa',
       qsa_leitura: true,
-      diagnostico: qsaConsistente ? 'CNPJ, razão social, capital social, nomes dos sócios e identificação do Sócio-Administrador foram conferidos.' : params.qsaDados?.diagnostico || qsaPendencia?.mensagem || (qsaAnexado ? 'Documento anexado; a análise societária ainda precisa ser concluída.' : 'Documento não anexado.'),
+      diagnostico: qsaConsistente ? 'QSA validado: vínculo com o CNPJ, quadro societário e administração conferidos.' : params.qsaDados?.diagnostico || qsaPendencia?.mensagem || (qsaAnexado ? 'Documento anexado; a análise societária ainda precisa ser concluída.' : 'Documento não anexado.'),
       fonte: params.qsaDados?.fonte_extracao || params.qsaDados?.modelo || null, confianca: params.qsaDados?.nivel_confianca ?? params.qsaDados?.confianca ?? null,
       socios_lidos: Array.isArray(params.qsaDados?.socios) ? params.qsaDados.socios : [],
       campos_principais: {
         cnpj: params.qsaDados?.cnpj || null,
-        razao_social: params.qsaDados?.razao_social || null,
-        capital_social: params.qsaDados?.capital_social ?? null,
-        socios_identificados: Array.isArray(params.qsaDados?.socios) ? params.qsaDados.socios.length : null,
-        administradores: Array.isArray(params.qsaDados?.socios)
-          ? params.qsaDados.socios
-              .filter((socio: any) => socio?.administrador === true || /administrador|titular|empres[aá]rio individual/i.test(String(socio?.qualificacao || '')))
-              .map((socio: any) => socio?.nome)
-              .filter(Boolean)
-          : [],
+        vinculo_cnpj: vinculoCnpjQsa,
+        quantidade_integrantes: params.qsaDados?.qsa_nao_aplicavel === true ? 0 : qsaSocios.length,
+        administrador_titular: qsaAdministradores.length ? qsaAdministradores : qsaTitularCadastro,
+        resultado_qsa: qsaConsistente ? 'QSA validado' : null,
       },
     },
     enquadramento_tributario: {
       codigo: 'enquadramento_tributario', nome: 'Enquadramento Tributário', anexado: enquadramentoAnexado, analisado: enquadramentoAnalisado, consistente: enquadramentoConsistente,
-      status: statusDocumento(enquadramentoAnexado, enquadramentoAnalisado, enquadramentoConsistente, params.enquadramentoDados?.status_leitura === 'falha_leitura'),
+      status: statusDocumento(enquadramentoAnexado, enquadramentoAnalisado, enquadramentoConsistente, params.enquadramentoDados?.status_leitura === 'falha_leitura', params.enquadramentoDados?.status_leitura),
       // O enquadramento existe para dizer QUAL regime a empresa usa, porque é o
       // regime que define o restante da documentação exigida. Quando a empresa
       // está fora do Simples, a Consulta de Optantes não responde isso sozinha:
@@ -2526,6 +2687,7 @@ export async function montarValidacaoSocietaria(
         nome: item.documento.nome_original || item.documento.nome_arquivo || 'Contrato/Alteração',
         nire: contrato.nire || null,
         data_registro: contrato.data_registro || null,
+        numero_arquivamento: contrato.numero_arquivamento || null,
         tipo_ato: contrato.tipo_ato || null,
         consistente: item.analise!.status === 'concluido' && bloqueios.length === 0,
         status_analise: item.analise!.status,
@@ -2777,7 +2939,7 @@ export async function montarDossieCreditoEmpresa(empresaId: string, options: { p
     ...dadosQsa(empresa, socios),
     analise_documental: qsaDocumental.dados,
     regra_fase_1: {
-      campos_conferidos: ['cnpj', 'razao_social', 'capital_social', 'nomes_socios', 'socio_administrador'],
+      campos_conferidos: ['cnpj', 'nomes_integrantes', 'administrador_titular'],
       dados_pessoais_obrigatorios: false,
       descricao: 'CPF, RG, endereço, estado civil, cônjuge, profissão, contato e documentos pessoais pertencem às etapas posteriores e não bloqueiam a Fase 1.',
     },
@@ -3839,14 +4001,9 @@ async function executarAnaliseDocumentalEspecializada(params: {
       [extracaoId],
     );
 
-    let resultado: any;
-    if (tipo === 'qsa') resultado = await analiseDocumentalService.analisarQSA(empresaId, arquivoId);
-    else if (tipo === 'simples_nacional') resultado = await analiseDocumentalService.analisarSimplesNacional(empresaId, arquivoId);
-    else if (tipo === 'atos_junta_comercial') resultado = await analiseDocumentalService.analisarAtosJuntaComercial(empresaId, arquivoId);
-    else if (tipo === 'faturamento_12_meses') resultado = await analiseDocumentalService.analisarFaturamento(empresaId, arquivoId);
-    else if (tipo === 'comprovante_residencia') resultado = await analiseDocumentalService.analisarComprovanteResidencia(empresaId, arquivoId);
-    else if (tipo === 'documento_generico' && tipoDocumento) resultado = await analiseDocumentalService.analisarDocumentoCatalogado(empresaId, arquivoId, tipoDocumento);
-    else throw new Error(`Tipo de análise documental sem executor: ${tipo}`);
+    const tipoParaDespacho = tipoDocumento || tipo;
+    if (tipo === 'documento_generico' && !tipoDocumento) throw new Error('Análise genérica sem tipo documental catalogado.');
+    const resultado: any = await analiseDocumentalService.analisarDocumentoAutomatico(empresaId, arquivoId, tipoParaDespacho);
 
     const satisfazRequisito = resultado?.dados_extraidos?.satisfaz_requisito === true;
     const assinatura = versionado
@@ -3961,6 +4118,7 @@ async function registrarExtracaoEspecializada(params: {
   blocoEntidadeId: string | null;
   promptCodigo: string;
   promptVersao?: string;
+  forcar?: boolean;
 }) {
   const client = await pool.connect();
   try {
@@ -4008,26 +4166,27 @@ async function registrarExtracaoEspecializada(params: {
         && Number.isFinite(atualizadoEm)
         && Date.now() - atualizadoEm < 5 * 60 * 1000;
       const emAndamento = mesmaVersao && (statusAtual === 'processando' || pendenteRecente);
-      const laudoAtual = versionado
+      const tentativaMesmaAssinatura = versionado
+        && mesmaVersao
+        && String(atual.analysis_signature || '') === expectedSignature
+        && ['pendente', 'processando', 'falhou'].includes(statusAtual);
+      const laudoAtual = !params.forcar
+        && versionado
         && mesmaVersao
         && ['concluido', 'revisao_humana'].includes(statusAtual)
         && atual.analysis_status === 'ATIVO'
         && atual.analysis_signature === expectedSignature;
+      // `forcar=true` é exclusivo do clique manual "Reler": uma conclusão
+      // atual não bloqueia uma nova leitura real. Ainda preservamos o guard de
+      // processamento em andamento para impedir duas OCRs simultâneas do mesmo
+      // arquivo/prompt.
       deveProcessar = !(emAndamento || laudoAtual);
 
-      if (emAndamento || laudoAtual) {
+      if (emAndamento || laudoAtual || tentativaMesmaAssinatura) {
         extracao = atual;
       } else if (versionado) {
-        if (atual.id) {
-          await client.query(
-            `UPDATE public.documentos_extracoes_ia
-                SET analysis_status = CASE WHEN status IN ('concluido', 'revisao_humana') THEN 'SUPERSEDED' ELSE 'REANALISE_NECESSARIA' END,
-                    superseded_at = CASE WHEN status IN ('concluido', 'revisao_humana') THEN NOW() ELSE superseded_at END,
-                    satisfaz_requisito = FALSE
-              WHERE id = $1`,
-            [atual.id],
-          );
-        }
+        // A versão nova nasce em paralelo. A conclusão anterior só é
+        // superseded depois que esta tentativa finalizar com sucesso.
         const inserida = await client.query(
           `INSERT INTO public.documentos_extracoes_ia
             (arquivo_id, entidade_bloco_id, status, prompt_codigo, prompt_versao, resultado, campos_extraidos, pendencias, erros, analysis_signature, classifier_version, extractor_version, rule_version, schema_version, analysis_status, satisfaz_requisito)
@@ -4037,21 +4196,34 @@ async function registrarExtracaoEspecializada(params: {
         );
         extracao = inserida.rows[0];
       } else {
-        const atualizada = await client.query(
-          `UPDATE public.documentos_extracoes_ia
-              SET entidade_bloco_id = COALESCE($2, entidade_bloco_id),
-                  status = 'pendente',
-                  prompt_versao = $3,
-                  resultado = '{}'::jsonb,
-                  campos_extraidos = '{}'::jsonb,
-                  pendencias = '[]'::jsonb,
-                  erros = '[]'::jsonb,
-                  processado_em = NULL
-            WHERE id = $1
-            RETURNING *`,
-          [atual.id, params.blocoEntidadeId, versaoEsperada],
-        );
-        extracao = atualizada.rows[0] || { ...atual, status: 'pendente', prompt_versao: versaoEsperada };
+        if (['concluido', 'revisao_humana'].includes(statusAtual)) {
+          // Banco legado sem colunas de versionamento: não zerar a única
+          // conclusão existente. A releitura usa nova linha.
+          const inserida = await client.query(
+            `INSERT INTO public.documentos_extracoes_ia
+              (arquivo_id, entidade_bloco_id, status, prompt_codigo, prompt_versao, resultado, campos_extraidos, pendencias, erros)
+             VALUES ($1,$2,'pendente',$3,$4,'{}'::jsonb,'{}'::jsonb,'[]'::jsonb,'[]'::jsonb)
+             RETURNING *`,
+            [params.arquivoId, params.blocoEntidadeId, params.promptCodigo, versaoEsperada],
+          );
+          extracao = inserida.rows[0];
+        } else {
+          const atualizada = await client.query(
+            `UPDATE public.documentos_extracoes_ia
+                SET entidade_bloco_id = COALESCE($2, entidade_bloco_id),
+                    status = 'pendente',
+                    prompt_versao = $3,
+                    resultado = '{}'::jsonb,
+                    campos_extraidos = '{}'::jsonb,
+                    pendencias = '[]'::jsonb,
+                    erros = '[]'::jsonb,
+                    processado_em = NULL
+              WHERE id = $1
+              RETURNING *`,
+            [atual.id, params.blocoEntidadeId, versaoEsperada],
+          );
+          extracao = atualizada.rows[0] || { ...atual, status: 'pendente', prompt_versao: versaoEsperada };
+        }
       }
     } else {
       const insertVersioned = versionado ? `, analysis_signature, classifier_version, extractor_version, rule_version, schema_version, analysis_status, satisfaz_requisito` : '';
@@ -4078,10 +4250,87 @@ async function registrarExtracaoEspecializada(params: {
   }
 }
 
+router.get('/ia/documentos/:documentoId/status', auth, async (req: Request, res: Response) => {
+  try {
+    const arquivoId = req.params.documentoId;
+    const documentoResult = await pool.query(
+      `SELECT id, empresa_id, entidade_id, entidade_tipo, tipo_documento, resultado_validacao, exige_revisao_humana
+         FROM public.documentos_arquivos
+        WHERE id = $1
+          AND excluido_em IS NULL
+          AND COALESCE(status, 'ativo') <> 'excluido'
+        LIMIT 1`,
+      [arquivoId],
+    );
+    const documento = documentoResult.rows[0];
+    if (!documento) { res.status(404).json({ error: 'Documento não encontrado' }); return; }
+
+    const tipoDocumento = String(documento.tipo_documento || '');
+    const config = documentAnalysisConfig(tipoDocumento);
+    const promptCodigo = ['contrato_social', 'alteracao_contratual'].includes(tipoDocumento)
+      ? 'contrato_junta_crosscheck'
+      : (ANALISE_ESPECIALIZADA_POR_TIPO[tipoDocumento]?.promptCodigo || config?.promptCodigo || null);
+
+    let extracao: any = null;
+    if (promptCodigo && await tableExists('documentos_extracoes_ia')) {
+      const temLifecycle = await columnExists('documentos_extracoes_ia', 'analysis_status');
+      const lifecycleSelect = temLifecycle ? ', analysis_status' : '';
+      const { rows } = await pool.query(
+        `SELECT id, status${lifecycleSelect}, resultado, erros, pendencias, processado_em, atualizado_em, criado_em
+           FROM public.documentos_extracoes_ia
+          WHERE arquivo_id = $1
+            AND prompt_codigo = $2
+          ORDER BY processado_em DESC NULLS LAST, atualizado_em DESC, criado_em DESC
+          LIMIT 1`,
+        [arquivoId, promptCodigo],
+      );
+      extracao = rows[0] || null;
+    }
+
+    const validacao = documento.resultado_validacao && typeof documento.resultado_validacao === 'object'
+      ? documento.resultado_validacao
+      : {};
+    const laudoArquivo = validacao.analise_regra_documental || null;
+    const erroArquivo = validacao.analise_regra_documental_erro || null;
+    const statusArquivo = String(validacao.analise_automatica_status || '').toLowerCase();
+    const statusExtracao = String(extracao?.status || '').toLowerCase();
+
+    // Contrato/alteração só é considerado concluído aqui quando o cross-check
+    // contra os Atos da Junta terminou. O laudo genérico individual pode existir,
+    // mas não substitui a validação da cadeia societária.
+    const exigeCrosscheckSocietario = ['contrato_social', 'alteracao_contratual'].includes(tipoDocumento);
+    const concluidoExtracao = ['concluido', 'revisao_humana'].includes(statusExtracao);
+    const falhouExtracao = statusExtracao === 'falhou';
+    const concluidoArquivo = !exigeCrosscheckSocietario && Boolean(laudoArquivo);
+    const falhouArquivo = !exigeCrosscheckSocietario && Boolean(erroArquivo);
+    const processando = ['pendente', 'processando'].includes(statusExtracao)
+      || (!exigeCrosscheckSocietario && ['pendente', 'processando'].includes(statusArquivo));
+
+    res.json({
+      documento_id: arquivoId,
+      tipo_documento: tipoDocumento,
+      prompt_codigo: promptCodigo,
+      suportado: Boolean(config),
+      processando,
+      concluido: concluidoExtracao || concluidoArquivo,
+      falhou: falhouExtracao || falhouArquivo,
+      status: statusExtracao || statusArquivo || (concluidoArquivo ? 'concluido' : falhouArquivo ? 'falhou' : 'nao_iniciado'),
+      analysis_status: extracao?.analysis_status || null,
+      exige_revisao_humana: documento.exige_revisao_humana === true,
+      resultado: extracao?.resultado || laudoArquivo || null,
+      erro: extracao?.erros?.[0] || erroArquivo || null,
+      processado_em: extracao?.processado_em || validacao.analise_automatica_concluida_em || null,
+    });
+  } catch (err: any) {
+    console.error('[GET /api/documentacao/ia/documentos/:documentoId/status]', err);
+    res.status(500).json({ error: 'Erro ao consultar status da leitura documental' });
+  }
+});
+
 router.post('/ia/documentos/:documentoId/extrair', auth, async (req: Request, res: Response) => {
   try {
     await ensureDocumentacaoSchema(pool);
-    const { bloco_entidade_id, prompt_codigo } = req.body || {};
+    const { bloco_entidade_id, prompt_codigo, forcar } = req.body || {};
     const arquivoId = req.params.documentoId;
     const documentoResult = await pool.query(
       `SELECT id, empresa_id, entidade_id, entidade_tipo, tipo_documento
@@ -4152,6 +4401,7 @@ router.post('/ia/documentos/:documentoId/extrair', auth, async (req: Request, re
       arquivoId,
       blocoEntidadeId: bloco_entidade_id || null,
       promptCodigo: configuracao.promptCodigo,
+      forcar: forcar === true,
     });
 
     if (deveProcessar) {

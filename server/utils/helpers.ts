@@ -30,9 +30,11 @@ export function parseDate(value: unknown): string | null {
 export function diffDays(dateIso?: string | null): number | null {
   const iso = parseDate(dateIso);
   if (!iso) return null;
-  const d = new Date(`${iso}T00:00:00`);
+  const d = new Date(`${iso}T00:00:00.000Z`);
   if (Number.isNaN(d.getTime())) return null;
-  return Math.floor((Date.now() - d.getTime()) / (1000 * 60 * 60 * 24));
+  const agora = new Date();
+  const hojeUtc = Date.UTC(agora.getUTCFullYear(), agora.getUTCMonth(), agora.getUTCDate());
+  return Math.floor((hojeUtc - d.getTime()) / (1000 * 60 * 60 * 24));
 }
 
 export function monthsSince(dateIso?: string | null): number | null {

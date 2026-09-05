@@ -56,7 +56,7 @@ const EMPRESA_ID = 'empresa-mei-rodada17';
 const ARQUIVO_ID = 'qsa-doc-rodada17';
 
 describe('persistirAnaliseEspecializada -> montarQsaDocumentalDados (leitura sem clique manual)', () => {
-  let extracoes: Array<{ id: string; arquivo_id: string; prompt_codigo: string; status: string; prompt_versao: string | null; resultado: any }>;
+  let extracoes: Array<Record<string, any>>;
 
   beforeEach(() => {
     vi.resetModules();
@@ -71,11 +71,7 @@ describe('persistirAnaliseEspecializada -> montarQsaDocumentalDados (leitura sem
         return { rows: [] };
       }
       if (sql.includes('FROM information_schema.tables')) return { rows: [{ exists: 1 }] };
-      // Caminho não-versionado (colunas de ciclo de vida ainda não existem) --
-      // o mesmo caminho de compatibilidade já coberto em
-      // analiseQsaDesatualizadaNaoRepeteErroAntigo.test.ts para o caso
-      // versionado; aqui o foco é só provar a ligação escrita -> leitura.
-      if (sql.includes('FROM information_schema.columns')) return { rows: [] };
+      if (sql.includes('FROM information_schema.columns')) return { rows: [{ exists: 1 }] };
       if (sql.includes('SELECT hash_arquivo FROM public.documentos_arquivos')) return { rows: [{ hash_arquivo: null }] };
 
       if (sql.includes('FROM public.documentos_arquivos') && sql.includes('tipo_documento = ANY')) {
@@ -89,10 +85,10 @@ describe('persistirAnaliseEspecializada -> montarQsaDocumentalDados (leitura sem
         return { rows: existente ? [existente] : [] };
       }
 
-      // registrarExtracaoEspecializada: cria a linha (caminho não-versionado)
+      // registrarExtracaoEspecializada: cria a linha versionada.
       if (sql.includes('INSERT INTO public.documentos_extracoes_ia')) {
-        const [arquivoId, , promptCodigo, promptVersao] = params;
-        const row = { id: `extracao-${proximoId++}`, arquivo_id: arquivoId, prompt_codigo: promptCodigo, status: 'pendente', prompt_versao: promptVersao, resultado: {} };
+        const [arquivoId, , promptCodigo, promptVersao, assinatura, classifierVersion, extractorVersion, ruleVersion, schemaVersion] = params;
+        const row = { id: `extracao-${proximoId++}`, arquivo_id: arquivoId, prompt_codigo: promptCodigo, status: 'pendente', prompt_versao: promptVersao, resultado: {}, analysis_signature: assinatura, classifier_version: classifierVersion, extractor_version: extractorVersion, rule_version: ruleVersion, schema_version: schemaVersion, analysis_status: 'REANALISE_NECESSARIA', satisfaz_requisito: false };
         extracoes.push(row);
         return { rows: [row] };
       }
@@ -104,6 +100,7 @@ describe('persistirAnaliseEspecializada -> montarQsaDocumentalDados (leitura sem
         if (row) {
           row.status = status;
           row.resultado = JSON.parse(resultadoJson);
+          row.analysis_status = 'ATIVO';
         }
         return { rows: [] };
       }
@@ -112,7 +109,7 @@ describe('persistirAnaliseEspecializada -> montarQsaDocumentalDados (leitura sem
       if (sql.includes('FROM public.documentos_extracoes_ia e') && sql.includes('LEFT JOIN public.documentos_arquivos d')) {
         const [arquivoId, promptCodigo] = params;
         const candidato = extracoes.find((e) => e.arquivo_id === arquivoId && e.prompt_codigo === promptCodigo && ['concluido', 'revisao_humana'].includes(e.status));
-        return { rows: candidato ? [{ resultado: candidato.resultado, status: candidato.status, prompt_versao: candidato.prompt_versao, id: candidato.id, hash_arquivo: null }] : [] };
+        return { rows: candidato ? [{ ...candidato, hash_arquivo: null }] : [] };
       }
 
       if (sql.includes("status = 'falhou'")) return { rows: [] };

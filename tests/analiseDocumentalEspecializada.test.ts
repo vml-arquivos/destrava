@@ -36,7 +36,7 @@ function criarDbMock(empresa: any, socios: any[] = [], documento: any = {}) {
 }
 
 describe('validação documental especializada', () => {
-  it('classifica CNPJ divergente do QSA como crítico e sócio ausente como alto', () => {
+  it('classifica CNPJ divergente do QSA como crítico e não usa capital como requisito do QSA', () => {
     const alertas = validarQsaExtraida(
       { cnpj: '12.345.678/0001-90', razao_social: 'Empresa Teste Ltda', capital_social: 100_000 },
       [{ nome: 'Ana Souza', qualificacao: 'Sócia-Administradora', administrador: true }],
@@ -50,7 +50,7 @@ describe('validação documental especializada', () => {
 
     expect(alertas.some((a) => a.codigo === 'qsa_cnpj_divergente' && a.severidade === 'critica')).toBe(true);
     expect(alertas.some((a) => a.codigo === 'qsa_socio_receita_ausente_documento' && a.severidade === 'alta')).toBe(true);
-    expect(alertas.some((a) => a.codigo === 'qsa_capital_social_divergente')).toBe(true);
+    expect(alertas.some((a) => a.codigo === 'qsa_capital_social_divergente')).toBe(false);
   });
 
   it('não exige dados pessoais do sócio na Etapa 1 quando os dados institucionais conferem', () => {
@@ -100,7 +100,7 @@ describe('validação documental especializada', () => {
     // conteúdo do documento, nenhum alerta de severidade alta/crítica pode
     // ser gerado.
     const alertas = validarQsaExtraida(
-      { cnpj: '44.598.036/0001-94', razao_social: '44.598.036 PAULO BOLSONI BALDI', capital_social: 200_000 },
+      { cnpj: '44.598.036/0001-94', razao_social: '44.598.036 PAULO BOLSONI BALDI', capital_social: 200_000, natureza_juridica: '213-5 - Empresário (Individual)', opcao_mei: true },
       [],
       {
         cnpj: '44.598.036/0001-94',
@@ -117,6 +117,33 @@ describe('validação documental especializada', () => {
     expect(alertas.some((a) => a.codigo === 'qsa_socios_nao_extraidos')).toBe(false);
     expect(alertas.some((a) => a.codigo === 'qsa_extracao_inconclusiva')).toBe(false);
     expect(alertas.some((a) => a.codigo === 'qsa_nao_aplicavel_natureza_juridica')).toBe(true);
+  });
+
+  it('valida sociedade pelo próprio QSA quando a base sincronizada ainda está vazia', () => {
+    const alertas = validarQsaExtraida(
+      { cnpj: '52.008.360/0001-33', natureza_juridica: 'Sociedade Empresária Limitada' },
+      [],
+      {
+        cnpj: '52.008.360/0001-33',
+        razao_social: null,
+        capital_social: null,
+        socios: [{ nome: 'JONNATHAS RODRIGUES PIRES', qualificacao: 'Sócio-Administrador', administrador: true }],
+        confianca: 0.95,
+      },
+    );
+
+    expect(alertas.some((a) => a.severidade === 'alta' || a.severidade === 'critica')).toBe(false);
+    expect(alertas.some((a) => a.codigo.includes('razao_social') || a.codigo.includes('capital_social'))).toBe(false);
+  });
+
+  it('não aceita resposta de QSA não aplicável para uma LTDA', () => {
+    const alertas = validarQsaExtraida(
+      { cnpj: '52.008.360/0001-33', natureza_juridica: 'Sociedade Empresária Limitada' },
+      [],
+      { cnpj: '52.008.360/0001-33', socios: [], qsa_nao_aplicavel: true, confianca: 1 },
+    );
+
+    expect(alertas.some((a) => a.codigo === 'qsa_nao_aplicavel_divergente_natureza' && a.severidade === 'critica')).toBe(true);
   });
 
   it('não bloqueia por qualificação genérica quando nome e condição de administrador conferem', () => {
@@ -376,14 +403,11 @@ describe('AnaliseDocumentalService com dependências isoladas', () => {
   });
 
   // NOVA CAPACIDADE (2026-08-30, Missão de evolução do Acervo Documental):
-  // EFD-Contribuições (registros M400/M800 de PIS/COFINS) não tem leitura
-  // especializada de receita bruta implementada neste sistema. Antes desta
-  // correção, o documento era tratado pelo analisador genérico em silêncio
-  // total sobre essa limitação (ver CHANGELOG_CORRECOES.md, rodada 1). Agora
-  // o sistema nunca inventa uma fórmula de receita a partir dele e sinaliza
-  // explicitamente ANALISE_ESPECIALIZADA_PENDENTE.
+  // A leitura especializada de EFD-Contribuições exige os registros M400 e
+  // M800 e só conclui quando os totais conciliam. Na ausência deles, mantém
+  // revisão humana fail-closed e nunca inventa receita bruta.
   describe('AnaliseDocumentalService.analisarDocumentoCatalogado -- EFD-Contribuições', () => {
-    it('nunca calcula receita bruta a partir de EFD-Contribuições -- fica marcado como análise especializada pendente', async () => {
+    it('nunca calcula receita bruta sem M400/M800 -- fica em revisão humana explícita', async () => {
       const empresa = { id: 'empresa-1', cnpj: '12.345.678/0001-90', razao_social: 'Empresa Teste Ltda' };
       const db = criarDbMock(empresa, [], { tipo_documento: 'efd_contribuicoes' });
       const extrator = async () => ({
@@ -395,9 +419,8 @@ describe('AnaliseDocumentalService com dependências isoladas', () => {
 
       const resultado = await service.analisarDocumentoCatalogado('empresa-1', 'doc-1', 'efd_contribuicoes');
 
-      expect(resultado.dados_extraidos.status_analise).toBe('ANALISE_ESPECIALIZADA_PENDENTE');
-      expect(resultado.dados_extraidos.motivo_status_analise).toMatch(/M400\/M800/);
-      expect(resultado.alertas.some((a) => a.codigo === 'efd_contribuicoes_analise_especializada_pendente')).toBe(true);
+      expect(resultado.dados_extraidos.status_analise).toBe('REVISAO_HUMANA');
+      expect(resultado.alertas.some((a) => a.codigo === 'efd_contribuicoes_m400_m800_incompletos')).toBe(true);
       expect(resultado.dados_extraidos.receita_bruta).toBeUndefined();
       // O documento continua sendo aceito e arquivado normalmente -- a
       // limitação é sobre a FÓRMULA, não sobre a compatibilidade do arquivo.
@@ -411,7 +434,7 @@ describe('AnaliseDocumentalService com dependências isoladas', () => {
 
       const resultado = await service.analisarDocumentoCatalogado('empresa-1', 'doc-1', 'efd');
 
-      expect(resultado.dados_extraidos.status_analise).toBe('ANALISE_ESPECIALIZADA_PENDENTE');
+      expect(resultado.dados_extraidos.status_analise).toBe('REVISAO_HUMANA');
     });
 
     it('outros documentos catalogados não recebem o status pendente da EFD (sem regressão)', async () => {

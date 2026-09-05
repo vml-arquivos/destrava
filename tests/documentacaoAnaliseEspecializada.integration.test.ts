@@ -39,6 +39,17 @@ vi.mock('../server/services/analiseDocumentalEspecializada', () => ({
     analisarAtosJuntaComercial: mocks.analisarAtos,
     analisarDocumentoCatalogado: mocks.analisarGenerico,
     analisarContratoComAtosJunta: mocks.analisarContrato,
+    analisarDocumentoAutomatico: (empresaId: string, arquivoId: string, tipoDocumento: string) => {
+      if (tipoDocumento === 'qsa') return mocks.analisarQSA(empresaId, arquivoId);
+      if (tipoDocumento === 'simples_nacional' || tipoDocumento === 'enquadramento_tributario_cnpj') {
+        return mocks.analisarSimples(empresaId, arquivoId);
+      }
+      if (tipoDocumento === 'atos_junta_comercial') return mocks.analisarAtos(empresaId, arquivoId);
+      if (tipoDocumento === 'contrato_social' || tipoDocumento === 'alteracao_contratual') {
+        return mocks.analisarContrato(empresaId, arquivoId);
+      }
+      return mocks.analisarGenerico(empresaId, arquivoId, tipoDocumento);
+    },
   },
 }));
 
@@ -236,13 +247,15 @@ describe('POST /api/documentacao/ia/documentos/:documentoId/extrair', () => {
     });
     mocks.clientQuery.mockImplementation(async (text: string) => {
       if (text.includes('FROM public.documentos_extracoes_ia')) {
-        // Laudo antigo já CONCLUÍDO (não pendente/processando) -- exatamente o
-        // caso de um PGDAS lido como "válido" pelo motor antigo antes da
-        // correção de identidade documental ser deployada.
+        // Laudo antigo já CONCLUÍDO (não pendente/processando). Rodada 36:
+        // ele permanece intacto enquanto uma NOVA linha recebe a releitura.
         return { rows: [{ id: 'extracao-ecf-1', arquivo_id: 'doc-ecf-antigo', prompt_codigo: 'ecf_extract', prompt_versao: '1.0.0', status: 'concluido', atualizado_em: new Date(Date.now() - 60 * 60 * 1000).toISOString() }] };
       }
+      if (text.includes('INSERT INTO public.documentos_extracoes_ia')) {
+        return { rows: [{ id: 'extracao-ecf-releitura', arquivo_id: 'doc-ecf-antigo', prompt_codigo: 'ecf_extract', status: 'pendente' }] };
+      }
       if (text.includes('UPDATE public.documentos_extracoes_ia')) {
-        return { rows: [{ id: 'extracao-ecf-1', arquivo_id: 'doc-ecf-antigo', prompt_codigo: 'ecf_extract', status: 'pendente' }] };
+        return { rows: [] };
       }
       return { rows: [] };
     });
@@ -255,9 +268,10 @@ describe('POST /api/documentacao/ia/documentos/:documentoId/extrair', () => {
     expect(response.body.message).toBe('Processamento especializado registrado como pendente.');
     await new Promise((resolve) => setTimeout(resolve, 20));
     // A garantia central deste teste: mesmo com um laudo "concluido" já
-    // persistido, a nova chamada dispara `analisarDocumentoCatalogado` de
-    // novo -- o resultado antigo nunca fica congelado para sempre.
+    // persistido, a nova chamada dispara `analisarDocumentoCatalogado` em
+    // uma nova tentativa sem apagar previamente a conclusão anterior.
     expect(mocks.analisarGenerico).toHaveBeenCalledWith('empresa-1', 'doc-ecf-antigo', 'ecf');
+    expect(mocks.clientQuery.mock.calls.some(([sql]) => String(sql).includes('INSERT INTO public.documentos_extracoes_ia'))).toBe(true);
   });
 });
 

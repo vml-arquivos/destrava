@@ -245,7 +245,7 @@ describe('documentosSocietariosPorNatureza (Rodada 29 -- MEI é regime tributár
   it('CORREÇÃO: Empresário Individual que NÃO é MEI (regime Simples Nacional comum, por exemplo) continua exigindo Contrato Social/Atos da Junta, como qualquer outra natureza jurídica -- antes desta rodada, isto devolvia [] indevidamente', () => {
     const resultado = documentosSocietariosPorNatureza({ natureza_juridica: 'Empresário Individual' }, 'simples_nacional');
     expect(resultado.some((d) => d.codigo === 'atos_junta')).toBe(true);
-    expect(resultado.some((d) => d.codigo === 'contrato_social_vigente')).toBe(true);
+    expect(resultado.some((d) => d.codigo === 'requerimento_empresario_vigente')).toBe(true);
   });
 
   it('CORREÇÃO: Empresário Individual em Lucro Presumido também continua exigindo a documentação societária padrão', () => {
@@ -266,5 +266,38 @@ describe('documentosSocietariosPorNatureza (Rodada 29 -- MEI é regime tributár
       expect(resultado.some((d) => d.codigo === 'atos_junta')).toBe(true);
       expect(resultado.some((d) => d.codigo === 'contrato_social_vigente')).toBe(true);
     }
+  });
+
+  it('cooperativa usa estatuto/atas e mantém o registro na Junta Comercial', () => {
+    const resultado = documentosSocietariosPorNatureza({ natureza_juridica: 'Cooperativa' }, 'lucro_real');
+    expect(resultado.some((d) => d.codigo === 'estatuto_ata_natureza')).toBe(true);
+    expect(resultado.some((d) => d.codigo === 'atos_junta')).toBe(true);
+    expect(resultado.some((d) => d.codigo === 'registro_cartorio_pj')).toBe(false);
+  });
+
+  it.each(['Associação Privada', 'Fundação Privada'])('%s usa RCPJ e não exige Junta Comercial', (naturezaJuridica) => {
+    const resultado = documentosSocietariosPorNatureza({ natureza_juridica: naturezaJuridica }, 'isenta');
+    expect(resultado.some((d) => d.codigo === 'estatuto_ata_natureza')).toBe(true);
+    expect(resultado.some((d) => d.codigo === 'registro_cartorio_pj')).toBe(true);
+    expect(resultado.some((d) => d.codigo === 'atos_junta')).toBe(false);
+  });
+
+  it('sociedade de advocacia usa ato constitutivo e registro na OAB, sem exigir Junta Comercial', () => {
+    const resultado = documentosSocietariosPorNatureza({ natureza_juridica: 'Sociedade Unipessoal de Advocacia - OAB' }, 'simples_nacional');
+    expect(resultado.some((d) => d.codigo === 'ato_constitutivo_oab')).toBe(true);
+    expect(resultado.some((d) => d.codigo === 'registro_oab')).toBe(true);
+    expect(resultado.some((d) => d.codigo === 'atos_junta')).toBe(false);
+  });
+
+  // CORREÇÃO (Rodada 33, 05/09/2026, diagnóstico cruzado de duas pesquisas
+  // independentes -- Manus AI e GPT -- que citam, de forma idêntica, a Lei nº
+  // 8.906/1994 (arts. 15-16) como fonte de que sociedade de advocacia se
+  // registra na OAB, nunca em Junta/RCPJ.
+  it('CORREÇÃO Rodada 33: exigências de sociedade de advocacia carregam a citação legal (Lei 8.906/1994) em fonte_normativa', () => {
+    const resultado = documentosSocietariosPorNatureza({ natureza_juridica: 'Sociedade Unipessoal de Advocacia - OAB' }, 'simples_nacional');
+    const ato = resultado.find((d) => d.codigo === 'ato_constitutivo_oab');
+    const registro = resultado.find((d) => d.codigo === 'registro_oab');
+    expect(ato?.fonte_normativa).toMatch(/8\.906\/1994/);
+    expect(registro?.fonte_normativa).toMatch(/8\.906\/1994/);
   });
 });

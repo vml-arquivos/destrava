@@ -20,7 +20,7 @@ import { setAuditoriaPool, registrarAuditoria, rotaAuditLogs } from "./middlewar
 import { getPermissoes, temPermissao, LISTA_CARGOS_VALIDOS, nivelHierarquico, podeGerenciar as _podeGerenciar, cargosGerenciaveis as _cargosGerenciaveis } from "../shared/cargos.ts";
 import cnpjRouter, { consultarCnpj } from './routes/cnpj';
 import sociosDocumentosRouter, { upsertSocioEmpresa } from './routes/socios_documentos';
-import documentosRouter, { createZip as createZipServer } from './routes/documentos';
+import documentosRouter, { agendarAnaliseRegraDocumental, createZip as createZipServer } from './routes/documentos';
 import { createColetaDocumentosRouter } from './routes/coletaDocumentos';
 import { createColetaDocumentosLivreRouter } from './routes/coletaDocumentosLivre';
 import documentacaoRouter from './routes/documentacao';
@@ -77,6 +77,7 @@ import { calcularInteligenciaAcompanhamentoBancario } from "./services/inteligen
 import { obterLinhaDoTempoRegime } from "./services/regimeTributarioTemporalService";
 import { obterFaturamentoRolling12Meses } from "./services/faturamentoRolling12MesesService";
 import { obterCoberturaPorEmpresa } from "./services/coberturaEvidenciaBureauService";
+import { validarSqlSomenteLeitura } from "./services/adminSqlReadOnly";
 import { normalizarPeriodoMensal, normalizarMetas, percentualAtingimento, arredondarMoeda, agruparForecast, agruparMetricasVendas } from "./services/crmSalesMetrics";
 import {
   enviarPendenciaNexus,
@@ -5751,17 +5752,30 @@ async function startServer() {
   app.get("/api/admin/audit-logs", auth, authorize(["Administrador", "Diretor"]), rotaAuditLogs(pool));
 
   app.post("/api/admin/sql", auth, authorize(["Administrador"]), async (req: Request, res: Response) => {
+    if (process.env.ENABLE_ADMIN_SQL !== "true") {
+      res.status(404).json({ error: "Endpoint administrativo SQL desabilitado." });
+      return;
+    }
+    const validacao = validarSqlSomenteLeitura(req.body?.query);
+    if (!validacao.ok) {
+      res.status(400).json({ error: validacao.error });
+      return;
+    }
+    const client = await pool.connect();
     try {
-      const { query } = req.body;
-      if (!query || typeof query !== "string") {
-        res.status(400).json({ error: "Query inválida" });
-        return;
-      }
-      const result = await pool.query(query);
-      res.json(result.rows);
+      await client.query("BEGIN READ ONLY");
+      await client.query("SET LOCAL statement_timeout = '5000ms'");
+      await client.query("SET LOCAL lock_timeout = '1000ms'");
+      const result = await client.query(validacao.normalized);
+      await client.query("ROLLBACK");
+      const limite = 1000;
+      res.json({ rows: result.rows.slice(0, limite), row_count: result.rowCount ?? result.rows.length, truncated: result.rows.length > limite });
     } catch (err: any) {
+      await client.query("ROLLBACK").catch(() => undefined);
       console.error("[POST /api/admin/sql]", err);
       res.status(500).json({ error: err.message || "Erro ao executar SQL" });
+    } finally {
+      client.release();
     }
   });
 
@@ -20657,7 +20671,7 @@ Responda em JSON com:
           (entidade_tipo, entidade_id, empresa_id, tipo_documento, nome_original, nome_customizado, nome_arquivo,
            caminho_arquivo, mime_type, tamanho_bytes, hash_arquivo, status, origem, obrigatorio, validado, metadados)
          VALUES ('empresa',$1,$1,'outros',$2,$3,$4,$5,$6,$7,$8,'ativo','importado_api',false,false,$9::jsonb)
-         RETURNING id, tipo_documento, nome_original, nome_customizado, nome_arquivo, mime_type, tamanho_bytes, status, criado_em`,
+         RETURNING id, entidade_tipo, entidade_id, empresa_id, criado_por, tipo_documento, nome_original, nome_customizado, nome_arquivo, mime_type, tamanho_bytes, status, criado_em`,
         [
           req.params.id, nomeOriginal, nomeCustomizado, nomeArquivo, salvo.relativePath,
           file.mimetype, file.size, hash,
@@ -20673,6 +20687,7 @@ Responda em JSON com:
         `Documento enviado pelo Nexus${origemNexus ? ` (${origemNexus})` : ''}: ${nomeOriginal}`,
         'Nexus (integração)',
       );
+      agendarAnaliseRegraDocumental(r.rows[0]);
       res.status(201).json({
         ...r.rows[0],
         preview_url: `/api/nexus/empresas/${req.params.id}/documentos/${r.rows[0].id}/view`,

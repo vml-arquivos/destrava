@@ -28,7 +28,7 @@ describe('montarQsaDocumentalDados -- laudo de QSA desatualizado não repete a p
   beforeEach(() => { vi.resetModules(); mocks.poolQuery.mockReset(); });
   afterEach(() => vi.clearAllMocks());
 
-  it('quando o laudo persistido tem rule_version diferente da atual, para de mostrar "Não foi possível identificar os nomes dos sócios no QSA" e passa a pedir reanálise', async () => {
+  it('quando o laudo foi explicitamente marcado STALE, para de mostrar "Não foi possível identificar os nomes dos sócios no QSA" e passa a pedir reanálise', async () => {
     const { montarQsaDocumentalDados } = await import('../server/routes/documentacao');
     mocks.poolQuery.mockImplementation(async (text: string) => {
       const sql = String(text);
@@ -54,8 +54,8 @@ describe('montarQsaDocumentalDados -- laudo de QSA desatualizado não repete a p
             extractor_version: 'extractor-antigo',
             rule_version: 'rules-antigo-pre-rodada-13',
             schema_version: 'schema-antigo',
-            analysis_status: 'ATIVO',
-            stale_at: null,
+            analysis_status: 'STALE',
+            stale_at: new Date().toISOString(),
             satisfaz_requisito: false,
             hash_arquivo: 'hash-1',
           }],

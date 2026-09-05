@@ -4,6 +4,7 @@ import { construirSecoesAnaliseDocumento } from '../shared/documentalPresentatio
 import { analisarTextoDocumentoLocal } from '../server/services/extracaoDocumentalLocal';
 import { AnaliseDocumentalService, tipoLeitorLocalDocumentoCatalogado } from '../server/services/analiseDocumentalEspecializada';
 import { classificarDocumentoDeterministico } from '../server/services/classificadorDocumentalCentral';
+import { obterPerfilAnaliseDocumental, possuiPerfilIndividualDocumental } from '../server/services/documentAnalysisProfiles';
 
 describe('cobertura integral da leitura automática documental', () => {
   it('atribui motor e prompt a todo tipo de arquivo aceito pelo catálogo', () => {
@@ -16,6 +17,23 @@ describe('cobertura integral da leitura automática documental', () => {
 
     expect(semAnalise).toEqual([]);
     expect(DOCUMENT_TYPE_CATALOG.filter((item) => item.uploadavel).length).toBeGreaterThan(100);
+  });
+
+  it('exige ficha de leitura interna explicitamente revisada para cada tipo do catálogo', () => {
+    const semPerfilIndividual = DOCUMENT_TYPE_CATALOG
+      .filter((item) => item.uploadavel)
+      .filter((item) => !possuiPerfilIndividualDocumental(item.tipo))
+      .map((item) => item.tipo);
+
+    expect(semPerfilIndividual).toEqual([]);
+    expect(obterPerfilAnaliseDocumental('qsa')).toMatchObject({
+      perfilIndividual: true,
+      camposObrigatorios: ['cnpj', 'socios', 'administrador_titular'],
+    });
+    expect(obterPerfilAnaliseDocumental('dasn_simei')).toMatchObject({
+      perfilIndividual: true,
+      politicaTemporal: 'competencia_anual',
+    });
   });
 
   it('usa parser genérico neutro fora das famílias especializadas', () => {
@@ -37,6 +55,23 @@ describe('cobertura integral da leitura automática documental', () => {
       tipo_detectado: 'REGISTRO_CARTORIO_PJ',
       satisfaz_requisito: true,
     });
+  });
+
+  it('distingue contratos operacionais e aceita CPEND no requisito federal', () => {
+    const assessoria = classificarDocumentoDeterministico({
+      tipoEsperado: 'contrato_assessoria',
+      texto: 'CONTRATO DE ASSESSORIA FINANCEIRA — CONTRATANTE E CONTRATADA',
+      hoje: new Date('2026-09-05T12:00:00.000Z'),
+    });
+    const cpend = classificarDocumentoDeterministico({
+      tipoEsperado: 'cnd_rfb_cnpj',
+      texto: 'CERTIDÃO POSITIVA COM EFEITOS DE NEGATIVA DE DÉBITOS RELATIVOS AOS TRIBUTOS FEDERAIS',
+      validadeFim: '2026-12-31',
+      hoje: new Date('2026-09-05T12:00:00.000Z'),
+    });
+
+    expect(assessoria).toMatchObject({ identidade_status: 'IDENTIFICADO', tipo_detectado: 'CONTRATO_ASSESSORIA' });
+    expect(cpend).toMatchObject({ identidade_status: 'IDENTIFICADO', tipo_detectado: 'CPEND', satisfaz_requisito: true });
   });
 
   it('usa o mesmo despacho especializado no upload e no reprocessamento', async () => {
@@ -66,7 +101,7 @@ describe('cobertura integral da leitura automática documental', () => {
       Data do registro: 15/08/2026
       Data de emissão: 01/09/2026
       Válida até: 30/09/2026
-    `);
+    `, 'cnd_rfb_cnpj');
 
     expect(dados.documento_compativel).toBeUndefined();
     expect(dados.campos_comprovados).toMatchObject({
@@ -83,6 +118,29 @@ describe('cobertura integral da leitura automática documental', () => {
       situacao_certidao: 'negativa',
     });
     expect(dados.evidencias.length).toBeGreaterThanOrEqual(7);
+    expect(dados.perfil_leitura_interna).toMatchObject({
+      tipo_documento: 'cnd_rfb_cnpj',
+      individual: true,
+      politica_temporal: 'validade_expressa',
+    });
+  });
+
+  it('usa o tipo esperado somente para selecionar campos, sem tratá-lo como prova de identidade', () => {
+    const { dados } = analisarTextoDocumentoLocal('documento_generico', `
+      CONTRATO DE PRESTAÇÃO DE SERVIÇOS
+      Contratante: EMPRESA EXEMPLO LTDA
+      Contratado: PRESTADOR EXEMPLO
+      Objeto: assessoria financeira
+      Data da assinatura: 05/09/2026
+    `, 'contrato_prestacao_servicos');
+
+    expect(dados.campos_comprovados).toMatchObject({
+      partes: ['EMPRESA EXEMPLO LTDA', 'PRESTADOR EXEMPLO'],
+      objeto: 'assessoria financeira',
+      data_assinatura: '2026-09-05',
+    });
+    expect(dados.documento_compativel).toBeUndefined();
+    expect(dados.perfil_leitura_interna.individual).toBe(true);
   });
 
   it('mostra somente a validação objetiva dos dados genéricos comprovados no card', () => {

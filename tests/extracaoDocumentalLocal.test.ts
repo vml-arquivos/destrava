@@ -254,6 +254,24 @@ describe('extração documental local determinística', () => {
     expect(resultado.confianca).toBeGreaterThanOrEqual(0.8);
   });
 
+  it('aceita o CCMEI como prova interna da condição de MEI no enquadramento', () => {
+    const resultado = analisarTextoDocumentoLocal('simples_nacional', `
+      CERTIFICADO DA CONDIÇÃO DE MICROEMPREENDEDOR INDIVIDUAL
+      CCMEI
+      CNPJ: 29.705.345/0001-22
+      Nome Empresarial: VILSON MARCIO DE LIMA
+      Situação: ATIVA
+    `);
+
+    expect(resultado.dados).toMatchObject({
+      documento_compativel: true,
+      documento_ccmei: true,
+      opcao_mei: true,
+      regime_tributario: 'MEI / SIMEI',
+      regime_confirmado: true,
+    });
+  });
+
   // O enquadramento existe para dizer QUAL regime a empresa usa -- é o regime
   // que define a documentação fiscal exigida depois. "Não Optante" responde
   // apenas se a empresa está no Simples; Lucro Presumido, Real e Arbitrado são

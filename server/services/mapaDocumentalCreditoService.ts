@@ -38,6 +38,12 @@ export type DocumentoMapa = {
   regra_versao?: string;
   vigencia_inicio?: string | null;
   vigencia_fim?: string | null;
+  // CORREÇÃO (Rodada 33, 05/09/2026): mesmo campo/mesmo motivo de
+  // `RegraDocumentalCredito.fonte_normativa` em `regrasDocumentaisCredito.ts`
+  // -- citação da lei/norma/serviço oficial, preenchida só onde as duas
+  // pesquisas independentes (Manus AI e GPT) convergem para uma fonte
+  // específica; ausente nas demais entradas por disciplina (não inferir).
+  fonte_normativa?: string | null;
 };
 
 export type EtapaMapa = {
@@ -208,7 +214,7 @@ function doc(codigo: string, nome: string, tipos: string[], fase: number, finali
     tipo_exigencia: tipoExigencia,
     aplicabilidade,
     status,
-    regra_versao: '2026.08.29',
+    regra_versao: '2026.09.05',
     ...extras,
   };
 }
@@ -496,16 +502,32 @@ export function documentosSocietariosPorNatureza(empresa: any, regime: RegimeCre
       ...base.filter((item) => item.codigo === 'atos_junta'),
     ];
   }
-  if (/cooperativa|associacao|fundacao/.test(natureza)) {
+  if (/cooperativa/.test(natureza)) {
     return [
       doc('estatuto_ata_natureza', 'Estatuto e atas vigentes', ['estatuto', 'ata'], 2, 'Comprovar governança, poderes de representação e registro da entidade.', { tipo_exigencia: 'obrigacao_legal' }),
       ...base.filter((item) => item.codigo === 'atos_junta'),
     ];
   }
+  if (/associacao|fundacao/.test(natureza)) {
+    return [
+      doc('estatuto_ata_natureza', 'Estatuto e atas vigentes', ['estatuto', 'ata'], 2, 'Comprovar governança e poderes de representação da entidade.', { tipo_exigencia: 'obrigacao_legal' }),
+      doc('registro_cartorio_pj', 'Registro no RCPJ / Cartório de Pessoas Jurídicas', ['registro_cartorio_pj'], 2, 'Comprovar o registro do ato constitutivo e das alterações no Registro Civil de Pessoas Jurídicas.', { tipo_exigencia: 'obrigacao_legal' }),
+    ];
+  }
   if (/advogad|oab/.test(natureza)) {
     return [
-      ...base,
-      doc('registro_oab', 'Registro/ato da OAB', ['registro_oab'], 2, 'Comprovar registro da sociedade e poderes de representação perante a OAB.', { tipo_exigencia: 'obrigacao_legal' }),
+      // CORREÇÃO (Rodada 33): `fonte_normativa` preenchida aqui porque as duas
+      // pesquisas independentes (Manus AI e GPT) citam, de forma idêntica, a
+      // mesma lei: sociedade de advocacia se registra na OAB, não em
+      // Junta/RCPJ -- Junta/RCPJ nunca deve ser aceito como substituto.
+      doc('ato_constitutivo_oab', 'Ato constitutivo e alterações da sociedade de advocacia', ['contrato_social', 'alteracao_contratual'], 2, 'Comprovar a constituição, composição e administração vigentes da sociedade.', { tipo_exigencia: 'obrigacao_legal', fonte_normativa: 'Lei nº 8.906/1994 (Estatuto da OAB), arts. 15 e 16 -- o registro constitutivo da sociedade de advogados/sociedade unipessoal de advocacia é feito na OAB Seccional; Junta Comercial e RCPJ são vedados como registro dessa atividade.' }),
+      doc('registro_oab', 'Registro/ato da OAB', ['registro_oab'], 2, 'Comprovar registro da sociedade e poderes de representação perante a OAB.', { tipo_exigencia: 'obrigacao_legal', fonte_normativa: 'Lei nº 8.906/1994 (Estatuto da OAB), arts. 15 e 16 -- registro constitutivo e de alterações no Conselho Seccional da OAB.' }),
+    ];
+  }
+  if (/empresario individual|empresa individual|\bei\b/.test(natureza)) {
+    return [
+      doc('requerimento_empresario_vigente', 'Requerimento de Empresário ou Instrumento de Inscrição vigente', ['requerimento_empresario', 'alteracao_contratual'], 2, 'Comprovar registro, objeto, capital e titularidade vigentes do Empresário Individual.', { tipo_exigencia: 'obrigacao_legal' }),
+      ...base.filter((item) => item.codigo === 'atos_junta'),
     ];
   }
   return base;

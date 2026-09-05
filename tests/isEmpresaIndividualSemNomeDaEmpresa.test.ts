@@ -70,3 +70,53 @@ describe('isEmpresaIndividual — nunca decide pelo nome da empresa, só por cam
     expect(isEmpresaIndividual({ natureza_juridica: 'Cooperativa' })).toBe(false);
   });
 });
+
+describe('dadosQsa — EI/MEI usam titular próprio e nunca sócio fictício', () => {
+  it('mantém o quadro de sócios vazio e usa o responsável estruturado como titular do MEI', async () => {
+    const { dadosQsa } = await import('../server/routes/documentacao');
+    const dados = dadosQsa({
+      id: 'mei-1',
+      cnpj: '29.705.345/0001-22',
+      natureza_juridica: '213-5 - Empresário (Individual)',
+      opcao_mei: true,
+      responsavel_nome: 'Vilson Marcio de Lima',
+    }, []);
+
+    expect(dados.empresa_individual_detectada).toBe(true);
+    expect(dados.socios).toEqual([]);
+    expect(dados.total_socios_consolidados).toBe(0);
+    expect(dados.proprietario_inferido).toBe(false);
+    expect(dados.titular_individual).toMatchObject({
+      nome: 'Vilson Marcio de Lima',
+      administrador: true,
+      fonte_dados: 'cadastro_responsavel_empresa_individual',
+    });
+  });
+
+  it('não transforma razão social ou nome fantasia em pessoa quando o titular não está cadastrado', async () => {
+    const { dadosQsa } = await import('../server/routes/documentacao');
+    const dados = dadosQsa({
+      id: 'mei-2',
+      natureza_juridica: 'Microempreendedor Individual (MEI)',
+      razao_social: 'EMPRESA EXEMPLO 12345678900',
+      nome_fantasia: 'LOJA EXEMPLO',
+      opcao_mei: true,
+    }, []);
+
+    expect(dados.socios).toEqual([]);
+    expect(dados.titular_individual).toBeNull();
+    expect(JSON.stringify(dados)).not.toContain('LOJA EXEMPLO');
+  });
+
+  it('preserva o quadro real de uma LTDA', async () => {
+    const { dadosQsa } = await import('../server/routes/documentacao');
+    const dados = dadosQsa({ natureza_juridica: 'Sociedade Empresária Limitada' }, [
+      { id: 's1', nome: 'Ana Souza', qualificacao_socio: 'Sócia-Administradora', administrador: true },
+    ]);
+
+    expect(dados.empresa_individual_detectada).toBe(false);
+    expect(dados.socios).toHaveLength(1);
+    expect(dados.socios[0]).toMatchObject({ nome: 'Ana Souza', administrador: true });
+    expect(dados.titular_individual).toBeNull();
+  });
+});

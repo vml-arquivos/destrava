@@ -13,7 +13,8 @@ import {
 } from '../services/documentStorage';
 import { analiseDocumentalService, type AnaliseDocumentalResult } from '../services/analiseDocumentalEspecializada';
 import { analisarCnpjReceitaCartaoEmpresa } from '../services/analiseCnpjReceitaCartao';
-import { TIPOS_DOCUMENTO as TIPOS_DOCUMENTO_CATALOGO, getDocumentCatalogEntry, isKnownDocumentType } from '../../shared/documentTypes';
+import { DOCUMENT_TYPE_CATALOG, TIPOS_DOCUMENTO as TIPOS_DOCUMENTO_CATALOGO, canonicalizeDocumentType, documentAnalysisConfig, getDocumentCatalogEntry, isKnownDocumentType } from '../../shared/documentTypes';
+import { backfillLaudosService } from '../services/backfillLaudosService';
 // CORREÇÃO (2026-09-02, Rodada 17 -- pedido explícito do usuário -- "eu quero
 // que... as confirmações já apareçam sem precisar iniciar a análise
 // documental... essa primeira confirmação... já é pra ser feita de forma
@@ -45,23 +46,13 @@ const ORIGENS = ['upload_manual', 'gerado_sistema', 'importado_api', 'sincroniza
 
 export const TIPOS_DOCUMENTO = TIPOS_DOCUMENTO_CATALOGO;
 
-const DOCUMENTOS_PESSOAIS = new Set([
-  'documento_socio', 'rg', 'cpf', 'cnh', 'comprovante_residencia', 'imposto_renda', 'irpf', 'recibo_irpf',
-  'certidao_casamento', 'averbacao_divorcio', 'certidao_obito', 'rating_bacen_cpf', 'cenprot_cpf',
-  'cnd_rfb_cpf', 'cadin_cpf', 'pgfn_cpf', 'enquadramento_tributario_cpf', 'situacao_fiscal_cpf',
-  'scr_cpf', 'ccs_cpf', 'ccf_cpf', 'consulta_serasa_cpf',
-]);
-const DOCUMENTOS_EMPRESA = new Set([
-  'contrato_prestacao_servicos', 'contrato_assessoria', 'cartao_cnpj', 'qsa', 'atos_junta_comercial',
-  'contrato_social', 'alteracao_contratual', 'comprovante_endereco', 'rating_bacen_cnpj', 'cenprot_cnpj',
-  'cnd_rfb_cnpj', 'cadin_cnpj', 'pgfn_cnpj', 'enquadramento_tributario_cnpj', 'situacao_fiscal_cnpj',
-  'simples_nacional', 'pgdas', 'pgmei', 'ecf',
-  'recibo_ecf', 'recibo_pgdas', 'recibo_pgmei', 'defis', 'dasn_simei', 'recibo_defis', 'recibo_dasn_simei',
-  'scr_cnpj', 'ccs_cnpj', 'ccf_cnpj', 'consulta_serasa_cnpj', 'compartilhamento_ecac', 'foto_fachada',
-  'foto_interna_1', 'foto_interna_2', 'foto_interna_3', 'faturamento_12_meses', 'nire', 'estatuto',
-  'crf_fgts', 'fgts', 'cndt', 'certidao_trabalhista', 'cnd_estadual', 'certidao_estadual',
-  'cnd_municipal', 'certidao_municipal', 'projecao_receitas', 'demonstrativo_receitas_projetadas',
-]);
+// Derivado do catálogo para que todo novo tipo empresarial fique protegido sem
+// depender de uma segunda lista manual, que já havia ficado incompleta.
+const DOCUMENTOS_EMPRESA = new Set(
+  DOCUMENT_TYPE_CATALOG
+    .filter((item) => item.escopo === 'empresa')
+    .map((item) => item.tipo),
+);
 
 export const MIME_EXT: Record<string, string[]> = {
   'application/pdf': ['.pdf'],
@@ -93,11 +84,10 @@ const upload = multer({
 // ser reaproveitados para classificar/relatar status), só não são mais usados
 // para impedir a gravação do arquivo.
 
-// Ordem obrigatória de leitura das consultas cadastrais: 1º SCR/Registrato, 2º CCS,
-// 3º CCF -- tanto para CNPJ quanto para CPF (por sócio). Antes disso os três campos
-// eram totalmente independentes: nada impedia anexar CCF sem nunca ter anexado SCR
-// ou CCS. `rating_bacen_*` e `scr_*` contam como o mesmo documento (já eram tratados
-// como sinônimos no restante do sistema -- ver `equivalentes` em documentacao.ts).
+// Validador auxiliar da sequência recomendada SCR/Registrato -> CCS -> CCF,
+// tanto para CNPJ quanto para CPF. Ele permanece disponível para classificação
+// de pendências, mas a rota de upload não o usa para bloquear anexos fora de ordem.
+// `rating_bacen_*` e `scr_*` contam como o mesmo documento.
 const ORDEM_CONSULTA_CADASTRAL: Record<string, { exige: string[]; rotuloExigido: string }> = {
   ccs_cnpj: { exige: ['rating_bacen_cnpj', 'scr_cnpj'], rotuloExigido: 'SCR/Registrato (CNPJ)' },
   ccf_cnpj: { exige: ['ccs_cnpj'], rotuloExigido: 'CCS (CNPJ)' },
@@ -167,6 +157,11 @@ const EXPORT_FOLDER_LABELS: Record<string, string> = {
   atos_junta_comercial: '04_Atos_da_Junta_Comercial',
   contrato_social: '05_Contrato_social_e_alteracoes',
   alteracao_contratual: '05_Contrato_social_e_alteracoes',
+  requerimento_empresario: '05_Requerimento_de_empresario',
+  estatuto: '05_Estatuto_e_atas',
+  ata: '05_Estatuto_e_atas',
+  registro_cartorio_pj: '05_Registro_RCPJ',
+  registro_oab: '05_Registro_OAB',
   documento_socio: '06A_Documento_de_identificacao_do_socio',
   rg: '06A_Documento_de_identificacao_do_socio',
   cnh: '06A_Documento_de_identificacao_do_socio',
@@ -495,6 +490,27 @@ export function validarArquivo(file: Express.Multer.File, tipoDocumento: string)
   const allowedExt = MIME_EXT[file.mimetype];
   if (!allowedExt) throw new Error(`MIME type não permitido: ${file.mimetype || 'desconhecido'}`);
   if (!allowedExt.includes(ext)) throw new Error(`Extensão incompatível com o MIME type. Esperado: ${allowedExt.join(', ')}`);
+  const buffer = file.buffer;
+  const assinaturaValida = (() => {
+    if (file.mimetype === 'application/pdf') return buffer.subarray(0, 5).toString('ascii') === '%PDF-';
+    if (file.mimetype === 'image/jpeg') return buffer.length >= 3 && buffer[0] === 0xff && buffer[1] === 0xd8 && buffer[2] === 0xff;
+    if (file.mimetype === 'image/png') return buffer.subarray(0, 8).equals(Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]));
+    if (file.mimetype === 'image/webp') return buffer.subarray(0, 4).toString('ascii') === 'RIFF' && buffer.subarray(8, 12).toString('ascii') === 'WEBP';
+    if (file.mimetype === 'application/vnd.openxmlformats-officedocument.wordprocessingml.document') {
+      return buffer.subarray(0, 2).toString('ascii') === 'PK' && buffer.includes(Buffer.from('word/'));
+    }
+    if (file.mimetype === 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet') {
+      return buffer.subarray(0, 2).toString('ascii') === 'PK' && buffer.includes(Buffer.from('xl/'));
+    }
+    if (file.mimetype === 'text/csv' || file.mimetype === 'application/csv') {
+      if (buffer.includes(0)) return false;
+      const texto = buffer.subarray(0, Math.min(buffer.length, 8192)).toString('utf8');
+      const substituicoes = (texto.match(/\uFFFD/g) || []).length;
+      return texto.length > 0 && substituicoes <= Math.max(2, Math.floor(texto.length * 0.01));
+    }
+    return false;
+  })();
+  if (!assinaturaValida) throw new Error('O conteúdo real do arquivo não corresponde ao tipo/extensão informados.');
   const max = getMaxSize(tipoDocumento, file.mimetype);
   if (file.size > max) throw new Error(`Arquivo excede o limite de ${(max / 1024 / 1024).toFixed(0)}MB para este tipo.`);
 }
@@ -507,94 +523,53 @@ async function auditar(documentoId: string, acao: string, antes: any, depois: an
   ).catch((err) => console.warn('[auditoria_documentos]', err.message));
 }
 
-// Tipos com análise automática no upload -- não exige mais clicar em
-// "iniciar análise" separadamente. Cartão CNPJ, QSA e Simples Nacional
-// entraram aqui porque já tinham motor de leitura/validação pronto
-// (analiseDocumentalEspecializada.ts / analiseCnpjReceitaCartao.ts), só
-// não eram disparados no momento do upload -- ver auditoria que motivou
-// esta mudança. `enquadramento_tributario_cnpj` é tratado como o mesmo
-// documento de `simples_nacional` (mesmo `promptCodigo` em
-// server/routes/documentacao.ts, ANALISE_ESPECIALIZADA_POR_TIPO). `darf`
-// entrou pelo mesmo motivo: o Guia de Análise de Crédito Corporativo indica
-// o código de receita do DARF (2089=Presumido, 5993/3373=Real,
-// 5625=Arbitrado -- catálogo corrigido em extracaoDocumentalLocal.ts; 8998
-// NÃO é confirmado na tabela oficial da RFB e nunca infere regime sozinho,
-// 2026-08-30) como forma de comprovar o regime tributário efetivo, e essa
-// leitura usa o mesmo motor de `analisarSimplesNacional`.
-const TIPOS_COM_ANALISE_AUTOMATICA = [
-  'faturamento_12_meses', 'comprovante_faturamento', 'declaracao_faturamento', 'comprovante_residencia',
-  'cartao_cnpj', 'qsa', 'simples_nacional', 'enquadramento_tributario_cnpj', 'darf',
-] as const;
+// O catálogo é a fonte única do disparo automático. Todo tipo anexável possui
+// configuração efetiva: motor especializado quando disponível e extrator
+// genérico conservador nos demais casos. Não é necessário clicar em “iniciar
+// análise” para validar identidade, datas, competência, validade e campos.
+const TIPOS_COM_ANALISE_AUTOMATICA = new Set(
+  TIPOS_DOCUMENTO_CATALOGO.filter((tipo) => Boolean(documentAnalysisConfig(tipo))),
+);
 
-// CORREÇÃO (2026-09-02, Rodada 17 -- pedido explícito do usuário, com print da
-// tela em produção -- "eu quero que... a leitura dos documentos, as
-// confirmações já apareçam sem precisar iniciar a análise documental. Então
-// essa primeira confirmação só pra validar documentação, ver as datas, ver os
-// regimes, ela já é pra ser feita de forma automática"):
-//
-// Causa raiz encontrada: QSA e Enquadramento Tributário JÁ eram lidos
-// automaticamente no upload (ver `TIPOS_COM_ANALISE_AUTOMATICA` acima), e o
-// card de cada documento no Acervo já mostrava o resultado dessa leitura --
-// mas o resultado era gravado só em `documentos_arquivos.resultado_validacao`
-// (`analise_regra_documental`, logo abaixo). O agregador da Etapa 1
-// (`montarQsaDocumentalDados`/`montarEnquadramentoDados`, chamado pelo GET
-// /dossie a cada carregamento da tela) nunca olha esse campo -- ele só
-// consulta `documentos_extracoes_ia` (via `obterAnaliseEspecializada` em
-// server/routes/documentacao.ts), que só recebia uma gravação quando alguém
-// clicava manualmente em "Iniciar análise documental". Ou seja: o documento
-// já tinha sido lido, mas o banner "Etapa 1 pendente" e a pendência "QSA
-// anexado e aguardando o início da análise documental" continuavam
-// aparecendo até o clique manual -- mesmo a leitura já estando pronta.
-//
-// A correção grava o MESMO resultado também em `documentos_extracoes_ia`
-// (`persistirAnaliseEspecializada`, exportada de documentacao.ts -- é a
-// função exata que o clique manual já usa), então na próxima vez que a tela
-// carregar (sem precisar clicar em nada) a Etapa 1 já enxerga a leitura como
-// concluída. Isto é uma correção de infraestrutura (onde o resultado da
-// leitura automática é gravado) -- não muda nenhuma regra de qual documento é
-// exigido por tipo de empresa/regime (isso continua em
-// mapaDocumentalCreditoService.ts, inalterado) nem o conteúdo do laudo em si.
-// Escopo deliberadamente restrito a QSA e Enquadramento Tributário/Simples
-// Nacional -- os dois blocos da Etapa 1 que o print mostrou parados em
-// "aguardando análise" (Cartão CNPJ já tem motor próprio, que já grava e já
-// aparecia automaticamente antes desta correção; DARF entra em
-// TIPOS_COM_ANALISE_AUTOMATICA por outro motivo -- comprovação de regime via
-// `resolverComprovacaoRegime`, um fluxo à parte -- e não faz parte da Etapa 1,
-// por isso fica de fora aqui).
+// QSA e enquadramento também alimentam o laudo consolidado da Etapa 1. Os
+// demais tipos já ficam persistidos por arquivo e passam a compor os alertas
+// do dossiê/inteligência documental sem depender de ação manual.
 const TIPOS_ETAPA1_PROMPT_CODIGO: Partial<Record<string, string>> = {
   qsa: 'qsa_extract',
   simples_nacional: 'simples_extract',
   enquadramento_tributario_cnpj: 'simples_extract',
 };
 
-function agendarAnaliseRegraDocumental(documento: any) {
+export function agendarAnaliseRegraDocumental(documento: any) {
   const empresaId = documento?.empresa_id || (documento?.entidade_tipo === 'empresa' ? documento?.entidade_id : null);
   const tipo = String(documento?.tipo_documento || '');
-  if (!empresaId || !documento?.id || !TIPOS_COM_ANALISE_AUTOMATICA.includes(tipo as any)) return;
-  setTimeout(async () => {
+  const config = documentAnalysisConfig(tipo);
+  if (!empresaId || !documento?.id || !config || !TIPOS_COM_ANALISE_AUTOMATICA.has(tipo as any)) return;
+  setImmediate(async () => {
     try {
+      await pool.query(
+        `UPDATE public.documentos_arquivos
+            SET resultado_validacao=COALESCE(resultado_validacao,'{}'::jsonb)||$2::jsonb,
+                atualizado_em=NOW()
+          WHERE id=$1`,
+        [documento.id, JSON.stringify({ analise_automatica_status: 'processando', analise_automatica_iniciada_em: new Date().toISOString() })],
+      ).catch(() => undefined);
       // Cartão CNPJ tem motor próprio que já persiste o resultado sozinho
       // (analises_cnpj_empresa + o UPDATE em documentos_arquivos), igual ao
       // que a rota manual POST /analise-cnpj já faz -- não repetimos esse
       // UPDATE aqui pra não sobrescrever o que a própria função já grava.
-      if (tipo === 'cartao_cnpj') {
+      if (canonicalizeDocumentType(tipo) === 'cartao_cnpj') {
         await analisarCnpjReceitaCartaoEmpresa(empresaId, documento.criado_por || null, documento.id);
         return;
       }
-      const resultado = tipo === 'comprovante_residencia'
-        ? await analiseDocumentalService.analisarComprovanteResidencia(empresaId, documento.id)
-        : tipo === 'qsa'
-          ? await analiseDocumentalService.analisarQSA(empresaId, documento.id)
-          : (tipo === 'simples_nacional' || tipo === 'enquadramento_tributario_cnpj' || tipo === 'darf')
-            ? await analiseDocumentalService.analisarSimplesNacional(empresaId, documento.id)
-            : await analiseDocumentalService.analisarFaturamento(empresaId, documento.id);
+      const resultado = await analiseDocumentalService.analisarDocumentoAutomatico(empresaId, documento.id, tipo);
       await pool.query(
         `UPDATE public.documentos_arquivos
             SET resultado_validacao=COALESCE(resultado_validacao,'{}'::jsonb)||$2::jsonb,
                 exige_revisao_humana=$3,
                 atualizado_em=NOW()
           WHERE id=$1`,
-        [documento.id, JSON.stringify({ analise_regra_documental: resultado }), resultado.revisao_humana_necessaria],
+        [documento.id, JSON.stringify({ analise_regra_documental: resultado, analise_automatica_status: resultado.status, analise_automatica_concluida_em: new Date().toISOString() }), resultado.revisao_humana_necessaria],
       );
 
       // Ver comentário completo acima de `TIPOS_ETAPA1_PROMPT_CODIGO`: além do
@@ -606,10 +581,10 @@ function agendarAnaliseRegraDocumental(documento: any) {
       // automática nem o upload -- só significa que a Etapa 1 vai continuar
       // pedindo o clique manual para este documento específico, exatamente
       // como já se comportava antes desta correção.
-      const promptCodigoEtapa1 = TIPOS_ETAPA1_PROMPT_CODIGO[tipo];
-      if (promptCodigoEtapa1) {
-        await persistirAnaliseEspecializada(String(documento.id), promptCodigoEtapa1, resultado as AnaliseDocumentalResult).catch((error: any) => {
-          console.warn('[documentos] Não foi possível refletir a leitura automática na Etapa 1 (documentos_extracoes_ia); "Iniciar análise documental" continua disponível como alternativa:', documento.id, error?.message || error);
+      const promptCodigo = TIPOS_ETAPA1_PROMPT_CODIGO[tipo] || config.promptCodigo;
+      if (promptCodigo) {
+        await persistirAnaliseEspecializada(String(documento.id), promptCodigo, resultado as AnaliseDocumentalResult).catch((error: any) => {
+          console.warn('[documentos] Não foi possível persistir o laudo automático versionado:', documento.id, error?.message || error);
         });
       }
     } catch (error: any) {
@@ -619,10 +594,13 @@ function agendarAnaliseRegraDocumental(documento: any) {
             SET resultado_validacao=COALESCE(resultado_validacao,'{}'::jsonb)||$2::jsonb,
                 atualizado_em=NOW()
           WHERE id=$1`,
-        [documento.id, JSON.stringify({ analise_regra_documental_erro: { mensagem: String(error?.message || error || 'Falha de leitura').slice(0, 1000), ocorrido_em: new Date().toISOString() } })],
+        [documento.id, JSON.stringify({ analise_automatica_status: 'falhou', analise_regra_documental_erro: { mensagem: String(error?.message || error || 'Falha de leitura').slice(0, 1000), ocorrido_em: new Date().toISOString() } })],
       ).catch(() => undefined);
+      await backfillLaudosService.enqueueDocument(documento).catch((queueError: any) => {
+        console.warn('[documentos] Falha ao enfileirar retentativa documental:', documento.id, queueError?.message || queueError);
+      });
     }
-  }, 0);
+  });
 }
 
 router.get('/', auth, async (req: Request, res: Response) => {
@@ -661,16 +639,67 @@ router.get('/', auth, async (req: Request, res: Response) => {
       }
     }
 
+    // Rodada 38: a lista do Acervo já devolve o último laudo persistido em
+    // uma única consulta. Antes a UI precisava aguardar /dossie para recuperar
+    // os dados detalhados de cada arquivo, tornando a primeira pintura lenta e
+    // fazendo CNPJ/Atos "sumirem" enquanto o dossiê era reconstruído.
+    const [temExtracoesIa, temAnalisesCnpj] = await Promise.all([
+      tableExists('documentos_extracoes_ia'),
+      tableExists('analises_cnpj_empresa'),
+    ]);
+    const selectExtracao = temExtracoesIa
+      ? `, extracao_persistida.resultado AS resultado_analise_persistida,
+           extracao_persistida.status AS resultado_analise_status_persistido`
+      : `, NULL::jsonb AS resultado_analise_persistida, NULL::text AS resultado_analise_status_persistido`;
+    const joinExtracao = temExtracoesIa
+      ? `LEFT JOIN LATERAL (
+           SELECT e.resultado, e.status
+             FROM public.documentos_extracoes_ia e
+            WHERE e.arquivo_id = docs.id
+            ORDER BY CASE WHEN e.status IN ('concluido','revisao_humana') THEN 0 WHEN e.status='falhou' THEN 1 ELSE 2 END,
+                     e.processado_em DESC NULLS LAST,
+                     e.criado_em DESC
+            LIMIT 1
+         ) extracao_persistida ON TRUE`
+      : '';
+    const selectCnpj = temAnalisesCnpj
+      ? `, analise_cnpj.resultado AS resultado_cnpj_persistido,
+           analise_cnpj.status AS resultado_cnpj_status_persistido,
+           analise_cnpj.campos_cartao AS campos_cartao_persistidos,
+           analise_cnpj.alertas AS alertas_cnpj_persistidos,
+           analise_cnpj.diagnostico AS diagnostico_cnpj_persistido`
+      : `, NULL::jsonb AS resultado_cnpj_persistido,
+           NULL::text AS resultado_cnpj_status_persistido,
+           NULL::jsonb AS campos_cartao_persistidos,
+           NULL::jsonb AS alertas_cnpj_persistidos,
+           NULL::text AS diagnostico_cnpj_persistido`;
+    const joinCnpj = temAnalisesCnpj
+      ? `LEFT JOIN LATERAL (
+           SELECT a.resultado, a.status, a.campos_cartao, a.alertas, a.diagnostico
+             FROM public.analises_cnpj_empresa a
+            WHERE a.cartao_cnpj_arquivo_id = docs.id
+            ORDER BY CASE WHEN a.status IN ('concluida','revisao_humana') THEN 0 ELSE 1 END,
+                     a.criado_em DESC
+            LIMIT 1
+         ) analise_cnpj ON docs.tipo_documento IN ('cartao_cnpj','cnpj_cartao')`
+      : '';
+
     const { rows } = await pool.query(
-      `SELECT id, entidade_tipo, entidade_id, empresa_id, cliente_pf_id, lead_id, socio_id, contrato_id, simulacao_id,
-              tipo_documento, nome_original, nome_arquivo, caminho_arquivo, url_arquivo, mime_type, tamanho_bytes, hash_arquivo,
-              status, origem, obrigatorio, validado, validado_por, validado_em, observacoes, metadados,
-              data_emissao_documento, data_validade_documento, validade_dias, status_validade, exige_revisao_humana,
-              nome_customizado, resultado_validacao, ultima_extracao_ia_id, ultima_indexacao_rag_id,
-              criado_por, criado_em, atualizado_em, excluido_em
-         FROM public.documentos_arquivos
-        WHERE ${where.join(' AND ')}
-        ORDER BY criado_em DESC`,
+      `WITH docs AS (
+         SELECT id, entidade_tipo, entidade_id, empresa_id, cliente_pf_id, lead_id, socio_id, contrato_id, simulacao_id,
+                tipo_documento, nome_original, nome_arquivo, caminho_arquivo, url_arquivo, mime_type, tamanho_bytes, hash_arquivo,
+                status, origem, obrigatorio, validado, validado_por, validado_em, observacoes, metadados,
+                data_emissao_documento, data_validade_documento, validade_dias, status_validade, exige_revisao_humana,
+                nome_customizado, resultado_validacao, ultima_extracao_ia_id, ultima_indexacao_rag_id,
+                criado_por, criado_em, atualizado_em, excluido_em
+           FROM public.documentos_arquivos
+          WHERE ${where.join(' AND ')}
+       )
+       SELECT docs.*${selectExtracao}${selectCnpj}
+         FROM docs
+         ${joinExtracao}
+         ${joinCnpj}
+        ORDER BY docs.criado_em DESC`,
       values
     );
     const rowsWithStorage = rows.map((doc: any) => {
@@ -681,9 +710,46 @@ router.get('/', auth, async (req: Request, res: Response) => {
           [resolved.relativePath, doc.id],
         ).catch((err: any) => console.warn('[documentos] Não foi possível normalizar caminho no list:', err?.message || err));
       }
-      const { caminho_arquivo, ...safeDoc } = doc;
+      const {
+        caminho_arquivo,
+        resultado_analise_persistida,
+        resultado_analise_status_persistido,
+        resultado_cnpj_persistido,
+        resultado_cnpj_status_persistido,
+        campos_cartao_persistidos,
+        alertas_cnpj_persistidos,
+        diagnostico_cnpj_persistido,
+        ...safeDoc
+      } = doc;
+      const validacao = safeJson(doc.resultado_validacao);
+      const laudoDoArquivo = validacao.analise_regra_documental && typeof validacao.analise_regra_documental === 'object'
+        ? validacao.analise_regra_documental
+        : null;
+      const laudoExtracao = resultado_analise_persistida && typeof resultado_analise_persistida === 'object'
+        && Object.keys(resultado_analise_persistida).length
+        ? resultado_analise_persistida
+        : null;
+      const laudoCnpjLegado = resultado_cnpj_persistido && typeof resultado_cnpj_persistido === 'object'
+        ? {
+            arquivo_id: doc.id,
+            empresa_id: doc.empresa_id || doc.entidade_id,
+            tipo_analise: 'cartao_cnpj',
+            status: resultado_cnpj_status_persistido === 'concluida' ? 'concluido' : 'revisao_humana',
+            revisao_humana_necessaria: resultado_cnpj_status_persistido !== 'concluida',
+            dados_extraidos: {
+              ...(resultado_cnpj_persistido.campos_cartao || campos_cartao_persistidos || {}),
+              documento_compativel: true,
+            },
+            alertas: resultado_cnpj_persistido.alertas || alertas_cnpj_persistidos || [],
+            diagnostico: resultado_cnpj_persistido.diagnostico || diagnostico_cnpj_persistido || null,
+            fonte_extracao: 'persistida',
+          }
+        : null;
+      const resultadoAnalise = laudoExtracao || laudoDoArquivo || laudoCnpjLegado || null;
       return {
         ...safeDoc,
+        resultado_analise: resultadoAnalise,
+        analisado: Boolean(resultadoAnalise && ['concluido','revisao_humana','falhou'].includes(String(resultadoAnalise.status || resultado_analise_status_persistido || '').toLowerCase())),
         arquivo_disponivel: Boolean(resolved.absolutePath),
         arquivo_relativo: resolved.relativePath || null,
         armazenamento_mensagem: resolved.absolutePath
@@ -861,6 +927,7 @@ router.post('/upload', auth, upload.single('file'), async (req: Request, res: Re
     let dataValidadeDocumento: string | null = null;
     let exigeRevisaoHumana = false;
     const resultadoValidacao: Record<string, unknown> = {};
+    resultadoValidacao.analise_automatica_status = 'pendente';
 
     if (dataEmissaoDocumento) {
       const emissao = new Date(`${dataEmissaoDocumento}T00:00:00`);
@@ -916,7 +983,7 @@ router.post('/upload', auth, upload.single('file'), async (req: Request, res: Re
     });
     await auditar(rows[0].id, 'upload', null, rows[0], user.id);
     agendarAnaliseRegraDocumental(rows[0]);
-    res.status(201).json(rows[0]);
+    res.status(201).json({ ...rows[0], analise_automatica: { status: 'pendente', agendada: true } });
   } catch (err: any) {
     console.error('[POST /api/documentos/upload]', err);
     const status = err instanceof PersistentStorageError ? err.statusCode : Number(err?.statusCode || 400);

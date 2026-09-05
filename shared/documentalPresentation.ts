@@ -43,6 +43,101 @@ function limitarEvidencia(value: unknown): string {
   return evidencia.length > 420 ? `${evidencia.slice(0, 417).trim()}...` : evidencia;
 }
 
+function rotuloCampoGenerico(chave: string): string {
+  const especiais: Record<string, string> = {
+    cnpj: 'CNPJ', cpf: 'CPF', nire: 'NIRE', cnae: 'CNAE', crc: 'CRC',
+    razao_social: 'Razão social', nome_fantasia: 'Nome fantasia', capital_social: 'Capital social',
+    data_emissao: 'Data de emissão', data_validade: 'Data de validade', situacao_cadastral: 'Situação cadastral',
+    data_registro: 'Data do registro', numero_registro: 'Número do registro', orgao_registro: 'Órgão de registro',
+    secional_oab: 'Seccional da OAB', situacao_registro: 'Situação do registro',
+    situacao_certidao: 'Situação da certidão', regime_tributario: 'Regime tributário',
+    tipo_detectado: 'Tipo detectado', identidade_status: 'Identidade documental',
+    temporalidade_status: 'Situação temporal', cobertura_status: 'Cobertura do requisito',
+    campos_essenciais_ausentes: 'Campos essenciais ausentes',
+  };
+  if (especiais[chave]) return especiais[chave];
+  const base = chave.replace(/_/g, ' ').trim();
+  return base ? base.charAt(0).toUpperCase() + base.slice(1) : 'Campo';
+}
+
+function valorCampoGenerico(value: unknown): string {
+  if (value === null || value === undefined || value === '') return '';
+  if (typeof value === 'boolean') return value ? 'Sim' : 'Não';
+  if (typeof value === 'number') return numero(value);
+  if (typeof value === 'string') return value.replace(/\s+/g, ' ').trim().slice(0, 500);
+  if (Array.isArray(value)) {
+    const resumidos = value.slice(0, 20).map((item) => {
+      if (item && typeof item === 'object') {
+        const registro = item as Record<string, unknown>;
+        return texto(registro.nome || registro.razao_social || registro.competencia || registro.valor || registro.descricao || registro.mensagem);
+      }
+      return texto(item);
+    }).filter(Boolean);
+    return resumidos.join(', ');
+  }
+  if (typeof value === 'object') {
+    const registro = value as Record<string, unknown>;
+    const intervalo = [registro.inicio, registro.fim].map(texto).filter(Boolean);
+    if (intervalo.length) return intervalo.join(' a ');
+    const pares = Object.entries(registro).slice(0, 8)
+      .map(([chave, item]) => {
+        const formatado = valorCampoGenerico(item);
+        return formatado ? `${rotuloCampoGenerico(chave)}: ${formatado}` : '';
+      })
+      .filter(Boolean);
+    return pares.join(' · ');
+  }
+  return texto(value);
+}
+
+function camposExtraidosGenericos(resultado: any): DocumentoAnaliseCampo[] {
+  const dados = resultado?.dados_extraidos && typeof resultado.dados_extraidos === 'object' ? resultado.dados_extraidos : {};
+  const comprovados = dados?.campos_comprovados && typeof dados.campos_comprovados === 'object' ? dados.campos_comprovados : {};
+  const tecnicos = new Set([
+    'texto', 'ocr_texto', 'campos_comprovados', 'campos_inferidos', 'evidencias', 'alertas', 'divergencias',
+    'fonte_extracao', 'mecanismo_extracao', 'separacao_comprovado_inferido', 'documento_compativel',
+    'confianca', 'nivel_confianca', 'satisfaz_requisito', 'tipo_documento', 'tipo_esperado',
+    // O histórico da Junta recebe um resumo próprio logo abaixo; despejar o
+    // array bruto no card deixa a leitura ruim e ainda pode esconder as datas.
+    'historico_arquivamentos',
+  ]);
+  const candidatos = new Map<string, unknown>();
+  for (const [chave, valor] of Object.entries(comprovados)) candidatos.set(chave, valor);
+  for (const [chave, valor] of Object.entries(dados)) {
+    if (!tecnicos.has(chave) && !candidatos.has(chave)) candidatos.set(chave, valor);
+  }
+
+  const campos: DocumentoAnaliseCampo[] = [];
+  const historico = Array.isArray(dados?.historico_arquivamentos)
+    ? [...dados.historico_arquivamentos]
+        .filter((item: any) => item?.data)
+        .sort((a: any, b: any) => String(b.data).localeCompare(String(a.data)))
+    : [];
+  if (historico.length) {
+    const alteracoes = historico.filter((item: any) => /alterac/i.test(normalizar(item?.tipo_ato || '')));
+    const ultima = alteracoes[0] || historico[0];
+    const penultima = alteracoes[1] || historico.find((item: any) => item !== ultima) || null;
+    if (dados?.nire) campos.push({ label: 'NIRE', valor: texto(dados.nire) });
+    if (ultima?.data) campos.push({ label: 'Última alteração', valor: texto(ultima.data) });
+    if (ultima?.numero) campos.push({ label: 'Arquivamento da última alteração', valor: texto(ultima.numero) });
+    if (penultima?.data) campos.push({ label: 'Penúltima alteração', valor: texto(penultima.data) });
+    if (penultima?.numero) campos.push({ label: 'Arquivamento da penúltima', valor: texto(penultima.numero) });
+    if (dados?.total_alteracoes_historico !== null && dados?.total_alteracoes_historico !== undefined) {
+      campos.push({ label: 'Total de alterações', valor: texto(dados.total_alteracoes_historico) });
+    }
+    candidatos.delete('nire');
+    candidatos.delete('total_alteracoes_historico');
+  }
+
+  for (const [chave, valor] of candidatos.entries()) {
+    const formatado = valorCampoGenerico(valor);
+    if (formatado) campos.push({ label: rotuloCampoGenerico(chave), valor: formatado });
+  }
+  return campos
+    .filter((campo, index, lista) => lista.findIndex((item) => normalizar(item.label) === normalizar(campo.label) && item.valor === campo.valor) === index)
+    .slice(0, 30);
+}
+
 function itens(value: unknown): string[] {
   if (!Array.isArray(value)) return [];
   return value
@@ -294,120 +389,277 @@ function evidenciasCompactas(resultado: any, alteracoes: any[], quadroFinal: any
   return Array.from(new Set(fontes.map((item: any) => limitarEvidencia(item?.texto || item).trim()).filter(Boolean))).slice(0, 3).map((item) => `“${item}”`);
 }
 
-function secoesSocietariasCompactas(resultado: any, documento: any, conclusao: string, socios: any[], qsa: boolean): DocumentoAnaliseSecao[] {
-  const secoes: DocumentoAnaliseSecao[] = [{ id: "resultado", titulo: qsa ? "Resultado da leitura do QSA" : "Resultado da leitura", texto: conclusao || "Leitura concluída." }];
-  const dadosQsa = resultado?.dados_extraidos || resultado?.dados_qsa || resultado?.analise_documental || {};
-  const camposBase = Array.isArray(resultado?.campos) ? resultado.campos : [];
-  const camposQsa = qsa ? [
-    { label: "CNPJ do QSA", valor: dadosQsa?.cnpj },
-    { label: "Razão social do QSA", valor: dadosQsa?.razao_social },
-    { label: "Capital social do QSA", valor: dadosQsa?.capital_social },
-    { label: "Sócios lidos no QSA", valor: socios.length ? String(socios.length) : "0" },
-  ] : [];
-  const campos = [...camposBase, ...camposQsa]
-    .map((campo: any) => ({ label: texto(campo?.label) || "Campo", valor: texto(campo?.valor) }))
-    .filter((campo: DocumentoAnaliseCampo) => campo.valor)
-    .filter((campo: DocumentoAnaliseCampo, index: number, lista: DocumentoAnaliseCampo[]) => lista.findIndex((item) => normalizar(item.label) === normalizar(campo.label) && item.valor === campo.valor) === index)
-    .filter((campo: DocumentoAnaliseCampo) => qsa || !/nire|clausula|numero de arquivamento|arquivamento/i.test(normalizar(campo.label)));
-  if (campos.length) secoes.push({ id: "amostra_dados", titulo: qsa ? "Dados do QSA" : "Amostra objetiva dos dados lidos", campos });
-  if (qsa && socios.length) secoes.push({ id: "qsa_nomes", titulo: "Nomes identificados no QSA", itens: socios.map(formatarSocio).filter(Boolean) });
+function tipoDocumentoResumo(resultado: any, documento: any): string {
+  return normalizar(
+    resultado?.tipo_documento
+    || documento?.tipo_documento
+    || documento?.codigo
+    || resultado?.tipo_leitura
+    || documento?.nome
+    || '',
+  ).replace(/[^a-z0-9]+/g, '_');
+}
 
-  // Alterações societárias (Atos da Junta / Contrato Social): o usuário não
-  // precisa do histórico jurídico inteiro na tela principal -- precisa saber
-  // 3 coisas, de forma direta: quando foi a última alteração, se isso já
-  // completa os 12 meses de histórico exigidos, e qual foi o resultado (ex.:
-  // "transferência de titularidade de Fulano para Fulano"). O texto jurídico
-  // completo (evidência literal, lista de cada alteração) continua existindo,
-  // só que dentro de uma seção "colapsavel" (id: transacoes/evidencias) —
-  // não é apagado, só deixa de brigar por atenção com o que importa.
-  const alteracoes = Array.isArray(resultado?.alteracoes_societarias) ? resultado.alteracoes_societarias : [];
-  if (!qsa && alteracoes.length) {
-    const maisRecente = alteracoes[0];
-    const dataAlteracao = parseDataIso(
-      resultado?.data_registro
-        || resultado?.datas_chave?.data_ato_junta_mais_recente
-        || resultado?.contrato?.data_registro
-        || dadosQsa?.data_registro
-        || maisRecente?.data_registro
-        || maisRecente?.data,
-    );
-    const camposResumo: DocumentoAnaliseCampo[] = [];
-    if (dataAlteracao) {
-      const dentroDe12Meses = (Date.now() - dataAlteracao.getTime()) <= 366 * 24 * 60 * 60 * 1000;
-      camposResumo.push({ label: "Última alteração em", valor: formatarDataBr(dataAlteracao) });
-      camposResumo.push({ label: "Completa 12 meses de histórico", valor: dentroDe12Meses ? "Sim — não precisa de alteração anterior" : "Não — anexar também a alteração/contrato anterior" });
+function dadosValidacao(resultado: any): Record<string, any> {
+  const dados = resultado?.dados_extraidos && typeof resultado.dados_extraidos === 'object'
+    ? resultado.dados_extraidos
+    : {};
+  const comprovados = dados?.campos_comprovados && typeof dados.campos_comprovados === 'object'
+    ? dados.campos_comprovados
+    : {};
+  const contrato = dados?.contrato && typeof dados.contrato === 'object' ? dados.contrato : {};
+  return { ...comprovados, ...dados, contrato };
+}
+
+function valorDeclarado(resultado: any, ...labels: string[]): string {
+  if (!Array.isArray(resultado?.campos)) return '';
+  const alvos = labels.map(normalizar);
+  const achado = resultado.campos.find((campo: any) => alvos.includes(normalizar(campo?.label)));
+  return texto(achado?.valor);
+}
+
+function primeiroValor(resultado: any, chaves: string[], labels: string[] = []): any {
+  const dados = dadosValidacao(resultado);
+  for (const chave of chaves) {
+    const partes = chave.split('.');
+    let atual: any = dados;
+    for (const parte of partes) atual = atual && typeof atual === 'object' ? atual[parte] : undefined;
+    if (atual !== null && atual !== undefined && atual !== '') return atual;
+  }
+  return labels.length ? valorDeclarado(resultado, ...labels) : null;
+}
+
+function adicionarCampoObjetivo(campos: DocumentoAnaliseCampo[], label: string, valor: unknown) {
+  let valorExibicao = valor;
+  // Competências e janelas podem ter 12+ itens internamente. Na tela basta
+  // confirmar a cobertura, nunca listar mês por mês.
+  if (Array.isArray(valor) && /compet[eê]ncia|per[ií]odo|cobertura/i.test(label) && valor.length) {
+    const itens = valor.map((item) => texto(item)).filter(Boolean);
+    valorExibicao = itens.length > 1
+      ? `${itens[0]} a ${itens[itens.length - 1]} (${itens.length} competências)`
+      : itens[0] || '';
+  }
+  const formatado = valorCampoGenerico(valorExibicao);
+  if (!formatado) return;
+  if (campos.some((campo) => normalizar(campo.label) === normalizar(label))) return;
+  campos.push({ label, valor: formatado });
+}
+
+function statusObjetivo(resultado: any, documento: any): string {
+  const estado = estadoVisualDocumento(resultado, documento);
+  if (estado === 'aprovado') return 'Confirmado';
+  if (estado === 'incompativel') return 'Documento incompatível';
+  if (estado === 'reanalisar') return 'Releitura necessária';
+  if (estado === 'aguardando') return 'Aguardando leitura';
+  return 'Revisar';
+}
+
+function camposValidacaoObjetiva(resultado: any, documento: any, socios: any[] = []): DocumentoAnaliseCampo[] {
+  const tipo = tipoDocumentoResumo(resultado, documento);
+  const dados = dadosValidacao(resultado);
+  const campos: DocumentoAnaliseCampo[] = [];
+  const aprovado = estadoVisualDocumento(resultado, documento) === 'aprovado';
+
+  if (/cartao_cnpj|cnpj_cartao/.test(tipo)) {
+    adicionarCampoObjetivo(campos, 'CNPJ', primeiroValor(resultado, ['cnpj'], ['CNPJ']));
+    adicionarCampoObjetivo(campos, 'Situação cadastral', primeiroValor(resultado, ['situacao_cadastral'], ['Situação cadastral', 'Situação']));
+    adicionarCampoObjetivo(campos, 'Unidade', primeiroValor(resultado, ['matriz_filial'], ['Matriz/Filial', 'Unidade']));
+    const municipio = texto(primeiroValor(resultado, ['municipio'], ['Município']));
+    const uf = texto(primeiroValor(resultado, ['uf'], ['UF']));
+    adicionarCampoObjetivo(campos, 'Localização', [municipio, uf].filter(Boolean).join(' / '));
+    adicionarCampoObjetivo(campos, 'Validação', aprovado ? 'CNPJ válido para o cadastro' : statusObjetivo(resultado, documento));
+    return campos.slice(0, 5);
+  }
+
+  if (/(^|_)qsa($|_)/.test(tipo)) {
+    adicionarCampoObjetivo(campos, 'CNPJ do QSA', primeiroValor(resultado, ['cnpj'], ['CNPJ do QSA', 'CNPJ']));
+    adicionarCampoObjetivo(campos, 'Vínculo com o CNPJ', aprovado ? 'Confirmado' : statusObjetivo(resultado, documento));
+    adicionarCampoObjetivo(campos, 'Quadro societário', dados?.qsa_nao_aplicavel === true
+      ? 'Não aplicável à natureza jurídica'
+      : socios.length ? `${socios.length} integrante(s) identificado(s)` : 'Não identificado');
+    const administradores = socios.filter((socio: any) => socio?.administrador === true).map(nomeSocio);
+    adicionarCampoObjetivo(campos, 'Administrador/Titular', administradores.slice(0, 3).join(', ')
+      || primeiroValor(resultado, ['titular_identificado', 'responsavel_nome'], ['Titular identificado', 'Administrador/Titular']));
+    adicionarCampoObjetivo(campos, 'Resultado', aprovado ? 'QSA validado' : statusObjetivo(resultado, documento));
+    return campos.slice(0, 5);
+  }
+
+  if (/enquadramento|simples_nacional|ccmei/.test(tipo)) {
+    adicionarCampoObjetivo(campos, 'CNPJ', primeiroValor(resultado, ['cnpj'], ['CNPJ do documento fiscal', 'CNPJ']));
+    adicionarCampoObjetivo(campos, 'Regime', primeiroValor(resultado, ['regime_tributario'], ['Regime tributário declarado no documento', 'Regime']));
+    adicionarCampoObjetivo(campos, 'Situação no Simples', primeiroValor(resultado, ['situacao_simples'], ['Situação no Simples Nacional', 'Situação']));
+    const opcaoMei = primeiroValor(resultado, ['opcao_mei'], ['Optante MEI/SIMEI']);
+    if (opcaoMei !== null && opcaoMei !== undefined && opcaoMei !== '') adicionarCampoObjetivo(campos, 'MEI/SIMEI', opcaoMei);
+    adicionarCampoObjetivo(campos, 'Validação', aprovado ? 'Enquadramento confirmado' : statusObjetivo(resultado, documento));
+    return campos.slice(0, 5);
+  }
+
+  if (/atos_junta|junta_comercial/.test(tipo)) {
+    const historico = Array.isArray(dados?.historico_arquivamentos)
+      ? [...dados.historico_arquivamentos]
+          .filter((item: any) => item?.data)
+          .sort((a: any, b: any) => String(b.data).localeCompare(String(a.data)))
+      : [];
+    const alteracoes = historico.filter((item: any) => /alterac/.test(normalizar(item?.tipo_ato || '')));
+    const ultima = alteracoes[0] || historico[0] || null;
+    const penultima = alteracoes[1] || historico.find((item: any) => item !== ultima) || null;
+    adicionarCampoObjetivo(campos, 'NIRE', primeiroValor(resultado, ['nire'], ['NIRE']));
+    adicionarCampoObjetivo(campos, 'Última alteração', ultima?.data || primeiroValor(resultado, ['data_registro'], ['Data de registro']));
+    adicionarCampoObjetivo(campos, 'Arquivamento', ultima?.numero || primeiroValor(resultado, ['numero_arquivamento'], ['Número do arquivamento']));
+    const dataUltima = parseDataIso(ultima?.data || primeiroValor(resultado, ['data_registro']));
+    if (dataUltima) {
+      const corte = new Date();
+      corte.setUTCMonth(corte.getUTCMonth() - 12);
+      const precisaAnterior = dataUltima.getTime() > corte.getTime();
+      adicionarCampoObjetivo(campos, 'Histórico de 12 meses', precisaAnterior ? 'Exige alteração/contrato anterior' : 'Cobertura mínima atendida');
+      if (precisaAnterior && penultima?.data) adicionarCampoObjetivo(campos, 'Alteração anterior', penultima.data);
     }
-    secoes.push({ id: "resumo_alteracao", titulo: "Resultado da alteração societária", texto: formatarAlteracaoResumo(maisRecente), campos: camposResumo.length ? camposResumo : undefined });
+    return campos.slice(0, 5);
   }
-  if (alteracoes.length) {
-    secoes.push({ id: "transacoes", titulo: "Transação ou ação realizada (detalhe jurídico)", itens: alteracoes.map(formatarAlteracaoCompacta).filter(Boolean), colapsavel: true });
+
+  if (/contrato_social|alteracao_contratual/.test(tipo)) {
+    adicionarCampoObjetivo(campos, 'Data do ato', primeiroValor(resultado, ['contrato.data_registro', 'data_registro'], ['Data de registro']));
+    adicionarCampoObjetivo(campos, 'Arquivamento', primeiroValor(resultado, ['contrato.numero_arquivamento', 'numero_arquivamento'], ['Número do arquivamento']));
+    adicionarCampoObjetivo(campos, 'Conferência com a Junta', aprovado ? 'Correspondência confirmada' : statusObjetivo(resultado, documento));
+    const alteracoes = Array.isArray(resultado?.alteracoes_societarias)
+      ? resultado.alteracoes_societarias
+      : Array.isArray(dados?.contrato?.alteracoes_societarias) ? dados.contrato.alteracoes_societarias : [];
+    return campos.slice(0, 4);
   }
-  if (!qsa && documentoAtual(resultado, documento)) {
-    const titulares = titularAtual(resultado);
-    if (titulares.length) secoes.push({ id: "titular_atual", titulo: "Titular atual do contrato social", itens: titulares });
+
+  if (/serasa|rating|scr|ccs|ccf|cenprot|protest|negativ/.test(tipo)) {
+    const negativacoesBrutas = primeiroValor(resultado, ['quantidade_negativacoes', 'negativacoes', 'total_negativacoes'], ['Negativações', 'Quantidade de negativações']);
+    const negativacoes = Array.isArray(negativacoesBrutas) ? negativacoesBrutas.length : negativacoesBrutas;
+    const possuiNegativacao = primeiroValor(resultado, ['possui_negativacao', 'tem_negativacao'], ['Possui negativação']);
+    const quantidade = Number(negativacoes);
+    const semNegativacao = possuiNegativacao === false || (Number.isFinite(quantidade) && quantidade === 0);
+    const comNegativacao = possuiNegativacao === true || (Number.isFinite(quantidade) && quantidade > 0);
+    adicionarCampoObjetivo(campos, 'Resultado', semNegativacao
+      ? 'Sem negativação identificada'
+      : comNegativacao ? 'Com negativação identificada' : primeiroValor(resultado, ['resultado', 'situacao', 'status_consulta'], ['Resultado', 'Situação']));
+    adicionarCampoObjetivo(campos, 'Negativações', negativacoes);
+    adicionarCampoObjetivo(campos, 'Rating/Score', primeiroValor(resultado, ['rating', 'score', 'faixa_rating'], ['Rating', 'Score']));
+    adicionarCampoObjetivo(campos, 'Data da consulta', primeiroValor(resultado, ['data_consulta', 'data_emissao'], ['Data da consulta', 'Data de emissão']));
+    return campos.slice(0, 4);
   }
-  const diagnostico = texto(resultado?.diagnostico_factual || resultado?.diagnostico || resultado?.descricao_leitura);
-  if (diagnostico && diagnostico !== conclusao) secoes.push({ id: "diagnostico_factual", titulo: "Descrição objetiva da leitura (texto completo)", texto: diagnostico, colapsavel: true });
-  const validacoesRealizadas = validacoes(resultado, documento, qsa, socios, campos);
-  if (validacoesRealizadas.length) secoes.push({ id: "validacoes", titulo: "Checklist técnico de validação", itens: validacoesRealizadas, colapsavel: true });
-  const evidencias = evidenciasCompactas(resultado, alteracoes, Array.isArray(resultado?.quadro_societario_final) ? resultado.quadro_societario_final : []);
-  if (evidencias.length) secoes.push({ id: "evidencias", titulo: "Evidências documentais (trecho literal)", itens: evidencias, colapsavel: true });
+
+  if (/cnd|cndt|crf|cadin|pgfn|certidao|regularidade/.test(tipo)) {
+    adicionarCampoObjetivo(campos, 'CNPJ', primeiroValor(resultado, ['cnpj'], ['CNPJ']));
+    adicionarCampoObjetivo(campos, 'Situação', primeiroValor(resultado, ['situacao_certidao', 'situacao', 'resultado'], ['Situação da certidão', 'Situação', 'Resultado']));
+    adicionarCampoObjetivo(campos, 'Validade', primeiroValor(resultado, ['data_validade', 'validade_fim'], ['Data de validade', 'Validade']));
+    adicionarCampoObjetivo(campos, 'Validação', aprovado ? 'Regularidade confirmada' : statusObjetivo(resultado, documento));
+    return campos.slice(0, 4);
+  }
+
+  if (/pgdas|defis|dasn|ecf|ecd|efd|dctf|darf|recibo/.test(tipo)) {
+    adicionarCampoObjetivo(campos, 'CNPJ', primeiroValor(resultado, ['cnpj'], ['CNPJ']));
+    adicionarCampoObjetivo(campos, 'Competência/Período', primeiroValor(resultado, ['competencia', 'periodo_analisado', 'mes_referencia'], ['Competência', 'Período analisado', 'Mês de referência']));
+    adicionarCampoObjetivo(campos, 'Regime', primeiroValor(resultado, ['regime_tributario'], ['Regime tributário declarado no documento', 'Regime']));
+    adicionarCampoObjetivo(campos, 'Validação', aprovado ? 'Documento e período confirmados' : statusObjetivo(resultado, documento));
+    return campos.slice(0, 4);
+  }
+
+  if (/faturamento|extrato_bancario|compartilhamento_open_finance|open_finance/.test(tipo)) {
+    adicionarCampoObjetivo(campos, 'Titular/CNPJ', primeiroValor(resultado, ['cnpj', 'titular_identificado', 'nome_titular'], ['CNPJ', 'Titular identificado']));
+    adicionarCampoObjetivo(campos, 'Período', primeiroValor(resultado, ['periodo_analisado', 'competencia', 'meses_referencia'], ['Período analisado', 'Meses cobertos']));
+    adicionarCampoObjetivo(campos, 'Cobertura', primeiroValor(resultado, ['cobertura_status'], ['Cobertura do requisito']));
+    adicionarCampoObjetivo(campos, 'Validação', aprovado ? 'Período documental confirmado' : statusObjetivo(resultado, documento));
+    return campos.slice(0, 4);
+  }
+
+  // Fallback universal: nunca despeja o objeto extraído na interface. Só
+  // apresenta o mínimo necessário para comprovar identidade, temporalidade e
+  // satisfação do requisito.
+  adicionarCampoObjetivo(campos, 'CNPJ/CPF', primeiroValor(resultado, ['cnpj', 'cpf'], ['CNPJ', 'CPF']));
+  adicionarCampoObjetivo(campos, 'Competência/Período', primeiroValor(resultado, ['competencia', 'periodo_analisado', 'mes_referencia'], ['Competência', 'Período analisado']));
+  adicionarCampoObjetivo(campos, 'Validade/Situação', primeiroValor(resultado, ['data_validade', 'situacao_certidao', 'situacao', 'temporalidade_status'], ['Data de validade', 'Situação', 'Situação temporal']));
+  adicionarCampoObjetivo(campos, 'Validação', statusObjetivo(resultado, documento));
+  return campos.slice(0, 4);
+}
+
+function secoesSocietariasCompactas(resultado: any, documento: any, conclusao: string, socios: any[], qsa: boolean): DocumentoAnaliseSecao[] {
+  const secoes: DocumentoAnaliseSecao[] = [{
+    id: 'resultado',
+    titulo: 'Validação do documento',
+    texto: conclusao || 'Leitura concluída.',
+  }];
+  const campos = camposValidacaoObjetiva(resultado, documento, socios);
+  if (campos.length) {
+    secoes.push({
+      id: qsa ? 'amostra_dados' : 'resumo_alteracao',
+      titulo: qsa ? 'Confirmações do QSA' : 'Confirmações societárias',
+      campos,
+    });
+  }
+
+  // A leitura completa continua persistida internamente para auditoria,
+  // cruzamentos e dossiê. Na camada documental operacional mostramos somente
+  // o que confirma o requisito. Para contrato/alteração, o único conteúdo
+  // substantivo exposto é o resumo da alteração relevante.
+  if (!qsa) {
+    const alteracoes = Array.isArray(resultado?.alteracoes_societarias) ? resultado.alteracoes_societarias : [];
+    if (alteracoes.length) {
+      secoes.push({
+        id: 'resumo_alteracao_acao',
+        titulo: 'O que foi alterado',
+        texto: formatarAlteracaoResumo(alteracoes[0]),
+      });
+    }
+  }
+
+  if (qsa && socios.length) {
+    const administradores = socios.filter((socio: any) => socio?.administrador === true).map(nomeSocio);
+    if (administradores.length) {
+      secoes.push({ id: 'qsa_nomes', titulo: 'Administração confirmada', itens: administradores.slice(0, 3) });
+    }
+  }
+
   return secoes;
 }
 
 export function construirSecoesAnaliseDocumento(resultado: any = {}, documento: any = {}): DocumentoAnaliseSecao[] {
-  const conclusao = texto(resultado?.conclusao || documento?.observacao || "Leitura concluída.");
+  const conclusao = texto(resultado?.conclusao || documento?.observacao || 'Leitura concluída.');
   const alteracoes = Array.isArray(resultado?.alteracoes_societarias) ? resultado.alteracoes_societarias : [];
   const quadroFinal = Array.isArray(resultado?.quadro_societario_final) ? resultado.quadro_societario_final : [];
   const socios = sociosLidos(resultado, documento);
   const qsa = ehQsa(resultado, documento, socios);
-  const societario = qsa || alteracoes.length > 0 || quadroFinal.length > 0 || Boolean(resultado?.analise_societaria_auditavel) || Boolean(resultado?.status_societario);
-  if (societario) return adicionarConfiancaLeitura(
-    secoesSocietariasCompactas(resultado, documento, conclusao, socios, qsa),
-    resultado,
-    documento,
-  );
+  const tipo = tipoDocumentoResumo(resultado, documento);
+  const societario = qsa
+    || /atos_junta|junta_comercial|contrato_social|alteracao_contratual/.test(tipo)
+    || alteracoes.length > 0
+    || quadroFinal.length > 0
+    || Boolean(resultado?.analise_societaria_auditavel)
+    || Boolean(resultado?.status_societario);
 
-  // CORREÇÃO (2026-08-31, "não é pra ele ler o que está nesse documento do
-  // simples, pra ele ler só se for o s f... tire esse monte de texto"): um
-  // documento do tipo ERRADO para o slot (ex.: PGDAS-D anexado no lugar do
-  // ECF) não pode mostrar NENHUM dado lido dele -- nem diagnóstico, nem
-  // "amostra objetiva dos dados lidos", nem os alertas explicando o motivo.
-  // A única informação exibida é que o documento é inválido para este campo;
-  // os dados do documento errado só voltam a aparecer quando o documento
-  // CORRETO for anexado e lido. Isso é intencionalmente diferente de outros
-  // motivos de revisão (baixa confiança, regime ambíguo, certidão positiva
-  // etc.), que continuam mostrando os dados normalmente -- ali o documento É
-  // o certo, só tem uma pendência sobre o CONTEÚDO dele.
   if (documentoMarcadoIncompativel(resultado, documento)) {
-    return [{ id: "resultado", titulo: "Resultado da análise", texto: conclusao }];
+    return [{ id: 'resultado', titulo: 'Validação do documento', texto: conclusao }];
   }
 
-  const secoes: DocumentoAnaliseSecao[] = [{ id: "resultado", titulo: "Resultado da análise", texto: conclusao }];
-  const diagnosticoFactual = texto(resultado?.diagnostico_factual || resultado?.diagnostico);
-  if (diagnosticoFactual && diagnosticoFactual !== conclusao) {
-    secoes.push({ id: "diagnostico_factual", titulo: "Diagnóstico objetivo do documento", texto: diagnosticoFactual });
+  if (societario) return secoesSocietariasCompactas(resultado, documento, conclusao, socios, qsa);
+
+  const secoes: DocumentoAnaliseSecao[] = [{
+    id: 'resultado',
+    titulo: 'Validação do documento',
+    texto: conclusao,
+  }];
+
+  const campos = camposValidacaoObjetiva(resultado, documento, socios);
+  if (campos.length) {
+    secoes.push({ id: 'campos', titulo: 'Confirmações', campos });
   }
-  // Alertas de severidade alta/crítica que sobrevivem ao ramo acima (documento
-  // correto, mas com uma pendência de conteúdo -- ex.: certidão positiva,
-  // regime ambíguo, baixa confiança) continuam sempre visíveis, nunca atrás de
-  // um clique.
+
   const alertasCriticos = (Array.isArray(resultado?.alertas) ? resultado.alertas : [])
-    .filter((alerta: any) => alerta && texto(alerta.mensagem) && (alerta.severidade === "alta" || alerta.severidade === "critica"));
+    .filter((alerta: any) => alerta && texto(alerta.mensagem) && (alerta.severidade === 'alta' || alerta.severidade === 'critica'))
+    .slice(0, 3);
   if (alertasCriticos.length) {
     secoes.push({
-      id: "alertas",
-      titulo: "Alertas da leitura automática",
-      itens: alertasCriticos.map((alerta: any) => alerta.recomendacao ? `${texto(alerta.mensagem)} — ${texto(alerta.recomendacao)}` : texto(alerta.mensagem)),
+      id: 'alertas',
+      titulo: 'Pendências relevantes',
+      itens: alertasCriticos.map((alerta: any) => texto(alerta.mensagem)),
     });
   }
-  const campos = Array.isArray(resultado?.campos)
-    ? resultado.campos.map((campo: any) => ({ label: texto(campo?.label) || "Campo", valor: texto(campo?.valor) })).filter((campo: DocumentoAnaliseCampo) => campo.valor)
-    : [];
-  if (campos.length) secoes.push({ id: "campos", titulo: "Amostra objetiva dos dados lidos", campos });
-  const validacoesRealizadas = validacoes(resultado, documento, false, [], campos);
-  if (validacoesRealizadas.length) secoes.push({ id: "validacoes", titulo: "Checklist técnico de validação", itens: validacoesRealizadas, colapsavel: true });
-  return adicionarConfiancaLeitura(secoes, resultado, documento);
+
+  return secoes;
 }
 
 
@@ -506,6 +758,24 @@ export type BucketRegimeFiscal = "simples" | "ecf";
 // `secoesSocietariasCompactas` para "Completa 12 meses de histórico" -- prazo
 // que o resto do sistema já trata como o necessário para reunir um ano fiscal
 // completo de documentação (a mesma janela de um ECF/DCTF anual).
+// CORREÇÃO (Rodada 33, 05/09/2026, diagnóstico cruzado de duas pesquisas
+// independentes sobre a matriz documental de crédito -- uma delas assinada
+// "Manus AI", a outra encomendada ao GPT -- que chegaram, cada uma por conta
+// própria, à mesma conclusão: "não foi encontrada base normativa específica
+// que sustente a regra interna de manter, por exatamente 366 dias após a
+// mudança de regime, os documentos do regime anterior como obrigatórios".
+// Este número continua existindo como PISO de segurança (nunca reduz a
+// janela que já existia antes desta correção -- ver `transicaoRecentePorPrazoFixo`
+// abaixo), mas deixa de ser o ÚNICO critério: a partir de agora, o slot do
+// regime anterior também continua oferecido enquanto a janela corrente de
+// faturamento (rolling 12 meses -- `faturamentoRolling12MesesService.ts`)
+// ainda alcançar competências anteriores ao início do regime hoje vigente,
+// mesmo que já tenham se passado mais de 366 dias -- porque, nesse caso, a
+// própria janela de crédito ainda precisa daquela competência antiga, com ou
+// sem prazo. As duas pesquisas concordam que esse é o critério correto:
+// "documentos do regime anterior continuam exigíveis enquanto comprovarem
+// competências ainda necessárias à análise" (GPT); "conservar o histórico
+// enquanto necessário à janela de faturamento" (Manus AI).
 const LIMITE_DIAS_TRANSICAO_REGIME_RECENTE = 366;
 
 function diasDesdeInicioRegimeVigente(regimeVigenteDesde: string | null | undefined, agora: Date): number | null {
@@ -516,6 +786,49 @@ function diasDesdeInicioRegimeVigente(regimeVigenteDesde: string | null | undefi
   const inicio = new Date(`${match[1]}-${match[2]}-${match[3]}T00:00:00.000Z`);
   if (Number.isNaN(inicio.getTime())) return null;
   return Math.floor((agora.getTime() - inicio.getTime()) / (24 * 60 * 60 * 1000));
+}
+
+// Primeiro dia da janela rolling de 12 meses vigente em `agora`, na mesma
+// definição já usada em produção por `faturamentoRolling12MesesService.ts`
+// (`ultimoMesFechado`/`janela12Meses`): o mês corrente nunca fecha sozinho,
+// então o último mês fechado é sempre o mês anterior ao mês corrente, e a
+// janela cobre os 12 meses que terminam nele. Reimplementada aqui (em vez de
+// importada) porque este arquivo é compartilhado com o bundle do cliente
+// (`DocumentosEntidade.tsx` importa `transicaoDeRegimeRecente` diretamente) e
+// `faturamentoRolling12MesesService.ts` é um serviço de servidor -- as duas
+// funções precisam continuar batendo exatamente; qualquer mudança na regra de
+// "último mês fechado" de um lado deve ser replicada no outro.
+function inicioJanelaFaturamentoRolling12Meses(agora: Date): Date {
+  const anoAtual = agora.getUTCFullYear();
+  const mesAtualIndice0 = agora.getUTCMonth(); // 0-11
+  // Último mês fechado = mês anterior ao corrente; início da janela de 12
+  // meses que termina nele = 11 meses antes desse mês fechado.
+  return new Date(Date.UTC(anoAtual, mesAtualIndice0 - 1 - 11, 1));
+}
+
+// Verdadeiro quando a transição ainda está dentro do piso fixo de segurança
+// (mesma regra que existia antes desta correção, preservada para nunca
+// esconder um slot que já ficava visível).
+function transicaoRecentePorPrazoFixo(regimeVigenteDesde: string | null | undefined, agora: Date): boolean {
+  const dias = diasDesdeInicioRegimeVigente(regimeVigenteDesde, agora);
+  return dias === null || dias < LIMITE_DIAS_TRANSICAO_REGIME_RECENTE;
+}
+
+// Verdadeiro quando o início do regime hoje vigente é mais recente do que o
+// início da janela rolling de 12 meses -- ou seja, quando a janela de
+// faturamento corrente ainda alcança competências de antes da mudança de
+// regime, não importa há quantos dias ela ocorreu. `regimeVigenteDesde`
+// desconhecido/inválido não ativa este critério (ele já é coberto, com
+// resultado "recente", pelo piso fixo acima).
+function janelaFaturamentoAindaAlcancaRegimeAnterior(regimeVigenteDesde: string | null | undefined, agora: Date): boolean {
+  const raw = texto(regimeVigenteDesde);
+  if (!raw) return false;
+  const match = raw.match(/^(\d{4})-(\d{2})-(\d{2})/);
+  if (!match) return false;
+  const inicioRegime = new Date(`${match[1]}-${match[2]}-${match[3]}T00:00:00.000Z`);
+  if (Number.isNaN(inicioRegime.getTime())) return false;
+  const inicioJanela = inicioJanelaFaturamentoRolling12Meses(agora);
+  return inicioRegime.getTime() > inicioJanela.getTime();
 }
 
 // Única fonte de verdade para "a empresa mudou de regime tributário e a
@@ -530,8 +843,8 @@ export function transicaoDeRegimeRecente(
 ): boolean {
   const buckets = new Set(bucketsHistoricos || []);
   if (!buckets.has("simples") || !buckets.has("ecf")) return false;
-  const dias = diasDesdeInicioRegimeVigente(regimeVigenteDesde, agora);
-  return dias === null || dias < LIMITE_DIAS_TRANSICAO_REGIME_RECENTE;
+  return transicaoRecentePorPrazoFixo(regimeVigenteDesde, agora)
+    || janelaFaturamentoAindaAlcancaRegimeAnterior(regimeVigenteDesde, agora);
 }
 
 export function slotCompativelComRegimeTributario(params: {
@@ -613,4 +926,36 @@ export function bucketDoRegimeTributarioHistorico(regime: string | null | undefi
   if (/\bmei\b|\bsimei\b|simples nacional/.test(valor)) return "simples";
   if (/lucro presumido|lucro real|lucro arbitrado|imune|isenta|nao optante/.test(valor)) return "ecf";
   return null;
+}
+
+// CORREÇÃO (Rodada 34, 05/09/2026, print real da tela em produção -- usuário
+// perguntou "como o MEI não tem contrato social, não tem os atos da junta,
+// quais os documentos então pra MEI que substituem os documentos de outra do
+// outro regime tributário?"): o MEI é dispensado por lei (LC 123/2006) do
+// registro na Junta Comercial -- seu documento constitutivo é o CCMEI
+// (Certificado da Condição de Microempreendedor Individual, já modelado no
+// catálogo como o tipo `ccmei`), não Contrato Social/Atos da Junta. O
+// backend já reconhece isso corretamente em duas camadas de negócio
+// (`montarValidacaoSocietaria`, que grava `atos_dispensados_por_mei` em
+// `documentacao.ts`, e `documentosSocietariosPorNatureza`,
+// `mapaDocumentalCreditoService.ts`, corrigida na Rodada 29) -- mas o
+// checklist visual (`DocumentosEntidade.tsx`) tinha o selo "OBRIGATÓRIO NA
+// ETAPA" fixo no código para os slots `atos_junta_comercial`/`contrato_social`,
+// sem nenhuma checagem de MEI: qualquer empresa MEI (regra geral, não é
+// específica de uma empresa) via esses dois cards marcados como obrigatórios
+// mesmo já estando dispensados por trás -- exatamente o tipo de "dois
+// lugares independentes calculando a mesma coisa" já registrado no item 0-T
+// de PENDENCIAS_REAIS.md. Esta função dá ao frontend o mesmo critério que o
+// backend já usa (`atos_dispensados_por_mei`), sem duplicar a lógica de
+// detecção de MEI em si.
+export const TIPOS_DOCUMENTAIS_SOCIETARIOS_DISPENSAVEIS_POR_MEI: ReadonlySet<string> = new Set([
+  "atos_junta_comercial",
+  "contrato_social",
+]);
+
+export function documentoSocietarioDispensadoPorMei(
+  tipoUpload: string,
+  atosDispensadosPorMei: boolean | null | undefined,
+): boolean {
+  return atosDispensadosPorMei === true && TIPOS_DOCUMENTAIS_SOCIETARIOS_DISPENSAVEIS_POR_MEI.has(tipoUpload);
 }
