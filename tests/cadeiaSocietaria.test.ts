@@ -10,7 +10,7 @@ describe('cadeia societária mínima de 12 meses', () => {
         { numero: '20251505987', data: '2025-06-06', tipo_ato: 'ALTERAÇÃO' },
         { numero: '20232527288', data: '2023-08-30', tipo_ato: 'CONTRATO' },
       ],
-      [{ arquivo_id: 'doc-1', nire: '52206183723', data_registro: '2025-06-06', consistente: true }],
+      [{ arquivo_id: 'doc-1', nire: '52206183723', data_registro: '2025-06-06', numero_arquivamento: '20251505987', consistente: true }],
       referencia,
     );
     expect(resultado.registros_requeridos).toHaveLength(1);
@@ -25,8 +25,8 @@ describe('cadeia societária mínima de 12 meses', () => {
         { numero: 'A1', data: '2025-05-01', tipo_ato: 'ALTERAÇÃO' },
       ],
       [
-        { arquivo_id: 'doc-3', data_registro: '2026-07-01', consistente: true },
-        { arquivo_id: 'doc-2', data_registro: '2026-02-01', consistente: true },
+        { arquivo_id: 'doc-3', data_registro: '2026-07-01', numero_arquivamento: 'A3', consistente: true },
+        { arquivo_id: 'doc-2', data_registro: '2026-02-01', numero_arquivamento: 'A2', consistente: true },
       ],
       referencia,
     );
@@ -41,7 +41,7 @@ describe('cadeia societária mínima de 12 meses', () => {
       { numero: 'A2', data: '2026-02-01', tipo_ato: 'ALTERAÇÃO' },
       { numero: 'A1', data: '2025-05-01', tipo_ato: 'CONTRATO' },
     ];
-    const documentos = historico.map((item, index) => ({ arquivo_id: `doc-${index}`, data_registro: item.data, consistente: true }));
+    const documentos = historico.map((item, index) => ({ arquivo_id: `doc-${index}`, data_registro: item.data, numero_arquivamento: item.numero, consistente: true }));
     const resultado = calcularCadeiaComprovacaoSocietaria(historico, documentos, referencia);
     expect(resultado.registros_faltantes).toEqual([]);
     expect(resultado.historico_cobre_12_meses).toBe(true);
@@ -75,4 +75,25 @@ describe('cadeia societária mínima de 12 meses', () => {
     expect(resultado.empresa_sem_tempo_minimo_constituicao).toBe(true);
     expect(resultado.registros_requeridos).toHaveLength(2);
   });
+  it('não presume correspondência só pela data quando a Junta informa número de arquivamento', () => {
+    const resultado = calcularCadeiaComprovacaoSocietaria(
+      [{ numero: '20251505987', data: '2025-06-06', tipo_ato: 'ALTERAÇÃO' }],
+      [{ arquivo_id: 'doc-sem-numero', data_registro: '2025-06-06', consistente: true }],
+      referencia,
+    );
+    expect(resultado.registros_faltantes).toHaveLength(1);
+    expect(resultado.registros_faltantes[0]?.criterio_correspondencia).toBe('data_e_numero_arquivamento');
+    expect(resultado.continuidade_12_meses_comprovada).toBe(false);
+  });
+
+  it('rejeita número de arquivamento divergente mesmo quando a data coincide', () => {
+    const resultado = calcularCadeiaComprovacaoSocietaria(
+      [{ numero: '20251505987', data: '2025-06-06', tipo_ato: 'ALTERAÇÃO' }],
+      [{ arquivo_id: 'doc-errado', data_registro: '2025-06-06', numero_arquivamento: '20251505988', consistente: true }],
+      referencia,
+    );
+    expect(resultado.registros_faltantes).toHaveLength(1);
+    expect(resultado.continuidade_12_meses_comprovada).toBe(false);
+  });
+
 });
