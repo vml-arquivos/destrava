@@ -108,6 +108,31 @@ export interface AnalysisVersionDecision {
   shouldReprocess: boolean;
 }
 
+/**
+ * Um laudo concluído não perde a validade operacional só porque o código foi
+ * atualizado ou o processo Node reiniciou. A assinatura de versão continua
+ * servindo para decidir se deve existir uma atualização em segundo plano,
+ * porém o último resultado concluído só deixa de ser utilizável quando foi
+ * explicitamente marcado como STALE/SUPERSEDED (ou quando não chegou a ser
+ * concluído).
+ *
+ * `REANALISE_NECESSARIA` é deliberadamente aceito aqui quando a linha está
+ * concluída: versões anteriores do sistema usavam esse mesmo status para um
+ * simples bump global de RULE_VERSION/CLASSIFIER_VERSION. Aceitá-lo durante a
+ * migração de comportamento recupera esses laudos sem apagar os dados já
+ * validados; a atualização automática continua sendo enfileirada pelo
+ * scheduler/backfill e, quando terminar com sucesso, substitui a versão
+ * anterior de forma atômica do ponto de vista do usuário.
+ */
+export function laudoConcluidoPodePermanecerAtivo(
+  row: PersistedAnalysisVersion | null | undefined,
+): boolean {
+  if (!row) return false;
+  if (statusProcessamentoLegado(row.status) !== 'CONCLUIDO') return false;
+  const lifecycle = String(row.analysis_status || '').toUpperCase();
+  return lifecycle !== 'STALE' && lifecycle !== 'SUPERSEDED';
+}
+
 function stablePart(value: unknown, fallback: string): string {
   const text = String(value ?? '').trim();
   return text || fallback;
