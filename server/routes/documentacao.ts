@@ -28,6 +28,7 @@ import {
   PROMPT_VERSION,
   calcularAssinaturaAnalise,
   decidirVersaoLaudo,
+  laudoConcluidoPodePermanecerAtivo,
   versaoPromptDocumental,
   type AnalysisLifecycleStatus,
 } from '../services/documentalLaudoVersioning';
@@ -1444,9 +1445,14 @@ async function buscarAnaliseEspecializadaPersistida(
     ruleVersion: RULE_VERSION,
     schemaVersion: SCHEMA_VERSION,
   });
-  // Fail-closed: sem as colunas de versionamento não existe evidência de que
-  // o laudo foi produzido pelas regras atuais. O conteúdo histórico continua
-  // visível, mas nunca satisfaz requisito até a migration e o reprocessamento.
+  // A assinatura continua indicando se o motor mudou, mas um deploy/restart
+  // não pode apagar uma validação documental já concluída. Quando a versão do
+  // motor diverge, o último laudo concluído permanece utilizável enquanto a
+  // releitura automática produz uma substituição. Só STALE/SUPERSEDED
+  // explícitos deixam de satisfazer o requisito imediatamente. Em bases sem
+  // as colunas de versionamento, preservamos o laudo concluído legado em vez
+  // de transformar todo o acervo em "Reanálise necessária" apenas pela
+  // ausência da migration.
   const decision = temVersionamento
     ? decidirVersaoLaudo(row, {
         arquivoId,
@@ -1459,6 +1465,35 @@ async function buscarAnaliseEspecializadaPersistida(
         schemaVersion: SCHEMA_VERSION,
       })
     : { expectedSignature: assinaturaEsperada, isCurrent: false, lifecycleStatus: 'REANALISE_NECESSARIA' as AnalysisLifecycleStatus, shouldReprocess: true };
+
+  const podeManterValidacaoDuranteAtualizacao = laudoConcluidoPodePermanecerAtivo(row);
+
+  if (!decision.isCurrent && podeManterValidacaoDuranteAtualizacao) {
+    // Versões anteriores zeravam `satisfaz_requisito` na coluna de ciclo de
+    // vida assim que detectavam um bump global, antes de existir uma nova
+    // leitura. Para não transformar esse efeito colateral em perda permanente
+    // de validação, a verdade documental original do próprio laudo tem
+    // precedência quando ela estiver explicitamente registrada. Um documento
+    // realmente incompatível continua trazendo `false` no resultado e nunca é
+    // promovido por esta compatibilidade.
+    const satisfazPersistidoNoLaudo = typeof (resultado as any)?.dados_extraidos?.satisfaz_requisito === 'boolean'
+      ? (resultado as any).dados_extraidos.satisfaz_requisito
+      : typeof (resultado as any)?.satisfaz_requisito === 'boolean'
+        ? (resultado as any).satisfaz_requisito
+        : row?.satisfaz_requisito;
+    return {
+      ...(resultado as AnaliseDocumentalResult),
+      analysis_status: 'ATIVO',
+      analysis_signature: row?.analysis_signature || null,
+      classifier_version: row?.classifier_version || null,
+      extractor_version: row?.extractor_version || null,
+      rule_version: row?.rule_version || null,
+      schema_version: row?.schema_version || null,
+      satisfaz_requisito: satisfazPersistidoNoLaudo,
+      atualizacao_em_segundo_plano_pendente: temVersionamento === true && decision.shouldReprocess === true,
+      versao_legada_sem_assinatura: temVersionamento !== true,
+    } as AnaliseDocumentalResult;
+  }
 
   if (!decision.isCurrent) {
     if (temVersionamento && row?.id) {
@@ -1581,6 +1616,25 @@ export async function persistirAnaliseEspecializada(
         ],
   );
   await persistirMetadadosExtracaoCatalogada(extracao.id, resultado);
+  if (versionado) {
+    // Só depois de a nova leitura ter sido persistida como ATIVO aposentamos
+    // as conclusões anteriores. Falha de releitura nunca apaga a última
+    // validação bem-sucedida.
+    await pool.query(
+      `UPDATE public.documentos_extracoes_ia
+          SET analysis_status = 'SUPERSEDED',
+              superseded_at = COALESCE(superseded_at, NOW()),
+              satisfaz_requisito = FALSE
+        WHERE arquivo_id = $1
+          AND prompt_codigo = $2
+          AND id <> $3
+          AND status IN ('concluido', 'revisao_humana')
+          AND COALESCE(analysis_status, 'ATIVO') NOT IN ('SUPERSEDED', 'STALE')`,
+      [arquivoId, promptCodigo, extracao.id],
+    ).catch((error: any) => {
+      console.warn('[Dossiê] Nova análise foi persistida, mas não foi possível superseder laudos anteriores:', error?.message || error);
+    });
+  }
 }
 
 async function persistirFalhaAnaliseEspecializada(
@@ -4062,6 +4116,10 @@ async function registrarExtracaoEspecializada(params: {
         && Number.isFinite(atualizadoEm)
         && Date.now() - atualizadoEm < 5 * 60 * 1000;
       const emAndamento = mesmaVersao && (statusAtual === 'processando' || pendenteRecente);
+      const tentativaMesmaAssinatura = versionado
+        && mesmaVersao
+        && String(atual.analysis_signature || '') === expectedSignature
+        && ['pendente', 'processando', 'falhou'].includes(statusAtual);
       const laudoAtual = versionado
         && mesmaVersao
         && ['concluido', 'revisao_humana'].includes(statusAtual)
@@ -4069,19 +4127,11 @@ async function registrarExtracaoEspecializada(params: {
         && atual.analysis_signature === expectedSignature;
       deveProcessar = !(emAndamento || laudoAtual);
 
-      if (emAndamento || laudoAtual) {
+      if (emAndamento || laudoAtual || tentativaMesmaAssinatura) {
         extracao = atual;
       } else if (versionado) {
-        if (atual.id) {
-          await client.query(
-            `UPDATE public.documentos_extracoes_ia
-                SET analysis_status = CASE WHEN status IN ('concluido', 'revisao_humana') THEN 'SUPERSEDED' ELSE 'REANALISE_NECESSARIA' END,
-                    superseded_at = CASE WHEN status IN ('concluido', 'revisao_humana') THEN NOW() ELSE superseded_at END,
-                    satisfaz_requisito = FALSE
-              WHERE id = $1`,
-            [atual.id],
-          );
-        }
+        // A versão nova nasce em paralelo. A conclusão anterior só é
+        // superseded depois que esta tentativa finalizar com sucesso.
         const inserida = await client.query(
           `INSERT INTO public.documentos_extracoes_ia
             (arquivo_id, entidade_bloco_id, status, prompt_codigo, prompt_versao, resultado, campos_extraidos, pendencias, erros, analysis_signature, classifier_version, extractor_version, rule_version, schema_version, analysis_status, satisfaz_requisito)
@@ -4091,21 +4141,34 @@ async function registrarExtracaoEspecializada(params: {
         );
         extracao = inserida.rows[0];
       } else {
-        const atualizada = await client.query(
-          `UPDATE public.documentos_extracoes_ia
-              SET entidade_bloco_id = COALESCE($2, entidade_bloco_id),
-                  status = 'pendente',
-                  prompt_versao = $3,
-                  resultado = '{}'::jsonb,
-                  campos_extraidos = '{}'::jsonb,
-                  pendencias = '[]'::jsonb,
-                  erros = '[]'::jsonb,
-                  processado_em = NULL
-            WHERE id = $1
-            RETURNING *`,
-          [atual.id, params.blocoEntidadeId, versaoEsperada],
-        );
-        extracao = atualizada.rows[0] || { ...atual, status: 'pendente', prompt_versao: versaoEsperada };
+        if (['concluido', 'revisao_humana'].includes(statusAtual)) {
+          // Banco legado sem colunas de versionamento: não zerar a única
+          // conclusão existente. A releitura usa nova linha.
+          const inserida = await client.query(
+            `INSERT INTO public.documentos_extracoes_ia
+              (arquivo_id, entidade_bloco_id, status, prompt_codigo, prompt_versao, resultado, campos_extraidos, pendencias, erros)
+             VALUES ($1,$2,'pendente',$3,$4,'{}'::jsonb,'{}'::jsonb,'[]'::jsonb,'[]'::jsonb)
+             RETURNING *`,
+            [params.arquivoId, params.blocoEntidadeId, params.promptCodigo, versaoEsperada],
+          );
+          extracao = inserida.rows[0];
+        } else {
+          const atualizada = await client.query(
+            `UPDATE public.documentos_extracoes_ia
+                SET entidade_bloco_id = COALESCE($2, entidade_bloco_id),
+                    status = 'pendente',
+                    prompt_versao = $3,
+                    resultado = '{}'::jsonb,
+                    campos_extraidos = '{}'::jsonb,
+                    pendencias = '[]'::jsonb,
+                    erros = '[]'::jsonb,
+                    processado_em = NULL
+              WHERE id = $1
+              RETURNING *`,
+            [atual.id, params.blocoEntidadeId, versaoEsperada],
+          );
+          extracao = atualizada.rows[0] || { ...atual, status: 'pendente', prompt_versao: versaoEsperada };
+        }
       }
     } else {
       const insertVersioned = versionado ? `, analysis_signature, classifier_version, extractor_version, rule_version, schema_version, analysis_status, satisfaz_requisito` : '';
