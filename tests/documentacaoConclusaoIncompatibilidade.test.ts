@@ -230,13 +230,12 @@ describe('montarResultadoDetalhadoRelatorio -- conclusão e selo visual de docum
     expect(estado).toBe('aprovado');
     expect(rotuloEstadoDocumento(estado)).toBe('Requisito satisfeito');
 
-    // Contraste explícito com o teste anterior: quando o documento CORRETO é
-    // o que está anexado, os dados lidos (regime tributário, neste caso)
-    // continuam aparecendo normalmente -- a supressão de dados é exclusiva
-    // do caso "documento errado no slot", nunca do caso "documento certo".
+    // Quando o documento CORRETO está anexado, a camada visual mostra apenas
+    // a confirmação necessária para o requisito -- aqui, o regime declarado
+    // no ECF -- sem reproduzir os demais campos extraídos.
     const secoes = construirSecoesAnaliseDocumento(item.resultado_analise, item);
     const secaoCampos = secoes.find((s: any) => s.id === 'campos');
     expect(secaoCampos).toBeTruthy();
-    expect(secaoCampos!.campos?.some((c: any) => c.label === 'Regime tributário declarado no documento' && c.valor === 'Lucro Presumido')).toBe(true);
+    expect(secaoCampos!.campos?.some((c: any) => c.label === 'Regime' && c.valor === 'Lucro Presumido')).toBe(true);
   });
 });
