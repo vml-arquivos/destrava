@@ -3,7 +3,7 @@ import { normalizeText, onlyDigits } from '../utils/helpers';
 import { Router, Request, Response } from 'express';
 import pkg from 'pg';
 import { auth } from '../middleware/auth';
-import { analisarCnpjReceitaCartaoEmpresa, buscarUltimaAnaliseCnpjEmpresa, limparAnalisesCnpjEmpresa } from '../services/analiseCnpjReceitaCartao';
+import { alertaCnpjBloqueiaValidacaoDocumental, analisarCnpjReceitaCartaoEmpresa, buscarUltimaAnaliseCnpjEmpresa, limparAnalisesCnpjEmpresa } from '../services/analiseCnpjReceitaCartao';
 import { deveReprocessarCartaoCnpjAutomaticamente, cooldownRetentativaAutomaticaMinutos } from '../utils/retentativaAutomaticaAnaliseDocumental';
 import { analiseDocumentalService, type AnaliseDocumentalResult, type TipoAnaliseDocumental } from '../services/analiseDocumentalEspecializada';
 import { calcularCadeiaComprovacaoSocietaria } from '../services/cadeiaSocietariaService';
@@ -2379,16 +2379,10 @@ export async function avaliarProntidaoIdentidadeCnpj(params: {
     ...(Array.isArray(resultadoCnpj?.alertas) ? resultadoCnpj.alertas : []),
     ...(Array.isArray(resultadoCnpj?.divergencias) ? resultadoCnpj.divergencias : []),
   ];
-  // Alguns códigos de alerta são sinais de risco de negócio (ex.: empresa recém-aberta),
-  // não uma divergência entre o Cartão CNPJ anexado e os dados da Receita Federal. Eles já
-  // são exibidos corretamente em "avisos estratégicos" (ver empresaApta12Meses acima) e não
-  // devem fazer o Cartão CNPJ ser rotulado como "divergente da Receita", que é uma mensagem
-  // sobre o documento em si, não sobre o risco cadastral da empresa.
-  const CODIGOS_ALERTA_RISCO_NAO_DIVERGENCIA_CARTAO = new Set(['empresa_menos_12_meses']);
-  const cnpjTemDivergenciaGrave = alertasCnpj.some((item: any) => (
-    !CODIGOS_ALERTA_RISCO_NAO_DIVERGENCIA_CARTAO.has(String(item?.codigo || ''))
-    && (['alta', 'critica'].includes(String(item?.severidade || '').toLowerCase()) || item?.divergente === true)
-  ));
+  // Usa a mesma semântica do serviço de CNPJ: risco estratégico e ausência
+  // da data de emissão não viram "divergência documental". Só identidade,
+  // situação impeditiva, vencimento conhecido e divergência real bloqueiam.
+  const cnpjTemDivergenciaGrave = alertasCnpj.some((item: any) => alertaCnpjBloqueiaValidacaoDocumental(item));
   const cartaoAnexado = params.docsCartao.length > 0 || analiseCnpj?.cartao_anexado === true;
   const cartaoAnalisado = !!analiseCnpj && analiseCnpj?.cartao_anexado === true && analiseCnpj?.cartao_pendente_ocr !== true;
   const cartaoConsistente = cartaoAnexado && cartaoAnalisado && !cnpjTemDivergenciaGrave;
@@ -2514,7 +2508,7 @@ export async function avaliarProntidaoIdentidadeCnpj(params: {
     if (!analisado) return 'aguardando_analise';
     return 'divergente';
   };
-  const cartaoPendencia = alertasCnpj.find((item: any) => ['critica', 'alta'].includes(String(item?.severidade || '').toLowerCase())) || alertasCnpj[0];
+  const cartaoPendencia = alertasCnpj.find((item: any) => alertaCnpjBloqueiaValidacaoDocumental(item)) || null;
   const qsaPendencia = primeiraPendencia(params.qsaPendencias);
   const enquadramentoPendencia = primeiraPendencia(params.enquadramentoPendencias);
   const qsaSocios = Array.isArray(params.qsaDados?.socios) ? params.qsaDados.socios : [];
@@ -2535,10 +2529,11 @@ export async function avaliarProntidaoIdentidadeCnpj(params: {
     cartao_cnpj: {
       codigo: 'cartao_cnpj', nome: 'Cartão CNPJ', anexado: cartaoAnexado, analisado: cartaoAnalisado, consistente: cartaoConsistente,
       status: statusDocumento(cartaoAnexado, cartaoAnalisado, cartaoConsistente, cartaoFalhou),
-      diagnostico: cartaoConsistente ? 'CNPJ validado: situação cadastral, unidade e localização conferidas.' : params.erroProcessamentoCartao || cartaoPendencia?.mensagem || (cartaoAnexado ? 'Documento anexado; a leitura automática ainda precisa ser concluída.' : 'Documento não anexado.'),
+      diagnostico: cartaoConsistente ? 'CNPJ validado: razão social, situação cadastral, unidade e localização conferidas.' : params.erroProcessamentoCartao || cartaoPendencia?.mensagem || (cartaoAnexado ? 'Documento anexado; a leitura automática ainda precisa ser concluída.' : 'Documento não anexado.'),
       fonte: camposCartao?.fonte_extracao || analiseCnpj?.fonte_receita || null, confianca: camposCartao?.confianca ?? null,
       campos_principais: {
         cnpj: camposCartao?.cnpj || camposReceita?.cnpj || params.empresa?.cnpj || null,
+        razao_social: camposCartao?.nome_empresarial || camposReceita?.nome_empresarial || params.empresa?.razao_social || null,
         situacao_cadastral: camposCartao?.situacao_cadastral || camposReceita?.situacao_cadastral || params.empresa?.situacao_cadastral || null,
         matriz_filial: camposCartao?.matriz_filial || null,
         localizacao: [camposCartao?.municipio, camposCartao?.uf].filter(Boolean).join(' / ') || null,
