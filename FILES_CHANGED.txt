@@ -909,3 +909,44 @@ SHA256SUMS.txt
 Total desta rodada: 2 arquivos de código alterados + 1 arquivo de
 teste ampliado (3 testes novos) + 7 arquivos de documentação
 alterados = 10 arquivos.
+
+======================================================================
+Rodada 35 (esta entrega, 05/09/2026) -- causa raiz de "análise
+pendente"/"Reanálise necessária" persistente: o scheduler nunca
+enfileirava sozinho a primeira análise de documentos antigos cobertos
+por um bump de catálogo/versão (ex.: "Continuidade 05/09/2026")
+======================================================================
+
+Arquivos existentes ALTERADOS nesta rodada:
+
+server/services/automation/scheduler.ts   (nova constante LOTE_ENFILEIRAMENTO_BACKFILL; executarRetryDocumental() agora chama backfillLaudosService.enqueue() antes de enqueueDueRetries()/run(), protegida pela mesma trava de reentrância já existente; console.log final do scheduler atualizado)
+.env.example   (nova variável DOCUMENT_ANALYSIS_BACKFILL_ENQUEUE_BATCH, com comentário explicativo)
+
+Arquivos de teste NOVOS ou AMPLIADOS:
+
+tests/schedulerBackfillDocumental.test.ts   (novo arquivo, 2 testes -- ordem de chamada enqueue()/enqueueDueRetries()/run() e limite de lote finito; trava de reentrância impede chamada dupla de enqueue())
+
+Arquivos de documentação ALTERADOS nesta rodada:
+
+CHANGELOG_CORRECOES.md
+PENDENCIAS_REAIS.md
+ROLLBACK_PLAN.md
+TEST_REPORT.md
+BUILD_REPORT.md
+FILES_CHANGED.txt (este arquivo)
+SHA256SUMS.txt
+
+Total desta rodada: 2 arquivos de código alterados + 1 arquivo de
+teste novo (2 testes) + 7 arquivos de documentação alterados = 10
+arquivos.
+
+Nota sobre SHA256SUMS.txt: ao regenerar os hashes desta rodada, foi
+constatado que `server/services/automation/scheduler.ts` -- alterado
+nesta própria rodada -- nunca tinha uma entrada em SHA256SUMS.txt em
+nenhuma rodada anterior (o mesmo tipo de lacuna documentada no aviso
+sobre a Rodada 7, no início deste arquivo; nenhum outro arquivo de
+`server/services/automation/` tem entrada nele até hoje). A entrada
+foi adicionada agora, com o hash do arquivo já corrigido -- sem alterar
+retroativamente nenhuma rodada anterior. Total de entradas em
+SHA256SUMS.txt: 94 → 95 (uma entrada nova de teste desta rodada +
+uma entrada retroativa desta lacuna).
