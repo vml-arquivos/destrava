@@ -985,6 +985,40 @@ export default function DocumentosEntidade({
     }
   }, [entidadeId, query, entidadeTipo, empresaId]);
 
+  // Rodada 37: além do scheduler do backend, a própria tela garante a
+  // convergência imediata dos documentos já anexados que ainda não possuem
+  // laudo. Isso cobre acervos anteriores ao deploy e documentos cuja leitura
+  // automática foi iniciada em segundo plano mas ainda não apareceu na UI.
+  // A chamada é idempotente: primeiro consulta o status; só cria leitura nova
+  // quando realmente não existe uma em andamento/concluída.
+  useEffect(() => {
+    if (loading || !entidadeId || !docs.length) return;
+    const timer = window.setTimeout(() => {
+      const temAtosJunta = docs.some((doc) => doc.tipo_documento === "atos_junta_comercial" && doc.arquivo_disponivel !== false);
+      const pendentes = docs.filter((doc) => {
+        if (!tipoDocumentoTemLeituraAutomatica(doc.tipo_documento)) return false;
+        if (TIPOS_GATILHO_ANALISE_IDENTIDADE.has(doc.tipo_documento)) return false;
+        if (documentoTemResultadoDeLeitura(doc)) return false;
+        if (doc.arquivo_disponivel === false) return false;
+        if (leiturasAutomaticasSolicitadasRef.current.has(doc.id)) return false;
+        if (["contrato_social", "alteracao_contratual"].includes(doc.tipo_documento) && !temAtosJunta) return false;
+        return true;
+      }).slice(0, 3);
+
+      if (!pendentes.length) return;
+      pendentes.forEach((doc) => leiturasAutomaticasSolicitadasRef.current.add(doc.id));
+      void Promise.allSettled(
+        pendentes.map((doc) => solicitarLeituraDocumento(doc, {
+          silencioso: true,
+          forcar: false,
+          somenteSeNecessario: true,
+          recarregar: false,
+        })),
+      ).then(() => carregar());
+    }, 1500);
+    return () => window.clearTimeout(timer);
+  }, [docs, loading, entidadeId, carregar]);
+
   // Dispara a análise da Etapa 1 (Cartão CNPJ + QSA + Enquadramento Tributário) e
   // faz o mesmo polling já usado em DossieCreditoEmpresa.tsx (recalcular) -- só
   // que agora direto nesta tela: o botão "Iniciar análise documental" não navega
@@ -1526,31 +1560,69 @@ export default function DocumentosEntidade({
     }
   }
 
-  // CORREÇÃO (2026-08-31): força uma nova leitura de um documento JÁ
-  // anexado e já analisado -- necessário sempre que o motor de análise for
-  // corrigido/atualizado depois que o arquivo já tinha sido lido pela
-  // versão antiga (o laudo antigo, errado, nunca se atualiza sozinho). O
-  // processamento roda em segundo plano no servidor (`setImmediate`), então
-  // aguarda alguns segundos antes de recarregar a lista para dar tempo do
-  // novo resultado ser persistido; se ainda não tiver terminado, o
-  // resultado antigo aparece por mais alguns segundos até o usuário abrir
-  // "Dados da análise" de novo ou recarregar a página.
-  async function reanalisar(doc: DocumentoArquivo) {
-    setReanalisandoId(doc.id);
+  async function aguardarConclusaoLeitura(documentoId: string, recarregar = true) {
+    let ultimoStatus: any = null;
+    for (let tentativa = 0; tentativa < 30; tentativa += 1) {
+      ultimoStatus = await apiFetch(`/api/documentacao/ia/documentos/${documentoId}/status`).catch(() => null);
+      if (ultimoStatus?.concluido === true || ultimoStatus?.falhou === true) break;
+      await new Promise((resolve) => window.setTimeout(resolve, 1500));
+    }
+    if (recarregar) await carregar();
+    return ultimoStatus;
+  }
+
+  async function solicitarLeituraDocumento(
+    doc: DocumentoArquivo,
+    opcoes: { silencioso?: boolean; forcar?: boolean; somenteSeNecessario?: boolean; recarregar?: boolean } = {},
+  ) {
+    const silencioso = opcoes.silencioso === true;
+    const recarregar = opcoes.recarregar !== false;
+    if (!silencioso) setReanalisandoId(doc.id);
     try {
-      await apiFetch(`/api/documentacao/ia/documentos/${doc.id}/extrair`, { method: "POST", body: JSON.stringify({}) });
-      toast.success("Nova leitura solicitada. Atualizando em instantes...");
-      setTimeout(() => { void carregar(); }, 4000);
+      if (opcoes.somenteSeNecessario) {
+        const atual = await apiFetch(`/api/documentacao/ia/documentos/${doc.id}/status`).catch(() => null);
+        if (atual?.concluido === true) {
+          if (recarregar) await carregar();
+          return atual;
+        }
+        if (atual?.processando === true) {
+          return await aguardarConclusaoLeitura(doc.id, recarregar);
+        }
+      }
+
+      const resposta = await apiFetch(`/api/documentacao/ia/documentos/${doc.id}/extrair`, {
+        method: "POST",
+        body: JSON.stringify({ forcar: opcoes.forcar === true }),
+      });
+
+      // Contrato/Alteração usa cross-check síncrono contra Atos da Junta.
+      if (resposta?.analise) {
+        if (recarregar) await carregar();
+        if (!silencioso) toast.success("Nova leitura concluída.");
+        return { concluido: true, resultado: resposta.analise };
+      }
+
+      const final = await aguardarConclusaoLeitura(doc.id, recarregar);
+      if (!silencioso) {
+        if (final?.falhou) toast.error("A leitura foi executada, mas precisa de revisão. Veja o diagnóstico no documento.");
+        else if (final?.concluido) toast.success("Nova leitura concluída.");
+        else toast.info("A leitura continua em processamento e será atualizada automaticamente.");
+      }
+      return final;
     } catch (err: any) {
       const mensagem = String(err?.message || "");
-      if (/ainda não implementado/i.test(mensagem)) {
-        toast.info("Este tipo de documento não tem reprocessamento automático disponível ainda.");
-      } else {
-        toast.error(mensagem || "Erro ao solicitar nova leitura do documento.");
-      }
+      if (!silencioso) toast.error(mensagem || "Erro ao solicitar leitura do documento.");
+      return null;
     } finally {
-      setReanalisandoId((prev) => (prev === doc.id ? null : prev));
+      if (!silencioso) setReanalisandoId((prev) => (prev === doc.id ? null : prev));
     }
+  }
+
+  // O clique manual é uma releitura REAL, mesmo quando o laudo atual já está
+  // válido e usa a mesma versão do motor. O backend recebe `forcar=true` e
+  // cria uma nova tentativa sem apagar a conclusão anterior.
+  async function reanalisar(doc: DocumentoArquivo) {
+    await solicitarLeituraDocumento(doc, { forcar: true, silencioso: false, recarregar: true });
   }
 
   function marcarDocs(lista: DocumentoArquivo[], valor: boolean) {
