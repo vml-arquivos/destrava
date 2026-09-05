@@ -20,7 +20,7 @@ describe('análise inline no Acervo Documental', () => {
   });
   it('oferece Ler/Reler para todo documento analisável, inclusive antes do primeiro laudo', () => {
     expect(acervo).toContain('tipoDocumentoTemLeituraAutomatica(doc.tipo_documento)');
-    expect(acervo).toContain('temResultadoInline ? "Reler" : "Ler"');
+    expect(acervo).toContain('temLeituraReal ? "Reler" : "Ler"');
     expect(acervo).toContain('somenteSeNecessario: true');
     expect(acervo).toContain('/api/documentacao/ia/documentos/${doc.id}/status');
   });
