@@ -639,16 +639,67 @@ router.get('/', auth, async (req: Request, res: Response) => {
       }
     }
 
+    // Rodada 38: a lista do Acervo já devolve o último laudo persistido em
+    // uma única consulta. Antes a UI precisava aguardar /dossie para recuperar
+    // os dados detalhados de cada arquivo, tornando a primeira pintura lenta e
+    // fazendo CNPJ/Atos "sumirem" enquanto o dossiê era reconstruído.
+    const [temExtracoesIa, temAnalisesCnpj] = await Promise.all([
+      tableExists('documentos_extracoes_ia'),
+      tableExists('analises_cnpj_empresa'),
+    ]);
+    const selectExtracao = temExtracoesIa
+      ? `, extracao_persistida.resultado AS resultado_analise_persistida,
+           extracao_persistida.status AS resultado_analise_status_persistido`
+      : `, NULL::jsonb AS resultado_analise_persistida, NULL::text AS resultado_analise_status_persistido`;
+    const joinExtracao = temExtracoesIa
+      ? `LEFT JOIN LATERAL (
+           SELECT e.resultado, e.status
+             FROM public.documentos_extracoes_ia e
+            WHERE e.arquivo_id = docs.id
+            ORDER BY CASE WHEN e.status IN ('concluido','revisao_humana') THEN 0 WHEN e.status='falhou' THEN 1 ELSE 2 END,
+                     e.processado_em DESC NULLS LAST,
+                     e.criado_em DESC
+            LIMIT 1
+         ) extracao_persistida ON TRUE`
+      : '';
+    const selectCnpj = temAnalisesCnpj
+      ? `, analise_cnpj.resultado AS resultado_cnpj_persistido,
+           analise_cnpj.status AS resultado_cnpj_status_persistido,
+           analise_cnpj.campos_cartao AS campos_cartao_persistidos,
+           analise_cnpj.alertas AS alertas_cnpj_persistidos,
+           analise_cnpj.diagnostico AS diagnostico_cnpj_persistido`
+      : `, NULL::jsonb AS resultado_cnpj_persistido,
+           NULL::text AS resultado_cnpj_status_persistido,
+           NULL::jsonb AS campos_cartao_persistidos,
+           NULL::jsonb AS alertas_cnpj_persistidos,
+           NULL::text AS diagnostico_cnpj_persistido`;
+    const joinCnpj = temAnalisesCnpj
+      ? `LEFT JOIN LATERAL (
+           SELECT a.resultado, a.status, a.campos_cartao, a.alertas, a.diagnostico
+             FROM public.analises_cnpj_empresa a
+            WHERE a.cartao_cnpj_arquivo_id = docs.id
+            ORDER BY CASE WHEN a.status IN ('concluida','revisao_humana') THEN 0 ELSE 1 END,
+                     a.criado_em DESC
+            LIMIT 1
+         ) analise_cnpj ON docs.tipo_documento IN ('cartao_cnpj','cnpj_cartao')`
+      : '';
+
     const { rows } = await pool.query(
-      `SELECT id, entidade_tipo, entidade_id, empresa_id, cliente_pf_id, lead_id, socio_id, contrato_id, simulacao_id,
-              tipo_documento, nome_original, nome_arquivo, caminho_arquivo, url_arquivo, mime_type, tamanho_bytes, hash_arquivo,
-              status, origem, obrigatorio, validado, validado_por, validado_em, observacoes, metadados,
-              data_emissao_documento, data_validade_documento, validade_dias, status_validade, exige_revisao_humana,
-              nome_customizado, resultado_validacao, ultima_extracao_ia_id, ultima_indexacao_rag_id,
-              criado_por, criado_em, atualizado_em, excluido_em
-         FROM public.documentos_arquivos
-        WHERE ${where.join(' AND ')}
-        ORDER BY criado_em DESC`,
+      `WITH docs AS (
+         SELECT id, entidade_tipo, entidade_id, empresa_id, cliente_pf_id, lead_id, socio_id, contrato_id, simulacao_id,
+                tipo_documento, nome_original, nome_arquivo, caminho_arquivo, url_arquivo, mime_type, tamanho_bytes, hash_arquivo,
+                status, origem, obrigatorio, validado, validado_por, validado_em, observacoes, metadados,
+                data_emissao_documento, data_validade_documento, validade_dias, status_validade, exige_revisao_humana,
+                nome_customizado, resultado_validacao, ultima_extracao_ia_id, ultima_indexacao_rag_id,
+                criado_por, criado_em, atualizado_em, excluido_em
+           FROM public.documentos_arquivos
+          WHERE ${where.join(' AND ')}
+       )
+       SELECT docs.*${selectExtracao}${selectCnpj}
+         FROM docs
+         ${joinExtracao}
+         ${joinCnpj}
+        ORDER BY docs.criado_em DESC`,
       values
     );
     const rowsWithStorage = rows.map((doc: any) => {
@@ -659,9 +710,46 @@ router.get('/', auth, async (req: Request, res: Response) => {
           [resolved.relativePath, doc.id],
         ).catch((err: any) => console.warn('[documentos] Não foi possível normalizar caminho no list:', err?.message || err));
       }
-      const { caminho_arquivo, ...safeDoc } = doc;
+      const {
+        caminho_arquivo,
+        resultado_analise_persistida,
+        resultado_analise_status_persistido,
+        resultado_cnpj_persistido,
+        resultado_cnpj_status_persistido,
+        campos_cartao_persistidos,
+        alertas_cnpj_persistidos,
+        diagnostico_cnpj_persistido,
+        ...safeDoc
+      } = doc;
+      const validacao = safeJson(doc.resultado_validacao);
+      const laudoDoArquivo = validacao.analise_regra_documental && typeof validacao.analise_regra_documental === 'object'
+        ? validacao.analise_regra_documental
+        : null;
+      const laudoExtracao = resultado_analise_persistida && typeof resultado_analise_persistida === 'object'
+        && Object.keys(resultado_analise_persistida).length
+        ? resultado_analise_persistida
+        : null;
+      const laudoCnpjLegado = resultado_cnpj_persistido && typeof resultado_cnpj_persistido === 'object'
+        ? {
+            arquivo_id: doc.id,
+            empresa_id: doc.empresa_id || doc.entidade_id,
+            tipo_analise: 'cartao_cnpj',
+            status: resultado_cnpj_status_persistido === 'concluida' ? 'concluido' : 'revisao_humana',
+            revisao_humana_necessaria: resultado_cnpj_status_persistido !== 'concluida',
+            dados_extraidos: {
+              ...(resultado_cnpj_persistido.campos_cartao || campos_cartao_persistidos || {}),
+              documento_compativel: true,
+            },
+            alertas: resultado_cnpj_persistido.alertas || alertas_cnpj_persistidos || [],
+            diagnostico: resultado_cnpj_persistido.diagnostico || diagnostico_cnpj_persistido || null,
+            fonte_extracao: 'persistida',
+          }
+        : null;
+      const resultadoAnalise = laudoExtracao || laudoDoArquivo || laudoCnpjLegado || null;
       return {
         ...safeDoc,
+        resultado_analise: resultadoAnalise,
+        analisado: Boolean(resultadoAnalise && ['concluido','revisao_humana','falhou'].includes(String(resultadoAnalise.status || resultado_analise_status_persistido || '').toLowerCase())),
         arquivo_disponivel: Boolean(resolved.absolutePath),
         arquivo_relativo: resolved.relativePath || null,
         armazenamento_mensagem: resolved.absolutePath
