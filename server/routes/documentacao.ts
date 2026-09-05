@@ -4240,8 +4240,10 @@ router.get('/ia/documentos/:documentoId/status', auth, async (req: Request, res:
 
     let extracao: any = null;
     if (promptCodigo && await tableExists('documentos_extracoes_ia')) {
+      const temLifecycle = await columnExists('documentos_extracoes_ia', 'analysis_status');
+      const lifecycleSelect = temLifecycle ? ', analysis_status' : '';
       const { rows } = await pool.query(
-        `SELECT id, status, analysis_status, resultado, erros, pendencias, processado_em, atualizado_em, criado_em
+        `SELECT id, status${lifecycleSelect}, resultado, erros, pendencias, processado_em, atualizado_em, criado_em
            FROM public.documentos_extracoes_ia
           WHERE arquivo_id = $1
             AND prompt_codigo = $2
