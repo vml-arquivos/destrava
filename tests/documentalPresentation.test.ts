@@ -56,7 +56,7 @@ describe("construirSecoesAnaliseDocumento", () => {
     expect(resumo?.texto).toContain("Marcos Henrique Soares Pio");
     expect(resumo?.texto).toContain("Jonnathas Rodrigues Pires");
     expect(resumo?.campos?.find((c) => c.label === "Última alteração em")?.valor).toBe("06/06/2025");
-    expect(resumo?.campos?.find((c) => c.label === "Completa 12 meses de histórico")?.valor).toMatch(/^(Sim|Não)/);
+    expect(resumo?.campos?.find((c) => c.label === "Janela societária de 12 meses")?.valor).toBe("Atendida pela última alteração");
 
     // O texto jurídico completo, o checklist técnico e a evidência literal
     // continuam existindo -- só que marcados como colapsavel (escondidos por
@@ -184,6 +184,71 @@ describe("construirSecoesAnaliseDocumento", () => {
 
     expect(secoes.map((secao) => secao.id)).toEqual(["resultado", "resumo_alteracao", "transacoes", "evidencias"]);
     expect(JSON.stringify(secoes)).not.toContain("titular_atual");
+  });
+
+  it("pede alteração anterior quando a última alteração tem menos de 12 meses", () => {
+    const recente = new Date();
+    recente.setUTCMonth(recente.getUTCMonth() - 4);
+    const dataRecente = recente.toISOString().slice(0, 10);
+    const secoes = construirSecoesAnaliseDocumento({
+      conclusao: "Leitura concluída.",
+      data_registro: dataRecente,
+      alteracoes_societarias: [{ tipo_alteracao: "alteracao_contratual", data: dataRecente }],
+      quadro_societario_final: [{ nome: "Sócio Atual" }],
+      analise_societaria_auditavel: { status_documento: "atual" },
+    }, { nome: "Alteração recente" });
+
+    const resumo = secoes.find((secao) => secao.id === "resumo_alteracao");
+    expect(resumo?.campos?.find((campo) => campo.label === "Janela societária de 12 meses")?.valor)
+      .toContain("validar também a alteração/contrato anterior");
+  });
+
+  it("mostra NIRE, última e penúltima alteração dos Atos da Junta a partir do laudo persistido", () => {
+    const secoes = construirSecoesAnaliseDocumento({
+      conclusao: "Leitura concluída.",
+      tipo_documento: "atos_junta_comercial",
+      status: "concluido",
+      dados_extraidos: {
+        nire: "52206183723",
+        total_alteracoes_historico: 2,
+        historico_arquivamentos: [
+          { numero: "20231507946", data: "2023-08-30", tipo_ato: "CONTRATO" },
+          { numero: "20244323909", data: "2025-03-27", tipo_ato: "ALTERAÇÃO" },
+          { numero: "20251505987", data: "2025-06-06", tipo_ato: "ALTERAÇÃO" },
+        ],
+      },
+    }, { tipo_documento: "atos_junta_comercial", nome: "Atos da Junta Comercial" });
+
+    const campos = secoes.flatMap((secao) => secao.campos || []);
+    expect(campos).toContainEqual({ label: "NIRE", valor: "52206183723" });
+    expect(campos).toContainEqual({ label: "Última alteração", valor: "2025-06-06" });
+    expect(campos).toContainEqual({ label: "Arquivamento da última alteração", valor: "20251505987" });
+    expect(campos).toContainEqual({ label: "Penúltima alteração", valor: "2025-03-27" });
+    expect(campos).toContainEqual({ label: "Arquivamento da penúltima", valor: "20244323909" });
+  });
+
+  it("mostra os dados persistidos do Cartão CNPJ sem depender do dossiê completo", () => {
+    const secoes = construirSecoesAnaliseDocumento({
+      conclusao: "Leitura concluída.",
+      tipo_documento: "cartao_cnpj",
+      status: "concluido",
+      dados_extraidos: {
+        cnpj: "52.008.368/0001-03",
+        razao_social: "PALUMA BURGER LTDA",
+        nome_fantasia: "Paluma Burger",
+        data_abertura: "2023-08-30",
+        cnae_principal: "5611-2/01",
+        natureza_juridica: "206-2",
+        porte: "ME",
+        situacao_cadastral: "ATIVA",
+      },
+    }, { tipo_documento: "cartao_cnpj", nome: "Cartão CNPJ" });
+
+    const serializado = JSON.stringify(secoes);
+    expect(serializado).toContain("52.008.368/0001-03");
+    expect(serializado).toContain("PALUMA BURGER LTDA");
+    expect(serializado).toContain("ATIVA");
+    expect(serializado).toContain("2023-08-30");
   });
 
   it("mantém resultado e diagnóstico para documentos sem leitura societária", () => {
