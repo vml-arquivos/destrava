@@ -1000,10 +1000,18 @@ export default function DocumentosEntidade({
       const pendentes = docs.filter((doc) => {
         if (!tipoDocumentoTemLeituraAutomatica(doc.tipo_documento)) return false;
         if (TIPOS_GATILHO_ANALISE_IDENTIDADE.has(doc.tipo_documento)) return false;
-        if (documentoTemResultadoDeLeitura(doc)) return false;
+        const exigeCrosscheckSocietario = ["contrato_social", "alteracao_contratual"].includes(doc.tipo_documento);
+        if (exigeCrosscheckSocietario) {
+          // Um laudo genérico do contrato não substitui o confronto com Atos da
+          // Junta. Só paramos quando o dossiê marcou este arquivo como analisado
+          // pela cadeia societária.
+          if (doc.analisado === true) return false;
+          if (!temAtosJunta) return false;
+        } else if (documentoTemResultadoDeLeitura(doc)) {
+          return false;
+        }
         if (doc.arquivo_disponivel === false) return false;
         if (leiturasAutomaticasSolicitadasRef.current.has(doc.id)) return false;
-        if (["contrato_social", "alteracao_contratual"].includes(doc.tipo_documento) && !temAtosJunta) return false;
         return true;
       }).slice(0, 3);
 
