@@ -508,6 +508,22 @@ export async function enriquecerDocumentosAcervoComAnalise(blocos: any[]): Promi
       analisado,
       consistente,
     }, analiseEspecializada);
+    if (analiseEspecializada && !laudoStale) {
+      // Rodada 36: o Acervo também precisa carregar o estado de ciclo de vida
+      // do laudo que buscarAnaliseEspecializadaPersistida já decidiu manter
+      // ATIVO durante uma atualização de motor. Sem esta propagação, a
+      // validação permanecia correta no backend, mas o DTO visual perdia
+      // analysis_status/atualizacao_em_segundo_plano_pendente e podia voltar a
+      // parecer "aguardando" em consumidores que leem resultado_analise.
+      (resultadoAnalise as any).analysis_status = analiseEspecializada.analysis_status || 'ATIVO';
+      (resultadoAnalise as any).satisfaz_requisito = analiseEspecializada.satisfaz_requisito;
+      (resultadoAnalise as any).atualizacao_em_segundo_plano_pendente = analiseEspecializada.atualizacao_em_segundo_plano_pendente === true;
+      (resultadoAnalise as any).analysis_signature = analiseEspecializada.analysis_signature || null;
+      (resultadoAnalise as any).classifier_version = analiseEspecializada.classifier_version || null;
+      (resultadoAnalise as any).extractor_version = analiseEspecializada.extractor_version || null;
+      (resultadoAnalise as any).rule_version = analiseEspecializada.rule_version || null;
+      (resultadoAnalise as any).schema_version = analiseEspecializada.schema_version || null;
+    }
     if (laudoStale) {
       (resultadoAnalise as any).status = 'REANALISE_NECESSARIA';
       // CORREÇÃO (2026-09-05, diagnóstico do estado "Aguardando análise"/
