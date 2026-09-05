@@ -652,9 +652,15 @@ function parseContratoSocialAlteracao(texto: string): { dados: Record<string, an
   const numeroArquivamento = texto.match(/CERTIFICO\s+O\s+REGISTRO\s+EM\s+\d{2}\/\d{2}\/\d{4}(?:\s+\d{1,2}:\d{2})?\s+SOB\s+N[ºO°]?\s*(\d{5,15})/i)?.[1]
     || texto.match(/\bprotocolo\s*[:\-]?\s*(\d{5,15})\b/i)?.[1]
     || null;
+  // Rodada 38: a data registral do ATO ATUAL só pode vir da certificação
+  // registral / rótulo explícito. O texto do contrato costuma narrar registros
+  // históricos da própria empresa ("arquivada ... em sessão de 30/08/2023");
+  // usar essa narrativa como data do ato atual fazia uma alteração de 2025 ser
+  // tratada como se tivesse sido registrada em 2023. Isso quebra exatamente o
+  // confronto Junta -> última alteração -> contrato correspondente.
   const dataRegistro = parseDate(
     texto.match(/CERTIFICO\s+O\s+REGISTRO\s+EM\s+(\d{2}\/\d{2}\/\d{4})/i)?.[1]
-      || texto.match(/(?:arquivad[ao]|registrad[ao]).{0,100}?(?:sess[aã]o\s+de|em)\s+(\d{2}\/\d{2}\/\d{4})/is)?.[1]
+      || texto.match(/(?:CERTIFICO|JUNTA\s+COMERCIAL|REGISTRO\s+DIGITAL)[\s\S]{0,240}?(?:REGISTRO|ARQUIVAMENTO)[\s\S]{0,80}?EM\s+(\d{2}\/\d{2}\/\d{4})/i)?.[1]
       || valorAposRotulo(linhas, ['data de registro', 'data do registro', 'data de arquivamento']),
   );
   const dataEfeitos = parseDate(texto.match(/COM\s+EFEITOS\s+DO\s+REGISTRO\s+EM\s*[:\-]?\s*(\d{2}\/\d{2}\/\d{4})/i)?.[1] || null);
@@ -751,6 +757,7 @@ function parseContratoSocialAlteracao(texto: string): { dados: Record<string, an
       data_efeitos_registro: dataEfeitos,
       data_documento: dataDocumento,
       numero_arquivamento: numeroArquivamento,
+      registro_atual_comprovado: Boolean(dataRegistro && numeroArquivamento),
       socios: quadroSocietarioFinal.length
         ? quadroSocietarioFinal.map((socio: any) => ({
             nome: socio.nome,

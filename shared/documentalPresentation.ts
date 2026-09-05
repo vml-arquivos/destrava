@@ -97,16 +97,45 @@ function camposExtraidosGenericos(resultado: any): DocumentoAnaliseCampo[] {
     'texto', 'ocr_texto', 'campos_comprovados', 'campos_inferidos', 'evidencias', 'alertas', 'divergencias',
     'fonte_extracao', 'mecanismo_extracao', 'separacao_comprovado_inferido', 'documento_compativel',
     'confianca', 'nivel_confianca', 'satisfaz_requisito', 'tipo_documento', 'tipo_esperado',
+    // O histórico da Junta recebe um resumo próprio logo abaixo; despejar o
+    // array bruto no card deixa a leitura ruim e ainda pode esconder as datas.
+    'historico_arquivamentos',
   ]);
   const candidatos = new Map<string, unknown>();
   for (const [chave, valor] of Object.entries(comprovados)) candidatos.set(chave, valor);
   for (const [chave, valor] of Object.entries(dados)) {
     if (!tecnicos.has(chave) && !candidatos.has(chave)) candidatos.set(chave, valor);
   }
-  return Array.from(candidatos.entries()).flatMap(([chave, valor]) => {
+
+  const campos: DocumentoAnaliseCampo[] = [];
+  const historico = Array.isArray(dados?.historico_arquivamentos)
+    ? [...dados.historico_arquivamentos]
+        .filter((item: any) => item?.data)
+        .sort((a: any, b: any) => String(b.data).localeCompare(String(a.data)))
+    : [];
+  if (historico.length) {
+    const alteracoes = historico.filter((item: any) => /alterac/i.test(normalizar(item?.tipo_ato || '')));
+    const ultima = alteracoes[0] || historico[0];
+    const penultima = alteracoes[1] || historico.find((item: any) => item !== ultima) || null;
+    if (dados?.nire) campos.push({ label: 'NIRE', valor: texto(dados.nire) });
+    if (ultima?.data) campos.push({ label: 'Última alteração', valor: texto(ultima.data) });
+    if (ultima?.numero) campos.push({ label: 'Arquivamento da última alteração', valor: texto(ultima.numero) });
+    if (penultima?.data) campos.push({ label: 'Penúltima alteração', valor: texto(penultima.data) });
+    if (penultima?.numero) campos.push({ label: 'Arquivamento da penúltima', valor: texto(penultima.numero) });
+    if (dados?.total_alteracoes_historico !== null && dados?.total_alteracoes_historico !== undefined) {
+      campos.push({ label: 'Total de alterações', valor: texto(dados.total_alteracoes_historico) });
+    }
+    candidatos.delete('nire');
+    candidatos.delete('total_alteracoes_historico');
+  }
+
+  for (const [chave, valor] of candidatos.entries()) {
     const formatado = valorCampoGenerico(valor);
-    return formatado ? [{ label: rotuloCampoGenerico(chave), valor: formatado }] : [];
-  }).slice(0, 30);
+    if (formatado) campos.push({ label: rotuloCampoGenerico(chave), valor: formatado });
+  }
+  return campos
+    .filter((campo, index, lista) => lista.findIndex((item) => normalizar(item.label) === normalizar(campo.label) && item.valor === campo.valor) === index)
+    .slice(0, 30);
 }
 
 function itens(value: unknown): string[] {
@@ -399,9 +428,15 @@ function secoesSocietariasCompactas(resultado: any, documento: any, conclusao: s
     );
     const camposResumo: DocumentoAnaliseCampo[] = [];
     if (dataAlteracao) {
-      const dentroDe12Meses = (Date.now() - dataAlteracao.getTime()) <= 366 * 24 * 60 * 60 * 1000;
+      const idadeAlteracaoMs = Date.now() - dataAlteracao.getTime();
+      const temDozeMesesDesdeUltimaAlteracao = idadeAlteracaoMs >= 365 * 24 * 60 * 60 * 1000;
       camposResumo.push({ label: "Última alteração em", valor: formatarDataBr(dataAlteracao) });
-      camposResumo.push({ label: "Completa 12 meses de histórico", valor: dentroDe12Meses ? "Sim — não precisa de alteração anterior" : "Não — anexar também a alteração/contrato anterior" });
+      camposResumo.push({
+        label: "Janela societária de 12 meses",
+        valor: temDozeMesesDesdeUltimaAlteracao
+          ? "Atendida pela última alteração"
+          : "Última alteração tem menos de 12 meses — validar também a alteração/contrato anterior",
+      });
     }
     secoes.push({ id: "resumo_alteracao", titulo: "Resultado da alteração societária", texto: formatarAlteracaoResumo(maisRecente), campos: camposResumo.length ? camposResumo : undefined });
   }

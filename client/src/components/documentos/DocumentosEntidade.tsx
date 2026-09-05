@@ -884,75 +884,35 @@ export default function DocumentosEntidade({
     setRelatorioModalAberto(false);
     setLoading(true);
     try {
-      const [data, observacoes, sociosEmpresa, pipelineAtual, dossieAtual] = await Promise.all([
+      // Rodada 38: primeira pintura = Acervo + laudos persistidos por arquivo.
+      // Não bloqueamos mais a tela esperando o dossiê completo. O endpoint de
+      // documentos já entrega resultado_analise persistido, então a leitura
+      // individual reaparece imediatamente — inclusive após refresh/redeploy.
+      const [data, observacoes, sociosEmpresa] = await Promise.all([
         apiFetch(`/api/documentos?${query}`),
         apiFetch(`/api/documentos/observacoes-slots?${new URLSearchParams({ entidade_tipo: entidadeTipo, entidade_id: entidadeId }).toString()}`).catch(() => []),
         entidadeTipo === "empresa" && empresaId
           ? apiFetch(`/api/empresas/${empresaId}/socios`).catch(() => [])
           : Promise.resolve([]),
-        entidadeTipo === "empresa" && empresaId
-          ? apiFetch(`/api/documentacao/empresa/${empresaId}/pipeline/status`).catch(() => null)
-          : Promise.resolve(null),
-        // Diagnóstico da Etapa 2/3 (Atos da Junta + Contrato Social/Alteração) --
-        // somente leitura aqui (sem processarSocietario), só pra exibir o que já
-        // foi analisado antes; a análise em si é disparada por iniciarAnaliseSocietaria().
-        entidadeTipo === "empresa" && empresaId
-          ? apiFetch(`/api/documentacao/empresa/${empresaId}/dossie`).catch(() => null)
-          : Promise.resolve(null),
       ]);
-      setPipeline(pipelineAtual);
-      setIdentidadeCnpj(dossieAtual?.identidade_cnpj || null);
-      const societariaAtual = dossieAtual?.documentacao_societaria || null;
-      setSocietaria(societariaAtual);
-      // Rodada 25 (02/09/2026, pedido explícito do usuário -- "eu quero que os
-      // cards pra anexar a documentação fiquem sempre visíveis, não é mais pra
-      // ter que ficar escondido... deixe só pra poder encolher, no card, com a
-      // análise documental" -- reportado ao abrir uma empresa de outro
-      // regime/tipo e ver a tela com um conjunto diferente de campos visíveis
-      // em relação a outra empresa): os campos complementares (não
-      // obrigatórios na Etapa 1) deixaram de ficar escondidos atrás de "Ver
-      // documentos complementares"/do marco societário (Atos da Junta
-      // aprovados ou dispensados por MEI) -- ver histórico da correção de
-      // 2026-09-01 logo abaixo, agora superada por este pedido mais amplo.
-      // Todos os campos do checklist ficam sempre visíveis, para qualquer
-      // empresa/regime/porte, desde a primeira carga da tela; o que continua
-      // colapsável é só o bloco de resultado da leitura DENTRO de cada card
-      // ("Dados da análise" por arquivo), nunca o card de anexo em si. Ver
-      // `slotsVisiveis` (removido) mais abaixo, onde a filtragem por
-      // obrigatório/complementar existia.
-      setMapaCredito(dossieAtual?.mapa_documental_credito || null);
-      const analisesPorArquivo = new Map<string, any>(
-        (Array.isArray(dossieAtual?.blocos) ? dossieAtual.blocos : [])
-          .flatMap((bloco: any) => Array.isArray(bloco?.documentos) ? bloco.documentos : [])
-          .filter((documento: any) => documento?.id && documento?.resultado_analise)
-          .map((documento: any) => [String(documento.id), documento] as [string, any]),
-      );
-      const lista = (Array.isArray(data) ? data : []).map((documento: DocumentoArquivo) => {
-        const enriquecido = analisesPorArquivo.get(String(documento.id));
-        return enriquecido
-          ? { ...documento, analisado: enriquecido.analisado, consistente: enriquecido.consistente, resultado_analise: enriquecido.resultado_analise }
-          : documento;
-      });
-      // O contrato de prestação de serviços (Destrava <-> empresa) não é documento
-      // de análise de crédito -- vive só na aba "Contratos Firmados". Filtrado
-      // apenas para entidadeTipo="empresa" (esta tela específica de Acervo
-      // Documental); o arquivo em si nunca é tocado, só não some aqui.
+
+      const lista = Array.isArray(data) ? data as DocumentoArquivo[] : [];
       const filtrada = entidadeTipo === "empresa"
         ? lista.filter((doc: DocumentoArquivo) => !TIPOS_FORA_DO_CHECKLIST_CREDITO.has(doc.tipo_documento))
         : lista;
       setDocs(filtrada);
+
       const observacoesMap: Record<string, string> = {};
       (Array.isArray(observacoes) ? observacoes : []).forEach((item: ObservacaoSlot) => {
         observacoesMap[chaveContextoSlot(item.tipo_documento, item.socio_id)] = item.observacao || "";
       });
-      // Compatibilidade com observações antigas gravadas junto ao arquivo: usa a
-      // mais recente como valor inicial, sem alterar ou excluir o registro legado.
       filtrada.forEach((doc: DocumentoArquivo) => {
         const documentoSlot = slotDoTipo(doc.tipo_documento);
         const chave = chaveContextoSlot(documentoSlot.tipoUpload, doc.socio_id);
         if (!observacoesMap[chave] && doc.observacoes) observacoesMap[chave] = doc.observacoes;
       });
       setObservacoesPorTipo(observacoesMap);
+
       const sociosLista = Array.isArray(sociosEmpresa) ? sociosEmpresa.filter((item: any) => item?.id) : [];
       setSocios(sociosLista);
       if (sociosLista.length) {
@@ -962,15 +922,6 @@ export default function DocumentosEntidade({
             const atual = copy[item.tipoUpload];
             const atualValido = !!atual && sociosLista.some((socio: SocioResumo) => socio.id === atual);
             if (atualValido) return;
-            // BUGFIX (2026-08-12): antes, ao remontar a tela (ex: sair e voltar ao
-            // perfil da empresa), o seletor sempre reiniciava no primeiro sócio em
-            // ordem alfabética -- se a Observação (ou qualquer documento) tivesse
-            // sido salva para outro sócio, ela parecia ter "sumido" (o dado
-            // continuava intacto no banco, só não era exibido, porque a chave
-            // exibida na tela dependia do sócio selecionado no momento). Agora
-            // preferimos, como seleção inicial, um sócio que já tenha documento
-            // ou observação registrada para este campo específico -- só cai no
-            // primeiro da lista quando nenhum sócio tem nada salvo ainda.
             const socioComDados = sociosLista.find((socio: SocioResumo) => (
               filtrada.some((doc: DocumentoArquivo) => doc.socio_id === socio.id && item.matchTipos.includes(doc.tipo_documento))
               || !!observacoesMap[chaveContextoSlot(item.tipoUpload, socio.id)]
@@ -980,9 +931,24 @@ export default function DocumentosEntidade({
           return copy;
         });
       }
+
+      // A tela já pode ser usada neste ponto. Pipeline e dossiê são resumos
+      // agregados; carregam em background e nunca seguram os cards individuais.
+      setLoading(false);
+      if (entidadeTipo === "empresa" && empresaId) {
+        void Promise.all([
+          apiFetch(`/api/documentacao/empresa/${empresaId}/pipeline/status`).catch(() => null),
+          apiFetch(`/api/documentacao/empresa/${empresaId}/dossie`).catch(() => null),
+        ]).then(([pipelineAtual, dossieAtual]) => {
+          if (pipelineAtual) setPipeline(pipelineAtual);
+          if (!dossieAtual) return;
+          setIdentidadeCnpj(dossieAtual?.identidade_cnpj || null);
+          setSocietaria(dossieAtual?.documentacao_societaria || null);
+          setMapaCredito(dossieAtual?.mapa_documental_credito || null);
+        }).catch(() => undefined);
+      }
     } catch (err: any) {
       toast.error(err?.message || "Erro ao carregar documentos.");
-    } finally {
       setLoading(false);
     }
   }, [entidadeId, query, entidadeTipo, empresaId]);
@@ -2396,9 +2362,14 @@ export default function DocumentosEntidade({
                                 // sem exigir nenhuma interação. Para os demais casos (documento
                                 // correto, com ou sem pendência de conteúdo), o comportamento de
                                 // clicar para expandir continua exatamente como antes.
-                                const documentoIncompativel = temResultadoInline && estadoVisualDocumento(resultadoInline, doc) === "incompativel";
+                                const estadoDocumento = temResultadoInline ? estadoVisualDocumento(resultadoInline, doc) : null;
+                                const documentoIncompativel = estadoDocumento === "incompativel";
+                                const leituraPrecisaAtencao = estadoDocumento === "revisao" || estadoDocumento === "reanalisar";
                                 const tipoTemAnaliseAutomatica = TIPOS_COM_ANALISE_AUTOMATICA.has(String(doc.tipo_documento || ""));
-                                const validacaoDocumentalConcluida = !!laudo && !laudoErro && doc.exige_revisao_humana !== true;
+                                const validacaoDocumentalConcluida = temLeituraReal
+                                  && !laudoErro
+                                  && estadoDocumento === "aprovado"
+                                  && doc.exige_revisao_humana !== true;
                                 const validadoComEvidencia = doc.validado === true
                                   && (!tipoTemAnaliseAutomatica || validacaoDocumentalConcluida);
                                 return (
@@ -2420,7 +2391,7 @@ export default function DocumentosEntidade({
                                       {doc.validado && !validadoComEvidencia && tipoTemAnaliseAutomatica && <span title="Ainda sem leitura documental conclusiva" className="text-warning shrink-0 text-[9px]">análise pendente</span>}
                                     </div>
                                     <p className="text-[9px] text-muted-foreground truncate">{formatDate(doc.criado_em)}</p>
-                                    {temResultadoInline && !documentoIncompativel && (
+                                    {temResultadoInline && !documentoIncompativel && !leituraPrecisaAtencao && (
                                       <button
                                         type="button"
                                         onClick={() => setLaudosExpandidos((prev) => ({ ...prev, [doc.id]: !prev[doc.id] }))}
@@ -2455,7 +2426,7 @@ export default function DocumentosEntidade({
                                     {permitirExcluir && <button type="button" title="Excluir" onClick={() => excluir(doc.id)} className="p-1 rounded-md hover:bg-destructive/10 text-destructive"><Trash2 className="w-3 h-3" /></button>}
                                   </div>
                                   </div>
-                                  {(documentoIncompativel || laudosExpandidos[doc.id]) && resultadoInline && <ResultadoAnaliseDocumento resultado={resultadoInline} documento={doc} compacto />}
+                                  {(documentoIncompativel || leituraPrecisaAtencao || laudosExpandidos[doc.id]) && resultadoInline && <ResultadoAnaliseDocumento resultado={resultadoInline} documento={doc} compacto />}
                                 </div>
                                 );
                               })}

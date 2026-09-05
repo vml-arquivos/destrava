@@ -1421,6 +1421,43 @@ export async function analisarCnpjReceitaCartaoEmpresa(empresaId: string, criado
   }
 
   if (cartao?.id) {
+    // Rodada 38: persistir também um laudo documental autocontido no próprio
+    // arquivo. A tela do Acervo não deve depender de reconstruir o dossiê
+    // completo só para reapresentar dados que já foram lidos/validados antes.
+    // Isso restaura imediatamente CNPJ, razão social, abertura, CNAE, natureza,
+    // porte, endereço, situação, e-mail/telefone etc. após refresh/redeploy.
+    const dadosDocumentaisCartao = {
+      ...camposCartao,
+      cnpj: camposCartao?.cnpj || camposReceita.cnpj || null,
+      razao_social: camposCartao?.nome_empresarial || camposReceita.nome_empresarial || null,
+      nome_empresarial: camposCartao?.nome_empresarial || camposReceita.nome_empresarial || null,
+      nome_fantasia: camposCartao?.nome_fantasia || camposReceita.nome_fantasia || null,
+      data_abertura: camposCartao?.data_abertura || camposReceita.data_abertura || null,
+      cnae_principal: camposCartao?.cnae_principal || camposReceita.cnae_principal || null,
+      natureza_juridica: camposCartao?.natureza_juridica || camposReceita.natureza_juridica || null,
+      porte: camposCartao?.porte || camposReceita.porte || null,
+      situacao_cadastral: camposCartao?.situacao_cadastral || camposReceita.situacao_cadastral || null,
+      data_situacao_cadastral: camposCartao?.data_situacao_cadastral || camposReceita.data_situacao_cadastral || null,
+      endereco_completo: camposCartao?.endereco_completo || camposReceita.endereco_completo || null,
+      data_emissao: camposCartao?.data_emissao || dataEmissaoCartao || null,
+      documento_compativel: cartaoFoiLido,
+      satisfaz_requisito: cartaoFoiLido && statusValidadeCartao === 'valido' && !exigeRevisao,
+      confianca: extracaoGemini?.confianca ?? null,
+      fonte_extracao: extracaoGemini?.fonte || 'local_deterministica',
+    };
+    const laudoDocumentalCartao = {
+      arquivo_id: cartao.id,
+      empresa_id: empresaId,
+      tipo_analise: 'cartao_cnpj',
+      status: !cartaoFoiLido ? 'revisao_humana' : exigeRevisao ? 'revisao_humana' : 'concluido',
+      revisao_humana_necessaria: !cartaoFoiLido || exigeRevisao,
+      nivel_confianca: extracaoGemini?.confianca ?? null,
+      dados_extraidos: dadosDocumentaisCartao,
+      alertas,
+      diagnostico,
+      fonte_extracao: extracaoGemini?.fonte || 'local_deterministica',
+      analisado_em: new Date().toISOString(),
+    };
     await pool.query(
       `UPDATE public.documentos_arquivos
           SET status_validade = $2,
@@ -1429,7 +1466,19 @@ export async function analisarCnpjReceitaCartaoEmpresa(empresaId: string, criado
               exige_revisao_humana = CASE WHEN $2 IN ('vencido','divergente','ilegivel') THEN true ELSE exige_revisao_humana END,
               atualizado_em = NOW()
         WHERE id = $1`,
-      [cartao.id, statusValidadeCartao, dataEmissaoCartao, JSON.stringify({ analise_cnpj_empresa_id: persistedRow?.id || null, dias_emissao_cartao: diasEmissaoCartao, divergencias: divergencias.length })]
+      [
+        cartao.id,
+        statusValidadeCartao,
+        dataEmissaoCartao,
+        JSON.stringify({
+          analise_cnpj_empresa_id: persistedRow?.id || null,
+          dias_emissao_cartao: diasEmissaoCartao,
+          divergencias: divergencias.length,
+          analise_regra_documental: laudoDocumentalCartao,
+          analise_automatica_status: laudoDocumentalCartao.status,
+          analise_automatica_concluida_em: new Date().toISOString(),
+        }),
+      ]
     ).catch(() => undefined);
   }
 
