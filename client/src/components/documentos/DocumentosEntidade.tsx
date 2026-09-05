@@ -884,33 +884,29 @@ export default function DocumentosEntidade({
     setRelatorioModalAberto(false);
     setLoading(true);
     try {
-      // Rodada 38: primeira pintura RÁPIDA. O Acervo não espera mais o dossiê
-      // completo para mostrar documentos e laudos individuais já persistidos.
-      // /api/documentos agora devolve o último laudo por arquivo, portanto a
-      // leitura visual do ZIP de referência volta a aparecer imediatamente.
-      const [data, observacoes, sociosEmpresa, pipelineAtual] = await Promise.all([
+      // Rodada 38: primeira pintura = Acervo + laudos persistidos por arquivo.
+      // Não bloqueamos mais a tela esperando o dossiê completo. O endpoint de
+      // documentos já entrega resultado_analise persistido, então a leitura
+      // individual reaparece imediatamente — inclusive após refresh/redeploy.
+      const [data, observacoes, sociosEmpresa] = await Promise.all([
         apiFetch(`/api/documentos?${query}`),
         apiFetch(`/api/documentos/observacoes-slots?${new URLSearchParams({ entidade_tipo: entidadeTipo, entidade_id: entidadeId }).toString()}`).catch(() => []),
         entidadeTipo === "empresa" && empresaId
           ? apiFetch(`/api/empresas/${empresaId}/socios`).catch(() => [])
           : Promise.resolve([]),
-        entidadeTipo === "empresa" && empresaId
-          ? apiFetch(`/api/documentacao/empresa/${empresaId}/pipeline/status`).catch(() => null)
-          : Promise.resolve(null),
       ]);
-      setPipeline(pipelineAtual);
 
-      const listaInicial = Array.isArray(data) ? data : [];
-      const filtradaInicial = entidadeTipo === "empresa"
-        ? listaInicial.filter((doc: DocumentoArquivo) => !TIPOS_FORA_DO_CHECKLIST_CREDITO.has(doc.tipo_documento))
-        : listaInicial;
-      setDocs(filtradaInicial);
+      const lista = Array.isArray(data) ? data as DocumentoArquivo[] : [];
+      const filtrada = entidadeTipo === "empresa"
+        ? lista.filter((doc: DocumentoArquivo) => !TIPOS_FORA_DO_CHECKLIST_CREDITO.has(doc.tipo_documento))
+        : lista;
+      setDocs(filtrada);
 
       const observacoesMap: Record<string, string> = {};
       (Array.isArray(observacoes) ? observacoes : []).forEach((item: ObservacaoSlot) => {
         observacoesMap[chaveContextoSlot(item.tipo_documento, item.socio_id)] = item.observacao || "";
       });
-      filtradaInicial.forEach((doc: DocumentoArquivo) => {
+      filtrada.forEach((doc: DocumentoArquivo) => {
         const documentoSlot = slotDoTipo(doc.tipo_documento);
         const chave = chaveContextoSlot(documentoSlot.tipoUpload, doc.socio_id);
         if (!observacoesMap[chave] && doc.observacoes) observacoesMap[chave] = doc.observacoes;
@@ -927,7 +923,7 @@ export default function DocumentosEntidade({
             const atualValido = !!atual && sociosLista.some((socio: SocioResumo) => socio.id === atual);
             if (atualValido) return;
             const socioComDados = sociosLista.find((socio: SocioResumo) => (
-              filtradaInicial.some((doc: DocumentoArquivo) => doc.socio_id === socio.id && item.matchTipos.includes(doc.tipo_documento))
+              filtrada.some((doc: DocumentoArquivo) => doc.socio_id === socio.id && item.matchTipos.includes(doc.tipo_documento))
               || !!observacoesMap[chaveContextoSlot(item.tipoUpload, socio.id)]
             ));
             copy[item.tipoUpload] = (socioComDados || sociosLista[0]).id;
@@ -936,44 +932,19 @@ export default function DocumentosEntidade({
         });
       }
 
-      // Libera a interface antes do resumo/dossiê. O usuário já pode visualizar,
-      // baixar, expandir "Dados da análise" e usar Ler/Reler.
+      // A tela já pode ser usada neste ponto. Pipeline e dossiê são resumos
+      // agregados; carregam em background e nunca seguram os cards individuais.
       setLoading(false);
-
-      // Segunda velocidade: o dossiê/checklist é enriquecimento de tela e roda
-      // depois da primeira pintura. Ele NÃO deve substituir um laudo persistido
-      // por placeholder nem bloquear o uso do Acervo.
       if (entidadeTipo === "empresa" && empresaId) {
-        void apiFetch(`/api/documentacao/empresa/${empresaId}/dossie`).then((dossieAtual) => {
+        void Promise.all([
+          apiFetch(`/api/documentacao/empresa/${empresaId}/pipeline/status`).catch(() => null),
+          apiFetch(`/api/documentacao/empresa/${empresaId}/dossie`).catch(() => null),
+        ]).then(([pipelineAtual, dossieAtual]) => {
+          if (pipelineAtual) setPipeline(pipelineAtual);
+          if (!dossieAtual) return;
           setIdentidadeCnpj(dossieAtual?.identidade_cnpj || null);
           setSocietaria(dossieAtual?.documentacao_societaria || null);
           setMapaCredito(dossieAtual?.mapa_documental_credito || null);
-
-          const analisesPorArquivo = new Map<string, any>(
-            (Array.isArray(dossieAtual?.blocos) ? dossieAtual.blocos : [])
-              .flatMap((bloco: any) => Array.isArray(bloco?.documentos) ? bloco.documentos : [])
-              .filter((documento: any) => documento?.id && documento?.resultado_analise)
-              .map((documento: any) => [String(documento.id), documento] as [string, any]),
-          );
-          if (analisesPorArquivo.size) {
-            setDocs((atuais) => atuais.map((documento) => {
-              const enriquecido = analisesPorArquivo.get(String(documento.id));
-              if (!enriquecido) return documento;
-              const resultadoAtual = documento.resultado_analise;
-              const resultadoDossie = enriquecido.resultado_analise;
-              // Nunca regride um laudo real já exibido para um placeholder de
-              // "aguardando análise" vindo do resumo.
-              const resultadoFinal = documentoTemResultadoDeLeitura(documento)
-                ? resultadoAtual
-                : (resultadoDossie || resultadoAtual);
-              return {
-                ...documento,
-                analisado: enriquecido.analisado ?? documento.analisado,
-                consistente: enriquecido.consistente ?? documento.consistente,
-                resultado_analise: resultadoFinal,
-              };
-            }));
-          }
         }).catch(() => undefined);
       }
     } catch (err: any) {
@@ -2391,9 +2362,14 @@ export default function DocumentosEntidade({
                                 // sem exigir nenhuma interação. Para os demais casos (documento
                                 // correto, com ou sem pendência de conteúdo), o comportamento de
                                 // clicar para expandir continua exatamente como antes.
-                                const documentoIncompativel = temResultadoInline && estadoVisualDocumento(resultadoInline, doc) === "incompativel";
+                                const estadoDocumento = temResultadoInline ? estadoVisualDocumento(resultadoInline, doc) : null;
+                                const documentoIncompativel = estadoDocumento === "incompativel";
+                                const leituraPrecisaAtencao = estadoDocumento === "revisao" || estadoDocumento === "reanalisar";
                                 const tipoTemAnaliseAutomatica = TIPOS_COM_ANALISE_AUTOMATICA.has(String(doc.tipo_documento || ""));
-                                const validacaoDocumentalConcluida = !!laudo && !laudoErro && doc.exige_revisao_humana !== true;
+                                const validacaoDocumentalConcluida = temLeituraReal
+                                  && !laudoErro
+                                  && estadoDocumento === "aprovado"
+                                  && doc.exige_revisao_humana !== true;
                                 const validadoComEvidencia = doc.validado === true
                                   && (!tipoTemAnaliseAutomatica || validacaoDocumentalConcluida);
                                 return (
@@ -2415,7 +2391,7 @@ export default function DocumentosEntidade({
                                       {doc.validado && !validadoComEvidencia && tipoTemAnaliseAutomatica && <span title="Ainda sem leitura documental conclusiva" className="text-warning shrink-0 text-[9px]">análise pendente</span>}
                                     </div>
                                     <p className="text-[9px] text-muted-foreground truncate">{formatDate(doc.criado_em)}</p>
-                                    {temResultadoInline && !documentoIncompativel && (
+                                    {temResultadoInline && !documentoIncompativel && !leituraPrecisaAtencao && (
                                       <button
                                         type="button"
                                         onClick={() => setLaudosExpandidos((prev) => ({ ...prev, [doc.id]: !prev[doc.id] }))}
@@ -2450,7 +2426,7 @@ export default function DocumentosEntidade({
                                     {permitirExcluir && <button type="button" title="Excluir" onClick={() => excluir(doc.id)} className="p-1 rounded-md hover:bg-destructive/10 text-destructive"><Trash2 className="w-3 h-3" /></button>}
                                   </div>
                                   </div>
-                                  {(documentoIncompativel || laudosExpandidos[doc.id]) && resultadoInline && <ResultadoAnaliseDocumento resultado={resultadoInline} documento={doc} compacto />}
+                                  {(documentoIncompativel || leituraPrecisaAtencao || laudosExpandidos[doc.id]) && resultadoInline && <ResultadoAnaliseDocumento resultado={resultadoInline} documento={doc} compacto />}
                                 </div>
                                 );
                               })}
