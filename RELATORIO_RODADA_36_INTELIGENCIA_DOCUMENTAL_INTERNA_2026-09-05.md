@@ -149,3 +149,20 @@ A Inteligência 360 deve consumir somente fatos `PROVADO` e `CALCULADO`, sem rel
 ## Critério de aceite arquitetural
 
 Com IA externa desligada, o sistema deve continuar recebendo documentos, executando leitura interna, persistindo laudos individuais, montando checklist e relatório consolidado. Quando a evidência interna não for suficiente, o resultado deve ser `NAO_VERIFICADO`/`REVISAO_HUMANA`, nunca dependência obrigatória de um provedor externo.
+
+
+## Auditoria de variáveis de ambiente — 05/09/2026
+
+A configuração de produção foi confrontada com o uso real de `process.env` no backend.
+
+Correções aplicadas no PR:
+
+- `DOCUMENT_EXTERNAL_AI_FALLBACK_ENABLED=false` passa a ser o opt-in mestre da IA externa documental;
+- `GEMINI_DOCUMENT_OCR_ENABLED=false` é o valor recomendado para a primeira camada documental internal-first;
+- `DOCUMENT_ANALYSIS_BACKFILL_ENQUEUE_BATCH=25` deve acompanhar o scheduler automático da Rodada 35;
+- `DATA_DIR=/app` é o valor explícito recomendado quando o volume Coolify está montado em `/app/uploads` (DATA_DIR aponta para o pai de `uploads`);
+- `PREDICAO_SERVICE_URL=http://localhost:8001` não é adequado no container Node; o exemplo foi corrigido para `http://172.17.0.1:8001` quando o serviço Python está publicado no host Docker, com recomendação de usar DNS interno do serviço quando disponível;
+- `NEXUS_DESTRAVA_INTEGRATION_SECRET` passou a ser aceito também pelo cliente outbound do Nexus, além de `NEXUS_API_TOKEN` e `NEXUS_INTEGRATION_SECRET`;
+- novo teste cobre o alias `NEXUS_DESTRAVA_INTEGRATION_SECRET` no header Authorization.
+
+Variáveis obrigatórias em produção continuam sendo `DATABASE_URL` e `JWT_SECRET`; nenhuma delas foi alterada por esta rodada.
