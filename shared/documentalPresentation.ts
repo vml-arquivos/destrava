@@ -462,12 +462,12 @@ function camposValidacaoObjetiva(resultado: any, documento: any, socios: any[] =
 
   if (/cartao_cnpj|cnpj_cartao/.test(tipo)) {
     adicionarCampoObjetivo(campos, 'CNPJ', primeiroValor(resultado, ['cnpj'], ['CNPJ']));
+    adicionarCampoObjetivo(campos, 'Razão social', primeiroValor(resultado, ['razao_social', 'nome_empresarial'], ['Razão social', 'Nome empresarial']));
     adicionarCampoObjetivo(campos, 'Situação cadastral', primeiroValor(resultado, ['situacao_cadastral'], ['Situação cadastral', 'Situação']));
     adicionarCampoObjetivo(campos, 'Unidade', primeiroValor(resultado, ['matriz_filial'], ['Matriz/Filial', 'Unidade']));
     const municipio = texto(primeiroValor(resultado, ['municipio'], ['Município']));
     const uf = texto(primeiroValor(resultado, ['uf'], ['UF']));
     adicionarCampoObjetivo(campos, 'Localização', [municipio, uf].filter(Boolean).join(' / '));
-    adicionarCampoObjetivo(campos, 'Validação', aprovado ? 'CNPJ válido para o cadastro' : statusObjetivo(resultado, documento));
     return campos.slice(0, 5);
   }
 
