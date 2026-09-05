@@ -116,13 +116,15 @@ describe('"Reler" (POST identidade/:tipo/reler) depois de um bump de versão de 
         return { rows: maisRecente ? [maisRecente] : [] };
       }
 
-      // registrarExtracaoEspecializada: marca a linha antiga como SUPERSEDED/REANALISE_NECESSARIA.
-      if (sql.includes('UPDATE public.documentos_extracoes_ia') && sql.includes("analysis_status = CASE")) {
-        const [id] = params;
-        const row = extracoes.find((e) => e.id === id);
-        if (row) {
-          row.analysis_status = ['concluido', 'revisao_humana'].includes(row.status) ? 'SUPERSEDED' : 'REANALISE_NECESSARIA';
-          row.satisfaz_requisito = false;
+      // Rodada 36: o laudo anterior só é superseded DEPOIS que a nova leitura
+      // foi persistida com sucesso; durante o processamento ele continua ATIVO.
+      if (sql.includes('UPDATE public.documentos_extracoes_ia') && sql.includes("SET analysis_status = 'SUPERSEDED'")) {
+        const [arquivoId, promptCodigo, idNovo] = params;
+        for (const row of extracoes) {
+          if (row.arquivo_id === arquivoId && row.prompt_codigo === promptCodigo && row.id !== idNovo && ['concluido', 'revisao_humana'].includes(row.status)) {
+            row.analysis_status = 'SUPERSEDED';
+            row.satisfaz_requisito = false;
+          }
         }
         return { rows: [] };
       }
