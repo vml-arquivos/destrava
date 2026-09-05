@@ -23,6 +23,7 @@ import {
 } from '../utils/helpers';
 import { extrairDocumentoLocal } from './extracaoDocumentalLocal';
 import { resolveDocumentPath } from './documentStorage';
+import { externalAiFallbackDocumentalEnabled } from './documentExternalAiPolicy';
 
 const { Pool } = pkg;
 const pool = new Pool({
@@ -219,7 +220,7 @@ function extrairJson(text: string): any | null {
 }
 
 function geminiOcrEnabled(): boolean {
-  return String(process.env.GEMINI_DOCUMENT_OCR_ENABLED || 'true').toLowerCase() !== 'false';
+  return externalAiFallbackDocumentalEnabled();
 }
 
 function normalizarConfianca(value: unknown): number | null {
@@ -415,18 +416,24 @@ async function tentarExtrairCartaoComGemini(doc: DocCartao | null): Promise<Extr
   const filePath = await resolverCaminhoDocumento(doc);
   if (!filePath) return null;
 
+  let extracaoLocalParcial: ExtracaoCartao | null = null;
+
   try {
     const local = await extrairDocumentoLocal(filePath, inferirMimeDocumento(doc), 'cartao_cnpj');
     if (local.dados?.documento_compativel !== false && Object.keys(local.dados || {}).length > 0) {
       const extracaoLocal = adaptarExtracaoCartaoLocal(local.dados, local.confianca);
       if (extracaoTemQualidade(extracaoLocal)) return extracaoLocal;
+      // Mesmo abaixo do limiar de confirmação automática, os campos lidos
+      // localmente continuam úteis para diagnóstico/revisão e não devem ser
+      // descartados só porque o fallback externo está desligado.
+      extracaoLocalParcial = extracaoLocal;
     }
   } catch (error: any) {
     console.warn('[analiseCnpjReceitaCartao] Extração local do Cartão CNPJ falhou de forma controlada:', error?.message || error);
   }
 
   const apiKey = process.env.GEMINI_API_KEY || process.env.GOOGLE_API_KEY;
-  if (!geminiOcrEnabled() || !apiKey) return null;
+  if (!geminiOcrEnabled() || !apiKey) return extracaoLocalParcial;
 
   try {
     const buffer = await fs.readFile(filePath);
@@ -461,11 +468,12 @@ async function tentarExtrairCartaoComGemini(doc: DocCartao | null): Promise<Extr
     }
 
     if (ultimaExtracao) return ultimaExtracao;
+    if (extracaoLocalParcial) return extracaoLocalParcial;
     if (ultimoErro) throw ultimoErro;
-    return null;
+    return extracaoLocalParcial;
   } catch (err) {
     console.warn('[analiseCnpjReceitaCartao] Gemini não conseguiu extrair Cartão CNPJ:', (err as any)?.message || err);
-    return null;
+    return extracaoLocalParcial;
   }
 }
 
