@@ -333,11 +333,13 @@ export function tipoDocumentoTemLeituraAutomatica(tipo: string): boolean {
 
 export function documentoTemResultadoDeLeitura(doc?: DocumentoArquivo | null): boolean {
   if (!doc) return false;
-  return Boolean(
-    doc.resultado_analise
-    || doc.resultado_validacao?.analise_regra_documental
-    || doc.resultado_validacao?.analise_regra_documental_erro,
-  );
+  if (doc.resultado_validacao?.analise_regra_documental || doc.resultado_validacao?.analise_regra_documental_erro) return true;
+  if (doc.analisado === true) return true;
+  const resultado = doc.resultado_analise || {};
+  const status = String(resultado?.status || "").toLowerCase();
+  const lifecycle = String(resultado?.analysis_status || "").toUpperCase();
+  return ["concluido", "revisao_humana", "falhou"].includes(status)
+    || ["ATIVO", "STALE", "SUPERSEDED", "REANALISE_NECESSARIA"].includes(lifecycle);
 }
 const TIPOS_FISCAIS_SIMPLIFICADOS = new Set(["pgdas", "pgdas_d", "pgmei", "das_mei", "ccmei", "recibo_pgdas", "recibo_pgmei", "defis", "dasn_simei", "recibo_defis", "recibo_dasn_simei", "relatorio_receitas_mei"]);
 const TIPOS_FISCAIS_ECF = new Set(["ecf", "recibo_ecf", "ecd", "recibo_ecd", "dctf", "dctfweb", "mit", "darf", "livro_caixa", "efd_contribuicoes", "efd_icms_ipi", "efd"]);
@@ -2377,6 +2379,7 @@ export default function DocumentosEntidade({
                                 const laudoErro = doc.resultado_validacao?.analise_regra_documental_erro || null;
                                 const resultadoInline = doc.resultado_analise || laudo || laudoErro || null;
                                 const temResultadoInline = Boolean(resultadoInline);
+                                const temLeituraReal = documentoTemResultadoDeLeitura(doc);
                                 // CORREÇÃO (2026-08-31, "isso é pra tirar, é já pra aparecer o
                                 // documento incompatível... isso pra todos que for incompatíveis"):
                                 // documento incompatível com o slot não fica mais atrás do clique
@@ -2425,7 +2428,7 @@ export default function DocumentosEntidade({
                                     {tipoTemAnaliseAutomatica && !TIPOS_GATILHO_ANALISE_IDENTIDADE.has(String(doc.tipo_documento || "")) && (
                                       <button
                                         type="button"
-                                        title={temResultadoInline
+                                        title={temLeituraReal
                                           ? "Reler este documento e atualizar os dados validados"
                                           : "Ler este documento agora e extrair os dados para validação"}
                                         onClick={() => void reanalisar(doc)}
@@ -2433,7 +2436,7 @@ export default function DocumentosEntidade({
                                         className="inline-flex items-center gap-0.5 rounded-md px-1 py-0.5 text-[8px] font-bold text-primary hover:bg-primary/10 disabled:opacity-50"
                                       >
                                         <RefreshCw className={`w-2.5 h-2.5 ${reanalisandoId === doc.id ? "animate-spin" : ""}`} />
-                                        {reanalisandoId === doc.id ? "Lendo..." : temResultadoInline ? "Reler" : "Ler"}
+                                        {reanalisandoId === doc.id ? "Lendo..." : temLeituraReal ? "Reler" : "Ler"}
                                       </button>
                                     )}
                                     {permitirValidar && (
