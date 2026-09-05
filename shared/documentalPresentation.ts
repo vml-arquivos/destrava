@@ -430,7 +430,16 @@ function primeiroValor(resultado: any, chaves: string[], labels: string[] = []):
 }
 
 function adicionarCampoObjetivo(campos: DocumentoAnaliseCampo[], label: string, valor: unknown) {
-  const formatado = valorCampoGenerico(valor);
+  let valorExibicao = valor;
+  // Competências e janelas podem ter 12+ itens internamente. Na tela basta
+  // confirmar a cobertura, nunca listar mês por mês.
+  if (Array.isArray(valor) && /compet[eê]ncia|per[ií]odo|cobertura/i.test(label) && valor.length) {
+    const itens = valor.map((item) => texto(item)).filter(Boolean);
+    valorExibicao = itens.length > 1
+      ? `${itens[0]} a ${itens[itens.length - 1]} (${itens.length} competências)`
+      : itens[0] || '';
+  }
+  const formatado = valorCampoGenerico(valorExibicao);
   if (!formatado) return;
   if (campos.some((campo) => normalizar(campo.label) === normalizar(label))) return;
   campos.push({ label, valor: formatado });
@@ -517,9 +526,15 @@ function camposValidacaoObjetiva(resultado: any, documento: any, socios: any[] =
   }
 
   if (/serasa|rating|scr|ccs|ccf|cenprot|protest|negativ/.test(tipo)) {
-    const negativacoes = primeiroValor(resultado, ['quantidade_negativacoes', 'negativacoes', 'total_negativacoes'], ['Negativações', 'Quantidade de negativações']);
+    const negativacoesBrutas = primeiroValor(resultado, ['quantidade_negativacoes', 'negativacoes', 'total_negativacoes'], ['Negativações', 'Quantidade de negativações']);
+    const negativacoes = Array.isArray(negativacoesBrutas) ? negativacoesBrutas.length : negativacoesBrutas;
     const possuiNegativacao = primeiroValor(resultado, ['possui_negativacao', 'tem_negativacao'], ['Possui negativação']);
-    adicionarCampoObjetivo(campos, 'Resultado', possuiNegativacao === false || Number(negativacoes) === 0 ? 'Sem negativação identificada' : primeiroValor(resultado, ['resultado', 'situacao', 'status_consulta'], ['Resultado', 'Situação']));
+    const quantidade = Number(negativacoes);
+    const semNegativacao = possuiNegativacao === false || (Number.isFinite(quantidade) && quantidade === 0);
+    const comNegativacao = possuiNegativacao === true || (Number.isFinite(quantidade) && quantidade > 0);
+    adicionarCampoObjetivo(campos, 'Resultado', semNegativacao
+      ? 'Sem negativação identificada'
+      : comNegativacao ? 'Com negativação identificada' : primeiroValor(resultado, ['resultado', 'situacao', 'status_consulta'], ['Resultado', 'Situação']));
     adicionarCampoObjetivo(campos, 'Negativações', negativacoes);
     adicionarCampoObjetivo(campos, 'Rating/Score', primeiroValor(resultado, ['rating', 'score', 'faixa_rating'], ['Rating', 'Score']));
     adicionarCampoObjetivo(campos, 'Data da consulta', primeiroValor(resultado, ['data_consulta', 'data_emissao'], ['Data da consulta', 'Data de emissão']));
