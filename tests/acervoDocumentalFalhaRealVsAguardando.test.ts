@@ -56,37 +56,18 @@ function bloco(documento: Record<string, any>) {
   return [{ codigo: 'atos_junta_comercial', nome_amigavel: 'Atos da Junta Comercial', status: 'pendente', documentos: [documento] }];
 }
 
-// CORREÇÃO (2026-09-05, diagnóstico "arquiteto sênior" solicitado pelo
-// usuário após a correção do GPT -- prints mostrando QSA e Enquadramento
-// Tributário presos em "Aguardando análise" e o CCMEI rotulado como
-// "Documento incompatível" logo depois do bump de versão de classificação):
-// `enriquecerDocumentosAcervoComAnalise` já calculava corretamente
-// `laudoStale` (a partir de `analiseEspecializada.analysis_status`, o mesmo
-// campo que `buscarAnaliseEspecializadaPersistida`/`decidirVersaoLaudo`
-// usam para marcar um laudo como desatualizado pelo versionamento), mas ao
-// montar `resultado_analise` para a tela só gravava esse sinal em `.status`
-// -- um campo que `estadoVisualDocumento` (shared/documentalPresentation.ts,
-// única fonte de verdade do selo visual, com teste próprio cobrindo
-// exatamente este contrato) NUNCA lê. Sem `resultado_analise.analysis_status`
-// populado, o guard de "reanalisar" (que tem que rodar ANTES de qualquer
-// checagem de incompatibilidade) nunca disparava para um laudo stale vindo
-// deste endpoint -- o documento caía em "aguardando" (sem selo específico)
-// ou, quando o laudo antigo carregava um `tipo_detectado`/`identidade_status`
-// que não bate mais com o catálogo atual, no pior selo possível,
-// "incompativel" ("Documento incompatível"), confundindo um documento que
-// só precisa ser relido com um documento do tipo errado. Este teste prova
-// que, com `analysis_status` propagado, qualquer laudo marcado
-// STALE/SUPERSEDED/REANALISE_NECESSARIA -- para QUALQUER tipo de documento,
-// sem caso especial -- é identificado corretamente como "reanalisar"
-// ("Reanálise necessária"), nunca como "aguardando" nem "incompativel".
-describe('enriquecerDocumentosAcervoComAnalise -- laudo desatualizado pelo versionamento vira "Reanálise necessária", não "Documento incompatível"/"Aguardando análise"', () => {
+// RODADA 36 (05/09/2026): um bump de versão do motor não desfaz uma
+// validação concluída. A atualização segue automática, mas o último laudo
+// comprovado permanece ativo até existir substituto bem-sucedido.
+// STALE/SUPERSEDED explícitos continuam fail-closed.
+describe('enriquecerDocumentosAcervoComAnalise -- atualização do motor não desfaz validação concluída', () => {
   beforeEach(() => {
     vi.resetModules();
     mocks.poolQuery.mockReset();
   });
   afterEach(() => vi.clearAllMocks());
 
-  it('laudo com analysis_status stale (versão de classificação mudou) produz resultado_analise.analysis_status e o estado visual "reanalisar"', async () => {
+  it('laudo concluído de versão anterior permanece ATIVO enquanto a atualização automática fica pendente', async () => {
     const { enriquecerDocumentosAcervoComAnalise } = await import('../server/routes/documentacao');
     const { estadoVisualDocumento } = await import('../shared/documentalPresentation');
     mocks.poolQuery.mockImplementation(async (text: string) => {
@@ -94,37 +75,72 @@ describe('enriquecerDocumentosAcervoComAnalise -- laudo desatualizado pelo versi
       if (sql.includes('FROM information_schema.tables')) return { rows: [{ exists: 1 }] };
       if (sql.includes('FROM information_schema.columns')) return { rows: [{ column_name: 'analysis_signature' }] };
       if (sql.includes('SELECT e.resultado')) {
-        return {
-          rows: [{
-            id: 'extracao-stale-1',
-            resultado: {
-              tipo_analise: 'atos_junta_comercial',
-              dados_extraidos: { identidade_status: 'IDENTIFICADO', documento_compativel: true },
-            },
-            status: 'concluido',
-            prompt_versao: '0.0.0-antiga',
-            analysis_signature: 'assinatura-antiga',
-            classifier_version: 'antiga',
-            extractor_version: 'antiga',
-            rule_version: 'antiga',
-            schema_version: 'antiga',
-            stale_at: null,
-            satisfaz_requisito: true,
-            hash_arquivo: 'hash-1',
-          }],
-        };
+        return { rows: [{
+          id: 'extracao-legada-1',
+          resultado: {
+            tipo_analise: 'atos_junta_comercial',
+            dados_extraidos: { identidade_status: 'IDENTIFICADO', documento_compativel: true, satisfaz_requisito: true },
+          },
+          status: 'concluido',
+          prompt_versao: '0.0.0-antiga',
+          analysis_signature: 'assinatura-antiga',
+          classifier_version: 'antiga',
+          extractor_version: 'antiga',
+          rule_version: 'antiga',
+          schema_version: 'antiga',
+          analysis_status: 'ATIVO',
+          stale_at: null,
+          satisfaz_requisito: false,
+          hash_arquivo: 'hash-1',
+        }] };
       }
       return { rows: [] };
     });
 
-    const documento = { id: 'atos-stale-1', tipo_documento: 'atos_junta_comercial', nome: 'ATOS DA JUNTA COMERCIAL.pdf', status: 'validado', validado: true, criado_em: new Date().toISOString() };
+    const documento = { id: 'atos-legado-1', tipo_documento: 'atos_junta_comercial', nome: 'ATOS DA JUNTA COMERCIAL.pdf', status: 'validado', validado: true, criado_em: new Date().toISOString() };
     const resultado = await enriquecerDocumentosAcervoComAnalise(bloco(documento));
+    const item = resultado[0].documentos[0];
 
+    expect(item.resultado_analise.analysis_status).toBe('ATIVO');
+    expect(item.resultado_analise.satisfaz_requisito).toBe(true);
+    expect(item.resultado_analise.atualizacao_em_segundo_plano_pendente).toBe(true);
+    expect(item.analisado).toBe(true);
+    expect(estadoVisualDocumento(item.resultado_analise, item)).not.toBe('reanalisar');
+    expect(estadoVisualDocumento(item.resultado_analise, item)).not.toBe('aguardando');
+  });
+
+  it('STALE explícito continua exigindo reanálise', async () => {
+    const { enriquecerDocumentosAcervoComAnalise } = await import('../server/routes/documentacao');
+    const { estadoVisualDocumento } = await import('../shared/documentalPresentation');
+    mocks.poolQuery.mockImplementation(async (text: string) => {
+      const sql = String(text);
+      if (sql.includes('FROM information_schema.tables')) return { rows: [{ exists: 1 }] };
+      if (sql.includes('FROM information_schema.columns')) return { rows: [{ column_name: 'analysis_signature' }] };
+      if (sql.includes('SELECT e.resultado')) {
+        return { rows: [{
+          id: 'extracao-stale-explicita',
+          resultado: { tipo_analise: 'atos_junta_comercial', dados_extraidos: { identidade_status: 'IDENTIFICADO', documento_compativel: true } },
+          status: 'concluido',
+          prompt_versao: '0.0.0-antiga',
+          analysis_signature: 'assinatura-antiga',
+          classifier_version: 'antiga',
+          extractor_version: 'antiga',
+          rule_version: 'antiga',
+          schema_version: 'antiga',
+          analysis_status: 'STALE',
+          stale_at: new Date().toISOString(),
+          satisfaz_requisito: false,
+          hash_arquivo: 'hash-2',
+        }] };
+      }
+      return { rows: [] };
+    });
+
+    const documento = { id: 'atos-stale-explicita', tipo_documento: 'atos_junta_comercial', nome: 'ATOS DA JUNTA COMERCIAL.pdf', status: 'validado', validado: true, criado_em: new Date().toISOString() };
+    const resultado = await enriquecerDocumentosAcervoComAnalise(bloco(documento));
     const item = resultado[0].documentos[0];
     expect(item.resultado_analise.analysis_status).toBe('REANALISE_NECESSARIA');
     expect(estadoVisualDocumento(item.resultado_analise, item)).toBe('reanalisar');
-    expect(estadoVisualDocumento(item.resultado_analise, item)).not.toBe('incompativel');
-    expect(estadoVisualDocumento(item.resultado_analise, item)).not.toBe('aguardando');
   });
 });
 
