@@ -2503,9 +2503,14 @@ export async function avaliarProntidaoIdentidadeCnpj(params: {
     cartao_cnpj: {
       codigo: 'cartao_cnpj', nome: 'Cartão CNPJ', anexado: cartaoAnexado, analisado: cartaoAnalisado, consistente: cartaoConsistente,
       status: statusDocumento(cartaoAnexado, cartaoAnalisado, cartaoConsistente, cartaoFalhou),
-      diagnostico: cartaoConsistente ? 'CNPJ, razão social, CNAE, natureza jurídica, porte e situação cadastral convergem com a Receita Federal.' : params.erroProcessamentoCartao || cartaoPendencia?.mensagem || (cartaoAnexado ? 'Documento anexado; a leitura automática ainda precisa ser concluída.' : 'Documento não anexado.'),
+      diagnostico: cartaoConsistente ? 'CNPJ validado: situação cadastral, unidade e localização conferidas.' : params.erroProcessamentoCartao || cartaoPendencia?.mensagem || (cartaoAnexado ? 'Documento anexado; a leitura automática ainda precisa ser concluída.' : 'Documento não anexado.'),
       fonte: camposCartao?.fonte_extracao || analiseCnpj?.fonte_receita || null, confianca: camposCartao?.confianca ?? null,
-      campos_principais: { cnpj: camposCartao?.cnpj || camposReceita?.cnpj || params.empresa?.cnpj || null, razao_social: camposCartao?.nome_empresarial || camposReceita?.razao_social || params.empresa?.razao_social || null, cnae: camposCartao?.cnae_principal || camposReceita?.cnae_principal || params.empresa?.cnae_principal || null, situacao_cadastral: camposCartao?.situacao_cadastral || camposReceita?.situacao_cadastral || params.empresa?.situacao_cadastral || null },
+      campos_principais: {
+        cnpj: camposCartao?.cnpj || camposReceita?.cnpj || params.empresa?.cnpj || null,
+        situacao_cadastral: camposCartao?.situacao_cadastral || camposReceita?.situacao_cadastral || params.empresa?.situacao_cadastral || null,
+        matriz_filial: camposCartao?.matriz_filial || null,
+        localizacao: [camposCartao?.municipio, camposCartao?.uf].filter(Boolean).join(' / ') || null,
+      },
     },
     qsa: {
       codigo: 'qsa', nome: 'QSA / Quadro Societário', anexado: qsaAnexado, analisado: qsaAnalisado, consistente: qsaConsistente,
@@ -2513,13 +2518,11 @@ export async function avaliarProntidaoIdentidadeCnpj(params: {
       tipo_documento: 'qsa',
       tipo_leitura: 'qsa',
       qsa_leitura: true,
-      diagnostico: qsaConsistente ? 'CNPJ, razão social, capital social, nomes dos sócios e identificação do Sócio-Administrador foram conferidos.' : params.qsaDados?.diagnostico || qsaPendencia?.mensagem || (qsaAnexado ? 'Documento anexado; a análise societária ainda precisa ser concluída.' : 'Documento não anexado.'),
+      diagnostico: qsaConsistente ? 'QSA validado: vínculo com o CNPJ, quadro societário e administração conferidos.' : params.qsaDados?.diagnostico || qsaPendencia?.mensagem || (qsaAnexado ? 'Documento anexado; a análise societária ainda precisa ser concluída.' : 'Documento não anexado.'),
       fonte: params.qsaDados?.fonte_extracao || params.qsaDados?.modelo || null, confianca: params.qsaDados?.nivel_confianca ?? params.qsaDados?.confianca ?? null,
       socios_lidos: Array.isArray(params.qsaDados?.socios) ? params.qsaDados.socios : [],
       campos_principais: {
         cnpj: params.qsaDados?.cnpj || null,
-        razao_social: params.qsaDados?.razao_social || null,
-        capital_social: params.qsaDados?.capital_social ?? null,
         socios_identificados: Array.isArray(params.qsaDados?.socios) ? params.qsaDados.socios.length : null,
         administradores: Array.isArray(params.qsaDados?.socios)
           ? params.qsaDados.socios

@@ -417,12 +417,23 @@ function StatusAnaliseSlot({ item, tipo, onReler, relendo }: { item?: { nome: st
     </button>
   ) : null;
 
+  // A leitura interna pode extrair dezenas de campos, mas esta tela é de
+  // VALIDAÇÃO DOCUMENTAL, não de reprodução do documento. Cada card expõe
+  // somente as confirmações que determinam se o requisito está correto.
+  const chavesPermitidas = tipo === "cartao_cnpj"
+    ? new Set(["cnpj", "situacao_cadastral", "matriz_filial", "localizacao"])
+    : tipo === "qsa"
+      ? new Set(["cnpj", "socios_identificados", "administradores"])
+      : tipo === "enquadramento_tributario_cnpj"
+        ? new Set(["cnpj", "regime_tributario", "situacao_simples", "data_opcao_simples", "exclusao_agendada"])
+        : null;
   const campos = Object.entries(item.campos_principais || {})
+    .filter(([chave]) => !chavesPermitidas || chavesPermitidas.has(chave))
     .map(([chave, valor]) => {
       if (valor === null || valor === undefined || valor === "") return null;
       if (typeof valor === "boolean") return { chave, valor: valor ? "Sim" : "Não" };
       if (Array.isArray(valor)) {
-        const texto = valor.filter(Boolean).join(", ");
+        const texto = valor.filter(Boolean).slice(0, 3).join(", ");
         return texto ? { chave, valor: texto } : null;
       }
       return { chave, valor: String(valor) };
@@ -467,7 +478,7 @@ function StatusAnaliseSlot({ item, tipo, onReler, relendo }: { item?: { nome: st
                 onClick={() => setAberto((v) => !v)}
                 className="shrink-0 text-[9px] font-bold text-success underline decoration-dotted"
               >
-                {aberto ? "ocultar" : "Dados da análise"}
+                {aberto ? "Ocultar" : "Validação"}
               </button>
             )}
             {botaoReler}
@@ -570,12 +581,11 @@ const TIPOS_GATILHO_ANALISE_IDENTIDADE = new Set(Object.keys(CHAVE_ANALISE_POR_S
 const CAMPO_ANALISE_LABEL: Record<string, string> = {
   cnpj: "CNPJ",
   data_opcao_simples: "Opção pelo Simples",
-  razao_social: "Razão social",
-  cnae: "CNAE",
   situacao_cadastral: "Situação",
-  capital_social: "Capital social",
-  socios_identificados: "Sócios",
-  administradores: "Sócio-Administrador",
+  matriz_filial: "Unidade",
+  localizacao: "Localização",
+  socios_identificados: "Integrantes do QSA",
+  administradores: "Administrador/Titular",
   regime_tributario: "Regime",
   situacao_simples: "Simples",
   exclusao_agendada: "Exclusão agendada",
@@ -2397,7 +2407,7 @@ export default function DocumentosEntidade({
                                         onClick={() => setLaudosExpandidos((prev) => ({ ...prev, [doc.id]: !prev[doc.id] }))}
                                         className={`mt-0.5 text-[9px] font-bold underline decoration-dotted ${laudoErro ? "text-destructive" : doc.exige_revisao_humana ? "text-warning" : "text-success"}`}
                                       >
-                                        {laudosExpandidos[doc.id] ? "Ocultar" : "Dados da análise"}
+                                        {laudosExpandidos[doc.id] ? "Ocultar" : "Validação"}
                                       </button>
                                     )}
                                   </div>

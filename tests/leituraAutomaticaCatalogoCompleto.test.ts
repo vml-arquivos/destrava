@@ -85,10 +85,12 @@ describe('cobertura integral da leitura automática documental', () => {
     expect(dados.evidencias.length).toBeGreaterThanOrEqual(7);
   });
 
-  it('mostra os dados genéricos comprovados no card do arquivo', () => {
+  it('mostra somente a validação objetiva dos dados genéricos comprovados no card', () => {
     const secoes = construirSecoesAnaliseDocumento({
       conclusao: 'Leitura concluída; documento considerado consistente.',
+      tipo_documento: 'cndt',
       status: 'concluido',
+      satisfaz_requisito: true,
       dados_extraidos: {
         campos_comprovados: {
           cnpj: '12.345.678/0001-90',
@@ -97,14 +99,15 @@ describe('cobertura integral da leitura automática documental', () => {
           situacao_certidao: 'negativa',
         },
       },
-    });
+    }, { tipo_documento: 'cndt', analisado: true, consistente: true });
     const campos = secoes.find((secao) => secao.id === 'campos')?.campos || [];
     expect(campos).toEqual(expect.arrayContaining([
       { label: 'CNPJ', valor: '12.345.678/0001-90' },
-      { label: 'Número do registro', valor: '4567' },
-      { label: 'Data de validade', valor: '2026-09-30' },
-      { label: 'Situação da certidão', valor: 'negativa' },
+      { label: 'Situação', valor: 'negativa' },
+      { label: 'Validade', valor: '2026-09-30' },
+      { label: 'Validação', valor: 'Regularidade confirmada' },
     ]));
+    expect(campos.some((campo) => campo.label === 'Número do registro')).toBe(false);
   });
 
   it('não aprova documento vencido nem data futura', () => {

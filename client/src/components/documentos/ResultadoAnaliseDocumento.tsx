@@ -114,7 +114,12 @@ export function ResultadoAnaliseDocumento({ resultado, documento, compacto = fal
   // "i" (informações) abaixo, que abre/fecha essas seções sem sair da tela.
   // No PDF gerado, essas mesmas seções nem são desenhadas (ver documentacao.ts).
   const principais = todasSecoes.filter((secao) => !secao.colapsavel);
-  const detalhes = todasSecoes.filter((secao) => secao.colapsavel);
+  // O Acervo (compacto=true) é uma tela operacional de validação. Mesmo que
+  // alguma evolução futura volte a produzir seções técnicas/evidências, elas
+  // não devem reaparecer dentro do card e transformar a tela em reprodução do
+  // documento. O detalhe completo continua disponível internamente para
+  // auditoria e cruzamentos, fora desta camada operacional.
+  const detalhes = compacto ? [] : todasSecoes.filter((secao) => secao.colapsavel);
 
   return (
     <div className="space-y-1.5">
