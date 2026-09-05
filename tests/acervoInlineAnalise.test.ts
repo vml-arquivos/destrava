@@ -16,7 +16,7 @@ describe('análise inline no Acervo Documental', () => {
     expect(acervo).toContain('resultado_analise?: Record<string, any> | null;');
     expect(acervo).toContain('const resultadoInline = doc.resultado_analise || laudo || laudoErro || null;');
     expect(acervo).toContain('<ResultadoAnaliseDocumento resultado={resultadoInline} documento={doc} compacto />');
-    expect(acervo).toContain('Dados da análise');
+    expect(acervo).toContain('Validação');
   });
   it('oferece Ler/Reler para todo documento analisável, inclusive antes do primeiro laudo', () => {
     expect(acervo).toContain('tipoDocumentoTemLeituraAutomatica(doc.tipo_documento)');
