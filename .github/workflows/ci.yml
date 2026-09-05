@@ -34,6 +34,11 @@ jobs:
           corepack prepare pnpm@10.4.1 --activate
           pnpm --version
 
+      - name: Install native document readers
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends poppler-utils tesseract-ocr tesseract-ocr-por tesseract-ocr-eng
+
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
