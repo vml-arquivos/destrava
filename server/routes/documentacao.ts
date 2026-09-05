@@ -2655,6 +2655,7 @@ export async function montarValidacaoSocietaria(
         nome: item.documento.nome_original || item.documento.nome_arquivo || 'Contrato/Alteração',
         nire: contrato.nire || null,
         data_registro: contrato.data_registro || null,
+        numero_arquivamento: contrato.numero_arquivamento || null,
         tipo_ato: contrato.tipo_ato || null,
         consistente: item.analise!.status === 'concluido' && bloqueios.length === 0,
         status_analise: item.analise!.status,
