@@ -462,12 +462,12 @@ function camposValidacaoObjetiva(resultado: any, documento: any, socios: any[] =
 
   if (/cartao_cnpj|cnpj_cartao/.test(tipo)) {
     adicionarCampoObjetivo(campos, 'CNPJ', primeiroValor(resultado, ['cnpj'], ['CNPJ']));
+    adicionarCampoObjetivo(campos, 'Razão social', primeiroValor(resultado, ['razao_social', 'nome_empresarial'], ['Razão social', 'Nome empresarial']));
     adicionarCampoObjetivo(campos, 'Situação cadastral', primeiroValor(resultado, ['situacao_cadastral'], ['Situação cadastral', 'Situação']));
     adicionarCampoObjetivo(campos, 'Unidade', primeiroValor(resultado, ['matriz_filial'], ['Matriz/Filial', 'Unidade']));
     const municipio = texto(primeiroValor(resultado, ['municipio'], ['Município']));
     const uf = texto(primeiroValor(resultado, ['uf'], ['UF']));
     adicionarCampoObjetivo(campos, 'Localização', [municipio, uf].filter(Boolean).join(' / '));
-    adicionarCampoObjetivo(campos, 'Validação', aprovado ? 'CNPJ válido para o cadastro' : statusObjetivo(resultado, documento));
     return campos.slice(0, 5);
   }
 
@@ -698,6 +698,37 @@ function documentoMarcadoIncompativel(resultado: any, documento: any): boolean {
   );
 }
 
+const ALERTAS_CNPJ_LEGADOS_NAO_BLOQUEANTES = new Set([
+  "empresa_menos_12_meses",
+  "cartao_cnpj_emissao_nao_confirmada",
+]);
+
+function cartaoCnpjLegadoTemSomenteRevisaoInformativa(resultado: any, documento: any): boolean {
+  const tipo = tipoDocumentoResumo(resultado, documento);
+  if (!/cartao_cnpj|cnpj_cartao/.test(tipo)) return false;
+  if (documentoMarcadoIncompativel(resultado, documento)) return false;
+
+  const dados = resultado?.dados_extraidos && typeof resultado.dados_extraidos === "object" ? resultado.dados_extraidos : {};
+  const alertas = [
+    ...(Array.isArray(resultado?.alertas) ? resultado.alertas : []),
+    ...(Array.isArray(dados?.alertas) ? dados.alertas : []),
+  ].filter(Boolean);
+  if (!alertas.length) return false;
+
+  const bloqueante = alertas.some((alerta: any) => {
+    const codigo = statusVisualNormalizado(alerta?.codigo);
+    if (ALERTAS_CNPJ_LEGADOS_NAO_BLOQUEANTES.has(codigo)) return false;
+    if (alerta?.divergente === true || codigo.startsWith("divergencia_")) return true;
+    return ["cnpj_invalido", "situacao_cadastral_impeditiva", "situacao_cadastral_atencao", "cartao_cnpj_vencido"].includes(codigo);
+  });
+  if (bloqueante) return false;
+
+  const cnpj = texto(dados?.cnpj || resultado?.cnpj || documento?.cnpj);
+  const situacao = statusVisualNormalizado(dados?.situacao_cadastral || resultado?.situacao_cadastral);
+  const status = statusVisualNormalizado(resultado?.status || dados?.status || documento?.status);
+  return Boolean(cnpj) && situacao === "ativa" && ["concluido", "concluida", "revisao_humana"].includes(status);
+}
+
 export function estadoVisualDocumento(resultado: any = {}, documento: any = {}): DocumentoEstadoVisual {
   const lifecycle = statusVisualNormalizado(resultado?.analysis_status || documento?.analysis_status);
   if (["stale", "superseded", "reanalise_necessaria", "reanalise", "reanalisar_necessario", "reanalisar_necessaria"].includes(lifecycle)) {
@@ -710,6 +741,14 @@ export function estadoVisualDocumento(resultado: any = {}, documento: any = {}):
 
   const dadosExtraidos = resultado?.dados_extraidos && typeof resultado.dados_extraidos === "object" ? resultado.dados_extraidos : {};
   const classificacao = resultado?.classificacao || resultado?.classificacao_documental || resultado?.classificacao_central || dadosExtraidos?.classificacao || {};
+
+  // Compatibilidade imediata com laudos de CNPJ já persistidos pela versão
+  // anterior: se a única "revisão" veio de alerta estratégico ou da ausência
+  // da data de emissão, não manter o falso amarelo até uma nova OCR.
+  if (cartaoCnpjLegadoTemSomenteRevisaoInformativa(resultado, documento)) {
+    return "aprovado";
+  }
+
   if (resultado?.satisfaz_requisito === false || dadosExtraidos?.satisfaz_requisito === false || classificacao?.satisfaz_requisito === false || resultado?.cobertura_status === "NAO_SATISFAZ" || dadosExtraidos?.cobertura_status === "NAO_SATISFAZ" || classificacao?.cobertura_status === "NAO_SATISFAZ") {
     return "revisao";
   }

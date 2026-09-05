@@ -31,7 +31,7 @@ describe("construirSecoesAnaliseDocumento — validação objetiva", () => {
     expect(serializado).toContain("ATIVA");
     expect(serializado).toContain("matriz");
     expect(serializado).toContain("Goiânia / GO");
-    expect(serializado).not.toContain("PALUMA BURGER LTDA");
+    expect(serializado).toContain("PALUMA BURGER LTDA");
     expect(serializado).not.toContain("5611-2/01");
     expect(serializado).not.toContain("natureza_juridica");
     expect(serializado).not.toContain("empresa@exemplo.com");
@@ -216,6 +216,65 @@ describe("construirSecoesAnaliseDocumento — validação objetiva", () => {
     expect(serializado).not.toContain("local_deterministica");
     expect(serializado).not.toContain("trecho literal");
     expect(serializado).not.toContain("Checklist técnico");
+  });
+
+  it("normaliza laudo legado do Cartão CNPJ quando a única revisão era informativa", () => {
+    const resultadoLegado = {
+      tipo_documento: "cartao_cnpj",
+      status: "revisao_humana",
+      satisfaz_requisito: false,
+      revisao_humana_necessaria: true,
+      alertas: [
+        {
+          codigo: "cartao_cnpj_emissao_nao_confirmada",
+          mensagem: "Data de emissão não identificada.",
+          severidade: "alta",
+        },
+        {
+          codigo: "empresa_menos_12_meses",
+          mensagem: "Empresa nova.",
+          severidade: "alta",
+        },
+      ],
+      dados_extraidos: {
+        cnpj: "52.008.368/0001-03",
+        situacao_cadastral: "ATIVA",
+        documento_compativel: true,
+      },
+    };
+
+    expect(estadoVisualDocumento(resultadoLegado, {
+      tipo_documento: "cartao_cnpj",
+      exige_revisao_humana: true,
+      analisado: true,
+    })).toBe("aprovado");
+  });
+
+  it("não normaliza Cartão CNPJ legado quando existe divergência real", () => {
+    const resultado = {
+      tipo_documento: "cartao_cnpj",
+      status: "revisao_humana",
+      satisfaz_requisito: false,
+      revisao_humana_necessaria: true,
+      alertas: [
+        {
+          codigo: "divergencia_nome_empresarial",
+          mensagem: "Razão social divergente.",
+          severidade: "alta",
+        },
+      ],
+      dados_extraidos: {
+        cnpj: "52.008.368/0001-03",
+        situacao_cadastral: "ATIVA",
+        documento_compativel: true,
+      },
+    };
+
+    expect(estadoVisualDocumento(resultado, {
+      tipo_documento: "cartao_cnpj",
+      exige_revisao_humana: true,
+      analisado: true,
+    })).toBe("revisao");
   });
 
   it("não pinta de verde documento incompatível, stale, não satisfeito ou sem análise", () => {

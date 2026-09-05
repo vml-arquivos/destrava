@@ -43,6 +43,29 @@ type AlertaAnalise = {
   recomendacao?: string;
 };
 
+/**
+ * Alertas estratégicos/informativos não podem transformar um Cartão CNPJ
+ * documentalmente consistente em "revisão necessária". O bloqueio desta
+ * camada é exclusivamente documental/cadastral.
+ */
+const CODIGOS_CNPJ_NAO_BLOQUEANTES = new Set([
+  'empresa_menos_12_meses',
+  'cartao_cnpj_emissao_nao_confirmada',
+]);
+
+export function alertaCnpjBloqueiaValidacaoDocumental(alerta: (Partial<AlertaAnalise> & { divergente?: boolean }) | null | undefined): boolean {
+  if (!alerta) return false;
+  const codigo = String(alerta.codigo || '').trim().toLowerCase();
+  if (CODIGOS_CNPJ_NAO_BLOQUEANTES.has(codigo)) return false;
+  if (alerta.divergente === true || codigo.startsWith('divergencia_')) return true;
+  return [
+    'cnpj_invalido',
+    'situacao_cadastral_impeditiva',
+    'situacao_cadastral_atencao',
+    'cartao_cnpj_vencido',
+  ].includes(codigo);
+}
+
 type DocCartao = {
   id: string;
   entidade_tipo?: string | null;
@@ -1277,8 +1300,16 @@ export async function analisarCnpjReceitaCartaoEmpresa(empresaId: string, criado
       }
     } else {
       statusValidadeCartao = extracaoGemini ? 'nao_verificado' : 'pendente';
-      alertas.push({ codigo: 'cartao_cnpj_emissao_nao_confirmada', mensagem: 'O Cartão CNPJ foi lido, mas a data de emissão não pôde ser confirmada no arquivo.', severidade: 'alta', recomendacao: 'Confirmar visualmente a data de emissão ou anexar um Cartão CNPJ atualizado e legível.' });
-      pontosAtencao.push('Data de emissão do Cartão CNPJ não confirmada; o documento foi analisado, mas exige correção antes do avanço.');
+      // A ausência da data de emissão não invalida, por si só, um Cartão CNPJ
+      // identificado e coerente. Ela apenas impede operações automáticas que
+      // exigem prova de recência (por exemplo, corrigir cadastro desatualizado).
+      // Portanto é informação operacional, não pendência documental bloqueante.
+      alertas.push({
+        codigo: 'cartao_cnpj_emissao_nao_confirmada',
+        mensagem: 'Data de emissão não identificada no arquivo; a validação cadastral pode prosseguir, mas atualizações automáticas que exigem documento recente ficam desabilitadas.',
+        severidade: 'media',
+        recomendacao: 'Só confirme a emissão se for necessário atualizar automaticamente algum dado cadastral divergente.',
+      });
     }
   }
 
@@ -1346,7 +1377,8 @@ export async function analisarCnpjReceitaCartaoEmpresa(empresaId: string, criado
   const { score, risco } = calcularScore({ camposReceita, cartao, extracao: camposCartao, divergencias, alertas, socios });
   const diagnostico = gerarDiagnostico({ empresa, camposReceita, cartao, statusValidadeCartao, diasEmissaoCartao, score, risco, alertas, recomendacoes });
   const cartaoFoiLido = !!extracaoGemini;
-  const exigeRevisao = alertas.some((a) => a.severidade === 'critica' || a.severidade === 'alta');
+  const alertasBloqueantes = alertas.filter((alerta) => alertaCnpjBloqueiaValidacaoDocumental(alerta));
+  const exigeRevisao = alertasBloqueantes.length > 0;
   const status = !cartao
     ? 'pendente_documento'
     : !cartaoFoiLido
@@ -1441,7 +1473,9 @@ export async function analisarCnpjReceitaCartaoEmpresa(empresaId: string, criado
       endereco_completo: camposCartao?.endereco_completo || camposReceita.endereco_completo || null,
       data_emissao: camposCartao?.data_emissao || dataEmissaoCartao || null,
       documento_compativel: cartaoFoiLido,
-      satisfaz_requisito: cartaoFoiLido && statusValidadeCartao === 'valido' && !exigeRevisao,
+      // Data de emissão não verificada não derruba a comprovação cadastral;
+      // apenas vencimento conhecido ou pendência cadastral real bloqueiam.
+      satisfaz_requisito: cartaoFoiLido && statusValidadeCartao !== 'vencido' && !exigeRevisao,
       confianca: extracaoGemini?.confianca ?? null,
       fonte_extracao: extracaoGemini?.fonte || 'local_deterministica',
     };
@@ -1463,7 +1497,7 @@ export async function analisarCnpjReceitaCartaoEmpresa(empresaId: string, criado
           SET status_validade = $2,
               data_emissao_documento = COALESCE(data_emissao_documento, $3::date),
               resultado_validacao = COALESCE(resultado_validacao, '{}'::jsonb) || $4::jsonb,
-              exige_revisao_humana = CASE WHEN $2 IN ('vencido','divergente','ilegivel') THEN true ELSE exige_revisao_humana END,
+              exige_revisao_humana = $5,
               atualizado_em = NOW()
         WHERE id = $1`,
       [
@@ -1478,6 +1512,7 @@ export async function analisarCnpjReceitaCartaoEmpresa(empresaId: string, criado
           analise_automatica_status: laudoDocumentalCartao.status,
           analise_automatica_concluida_em: new Date().toISOString(),
         }),
+        laudoDocumentalCartao.revisao_humana_necessaria === true,
       ]
     ).catch(() => undefined);
   }
