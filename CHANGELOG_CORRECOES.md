@@ -2,6 +2,7 @@
 
 ## Continuidade 05/09/2026 — leitura automática integral e operação segura
 
+- Corrigido o empacotamento Docker após validação com log real do Coolify: servidor e worker agora são compilados separadamente para `dist/index.js` e `dist/backfill-laudos.js`, exatamente os caminhos usados no runtime. Adicionado teste de contrato entre `package.json` e `Dockerfile` para impedir recorrência.
 - Todo tipo uploadável do catálogo passa a ter configuração efetiva de análise e prompt; tipos sem extrator dedicado usam leitura genérica orientada pelo perfil documental.
 - O fallback local genérico é neutro: extrai somente campos explicitamente rotulados e não reaproveita mais o parser de contrato social para arquivos de outras famílias.
 - PDF, imagens, CSV, DOCX e XLSX entram no pipeline automático; conteúdo e assinatura do arquivo são conferidos antes da persistência.
@@ -10,7 +11,7 @@
 - EFD-Contribuições lê e reconcilia M400/M800 sem somar duas vezes a mesma base; EFD ICMS/IPI lê E110. Divergência ou bloco ausente encaminha para revisão humana.
 - Upload, execução manual e backfill usam o mesmo despachante de analisadores especializados. As versões de prompt também foram centralizadas para impedir que um laudo reprocessado nasça imediatamente obsoleto.
 - Migração 104 adiciona fila rearmável/versionada, retentativa automática e o tipo Requerimento de Empresário; o container não migra o banco por padrão.
-- A matriz societária diferencia MEI de Empresário Individual não-MEI e preserva as trilhas de LTDA, S.A., cooperativa/associação/fundação e sociedade de advogados.
+- A matriz societária diferencia MEI de Empresário Individual não-MEI e separa as trilhas de LTDA/S.A., cooperativa (Junta), associação/fundação (RCPJ) e sociedade de advocacia (OAB).
 - Console SQL administrativo bloqueado por padrão; quando explicitamente habilitado, aceita somente leitura com transação read-only, timeout e limite de linhas.
 
 Detalhes de implantação, matriz documental, política temporal e limitações estão em `DOCUMENTACAO_LEITURA_AUTOMATICA_2026-09-05.md`.

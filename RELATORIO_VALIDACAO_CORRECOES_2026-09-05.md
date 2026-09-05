@@ -35,13 +35,15 @@ Data: 2026-09-05
 | Verificação | Resultado |
 |---|---|
 | TypeScript (`tsc --noEmit`) | aprovado |
-| Testes automatizados | 103 arquivos; 928 testes aprovados |
+| Testes automatizados | 104 arquivos; 929 testes aprovados |
 | Build Vite | aprovado; 2.943 módulos transformados |
 | Pré-renderização | meta OG, Twitter, canonical, root React e bundle aprovados |
 | Orçamento de bundle | JS inicial 98,7 kB gzip (limite 130); CSS 31,3 kB (limite 45); landing A1 8,5 kB (limite 20) |
-| Bundle servidor/worker | aprovado (`dist/server/index.js` e `dist/scripts/backfill-laudos.js`) |
+| Bundle servidor/worker | aprovado (`dist/index.js` e `dist/backfill-laudos.js`), nos mesmos caminhos consumidos pelo Docker/runtime |
 
 Mensagens de `stderr` vistas em testes são cenários deliberadamente simulados de rede, banco, fallback e best-effort; não houve teste reprovado ao final.
+
+O primeiro deploy do pacote anterior foi revertido pelo Coolify porque o build com dois pontos de entrada gerou `dist/server/index.js`, enquanto o Docker inicia `dist/index.js`. O comando foi corrigido para duas compilações com `--outfile` explícito e ganhou o teste `tests/buildEntrypoints.test.ts`. O build final confirmou os dois arquivos corretos e `node --check` aprovou ambos. O pacote anterior não deve ser redeployado.
 
 ## Arquivos centrais alterados/adicionados
 
