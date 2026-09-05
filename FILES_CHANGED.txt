@@ -758,3 +758,45 @@ Arquivos de teste NOVOS ou AMPLIADOS: nenhum (correção puramente de CSS/layout
 
 Total desta rodada: 1 arquivo de código alterado + 6 arquivos de
 documentação alterados = 7 arquivos.
+
+======================================================================
+Continuidade 05/09/2026 (outra IA, "GPT", fora desta sessão) -- reescrita
+do catálogo de leitura automática (141 tipos), versionamento de laudos,
+matriz documental por natureza jurídica/regime, empacotamento Docker,
+console SQL administrativo, migração 104, entre outros.
+======================================================================
+
+Este bloco de mudanças NÃO foi feito nesta sessão -- chegou pronto no zip
+"destravamain 24.zip" enviado pelo usuário. A lista completa de arquivos
+alterados/adicionados por ele está no próprio pacote, em
+RELATORIO_VALIDACAO_CORRECOES_2026-09-05.md (seção "Arquivos centrais
+alterados/adicionados") e DOCUMENTACAO_LEITURA_AUTOMATICA_2026-09-05.md --
+não reproduzida aqui para não duplicar/divergir da fonte. Meu papel nesta
+rodada (abaixo) foi diagnosticar e corrigir cirurgicamente um bug real
+introduzido por essa reescrita, não auditar/re-certificar cada arquivo dela.
+
+======================================================================
+Rodada 31 (esta entrega, 05/09/2026) -- diagnóstico "arquiteto sênior"
+pós-implantação do GPT: laudo desatualizado pelo bump de versão de
+classificação aparecia como "Documento incompatível"/preso em "Aguardando
+análise" em vez de "Reanálise necessária" (print real: QSA, Enquadramento
+Tributário e CCMEI da empresa MEI "VILSON MARCIO DE LIMA 70010668187")
+======================================================================
+
+Arquivos existentes ALTERADOS nesta rodada:
+
+server/routes/documentacao.ts   (em enriquecerDocumentosAcervoComAnalise, bloco `if (laudoStale)`: adicionada a linha `resultadoAnalise.analysis_status = lifecycleStatus || 'REANALISE_NECESSARIA';`, propagando ao objeto `resultado_analise` devolvido à tela o mesmo sinal de "laudo desatualizado" que `estadoVisualDocumento`, shared/documentalPresentation.ts -- já existente no pacote do GPT, não tocado -- precisa para aplicar o estado "reanalisar"/"Reanálise necessária" ANTES de qualquer checagem de incompatibilidade; antes desta linha só `.status` era gravado, campo que essa função nunca lê)
+tests/acervoDocumentalFalhaRealVsAguardando.test.ts   (novo describe/it: laudo com analysis_status stale simulado via mock de pg -> prova, chamando enriquecerDocumentosAcervoComAnalise e depois estadoVisualDocumento, que o resultado é "reanalisar", nunca "incompativel" nem "aguardando")
+CHANGELOG_CORRECOES.md
+PENDENCIAS_REAIS.md
+ROLLBACK_PLAN.md
+TEST_REPORT.md
+BUILD_REPORT.md
+FILES_CHANGED.txt (este arquivo)
+SHA256SUMS.txt
+
+Arquivos NOVOS: nenhum.
+Arquivos de teste NOVOS ou AMPLIADOS: tests/acervoDocumentalFalhaRealVsAguardando.test.ts (+1 teste, 929 -> 930 -- ver TEST_REPORT.md).
+
+Total desta rodada: 1 arquivo de código alterado + 1 arquivo de teste
+ampliado + 7 arquivos de documentação alterados = 9 arquivos.

@@ -509,6 +509,34 @@ export async function enriquecerDocumentosAcervoComAnalise(blocos: any[]): Promi
     }, analiseEspecializada);
     if (laudoStale) {
       (resultadoAnalise as any).status = 'REANALISE_NECESSARIA';
+      // CORREÇÃO (2026-09-05, diagnóstico do estado "Aguardando análise"/
+      // "Documento incompatível" mostrado incorretamente para laudos apenas
+      // desatualizados após a correção do GPT): `estadoVisualDocumento`
+      // (shared/documentalPresentation.ts) é a ÚNICA fonte de verdade para o
+      // selo visual e lê `resultado.analysis_status` -- não `resultado.status`
+      // -- para decidir o estado "reanalisar" (ver seu próprio teste em
+      // tests/documentalPresentation.test.ts: `analysis_status:
+      // "REANALISE_NECESSARIA"` -> `"reanalisar"`). Sem popular este campo
+      // aqui, o guard de "reanalisar" (que tem que rodar ANTES de qualquer
+      // checagem de incompatibilidade, para nunca confundir "laudo antigo,
+      // precisa reler" com "documento errado para este campo") nunca disparava
+      // para nenhum laudo marcado como stale/superseded neste endpoint (o que
+      // alimenta o Acervo Documental) -- o documento caía em "aguardando" (se
+      // os dados antigos não tinham sinal de incompatibilidade) ou, pior, em
+      // "incompativel" (se os dados antigos do laudo desatualizado carregavam
+      // tipo/identidade que não batem mais com o catálogo atual), mostrando o
+      // selo enganoso "Documento incompatível" para um documento que só
+      // precisa ser relido -- exatamente o sintoma relatado pelo usuário para
+      // QSA, Enquadramento Tributário e CCMEI de uma empresa MEI logo após a
+      // correção do GPT (que renumerou/expandiu as versões de classificação e
+      // por isso marcou laudos antigos como stale em todo o sistema, por
+      // design -- ver CLASSIFIER_VERSION/RULE_VERSION em
+      // documentalLaudoVersioning.ts). Regra geral, sem exceção por tipo de
+      // documento/empresa/regime: qualquer laudo marcado stale/superseded por
+      // este mecanismo passa a ser identificado corretamente como
+      // "Reanálise necessária" pelo selo visual, em vez de cair em outro
+      // estado por acidente de nome de campo.
+      (resultadoAnalise as any).analysis_status = lifecycleStatus || 'REANALISE_NECESSARIA';
       resultadoAnalise.conclusao = 'Laudo antigo ou superseded; reanálise necessária antes de considerar o documento válido.';
       resultadoAnalise.diagnostico = analiseEspecializada?.mensagem_status || 'A versão do motor mudou ou a assinatura do arquivo não confere. O laudo histórico foi preservado e não satisfaz o requisito atual.';
     } else if (!analisado) {
