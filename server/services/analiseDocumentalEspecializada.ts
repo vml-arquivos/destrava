@@ -22,6 +22,7 @@ import { registrarPeriodoRegime } from './regimeTributarioTemporalService';
 import { registrarFaturamentoCompetencia } from './faturamentoRolling12MesesService';
 import { detectarRequisitosCobertosPeloTexto, detectarStatusCertidaoDebitos, registrarCoberturaEvidencia } from './coberturaEvidenciaBureauService';
 import { descricaoPerfilParaPrompt, obterPerfilAnaliseDocumental } from './documentAnalysisProfiles';
+import { externalAiFallbackDocumentalEnabled } from './documentExternalAiPolicy';
 
 const { Pool } = pkg;
 
@@ -1939,8 +1940,8 @@ export class AnaliseDocumentalService {
       return this.extratorInjetado(arquivoPath, prompt, mimeType);
     }
 
-    if (String(process.env.GEMINI_DOCUMENT_OCR_ENABLED || 'true').toLowerCase() === 'false') {
-      throw new Error('Análise documental Gemini desativada por GEMINI_DOCUMENT_OCR_ENABLED=false.');
+    if (!externalAiFallbackDocumentalEnabled()) {
+      throw new Error('Fallback externo documental desativado; a validação deve usar o motor interno.');
     }
 
     const apiKey = process.env.GEMINI_API_KEY || process.env.GOOGLE_API_KEY;
@@ -2011,84 +2012,11 @@ export class AnaliseDocumentalService {
       : 0.72;
 
     let local: Awaited<ReturnType<typeof extrairDocumentoLocal>> | null = null;
-    try {
-      local = await extrairDocumentoLocal(resolvedPath, mimeType, tipo);
-      // CORREÇÃO (2026-08-31, bug real reportado em produção 3 vezes seguidas
-      // para o mesmo caso -- ver comentário em TIPOS_COMPROVANTE_REGIME_DETERMINISTICO):
-      // a condição anterior só usava o resultado local diretamente quando ele
-      // NÃO apontasse incompatibilidade -- ou seja, exatamente quando o
-      // classificador determinístico mais precisava ser ouvido (encontrou um
-      // documento do tipo errado, ex.: PGDAS no slot de ECF), o código descartava
-      // esse achado e pedia uma segunda opinião à IA. Como a IA é não
-      // determinística e `normalizarDocumentoCatalogado` assume
-      // `documento_compativel: true` quando o campo vem ausente da resposta,
-      // isso apagava sistematicamente o "false" correto. Para os 4 tipos com
-      // classificador 100% determinístico, um "false" local agora é decisivo,
-      // igual a um "true" -- sem rodada extra pela IA. Para os demais tipos com
-      // extração local (QSA, Atos da Junta, Cartão CNPJ etc.), cujo
-      // `documento_compativel` vem de heurísticas mais aproximadas, o
-      // comportamento de pedir a segunda opinião da IA continua idêntico ao de
-      // antes desta correção.
-      const classificacaoLocalEDeterministica = TIPOS_COMPROVANTE_REGIME_DETERMINISTICO.has(tipo);
-      const confiavelParaUsoDireto = local.legivel && local.confianca >= threshold
-        && (classificacaoLocalEDeterministica || local.dados?.documento_compativel !== false);
-      if (confiavelParaUsoDireto) {
-        this.ultimoModeloUsado = `local:${local.mecanismo}-v1`;
-        this.ultimaFonteExtracao = 'local';
-        return {
-          ...local.dados,
-          confianca: local.confianca,
-          fonte_extracao: 'local_deterministica',
-          mecanismo_extracao: local.mecanismo,
-          ...(local.texto ? { __texto_local: local.texto } : {}),
-        };
-      }
-    } catch (error: any) {
-      console.warn('[AnaliseDocumentalService] Extração local falhou de forma controlada:', tipo, error?.message || error);
-    }
-
-    try {
-      const resultadoIa = await this.extrairComIA(arquivoPath, prompt, mimeType, local?.texto || null);
-      // CORREÇÃO (2026-08-31): antes, o texto local só era propagado para a IA
-      // quando `tipo === 'qsa'`, mesmo quando a extração local tinha texto de
-      // sobra para os demais tipos críticos (ECF, DCTF/MIT, DARF, Livro Caixa,
-      // e qualquer outro tipo com extração local). Sem esse texto,
-      // `classificarResultadoPersistido` (o classificador central,
-      // `classificadorDocumentalCentral.ts`) nunca recebia conteúdo real para
-      // analisar neste ramo -- ficava com `NAO_IDENTIFICADO` em vez de
-      // `INCOMPATIVEL`, mesmo já existindo texto extraído localmente que
-      // provaria a incompatibilidade. Propagar sempre que houver texto local
-      // não muda em nada o resultado da IA em si -- só garante que a camada de
-      // classificação determinística por trás dela tenha o texto real para
-      // trabalhar.
-      return local?.texto
-        ? { ...resultadoIa, __texto_local: local.texto }
-        : resultadoIa;
-    } catch (error: any) {
-      // A ausência de Gemini não transforma uma leitura local executada em
-      // "aguardando análise". Quando o OCR/pdftotext conseguiu extrair algum
-      // conteúdo estruturado, persistimos o resultado como parcial e o motor
-      // determinístico gera as pendências objetivas para revisão humana.
-      // Assim a tela sempre mostra o que foi lido e por que não pode avançar.
-      const temDadosLocais = !!local?.dados && Object.keys(local.dados).some((chave) => {
-        const valor = local?.dados?.[chave];
-        return valor !== null && valor !== undefined && valor !== ''
-          && !(Array.isArray(valor) && valor.length === 0)
-          && !(typeof valor === 'object' && !Array.isArray(valor) && Object.keys(valor).length === 0);
-      });
-      if (temDadosLocais) {
+    const fallbackLocalParcial = (motivo: unknown): any | null => {
+      const parcial = fallbackLocalParcial(error);
+      if (parcial) {
         console.warn('[AnaliseDocumentalService] Gemini indisponível; mantendo extração local parcial para revisão humana:', tipo, error?.message || error);
-        this.ultimoModeloUsado = `local:${local?.mecanismo || 'ocr'}-v1-parcial`;
-        this.ultimaFonteExtracao = 'local';
-        return {
-          ...local!.dados,
-          confianca: local!.confianca,
-          fonte_extracao: 'local_deterministica',
-          mecanismo_extracao: local!.mecanismo,
-          ...(local?.texto ? { __texto_local: local.texto } : {}),
-          extracao_parcial: true,
-          motivo_extracao_parcial: local!.motivo || error?.message || 'Extração local abaixo do limiar de confiança.',
-        };
+        return parcial;
       }
       throw new Error(`${tipo}: ${local?.motivo || error?.message || 'não foi possível ler o documento pelo OCR interno nem pela IA externa.'}`);
     }
