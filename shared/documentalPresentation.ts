@@ -513,7 +513,6 @@ function camposValidacaoObjetiva(resultado: any, documento: any, socios: any[] =
     const alteracoes = Array.isArray(resultado?.alteracoes_societarias)
       ? resultado.alteracoes_societarias
       : Array.isArray(dados?.contrato?.alteracoes_societarias) ? dados.contrato.alteracoes_societarias : [];
-    if (alteracoes.length) adicionarCampoObjetivo(campos, 'Resultado da alteração', formatarAlteracaoResumo(alteracoes[0]));
     return campos.slice(0, 4);
   }
 
