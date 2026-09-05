@@ -326,6 +326,21 @@ const TIPOS_FORA_DO_CHECKLIST_CREDITO = new Set(["contrato_prestacao_servicos", 
 const TIPOS_COM_ANALISE_AUTOMATICA = new Set(
   DOCUMENT_TYPE_CATALOG.filter((item) => item.uploadavel && documentAnalysisConfig(item.tipo)).map((item) => item.tipo),
 );
+
+export function tipoDocumentoTemLeituraAutomatica(tipo: string): boolean {
+  return TIPOS_COM_ANALISE_AUTOMATICA.has(String(tipo || ""));
+}
+
+export function documentoTemResultadoDeLeitura(doc?: DocumentoArquivo | null): boolean {
+  if (!doc) return false;
+  if (doc.resultado_validacao?.analise_regra_documental || doc.resultado_validacao?.analise_regra_documental_erro) return true;
+  if (doc.analisado === true) return true;
+  const resultado = doc.resultado_analise || {};
+  const status = String(resultado?.status || "").toLowerCase();
+  const lifecycle = String(resultado?.analysis_status || "").toUpperCase();
+  return ["concluido", "revisao_humana", "falhou"].includes(status)
+    || ["ATIVO", "STALE", "SUPERSEDED", "REANALISE_NECESSARIA"].includes(lifecycle);
+}
 const TIPOS_FISCAIS_SIMPLIFICADOS = new Set(["pgdas", "pgdas_d", "pgmei", "das_mei", "ccmei", "recibo_pgdas", "recibo_pgmei", "defis", "dasn_simei", "recibo_defis", "recibo_dasn_simei", "relatorio_receitas_mei"]);
 const TIPOS_FISCAIS_ECF = new Set(["ecf", "recibo_ecf", "ecd", "recibo_ecd", "dctf", "dctfweb", "mit", "darf", "livro_caixa", "efd_contribuicoes", "efd_icms_ipi", "efd"]);
 
@@ -767,6 +782,10 @@ export default function DocumentosEntidade({
   // o arquivo. Este estado controla o botão "Reanalisar" novo, por arquivo,
   // que resolve isso sem precisar reanexar nada.
   const [reanalisandoId, setReanalisandoId] = useState<string | null>(null);
+  // Evita solicitar automaticamente a mesma leitura várias vezes durante a
+  // mesma permanência na tela. O backend continua idempotente; este guard é
+  // apenas para reduzir chamadas/reloads no navegador.
+  const leiturasAutomaticasSolicitadasRef = useRef<Set<string>>(new Set());
   // CORREÇÃO (Rodada 27, 02/09/2026, pedido explícito do usuário -- "quero
   // que coloque... um botão pra reler... pra reanalisar os dados. Caso não
   // atualize automaticamente e também pra não precisar ficar trocando toda a
@@ -967,6 +986,48 @@ export default function DocumentosEntidade({
       setLoading(false);
     }
   }, [entidadeId, query, entidadeTipo, empresaId]);
+
+  // Rodada 37: além do scheduler do backend, a própria tela garante a
+  // convergência imediata dos documentos já anexados que ainda não possuem
+  // laudo. Isso cobre acervos anteriores ao deploy e documentos cuja leitura
+  // automática foi iniciada em segundo plano mas ainda não apareceu na UI.
+  // A chamada é idempotente: primeiro consulta o status; só cria leitura nova
+  // quando realmente não existe uma em andamento/concluída.
+  useEffect(() => {
+    if (loading || !entidadeId || !docs.length) return;
+    const timer = window.setTimeout(() => {
+      const temAtosJunta = docs.some((doc) => doc.tipo_documento === "atos_junta_comercial" && doc.arquivo_disponivel !== false);
+      const pendentes = docs.filter((doc) => {
+        if (!tipoDocumentoTemLeituraAutomatica(doc.tipo_documento)) return false;
+        if (TIPOS_GATILHO_ANALISE_IDENTIDADE.has(doc.tipo_documento)) return false;
+        const exigeCrosscheckSocietario = ["contrato_social", "alteracao_contratual"].includes(doc.tipo_documento);
+        if (exigeCrosscheckSocietario) {
+          // Um laudo genérico do contrato não substitui o confronto com Atos da
+          // Junta. Só paramos quando o dossiê marcou este arquivo como analisado
+          // pela cadeia societária.
+          if (doc.analisado === true) return false;
+          if (!temAtosJunta) return false;
+        } else if (documentoTemResultadoDeLeitura(doc)) {
+          return false;
+        }
+        if (doc.arquivo_disponivel === false) return false;
+        if (leiturasAutomaticasSolicitadasRef.current.has(doc.id)) return false;
+        return true;
+      }).slice(0, 3);
+
+      if (!pendentes.length) return;
+      pendentes.forEach((doc) => leiturasAutomaticasSolicitadasRef.current.add(doc.id));
+      void Promise.allSettled(
+        pendentes.map((doc) => solicitarLeituraDocumento(doc, {
+          silencioso: true,
+          forcar: false,
+          somenteSeNecessario: true,
+          recarregar: false,
+        })),
+      ).then(() => carregar());
+    }, 1500);
+    return () => window.clearTimeout(timer);
+  }, [docs, loading, entidadeId, carregar]);
 
   // Dispara a análise da Etapa 1 (Cartão CNPJ + QSA + Enquadramento Tributário) e
   // faz o mesmo polling já usado em DossieCreditoEmpresa.tsx (recalcular) -- só
@@ -1509,31 +1570,69 @@ export default function DocumentosEntidade({
     }
   }
 
-  // CORREÇÃO (2026-08-31): força uma nova leitura de um documento JÁ
-  // anexado e já analisado -- necessário sempre que o motor de análise for
-  // corrigido/atualizado depois que o arquivo já tinha sido lido pela
-  // versão antiga (o laudo antigo, errado, nunca se atualiza sozinho). O
-  // processamento roda em segundo plano no servidor (`setImmediate`), então
-  // aguarda alguns segundos antes de recarregar a lista para dar tempo do
-  // novo resultado ser persistido; se ainda não tiver terminado, o
-  // resultado antigo aparece por mais alguns segundos até o usuário abrir
-  // "Dados da análise" de novo ou recarregar a página.
-  async function reanalisar(doc: DocumentoArquivo) {
-    setReanalisandoId(doc.id);
+  async function aguardarConclusaoLeitura(documentoId: string, recarregar = true) {
+    let ultimoStatus: any = null;
+    for (let tentativa = 0; tentativa < 30; tentativa += 1) {
+      ultimoStatus = await apiFetch(`/api/documentacao/ia/documentos/${documentoId}/status`).catch(() => null);
+      if (ultimoStatus?.concluido === true || ultimoStatus?.falhou === true) break;
+      await new Promise((resolve) => window.setTimeout(resolve, 1500));
+    }
+    if (recarregar) await carregar();
+    return ultimoStatus;
+  }
+
+  async function solicitarLeituraDocumento(
+    doc: DocumentoArquivo,
+    opcoes: { silencioso?: boolean; forcar?: boolean; somenteSeNecessario?: boolean; recarregar?: boolean } = {},
+  ) {
+    const silencioso = opcoes.silencioso === true;
+    const recarregar = opcoes.recarregar !== false;
+    if (!silencioso) setReanalisandoId(doc.id);
     try {
-      await apiFetch(`/api/documentacao/ia/documentos/${doc.id}/extrair`, { method: "POST", body: JSON.stringify({}) });
-      toast.success("Nova leitura solicitada. Atualizando em instantes...");
-      setTimeout(() => { void carregar(); }, 4000);
+      if (opcoes.somenteSeNecessario) {
+        const atual = await apiFetch(`/api/documentacao/ia/documentos/${doc.id}/status`).catch(() => null);
+        if (atual?.concluido === true) {
+          if (recarregar) await carregar();
+          return atual;
+        }
+        if (atual?.processando === true) {
+          return await aguardarConclusaoLeitura(doc.id, recarregar);
+        }
+      }
+
+      const resposta = await apiFetch(`/api/documentacao/ia/documentos/${doc.id}/extrair`, {
+        method: "POST",
+        body: JSON.stringify({ forcar: opcoes.forcar === true }),
+      });
+
+      // Contrato/Alteração usa cross-check síncrono contra Atos da Junta.
+      if (resposta?.analise) {
+        if (recarregar) await carregar();
+        if (!silencioso) toast.success("Nova leitura concluída.");
+        return { concluido: true, resultado: resposta.analise };
+      }
+
+      const final = await aguardarConclusaoLeitura(doc.id, recarregar);
+      if (!silencioso) {
+        if (final?.falhou) toast.error("A leitura foi executada, mas precisa de revisão. Veja o diagnóstico no documento.");
+        else if (final?.concluido) toast.success("Nova leitura concluída.");
+        else toast.info("A leitura continua em processamento e será atualizada automaticamente.");
+      }
+      return final;
     } catch (err: any) {
       const mensagem = String(err?.message || "");
-      if (/ainda não implementado/i.test(mensagem)) {
-        toast.info("Este tipo de documento não tem reprocessamento automático disponível ainda.");
-      } else {
-        toast.error(mensagem || "Erro ao solicitar nova leitura do documento.");
-      }
+      if (!silencioso) toast.error(mensagem || "Erro ao solicitar leitura do documento.");
+      return null;
     } finally {
-      setReanalisandoId((prev) => (prev === doc.id ? null : prev));
+      if (!silencioso) setReanalisandoId((prev) => (prev === doc.id ? null : prev));
     }
+  }
+
+  // O clique manual é uma releitura REAL, mesmo quando o laudo atual já está
+  // válido e usa a mesma versão do motor. O backend recebe `forcar=true` e
+  // cria uma nova tentativa sem apagar a conclusão anterior.
+  async function reanalisar(doc: DocumentoArquivo) {
+    await solicitarLeituraDocumento(doc, { forcar: true, silencioso: false, recarregar: true });
   }
 
   function marcarDocs(lista: DocumentoArquivo[], valor: boolean) {
@@ -2288,6 +2387,7 @@ export default function DocumentosEntidade({
                                 const laudoErro = doc.resultado_validacao?.analise_regra_documental_erro || null;
                                 const resultadoInline = doc.resultado_analise || laudo || laudoErro || null;
                                 const temResultadoInline = Boolean(resultadoInline);
+                                const temLeituraReal = documentoTemResultadoDeLeitura(doc);
                                 // CORREÇÃO (2026-08-31, "isso é pra tirar, é já pra aparecer o
                                 // documento incompatível... isso pra todos que for incompatíveis"):
                                 // documento incompatível com o slot não fica mais atrás do clique
@@ -2333,15 +2433,18 @@ export default function DocumentosEntidade({
                                   <div className="flex items-center gap-0.5 shrink-0">
                                     <button type="button" title="Visualizar" onClick={() => visualizar(doc)} className="p-1 rounded-md hover:bg-primary/10 text-primary"><Eye className="w-3 h-3" /></button>
                                     <button type="button" title="Baixar" onClick={() => baixar(doc)} className="p-1 rounded-md hover:bg-muted text-muted-foreground"><Download className="w-3 h-3" /></button>
-                                    {temResultadoInline && (
+                                    {tipoTemAnaliseAutomatica && !TIPOS_GATILHO_ANALISE_IDENTIDADE.has(String(doc.tipo_documento || "")) && (
                                       <button
                                         type="button"
-                                        title="Forçar nova leitura deste documento (use depois de corrigir o arquivo, ou depois de uma atualização do motor de análise)"
+                                        title={temLeituraReal
+                                          ? "Reler este documento e atualizar os dados validados"
+                                          : "Ler este documento agora e extrair os dados para validação"}
                                         onClick={() => void reanalisar(doc)}
                                         disabled={reanalisandoId === doc.id}
-                                        className="p-1 rounded-md hover:bg-primary/10 text-primary disabled:opacity-50"
+                                        className="inline-flex items-center gap-0.5 rounded-md px-1 py-0.5 text-[8px] font-bold text-primary hover:bg-primary/10 disabled:opacity-50"
                                       >
-                                        <RefreshCw className={`w-3 h-3 ${reanalisandoId === doc.id ? "animate-spin" : ""}`} />
+                                        <RefreshCw className={`w-2.5 h-2.5 ${reanalisandoId === doc.id ? "animate-spin" : ""}`} />
+                                        {reanalisandoId === doc.id ? "Lendo..." : temLeituraReal ? "Reler" : "Ler"}
                                       </button>
                                     )}
                                     {permitirValidar && (

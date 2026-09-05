@@ -18,4 +18,20 @@ describe('análise inline no Acervo Documental', () => {
     expect(acervo).toContain('<ResultadoAnaliseDocumento resultado={resultadoInline} documento={doc} compacto />');
     expect(acervo).toContain('Dados da análise');
   });
+  it('oferece Ler/Reler para todo documento analisável, inclusive antes do primeiro laudo', () => {
+    expect(acervo).toContain('tipoDocumentoTemLeituraAutomatica(doc.tipo_documento)');
+    expect(acervo).toContain('temLeituraReal ? "Reler" : "Ler"');
+    expect(acervo).toContain('somenteSeNecessario: true');
+    expect(acervo).toContain('/api/documentacao/ia/documentos/${doc.id}/status');
+    expect(acervo).toContain('const exigeCrosscheckSocietario = ["contrato_social", "alteracao_contratual"].includes(doc.tipo_documento)');
+    expect(acervo).toContain('if (doc.analisado === true) return false;');
+  });
+
+  it('backend expõe status universal e o clique manual força uma nova leitura real', () => {
+    expect(backend).toContain("router.get('/ia/documentos/:documentoId/status'");
+    expect(backend).toContain('forcar: forcar === true');
+    expect(backend).toContain('const laudoAtual = !params.forcar');
+    expect(backend).toContain("'contrato_junta_crosscheck'");
+  });
+
 });
