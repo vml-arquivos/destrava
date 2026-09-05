@@ -326,6 +326,19 @@ const TIPOS_FORA_DO_CHECKLIST_CREDITO = new Set(["contrato_prestacao_servicos", 
 const TIPOS_COM_ANALISE_AUTOMATICA = new Set(
   DOCUMENT_TYPE_CATALOG.filter((item) => item.uploadavel && documentAnalysisConfig(item.tipo)).map((item) => item.tipo),
 );
+
+export function tipoDocumentoTemLeituraAutomatica(tipo: string): boolean {
+  return TIPOS_COM_ANALISE_AUTOMATICA.has(String(tipo || ""));
+}
+
+export function documentoTemResultadoDeLeitura(doc?: DocumentoArquivo | null): boolean {
+  if (!doc) return false;
+  return Boolean(
+    doc.resultado_analise
+    || doc.resultado_validacao?.analise_regra_documental
+    || doc.resultado_validacao?.analise_regra_documental_erro,
+  );
+}
 const TIPOS_FISCAIS_SIMPLIFICADOS = new Set(["pgdas", "pgdas_d", "pgmei", "das_mei", "ccmei", "recibo_pgdas", "recibo_pgmei", "defis", "dasn_simei", "recibo_defis", "recibo_dasn_simei", "relatorio_receitas_mei"]);
 const TIPOS_FISCAIS_ECF = new Set(["ecf", "recibo_ecf", "ecd", "recibo_ecd", "dctf", "dctfweb", "mit", "darf", "livro_caixa", "efd_contribuicoes", "efd_icms_ipi", "efd"]);
 
@@ -767,6 +780,10 @@ export default function DocumentosEntidade({
   // o arquivo. Este estado controla o botão "Reanalisar" novo, por arquivo,
   // que resolve isso sem precisar reanexar nada.
   const [reanalisandoId, setReanalisandoId] = useState<string | null>(null);
+  // Evita solicitar automaticamente a mesma leitura várias vezes durante a
+  // mesma permanência na tela. O backend continua idempotente; este guard é
+  // apenas para reduzir chamadas/reloads no navegador.
+  const leiturasAutomaticasSolicitadasRef = useRef<Set<string>>(new Set());
   // CORREÇÃO (Rodada 27, 02/09/2026, pedido explícito do usuário -- "quero
   // que coloque... um botão pra reler... pra reanalisar os dados. Caso não
   // atualize automaticamente e também pra não precisar ficar trocando toda a
