@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  alertaCnpjBloqueiaValidacaoDocumental,
   calcularScore,
   deveAtualizarCampoContatoViaCartao,
   deveAtualizarContatoViaCartao,
@@ -7,6 +8,37 @@ import {
   deveConfirmarSituacaoCadastralViaCartao,
   extracaoTemQualidade,
 } from "../server/services/analiseCnpjReceitaCartao";
+
+describe("alertaCnpjBloqueiaValidacaoDocumental", () => {
+  it("não bloqueia idade da empresa nem ausência da data de emissão", () => {
+    expect(alertaCnpjBloqueiaValidacaoDocumental({
+      codigo: "empresa_menos_12_meses",
+      mensagem: "empresa nova",
+      severidade: "alta",
+    })).toBe(false);
+    expect(alertaCnpjBloqueiaValidacaoDocumental({
+      codigo: "cartao_cnpj_emissao_nao_confirmada",
+      mensagem: "emissão não identificada",
+      severidade: "media",
+    })).toBe(false);
+  });
+
+  it("bloqueia divergência real, CNPJ inválido, situação impeditiva e vencimento conhecido", () => {
+    for (const codigo of [
+      "divergencia_nome_empresarial",
+      "cnpj_invalido",
+      "situacao_cadastral_impeditiva",
+      "situacao_cadastral_atencao",
+      "cartao_cnpj_vencido",
+    ]) {
+      expect(alertaCnpjBloqueiaValidacaoDocumental({
+        codigo,
+        mensagem: codigo,
+        severidade: "alta",
+      })).toBe(true);
+    }
+  });
+});
 
 describe("calcularScore — leitura do Cartão CNPJ", () => {
   const camposReceitaCompletos = {
