@@ -421,7 +421,7 @@ function StatusAnaliseSlot({ item, tipo, onReler, relendo }: { item?: { nome: st
   // VALIDAÇÃO DOCUMENTAL, não de reprodução do documento. Cada card expõe
   // somente as confirmações que determinam se o requisito está correto.
   const chavesPermitidas = tipo === "cartao_cnpj"
-    ? new Set(["cnpj", "situacao_cadastral", "matriz_filial", "localizacao"])
+    ? new Set(["cnpj", "razao_social", "situacao_cadastral", "matriz_filial", "localizacao"])
     : tipo === "qsa"
       ? new Set(["cnpj", "vinculo_cnpj", "quantidade_integrantes", "administrador_titular", "resultado_qsa"])
       : tipo === "enquadramento_tributario_cnpj"
@@ -580,6 +580,7 @@ const TIPOS_GATILHO_ANALISE_IDENTIDADE = new Set(Object.keys(CHAVE_ANALISE_POR_S
 
 const CAMPO_ANALISE_LABEL: Record<string, string> = {
   cnpj: "CNPJ",
+  razao_social: "Razão social",
   data_opcao_simples: "Opção pelo Simples",
   situacao_cadastral: "Situação",
   matriz_filial: "Unidade",
@@ -2377,8 +2378,7 @@ export default function DocumentosEntidade({
                                 const tipoTemAnaliseAutomatica = TIPOS_COM_ANALISE_AUTOMATICA.has(String(doc.tipo_documento || ""));
                                 const validacaoDocumentalConcluida = temLeituraReal
                                   && !laudoErro
-                                  && estadoDocumento === "aprovado"
-                                  && doc.exige_revisao_humana !== true;
+                                  && estadoDocumento === "aprovado";
                                 const validadoComEvidencia = doc.validado === true
                                   && (!tipoTemAnaliseAutomatica || validacaoDocumentalConcluida);
                                 return (
