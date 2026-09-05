@@ -1,7 +1,7 @@
 import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { apiFetch, apiFetchBlob } from "@/lib/api";
 import { DOCUMENT_TYPE_CATALOG, documentAnalysisConfig, documentLabel } from "@shared/documentTypes";
-import { bucketDoRegimeTributarioHistorico, estadoVisualDocumento, slotCompativelComRegimeTributario, transicaoDeRegimeRecente, type BucketRegimeFiscal } from "@shared/documentalPresentation";
+import { bucketDoRegimeTributarioHistorico, documentoSocietarioDispensadoPorMei, estadoVisualDocumento, slotCompativelComRegimeTributario, transicaoDeRegimeRecente, type BucketRegimeFiscal } from "@shared/documentalPresentation";
 import { ResultadoAnaliseDocumento } from "./ResultadoAnaliseDocumento";
 import { ProntidaoIdentidadeCard, type IdentidadeCnpj } from "../documentacao/DossieCreditoEmpresa";
 import { toast } from "sonner";
@@ -185,8 +185,8 @@ export const SECOES_DOCUMENTAIS: SecaoDocumento[] = [
     titulo: "Documentação da Empresa",
     descricao: "Todo o restante referente à empresa: contrato social, consultas e certidões do CNPJ, fiscal/tributário, faturamento, eCAC, fotos e outros.",
     slots: [
-      slot("Atos da Junta Comercial", "atos_junta_comercial", [], { obrigatorio: true, descricao: "Primeiro documento da Etapa 2. A IA identifica todos os atos e define quais contratos/alterações devem ser anexados até comprovar 12 meses. Para MEI, a dispensa é registrada automaticamente." }),
-      slot("Contrato social e alterações contratuais", "contrato_social", ["alteracao_contratual"], { obrigatorio: true, descricao: "Lido depois dos Atos da Junta e conferido por número do ato, data de registro, NIRE, CNPJ e sócios do QSA." }),
+      slot("Atos da Junta Comercial", "atos_junta_comercial", [], { obrigatorio: true, descricao: "Primeiro documento da Etapa 2. A IA identifica todos os atos e define quais contratos/alterações devem ser anexados até comprovar 12 meses. Para MEI, a dispensa é registrada automaticamente -- o MEI é dispensado por lei do registro na Junta Comercial; o documento constitutivo dele é o CCMEI (seção Fiscal/Tributário)." }),
+      slot("Contrato social e alterações contratuais", "contrato_social", ["alteracao_contratual"], { obrigatorio: true, descricao: "Lido depois dos Atos da Junta e conferido por número do ato, data de registro, NIRE, CNPJ e sócios do QSA. Para MEI, a dispensa é registrada automaticamente -- o documento constitutivo do MEI é o CCMEI (seção Fiscal/Tributário)." }),
       slot("Requerimento de Empresário / Instrumento de Inscrição", "requerimento_empresario", ["alteracao_contratual"], { descricao: "Ato registral próprio do Empresário Individual não enquadrado como MEI." }),
       slot("Estatuto e atas vigentes", "estatuto", ["ata"], { descricao: "Atos de constituição, governança e representação de S.A., cooperativa, associação ou fundação, conforme a natureza jurídica." }),
       slot("Registro no RCPJ / Cartório de Pessoas Jurídicas", "registro_cartorio_pj", [], { descricao: "Registro civil do estatuto, ato constitutivo e alterações de associação ou fundação; não substitua por ato da Junta Comercial." }),
@@ -2076,6 +2076,15 @@ export default function DocumentosEntidade({
                       : 0;
                     const uploading = uploadingTipo === chaveSlot;
                     const destaqueConfirmacaoRegime = regimeAConfirmar && tiposConfirmacaoRegime.has(tipo);
+                    // CORREÇÃO (Rodada 34, 05/09/2026): Atos da Junta Comercial e
+                    // Contrato Social são dispensados por lei para MEI (o
+                    // constitutivo do MEI é o CCMEI, não registro na Junta
+                    // Comercial) -- o backend já reconhece isso em
+                    // `atos_dispensados_por_mei` (`montarValidacaoSocietaria`,
+                    // devolvido em `societaria`), mas o selo abaixo era fixo,
+                    // sem checar essa dispensa. Ver `documentoSocietarioDispensadoPorMei`
+                    // em `shared/documentalPresentation.ts` para o critério completo.
+                    const dispensadoPorMei = documentoSocietarioDispensadoPorMei(tipo, societaria?.atos_dispensados_por_mei);
                     // Decisão de negócio (2026-08-30): a ordem CNPJ -> QSA -> Enquadramento ->
                     // confirmação de regime -> Atos da Junta -> Contrato Social/Alteração, e a
                     // ordem de consulta cadastral SCR -> CCS -> CCF, são ordens RECOMENDADAS de
@@ -2160,7 +2169,8 @@ export default function DocumentosEntidade({
                           <div className="min-w-0">
                             <div className="flex items-center gap-1.5 flex-wrap">
                               <p className="text-xs font-bold text-muted-foreground leading-tight">{documentoSlot.titulo}</p>
-                              {(documentoSlot.obrigatorio || destaqueConfirmacaoRegime) && !satisfeitoPorOutro && <span className="text-[9px] font-bold px-1.5 py-0.5 rounded-full bg-brand-navy text-primary-foreground shrink-0">OBRIGATÓRIO NA ETAPA</span>}
+                              {dispensadoPorMei && docsTipo.length === 0 && !satisfeitoPorOutro && <span className="text-[9px] font-bold px-1.5 py-0.5 rounded-full bg-success/20 text-success shrink-0">DISPENSADO (MEI)</span>}
+                              {!dispensadoPorMei && (documentoSlot.obrigatorio || destaqueConfirmacaoRegime) && !satisfeitoPorOutro && <span className="text-[9px] font-bold px-1.5 py-0.5 rounded-full bg-brand-navy text-primary-foreground shrink-0">OBRIGATÓRIO NA ETAPA</span>}
                               {(documentoSlot.descricao || tipo === "cartao_cnpj") && (
                                 <button
                                   type="button"

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { construirSecoesAnaliseDocumento, estadoVisualDocumento } from "@shared/documentalPresentation";
+import { construirSecoesAnaliseDocumento, documentoSocietarioDispensadoPorMei, estadoVisualDocumento } from "@shared/documentalPresentation";
 
 // Reprojetado a pedido do usuário (relatório documental "poluído", com uma
 // seção dizendo "validado" e, logo abaixo, um checklist técnico dizendo "não
@@ -230,5 +230,32 @@ describe("construirSecoesAnaliseDocumento", () => {
     expect(estadoVisualDocumento({ dados_extraidos: { tipo_esperado: "ECF", tipo_detectado: "PGDAS_D", documento_compativel: false, satisfaz_requisito: false } }, { consistente: true })).toBe("incompativel");
     expect(estadoVisualDocumento({}, { analisado: false, consistente: true })).toBe("aguardando");
     expect(estadoVisualDocumento({ status: "concluido", satisfaz_requisito: true }, { consistente: true })).toBe("aprovado");
+  });
+});
+
+// CORREÇÃO (Rodada 34, 05/09/2026 -- print real da tela em produção: uma
+// empresa MEI mostrava "Atos da Junta Comercial"/"Contrato social e
+// alterações contratuais" com o selo "OBRIGATÓRIO NA ETAPA", mesmo já
+// dispensada dos dois pelo backend, `montarValidacaoSocietaria`,
+// `atos_dispensados_por_mei`). O selo do checklist (`DocumentosEntidade.tsx`)
+// era fixo no código, sem checar essa dispensa -- regra geral, vale para
+// qualquer empresa MEI, não só a do print.
+describe("documentoSocietarioDispensadoPorMei", () => {
+  it("considera dispensados Atos da Junta e Contrato Social quando o backend já confirmou atos_dispensados_por_mei", () => {
+    expect(documentoSocietarioDispensadoPorMei("atos_junta_comercial", true)).toBe(true);
+    expect(documentoSocietarioDispensadoPorMei("contrato_social", true)).toBe(true);
+  });
+
+  it("não dispensa quando atos_dispensados_por_mei é false, null, undefined ou ausente", () => {
+    expect(documentoSocietarioDispensadoPorMei("atos_junta_comercial", false)).toBe(false);
+    expect(documentoSocietarioDispensadoPorMei("contrato_social", null)).toBe(false);
+    expect(documentoSocietarioDispensadoPorMei("atos_junta_comercial", undefined)).toBe(false);
+  });
+
+  it("não dispensa outros tipos documentais mesmo com atos_dispensados_por_mei true -- a dispensa é só para os dois tipos societários do grupo Junta Comercial", () => {
+    expect(documentoSocietarioDispensadoPorMei("requerimento_empresario", true)).toBe(false);
+    expect(documentoSocietarioDispensadoPorMei("ccmei", true)).toBe(false);
+    expect(documentoSocietarioDispensadoPorMei("estatuto", true)).toBe(false);
+    expect(documentoSocietarioDispensadoPorMei("alteracao_contratual", true)).toBe(false);
   });
 });

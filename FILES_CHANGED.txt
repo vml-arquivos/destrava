@@ -878,3 +878,34 @@ Total desta rodada: 7 arquivos de código alterados + 1 arquivo de
 teste novo (6 testes) + 5 arquivos de teste ampliados/ajustados (15
 testes novos + 3 expectativas ajustadas) + 7 arquivos de documentação
 alterados = 20 arquivos.
+
+======================================================================
+Rodada 34 (esta entrega, 05/09/2026) -- selo "OBRIGATÓRIO NA ETAPA" de
+Atos da Junta Comercial/Contrato Social não checava a dispensa do MEI
+(atos_dispensados_por_mei, já calculada pelo backend); diagnóstico do
+QSA "Reanálise necessária" no mesmo print (comportamento esperado do
+versionamento, sem alteração de código)
+======================================================================
+
+Arquivos existentes ALTERADOS nesta rodada:
+
+shared/documentalPresentation.ts   (nova função documentoSocietarioDispensadoPorMei e a constante TIPOS_DOCUMENTAIS_SOCIETARIOS_DISPENSAVEIS_POR_MEI, aplicando o mesmo critério de dispensa que o backend já usa aos tipos atos_junta_comercial/contrato_social)
+client/src/components/documentos/DocumentosEntidade.tsx   (novo cálculo dispensadoPorMei por slot, usando societaria?.atos_dispensados_por_mei; selo "OBRIGATÓRIO NA ETAPA" substituído por "DISPENSADO (MEI)" quando aplicável e o slot ainda não tem arquivo anexado; descrições dos slots atos_junta_comercial/contrato_social complementadas explicando a dispensa legal do MEI e o CCMEI como documento constitutivo equivalente)
+
+Arquivos de teste NOVOS ou AMPLIADOS:
+
+tests/documentalPresentation.test.ts   (+3 testes, novo describe "documentoSocietarioDispensadoPorMei")
+
+Arquivos de documentação ALTERADOS nesta rodada:
+
+CHANGELOG_CORRECOES.md
+PENDENCIAS_REAIS.md
+ROLLBACK_PLAN.md
+TEST_REPORT.md
+BUILD_REPORT.md
+FILES_CHANGED.txt (este arquivo)
+SHA256SUMS.txt
+
+Total desta rodada: 2 arquivos de código alterados + 1 arquivo de
+teste ampliado (3 testes novos) + 7 arquivos de documentação
+alterados = 10 arquivos.

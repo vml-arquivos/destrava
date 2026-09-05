@@ -742,3 +742,35 @@ export function bucketDoRegimeTributarioHistorico(regime: string | null | undefi
   if (/lucro presumido|lucro real|lucro arbitrado|imune|isenta|nao optante/.test(valor)) return "ecf";
   return null;
 }
+
+// CORREÇÃO (Rodada 34, 05/09/2026, print real da tela em produção -- usuário
+// perguntou "como o MEI não tem contrato social, não tem os atos da junta,
+// quais os documentos então pra MEI que substituem os documentos de outra do
+// outro regime tributário?"): o MEI é dispensado por lei (LC 123/2006) do
+// registro na Junta Comercial -- seu documento constitutivo é o CCMEI
+// (Certificado da Condição de Microempreendedor Individual, já modelado no
+// catálogo como o tipo `ccmei`), não Contrato Social/Atos da Junta. O
+// backend já reconhece isso corretamente em duas camadas de negócio
+// (`montarValidacaoSocietaria`, que grava `atos_dispensados_por_mei` em
+// `documentacao.ts`, e `documentosSocietariosPorNatureza`,
+// `mapaDocumentalCreditoService.ts`, corrigida na Rodada 29) -- mas o
+// checklist visual (`DocumentosEntidade.tsx`) tinha o selo "OBRIGATÓRIO NA
+// ETAPA" fixo no código para os slots `atos_junta_comercial`/`contrato_social`,
+// sem nenhuma checagem de MEI: qualquer empresa MEI (regra geral, não é
+// específica de uma empresa) via esses dois cards marcados como obrigatórios
+// mesmo já estando dispensados por trás -- exatamente o tipo de "dois
+// lugares independentes calculando a mesma coisa" já registrado no item 0-T
+// de PENDENCIAS_REAIS.md. Esta função dá ao frontend o mesmo critério que o
+// backend já usa (`atos_dispensados_por_mei`), sem duplicar a lógica de
+// detecção de MEI em si.
+export const TIPOS_DOCUMENTAIS_SOCIETARIOS_DISPENSAVEIS_POR_MEI: ReadonlySet<string> = new Set([
+  "atos_junta_comercial",
+  "contrato_social",
+]);
+
+export function documentoSocietarioDispensadoPorMei(
+  tipoUpload: string,
+  atosDispensadosPorMei: boolean | null | undefined,
+): boolean {
+  return atosDispensadosPorMei === true && TIPOS_DOCUMENTAIS_SOCIETARIOS_DISPENSAVEIS_POR_MEI.has(tipoUpload);
+}
