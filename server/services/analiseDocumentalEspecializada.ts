@@ -2013,6 +2013,58 @@ export class AnaliseDocumentalService {
 
     let local: Awaited<ReturnType<typeof extrairDocumentoLocal>> | null = null;
     const fallbackLocalParcial = (motivo: unknown): any | null => {
+      const temDadosLocais = !!local?.dados && Object.keys(local.dados).some((chave) => {
+        const valor = local?.dados?.[chave];
+        return valor !== null && valor !== undefined && valor !== ''
+          && !(Array.isArray(valor) && valor.length === 0)
+          && !(typeof valor === 'object' && !Array.isArray(valor) && Object.keys(valor).length === 0);
+      });
+      const temTextoLocal = Boolean(String(local?.texto || '').trim());
+      if (!local || (!temDadosLocais && !temTextoLocal)) return null;
+      this.ultimoModeloUsado = `local:${local.mecanismo || 'ocr'}-v1-parcial`;
+      this.ultimaFonteExtracao = 'local';
+      return {
+        ...(local.dados || {}),
+        confianca: local.confianca,
+        fonte_extracao: 'local_deterministica',
+        mecanismo_extracao: local.mecanismo,
+        ...(temTextoLocal ? { __texto_local: local.texto } : {}),
+        extracao_parcial: true,
+        motivo_extracao_parcial: local.motivo || String((motivo as any)?.message || motivo || 'Extração local abaixo do limiar de confiança.'),
+      };
+    };
+    try {
+      local = await extrairDocumentoLocal(resolvedPath, mimeType, tipo);
+      const classificacaoLocalEDeterministica = TIPOS_COMPROVANTE_REGIME_DETERMINISTICO.has(tipo);
+      const confiavelParaUsoDireto = local.legivel && local.confianca >= threshold
+        && (classificacaoLocalEDeterministica || local.dados?.documento_compativel !== false);
+      if (confiavelParaUsoDireto) {
+        this.ultimoModeloUsado = `local:${local.mecanismo}-v1`;
+        this.ultimaFonteExtracao = 'local';
+        return {
+          ...local.dados,
+          confianca: local.confianca,
+          fonte_extracao: 'local_deterministica',
+          mecanismo_extracao: local.mecanismo,
+          ...(local.texto ? { __texto_local: local.texto } : {}),
+        };
+      }
+    } catch (error: any) {
+      console.warn('[AnaliseDocumentalService] Extração local falhou de forma controlada:', tipo, error?.message || error);
+    }
+
+    if (!externalAiFallbackDocumentalEnabled()) {
+      const parcial = fallbackLocalParcial('Fallback externo desativado por política internal-first.');
+      if (parcial) return parcial;
+      throw new Error(`${tipo}: o motor interno não encontrou evidência legível suficiente; revisão humana necessária.`);
+    }
+
+    try {
+      const resultadoIa = await this.extrairComIA(arquivoPath, prompt, mimeType, local?.texto || null);
+      return local?.texto
+        ? { ...resultadoIa, __texto_local: local.texto }
+        : resultadoIa;
+    } catch (error: any) {
       const parcial = fallbackLocalParcial(error);
       if (parcial) {
         console.warn('[AnaliseDocumentalService] Gemini indisponível; mantendo extração local parcial para revisão humana:', tipo, error?.message || error);
