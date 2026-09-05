@@ -27,6 +27,21 @@ describe('análise inline no Acervo Documental', () => {
     expect(acervo).toContain('if (doc.analisado === true) return false;');
   });
 
+  it('abre o Acervo com laudos individuais antes de aguardar o dossiê completo', () => {
+    expect(acervo).toContain('primeira pintura RÁPIDA');
+    expect(acervo).toContain('setDocs(filtradaInicial)');
+    expect(acervo).toContain('setLoading(false)');
+    expect(acervo).toContain('void apiFetch(\`/api/documentacao/empresa/\${empresaId}/dossie\`)');
+    expect(acervo).toContain('Nunca regride um laudo real já exibido para um placeholder');
+  });
+
+  it('lista documentos já trazendo o último laudo persistido por arquivo', () => {
+    const documentosBackend = readFileSync(resolve(process.cwd(), 'server/routes/documentos.ts'), 'utf8');
+    expect(documentosBackend).toContain('resultado_analise_persistida');
+    expect(documentosBackend).toContain('resultado_cnpj_persistido');
+    expect(documentosBackend).toContain('resultado_analise: resultadoAnalise');
+  });
+
   it('backend expõe status universal e o clique manual força uma nova leitura real', () => {
     expect(backend).toContain("router.get('/ia/documentos/:documentoId/status'");
     expect(backend).toContain('forcar: forcar === true');
