@@ -2035,6 +2035,22 @@ export class AnaliseDocumentalService {
     };
     try {
       local = await extrairDocumentoLocal(resolvedPath, mimeType, tipo);
+      // CORREÇÃO (2026-08-31, bug real reportado em produção 3 vezes seguidas
+      // para o mesmo caso -- ver comentário em TIPOS_COMPROVANTE_REGIME_DETERMINISTICO):
+      // a condição anterior só usava o resultado local diretamente quando ele
+      // NÃO apontasse incompatibilidade -- ou seja, exatamente quando o
+      // classificador determinístico mais precisava ser ouvido (encontrou um
+      // documento do tipo errado, ex.: PGDAS no slot de ECF), o código descartava
+      // esse achado e pedia uma segunda opinião à IA. Como a IA é não
+      // determinística e `normalizarDocumentoCatalogado` assume
+      // `documento_compativel: true` quando o campo vem ausente da resposta,
+      // isso apagava sistematicamente o "false" correto. Para os 4 tipos com
+      // classificador 100% determinístico, um "false" local agora é decisivo,
+      // igual a um "true" -- sem rodada extra pela IA. Para os demais tipos com
+      // extração local (QSA, Atos da Junta, Cartão CNPJ etc.), cujo
+      // `documento_compativel` vem de heurísticas mais aproximadas, o
+      // comportamento de pedir a segunda opinião da IA continua idêntico ao de
+      // antes desta correção.
       const classificacaoLocalEDeterministica = TIPOS_COMPROVANTE_REGIME_DETERMINISTICO.has(tipo);
       const confiavelParaUsoDireto = local.legivel && local.confianca >= threshold
         && (classificacaoLocalEDeterministica || local.dados?.documento_compativel !== false);
@@ -2061,10 +2077,27 @@ export class AnaliseDocumentalService {
 
     try {
       const resultadoIa = await this.extrairComIA(arquivoPath, prompt, mimeType, local?.texto || null);
+      // CORREÇÃO (2026-08-31): antes, o texto local só era propagado para a IA
+      // quando `tipo === 'qsa'`, mesmo quando a extração local tinha texto de
+      // sobra para os demais tipos críticos (ECF, DCTF/MIT, DARF, Livro Caixa,
+      // e qualquer outro tipo com extração local). Sem esse texto,
+      // `classificarResultadoPersistido` (o classificador central,
+      // `classificadorDocumentalCentral.ts`) nunca recebia conteúdo real para
+      // analisar neste ramo -- ficava com `NAO_IDENTIFICADO` em vez de
+      // `INCOMPATIVEL`, mesmo já existindo texto extraído localmente que
+      // provaria a incompatibilidade. Propagar sempre que houver texto local
+      // não muda em nada o resultado da IA em si -- só garante que a camada de
+      // classificação determinística por trás dela tenha o texto real para
+      // trabalhar.
       return local?.texto
         ? { ...resultadoIa, __texto_local: local.texto }
         : resultadoIa;
     } catch (error: any) {
+      // A ausência de Gemini não transforma uma leitura local executada em
+      // "aguardando análise". Quando o OCR/pdftotext conseguiu extrair algum
+      // conteúdo estruturado, persistimos o resultado como parcial e o motor
+      // determinístico gera as pendências objetivas para revisão humana.
+      // Assim a tela sempre mostra o que foi lido e por que não pode avançar.
       const parcial = fallbackLocalParcial(error);
       if (parcial) {
         console.warn('[AnaliseDocumentalService] Gemini indisponível; mantendo extração local parcial para revisão humana:', tipo, error?.message || error);
