@@ -1246,7 +1246,7 @@ router.delete('/:id/socios/:sid', auth, async (req: Request, res: Response) => {
 // ─── DOCUMENTOS_EMPRESA (GED) ─────────────────────────────────────────────────
 
 const TIPOS_VALIDOS_DOC = [
-  'contrato_social','alteracao_contratual','requerimento_empresario','estatuto','cartao_cnpj','nire',
+  'contrato_social','alteracao_contratual','estatuto','cartao_cnpj','nire',
   'balanco_patrimonial','dre','declaracao_faturamento','irpj','defis','ecf','extrato_bancario',
   'cnd_receita_inss','cndt_trabalhista','fgts','certidao_estadual','certidao_municipal',
   'rg_socio','cpf_socio','cnh_socio','certidao_casamento','certidao_nascimento',

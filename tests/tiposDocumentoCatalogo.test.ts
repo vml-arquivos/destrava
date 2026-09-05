@@ -32,13 +32,4 @@ describe('TIPOS_DOCUMENTO -- catálogo de tipos aceitos no upload', () => {
       expect(TIPOS_DOCUMENTO, `tipo_documento "${tipo}" precisa estar na whitelist para o upload não falhar`).toContain(tipo);
     }
   });
-
-  it('todo tipo anexável do catálogo possui configuração de leitura automática', async () => {
-    const { DOCUMENT_TYPE_CATALOG, documentAnalysisConfig } = await import('../shared/documentTypes');
-    const semLeitura = DOCUMENT_TYPE_CATALOG
-      .filter((item) => item.uploadavel && !documentAnalysisConfig(item.tipo))
-      .map((item) => item.tipo);
-    expect(semLeitura).toEqual([]);
-  });
-
 });

@@ -19,7 +19,6 @@ import type { Pool } from "pg";
 import { executarVarreduraOutbox } from "./dispatcher";
 import { publishEvent } from "./eventBus";
 import { executarSincronizacaoReceitaAutomatica } from "../sincronizacaoReceitaAutomaticaService";
-import { backfillLaudosService } from "../backfillLaudosService";
 
 const INTERVALO_RETRY_MS = Number(process.env.AUTOMATION_RETRY_INTERVAL_MS || 60_000);
 const INTERVALO_ROTINAS_MS = Number(process.env.AUTOMATION_ROTINAS_INTERVAL_MS || 15 * 60_000);
@@ -30,57 +29,6 @@ const INTERVALO_ROTINAS_MS = Number(process.env.AUTOMATION_ROTINAS_INTERVAL_MS |
 // para a justificativa completa (por que nenhuma API gratuita resolveria isso
 // sozinha) e CHANGELOG_CORRECOES.md, seção "Rodada 19".
 const INTERVALO_SINCRONIZACAO_RECEITA_MS = Number(process.env.SINCRONIZACAO_RECEITA_INTERVAL_MS || 30 * 60_000);
-const INTERVALO_RETRY_DOCUMENTAL_MS = Number(process.env.DOCUMENT_ANALYSIS_RETRY_INTERVAL_MS || 5 * 60_000);
-let retryDocumentalEmAndamento = false;
-
-// CORREÇÃO (Rodada 35, 05/09/2026, print real da tela em produção -- empresa
-// "PALUMA BURGER LTDA" mostrando "análise pendente"/"Reanálise necessária"
-// persistente em muitos tipos de documento, e pedido explícito do usuário:
-// "essas leituras individuais elas já podem ser programadas, cronometradas,
-// garantidas individualmente pra juntar esses dados dentro do sistema"):
-// antes desta correção, este job (a cada `INTERVALO_RETRY_DOCUMENTAL_MS`, 5
-// minutos por padrão) só fazia duas coisas -- reenfileirar extrações que JÁ
-// tinham falhado antes (`enqueueDueRetries`) e processar jobs que já
-// estivessem na fila (`run`) -- mas NUNCA enfileirava, sozinho, um documento
-// que nunca teve nenhuma tentativa de análise sob o catálogo atual. Isso
-// afeta em cheio a maioria dos ~136 tipos documentais cobertos pela
-// "Continuidade 05/09/2026" (leitura automática integral): qualquer
-// documento desses tipos anexado ANTES desse deploy nunca teve um job
-// criado para ele -- só um comando manual (`pnpm backfill:laudos --
-// enqueue-and-run`) ou o clique manual em "Reanalisar" por arquivo
-// colocavam esses documentos na fila. Sem isso, a cada nova versão do
-// motor de classificação (qualquer bump futuro de RULE_VERSION/
-// CLASSIFIER_VERSION) o mesmo comando manual precisaria ser lembrado de
-// novo -- exatamente o tipo de dependência de ação humana que o usuário
-// pediu para eliminar. `backfillLaudosService.enqueue()` é o mesmo método
-// já usado pelo comando manual (varre `documentos_arquivos` por QUALQUER
-// tipo com `documentAnalysisConfig`, priorizando os mais antigos via
-// `ORDER BY d.criado_em`) -- só faltava alguém chamando-o automaticamente.
-// Roda em lotes pequenos (mesma ordem de grandeza do lote de retry já
-// existente), no mesmo intervalo já existente, para nunca gerar um pico
-// repentino de chamadas de IA logo após um deploy grande -- o sistema
-// inteiro converge sozinho ao longo de vários ciclos, sem exigir nenhum
-// comando manual nem para o backlog atual nem para deploys futuros.
-const LOTE_ENFILEIRAMENTO_BACKFILL = Number(process.env.DOCUMENT_ANALYSIS_BACKFILL_ENQUEUE_BATCH || 25);
-
-// Exportada só para viabilizar teste direto (mesma convenção já usada em
-// outras rodadas -- ex.: `tipoIdentidadeTemReleituraManual`, Rodada 27 --
-// para funções que antes eram privadas): confirma que o enfileiramento de
-// documentos nunca-analisados roda ANTES das retentativas/processamento de
-// jobs já enfileirados, sem precisar mockar setInterval nem esperar 5
-// minutos reais.
-export async function executarRetryDocumental(): Promise<void> {
-  if (retryDocumentalEmAndamento) return;
-  retryDocumentalEmAndamento = true;
-  try {
-    const limite = Number(process.env.DOCUMENT_ANALYSIS_RETRY_BATCH || 25);
-    await backfillLaudosService.enqueue({ limit: LOTE_ENFILEIRAMENTO_BACKFILL });
-    await backfillLaudosService.enqueueDueRetries(limite);
-    await backfillLaudosService.run({ limit: limite + LOTE_ENFILEIRAMENTO_BACKFILL });
-  } finally {
-    retryDocumentalEmAndamento = false;
-  }
-}
 
 interface ContratoAtivoRow {
   id: string;
@@ -185,10 +133,6 @@ async function avaliarRotinas(pool: Pool): Promise<void> {
 }
 
 export function iniciarAutomationScheduler(pool: Pool): void {
-  setImmediate(() => executarRetryDocumental().catch((err) => {
-    console.warn("[automation-engine] Retry documental indisponível:", err?.message || err);
-  }));
-
   setInterval(() => {
     executarVarreduraOutbox(pool).catch((err) => {
       console.error("[automation-engine] Erro na varredura do outbox:", err);
@@ -215,13 +159,7 @@ export function iniciarAutomationScheduler(pool: Pool): void {
       });
   }, INTERVALO_SINCRONIZACAO_RECEITA_MS);
 
-  setInterval(() => {
-    executarRetryDocumental().catch((err) => {
-      console.error("[automation-engine] Erro na retentativa documental:", err);
-    });
-  }, INTERVALO_RETRY_DOCUMENTAL_MS);
-
   console.log(
-    `[automation-engine] Scheduler iniciado (retry a cada ${INTERVALO_RETRY_MS}ms, documentos a cada ${INTERVALO_RETRY_DOCUMENTAL_MS}ms [enfileira até ${LOTE_ENFILEIRAMENTO_BACKFILL} documento(s) nunca analisado(s) por ciclo], rotinas a cada ${INTERVALO_ROTINAS_MS}ms, sincronização de CNPJ a cada ${INTERVALO_SINCRONIZACAO_RECEITA_MS}ms)`
+    `[automation-engine] Scheduler iniciado (retry a cada ${INTERVALO_RETRY_MS}ms, rotinas a cada ${INTERVALO_ROTINAS_MS}ms, sincronização de CNPJ a cada ${INTERVALO_SINCRONIZACAO_RECEITA_MS}ms)`
   );
 }

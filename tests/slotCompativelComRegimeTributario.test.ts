@@ -192,48 +192,6 @@ describe("transicaoDeRegimeRecente", () => {
   it("true quando há os dois grupos e não se sabe a data de início do regime atual (incerteza nunca esconde)", () => {
     expect(transicaoDeRegimeRecente(["simples", "ecf"], null, agora)).toBe(true);
   });
-
-  // CORREÇÃO (Rodada 33, 05/09/2026, diagnóstico cruzado de duas pesquisas
-  // independentes -- "Manus AI" e GPT -- que concluíram, cada uma por conta
-  // própria, que o prazo fixo de 366 dias não tem base normativa e deveria
-  // ser substituído por um critério de competência: o documento do regime
-  // anterior continua sendo necessário enquanto a janela de faturamento
-  // corrente (rolling 12 meses) ainda alcançar competências de antes da
-  // mudança de regime -- mesmo que já tenham se passado mais de 366 dias.
-  // Estes testes usam a mesma data de referência do exemplo numérico que as
-  // duas pesquisas trazem (05/09/2026 -> último mês fechado 08/2026 -> janela
-  // 09/2025 a 08/2026), então a janela começa em 01/09/2025.
-  describe("Rodada 33 -- critério de competência substitui/complementa o prazo fixo de 366 dias", () => {
-    const referencia33 = new Date("2026-09-05T12:00:00.000Z");
-
-    it("true mesmo com mais de 366 dias de transição, quando o início do regime vigente ainda está dentro da janela rolling de 12 meses", () => {
-      // Regime mudou em 02/09/2025 -- 368 dias antes da referência (mais que o
-      // piso fixo de 366), mas 02/09/2025 é posterior a 01/09/2025 (início da
-      // janela), então a janela de faturamento corrente ainda precisa de uma
-      // competência do regime anterior (01/09/2025, antes da mudança).
-      expect(transicaoDeRegimeRecente(["simples", "ecf"], "2025-09-02", referencia33)).toBe(true);
-    });
-
-    it("false quando a transição é antiga E o início do regime vigente já é anterior à janela rolling de 12 meses inteira", () => {
-      // Regime mudou em 01/08/2025 -- mais de 366 dias antes da referência E
-      // anterior ao início da janela (01/09/2025): a janela de 12 meses
-      // corrente é inteiramente do regime novo, não sobra nenhuma competência
-      // do regime anterior para justificar manter o slot visível.
-      expect(transicaoDeRegimeRecente(["simples", "ecf"], "2025-08-01", referencia33)).toBe(false);
-    });
-
-    it("continua true dentro do piso fixo de 366 dias, mesmo quando a janela sozinha já não alcançaria mais o regime anterior (comportamento preexistente preservado)", () => {
-      // Regime mudou há 100 dias -- dentro do piso fixo -- mesmo que,
-      // hipoteticamente, a janela de faturamento não precisasse mais da
-      // competência antiga, o piso de segurança pré-existente não pode
-      // encolher: esta correção só amplia quando o slot fica visível, nunca
-      // reduz o que já era visível antes dela.
-      const inicioRegime = new Date(referencia33);
-      inicioRegime.setUTCDate(inicioRegime.getUTCDate() - 100);
-      const isoInicio = inicioRegime.toISOString().slice(0, 10);
-      expect(transicaoDeRegimeRecente(["simples", "ecf"], isoInicio, referencia33)).toBe(true);
-    });
-  });
 });
 
 describe("bucketDoRegimeTributarioHistorico", () => {

@@ -7,7 +7,6 @@ import {
   calcularAssinaturaAnalise,
   decidirVersaoLaudo,
   statusLaudoPodeSatisfazer,
-  versaoPromptDocumental,
 } from '../server/services/documentalLaudoVersioning';
 import { classificarDocumentoDeterministico } from '../server/services/classificadorDocumentalCentral';
 import { janela12Meses, obterFaturamentoRolling12Meses } from '../server/services/faturamentoRolling12MesesService';
@@ -16,12 +15,6 @@ import { detectarRequisitosCobertosPeloTexto, detectarStatusCertidaoDebitos, sta
 import { analisarTextoDocumentoLocal } from '../server/services/extracaoDocumentalLocal';
 
 describe('P0 — laudos, classificação e evidência temporal', () => {
-  it('mantém a mesma versão de prompt no upload, no leitor e no backfill', () => {
-    expect(versaoPromptDocumental('qsa_extract')).toBe('5.1.0');
-    expect(versaoPromptDocumental('simples_extract')).toBe('1.0.0');
-    expect(versaoPromptDocumental('catalogo_foto_fachada_extract')).toBe('2.0.0');
-  });
-
   it('inclui todas as versões na assinatura e invalida laudo antigo', () => {
     const base = calcularAssinaturaAnalise({
       arquivoId: 'arquivo-1',
@@ -79,14 +72,7 @@ describe('P0 — laudos, classificação e evidência temporal', () => {
     expect(pgdasNoEcf.tipo_detectado).toBe('PGDAS_D');
     expect(pgdasNoEcf.satisfaz_requisito).toBe(false);
     expect(pgdasNoEcf.identidade_status).toBe('INCOMPATIVEL');
-    // CORREÇÃO (Rodada 33, 05/09/2026): a competência 12/2025, vista de
-    // 08/2026, está a 8 meses -- dentro da janela rolling de 12 meses --
-    // então passa a ser `WINDOW_SUPPORT`, não mais `HISTORICO` genérico (ver
-    // `TemporalStatus` em documentalLaudoVersioning.ts). O ponto original
-    // deste teste -- identidade incompatível reprova o documento -- continua
-    // garantido por `identidade_status: 'INCOMPATIVEL'` e
-    // `satisfaz_requisito: false`, que não dependem do rótulo temporal.
-    expect(pgdasNoEcf.temporalidade_status).toBe('WINDOW_SUPPORT');
+    expect(pgdasNoEcf.temporalidade_status).toBe('HISTORICO');
 
     const reciboNoReciboEcf = classificarDocumentoDeterministico({
       tipoEsperado: 'recibo_ecf',
@@ -99,9 +85,7 @@ describe('P0 — laudos, classificação e evidência temporal', () => {
     expect(reciboNoReciboEcf.tipo_detectado).toBe('RECIBO_PGDAS');
     expect(reciboNoReciboEcf.satisfaz_requisito).toBe(false);
     expect(reciboNoReciboEcf.identidade_status).toBe('INCOMPATIVEL');
-    // CORREÇÃO (Rodada 33): mesma razão do caso acima (8 meses -- dentro da
-    // janela rolling de 12 meses).
-    expect(reciboNoReciboEcf.temporalidade_status).toBe('WINDOW_SUPPORT');
+    expect(reciboNoReciboEcf.temporalidade_status).toBe('HISTORICO');
   });
 
   it('classifica documento fiscal errado como incompatível e texto ausente como fail-closed', () => {

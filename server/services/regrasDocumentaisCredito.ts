@@ -1,14 +1,4 @@
 import { normalizarBasico, onlyDigits, parseDate } from '../utils/helpers';
-// CORREÇÃO (Rodada 33): o prazo de 60 dias do comprovante de residência
-// estava duplicado, como número mágico independente, aqui e em
-// `documentAnalysisProfiles.ts` -- com risco real de um dia divergirem sem
-// ninguém perceber. `documentAnalysisProfiles.ts` já é a fonte única de
-// `grauFonte`/política temporal por tipo de documento (ver diagnóstico da
-// Rodada 33), então passa a ser também a fonte única deste número; o literal
-// `60` abaixo (`VALIDADE_DIAS_COMPROVANTE_RESIDENCIA_FALLBACK`) fica só como
-// piso de segurança caso o perfil não devolva um valor, nunca como valor
-// normalmente usado.
-import { obterPerfilAnaliseDocumental } from './documentAnalysisProfiles';
 
 export type AlertaRegraDocumental = {
   codigo: string;
@@ -227,18 +217,6 @@ export type RegraDocumentalCredito = {
   versao?: string | null;
   ativo?: boolean;
   fonte?: string | null;
-  // CORREÇÃO (Rodada 33, 05/09/2026): campo novo e opcional, pedido pelas
-  // duas pesquisas independentes (Manus AI e GPT) sobre a matriz documental
-  // de crédito -- cada uma delas, com seu próprio vocabulário, recomenda que
-  // toda regra auditável carregue a citação da lei/norma/serviço oficial que
-  // a sustenta, separada de `fonte` (que hoje guarda só um identificador de
-  // lote interno, ex.: "matriz_estrategica_2026", não uma citação
-  // rastreável). Preenchido só onde as duas pesquisas convergem para uma
-  // citação específica; deixado `null`/ausente nas demais regras -- não
-  // inventado por inferência, seguindo a mesma disciplina que as próprias
-  // pesquisas adotaram ("pontos não sustentados por fonte confiável devem
-  // ser marcados como não encontrados").
-  fonte_normativa?: string | null;
 };
 
 export type ContextoRegraDocumental = {
@@ -272,24 +250,17 @@ const FALLBACK_REGRAS_DOCUMENTAIS: RegraDocumentalCredito[] = [
     entidade_tipo: 'empresa', escopo: 'empresa', obrigatorio: false, permite_multiplos: true, validade_dias: null,
     condicao: { quando_anexado: true }, descricao: 'Documento opcional universalmente; quando anexado, deve ser analisado.', tipo_exigencia: 'boa_pratica_analise', bloqueia_etapa: null, versao: 'fallback-2026.08.29', ativo: true, fonte: 'matriz_estrategica_2026',
   },
-  // `fonte_normativa` preenchido nestas quatro regras porque as duas
-  // pesquisas independentes da Rodada 33 (Manus AI e GPT) convergem, cada
-  // uma com sua própria lista de fontes, para a mesma citação.
   {
     codigo: 'empresa_pgdas', tipo_documento: 'pgdas', nome_amigavel: 'PGDAS-D', entidade_tipo: 'empresa', escopo: 'empresa', obrigatorio: false, permite_multiplos: true, condicao: { regime: 'simples_nacional' }, tipo_exigencia: 'obrigacao_legal', bloqueia_etapa: 4, versao: 'fallback-2026.08.29', ativo: true, fonte: 'matriz_estrategica_2026',
-    fonte_normativa: 'LC 123/2006 e Resolução CGSN 140/2018 -- apuração mensal do Simples Nacional (PGDAS-D), prazo até o dia 20 do mês seguinte.',
   },
   {
     codigo: 'empresa_defis', tipo_documento: 'defis', nome_amigavel: 'DEFIS', entidade_tipo: 'empresa', escopo: 'empresa', obrigatorio: false, permite_multiplos: true, condicao: { regime: 'simples_nacional', exceto: 'mei' }, tipo_exigencia: 'obrigacao_legal', bloqueia_etapa: 4, versao: 'fallback-2026.08.29', ativo: true, fonte: 'matriz_estrategica_2026',
-    fonte_normativa: 'LC 123/2006 e Resolução CGSN 140/2018 -- declaração anual do Simples Nacional (DEFIS), prazo até o último dia de março do ano seguinte.',
   },
   {
     codigo: 'empresa_dasn_simei', tipo_documento: 'dasn_simei', nome_amigavel: 'DASN-SIMEI', entidade_tipo: 'empresa', escopo: 'empresa', obrigatorio: false, permite_multiplos: true, condicao: { regime: 'mei' }, tipo_exigencia: 'obrigacao_legal', bloqueia_etapa: 4, versao: 'fallback-2026.08.29', ativo: true, fonte: 'matriz_estrategica_2026',
-    fonte_normativa: 'Portal do Empreendedor/Simples Nacional -- Declaração Anual do MEI (DASN-SIMEI), prazo até 31 de maio do ano seguinte, mesmo sem faturamento.',
   },
   {
     codigo: 'empresa_ecf', tipo_documento: 'ecf', nome_amigavel: 'ECF', entidade_tipo: 'empresa', escopo: 'empresa', obrigatorio: false, permite_multiplos: true, condicao: { regime: ['lucro_presumido', 'lucro_real', 'lucro_arbitrado'] }, tipo_exigencia: 'obrigacao_legal', bloqueia_etapa: 4, versao: 'fallback-2026.08.29', ativo: true, fonte: 'matriz_estrategica_2026',
-    fonte_normativa: 'SPED/Receita Federal -- Escrituração Contábil Fiscal (ECF), obrigatoriedade e prazo até o último dia útil de julho do ano seguinte (exceção: optantes do Simples Nacional).',
   },
   {
     codigo: 'empresa_cndt', tipo_documento: 'cndt', nome_amigavel: 'CNDT', entidade_tipo: 'empresa', escopo: 'empresa', obrigatorio: false, permite_multiplos: false, condicao: { somente_se: 'possui_empregados_ou_linha_exigir' }, tipo_exigencia: 'politica_bancaria', bloqueia_etapa: null, versao: 'fallback-2026.08.29', ativo: true, fonte: 'matriz_estrategica_2026',
@@ -300,20 +271,8 @@ const FALLBACK_REGRAS_DOCUMENTAIS: RegraDocumentalCredito[] = [
   {
     codigo: 'socio_documento_id', tipo_documento: 'documento_socio', nome_amigavel: 'Documento de identificação do sócio', entidade_tipo: 'socio', escopo: 'socio', obrigatorio: true, permite_multiplos: true, condicao: { depois_etapa: 2 }, tipo_exigencia: 'obrigacao_legal', bloqueia_etapa: 3, versao: 'fallback-2026.08.29', ativo: true, fonte: 'matriz_estrategica_2026',
   },
-  // CORREÇÃO (Rodada 33, 05/09/2026, diagnóstico cruzado de duas pesquisas
-  // independentes -- "Manus AI" e GPT -- sobre a matriz documental de
-  // crédito): as duas pesquisas concluem que o prazo de validade do
-  // comprovante de residência (60/90 dias) "é prática, não regra legal
-  // nacional encontrada" -- ou seja, é política de crédito, não obrigação
-  // legal. Esta regra estava rotulada `tipo_exigencia: 'obrigacao_legal'`,
-  // o oposto do que as pesquisas confirmam; corrigido para
-  // `'politica_bancaria'`. `validade_dias: 60` é mantido (o número em si não
-  // está errado como política operacional -- só o rótulo de que tipo de
-  // exigência ele representa estava). `tipo_exigencia` é hoje só um campo de
-  // apresentação (nenhum código decide fluxo por `=== 'obrigacao_legal'`),
-  // então esta correção não muda `aplicabilidade`/`status`/bloqueio de etapa.
   {
-    codigo: 'socio_comprovante_residencia', tipo_documento: 'comprovante_residencia', nome_amigavel: 'Comprovante de residência do sócio', entidade_tipo: 'socio', escopo: 'socio', obrigatorio: true, permite_multiplos: false, validade_dias: obterPerfilAnaliseDocumental('comprovante_residencia').validadePadraoDias ?? 60, condicao: { depois_etapa: 2 }, tipo_exigencia: 'politica_bancaria', bloqueia_etapa: 3, versao: 'fallback-2026.08.29', ativo: true, fonte: 'matriz_estrategica_2026',
+    codigo: 'socio_comprovante_residencia', tipo_documento: 'comprovante_residencia', nome_amigavel: 'Comprovante de residência do sócio', entidade_tipo: 'socio', escopo: 'socio', obrigatorio: true, permite_multiplos: false, validade_dias: 60, condicao: { depois_etapa: 2 }, tipo_exigencia: 'obrigacao_legal', bloqueia_etapa: 3, versao: 'fallback-2026.08.29', ativo: true, fonte: 'matriz_estrategica_2026',
   },
 ];
 
@@ -404,10 +363,6 @@ function normalizarRegraBanco(row: any): RegraDocumentalCredito {
     versao: row.versao || null,
     ativo: row.ativo !== false,
     fonte: row.fonte || null,
-    // Coluna nova e opcional (ver `RegraDocumentalCredito.fonte_normativa`).
-    // `row.fonte_normativa` fica `undefined` em bancos que ainda não têm essa
-    // coluna -- resolve para `null` normalmente, sem quebrar nada.
-    fonte_normativa: row.fonte_normativa || null,
   };
 }
 

@@ -1,7 +1,7 @@
 import crypto from 'node:crypto';
 
-export const CLASSIFIER_VERSION = '2026.09.05';
-export const EXTRACTOR_VERSION = 'local-2026.09.04';
+export const CLASSIFIER_VERSION = '2026.09.01';
+export const EXTRACTOR_VERSION = 'local-2026.09.01';
 // CORREÇÃO (2026-08-31, caso real ZR CONSTRUCOES -- PGDAS aceito no slot de
 // ECF): bump obrigatório sempre que `extrairHibrido`/`normalizarDocumentoCatalogado`
 // mudam como um documento é classificado. Sem este bump, um laudo já
@@ -35,47 +35,14 @@ export const EXTRACTOR_VERSION = 'local-2026.09.04';
 // `validarQsaExtraida` sem bump nenhum, então TODO QSA já analisado antes do
 // deploy da Rodada 13 está na mesma situação -- não é possível bumpar de forma
 // seletiva só para QSA com a infraestrutura de assinatura única hoje existente.
-export const RULE_VERSION = 'rules-2026.09.05.1';
-export const PROMPT_VERSION = 'prompt-2.0.0';
-export const SCHEMA_VERSION = 'laudo-104';
-
-const VERSOES_PROMPT_DOCUMENTAL: Readonly<Record<string, string>> = {
-  qsa_extract: '5.1.0',
-  simples_extract: '1.0.0',
-  atos_junta_extract: '1.0.0',
-  faturamento_12m_extract: '1.0.0',
-  comprovante_residencia_extract: '1.0.0',
-};
-
-/** Fonte única da versão que entra na linha persistida e na assinatura. */
-export function versaoPromptDocumental(promptCodigo: string): string {
-  const codigo = String(promptCodigo || '').trim();
-  if (VERSOES_PROMPT_DOCUMENTAL[codigo]) return VERSOES_PROMPT_DOCUMENTAL[codigo];
-  if (codigo.startsWith('catalogo_')) return '2.0.0';
-  return '1.0.0';
-}
+export const RULE_VERSION = 'rules-2026.09.01.2';
+export const PROMPT_VERSION = 'prompt-1.0.0';
+export const SCHEMA_VERSION = 'laudo-103';
 
 export type AnalysisLifecycleStatus = 'ATIVO' | 'STALE' | 'REANALISE_NECESSARIA' | 'SUPERSEDED';
 export type ProcessingStatus = 'PENDENTE' | 'PROCESSANDO' | 'CONCLUIDO' | 'FALHOU';
 export type IdentityStatus = 'IDENTIFICADO' | 'INCOMPATIVEL' | 'AMBIGUO' | 'NAO_IDENTIFICADO';
-// CORREÇÃO (Rodada 33, 05/09/2026, diagnóstico cruzado de duas pesquisas
-// independentes -- Manus AI e GPT -- sobre a matriz documental de crédito):
-// `WINDOW_SUPPORT` acrescentado aos 7 estados que já existiam. A pesquisa da
-// Manus AI propõe 5 estados novos (`WINDOW_SUPPORT`, `REGIME_NAO_CONFIRMADO`,
-// `HISTORICO_INSUFICIENTE_POR_IDADE`, `PARTIAL`, `AUTENTICIDADE_NAO_VALIDADA`);
-// a pesquisa do GPT, de forma independente, lista os mesmos 7 estados que já
-// existiam como sua própria recomendação, sem pedir nenhum a mais -- as duas
-// pesquisas divergem entre si nesse ponto (ver diagnóstico da Rodada 33).
-// Decisão desta rodada: adotar só `WINDOW_SUPPORT`, o único dos 5 que resolve
-// diretamente um problema concreto já corrigido nesta mesma rodada (ver
-// `shared/documentalPresentation.ts`, `transicaoDeRegimeRecente`) -- um
-// documento histórico (ex.: PGDAS-D de mais de 2 meses atrás) cuja
-// competência ainda está dentro da janela rolling de 12 meses deixa de ser
-// rotulado com o mesmo `HISTORICO` genérico de um documento de anos atrás.
-// Os outros 4 estados propostos pela Manus AI ficam deliberadamente fora
-// desta rodada -- nenhum deles tinha, no diagnóstico, um ponto concreto do
-// código já pronto para consumi-los sem inventar lógica nova do zero.
-export type TemporalStatus = 'ATUAL' | 'HISTORICO' | 'WINDOW_SUPPORT' | 'FORA_JANELA' | 'AINDA_NAO_EXIGIVEL' | 'FUTURO' | 'NAO_VERIFICADO' | 'NAO_APLICAVEL';
+export type TemporalStatus = 'ATUAL' | 'HISTORICO' | 'FORA_JANELA' | 'AINDA_NAO_EXIGIVEL';
 export type CoverageStatus = 'SATISFAZ' | 'NAO_SATISFAZ' | 'PARCIAL' | 'EQUIVALENTE';
 
 export interface AnalysisSignatureInput {
@@ -106,31 +73,6 @@ export interface AnalysisVersionDecision {
   isCurrent: boolean;
   lifecycleStatus: AnalysisLifecycleStatus;
   shouldReprocess: boolean;
-}
-
-/**
- * Um laudo concluído não perde a validade operacional só porque o código foi
- * atualizado ou o processo Node reiniciou. A assinatura de versão continua
- * servindo para decidir se deve existir uma atualização em segundo plano,
- * porém o último resultado concluído só deixa de ser utilizável quando foi
- * explicitamente marcado como STALE/SUPERSEDED (ou quando não chegou a ser
- * concluído).
- *
- * `REANALISE_NECESSARIA` é deliberadamente aceito aqui quando a linha está
- * concluída: versões anteriores do sistema usavam esse mesmo status para um
- * simples bump global de RULE_VERSION/CLASSIFIER_VERSION. Aceitá-lo durante a
- * migração de comportamento recupera esses laudos sem apagar os dados já
- * validados; a atualização automática continua sendo enfileirada pelo
- * scheduler/backfill e, quando terminar com sucesso, substitui a versão
- * anterior de forma atômica do ponto de vista do usuário.
- */
-export function laudoConcluidoPodePermanecerAtivo(
-  row: PersistedAnalysisVersion | null | undefined,
-): boolean {
-  if (!row) return false;
-  if (statusProcessamentoLegado(row.status) !== 'CONCLUIDO') return false;
-  const lifecycle = String(row.analysis_status || '').toUpperCase();
-  return lifecycle !== 'STALE' && lifecycle !== 'SUPERSEDED';
 }
 
 function stablePart(value: unknown, fallback: string): string {

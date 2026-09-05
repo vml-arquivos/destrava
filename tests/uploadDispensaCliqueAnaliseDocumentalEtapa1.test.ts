@@ -60,11 +60,6 @@ vi.mock('../server/services/analiseDocumentalEspecializada', async (importOrigin
       ...original.analiseDocumentalService,
       analisarQSA: mocks.analisarQSA,
       analisarSimplesNacional: mocks.analisarSimplesNacional,
-      analisarDocumentoAutomatico: (empresaId: string, arquivoId: string, tipoDocumento: string) => (
-        tipoDocumento === 'qsa'
-          ? mocks.analisarQSA(empresaId, arquivoId)
-          : mocks.analisarSimplesNacional(empresaId, arquivoId)
-      ),
     },
   };
 });

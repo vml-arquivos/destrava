@@ -1,7 +1,7 @@
 import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { apiFetch, apiFetchBlob } from "@/lib/api";
-import { DOCUMENT_TYPE_CATALOG, documentAnalysisConfig, documentLabel } from "@shared/documentTypes";
-import { bucketDoRegimeTributarioHistorico, documentoSocietarioDispensadoPorMei, estadoVisualDocumento, slotCompativelComRegimeTributario, transicaoDeRegimeRecente, type BucketRegimeFiscal } from "@shared/documentalPresentation";
+import { DOCUMENT_TYPE_CATALOG, documentLabel } from "@shared/documentTypes";
+import { bucketDoRegimeTributarioHistorico, estadoVisualDocumento, slotCompativelComRegimeTributario, transicaoDeRegimeRecente, type BucketRegimeFiscal } from "@shared/documentalPresentation";
 import { ResultadoAnaliseDocumento } from "./ResultadoAnaliseDocumento";
 import { ProntidaoIdentidadeCard, type IdentidadeCnpj } from "../documentacao/DossieCreditoEmpresa";
 import { toast } from "sonner";
@@ -185,12 +185,8 @@ export const SECOES_DOCUMENTAIS: SecaoDocumento[] = [
     titulo: "Documentação da Empresa",
     descricao: "Todo o restante referente à empresa: contrato social, consultas e certidões do CNPJ, fiscal/tributário, faturamento, eCAC, fotos e outros.",
     slots: [
-      slot("Atos da Junta Comercial", "atos_junta_comercial", [], { obrigatorio: true, descricao: "Primeiro documento da Etapa 2. A IA identifica todos os atos e define quais contratos/alterações devem ser anexados até comprovar 12 meses. Para MEI, a dispensa é registrada automaticamente -- o MEI é dispensado por lei do registro na Junta Comercial; o documento constitutivo dele é o CCMEI (seção Fiscal/Tributário)." }),
-      slot("Contrato social e alterações contratuais", "contrato_social", ["alteracao_contratual"], { obrigatorio: true, descricao: "Lido depois dos Atos da Junta e conferido por número do ato, data de registro, NIRE, CNPJ e sócios do QSA. Para MEI, a dispensa é registrada automaticamente -- o documento constitutivo do MEI é o CCMEI (seção Fiscal/Tributário)." }),
-      slot("Requerimento de Empresário / Instrumento de Inscrição", "requerimento_empresario", ["alteracao_contratual"], { descricao: "Ato registral próprio do Empresário Individual não enquadrado como MEI." }),
-      slot("Estatuto e atas vigentes", "estatuto", ["ata"], { descricao: "Atos de constituição, governança e representação de S.A., cooperativa, associação ou fundação, conforme a natureza jurídica." }),
-      slot("Registro no RCPJ / Cartório de Pessoas Jurídicas", "registro_cartorio_pj", [], { descricao: "Registro civil do estatuto, ato constitutivo e alterações de associação ou fundação; não substitua por ato da Junta Comercial." }),
-      slot("Registro/ato da OAB", "registro_oab", [], { descricao: "Registro do ato constitutivo e das alterações da sociedade de advocacia perante a OAB Seccional." }),
+      slot("Atos da Junta Comercial", "atos_junta_comercial", [], { obrigatorio: true, descricao: "Primeiro documento da Etapa 2. A IA identifica todos os atos e define quais contratos/alterações devem ser anexados até comprovar 12 meses. Para MEI, a dispensa é registrada automaticamente." }),
+      slot("Contrato social e alterações contratuais", "contrato_social", ["alteracao_contratual"], { obrigatorio: true, descricao: "Lido depois dos Atos da Junta e conferido por número do ato, data de registro, NIRE, CNPJ e sócios do QSA." }),
       slot("Relatório SCR/Registrato (CNPJ)", "rating_bacen_cnpj", ["scr_cnpj", "relatorio_scr"], { descricao: "Sequência de análise: SCR, CCS e CCF." }),
       slot("Relatório CCS do CNPJ", "ccs_cnpj"),
       slot("Relatório CCF do CNPJ", "ccf_cnpj"),
@@ -247,7 +243,7 @@ export const SECOES_DOCUMENTAIS: SecaoDocumento[] = [
       slot("Compartilhamento eCAC por banco", "compartilhamento_ecac", [], { exigeNome: true, placeholderNome: "Banco/destinatário eCAC" }),
       slot("Fotos da empresa", "foto_fachada", ["foto_interna_1", "foto_interna_2", "foto_interna_3"], { descricao: "Anexe fachada e fotos internas no mesmo local." }),
       slot("Campo outros / Documento nomeado", "outros", [
-        "comprovante_endereco", "procuracao", "nire",
+        "comprovante_endereco", "procuracao", "nire", "estatuto",
       ], {
         exigeNome: true,
         placeholderNome: "Nome do documento",
@@ -323,24 +319,7 @@ function grupoDaSecao(tituloSecao: string): string {
 // sistema" assim que um contrato assinado fosse anexado -- o arquivo continua
 // 100% acessível pela aba Contratos Firmados, só não é exibido nesta tela.
 const TIPOS_FORA_DO_CHECKLIST_CREDITO = new Set(["contrato_prestacao_servicos", "contrato_assessoria", "enquadramento_tributario_cpf"]);
-const TIPOS_COM_ANALISE_AUTOMATICA = new Set(
-  DOCUMENT_TYPE_CATALOG.filter((item) => item.uploadavel && documentAnalysisConfig(item.tipo)).map((item) => item.tipo),
-);
-
-export function tipoDocumentoTemLeituraAutomatica(tipo: string): boolean {
-  return TIPOS_COM_ANALISE_AUTOMATICA.has(String(tipo || ""));
-}
-
-export function documentoTemResultadoDeLeitura(doc?: DocumentoArquivo | null): boolean {
-  if (!doc) return false;
-  if (doc.resultado_validacao?.analise_regra_documental || doc.resultado_validacao?.analise_regra_documental_erro) return true;
-  if (doc.analisado === true) return true;
-  const resultado = doc.resultado_analise || {};
-  const status = String(resultado?.status || "").toLowerCase();
-  const lifecycle = String(resultado?.analysis_status || "").toUpperCase();
-  return ["concluido", "revisao_humana", "falhou"].includes(status)
-    || ["ATIVO", "STALE", "SUPERSEDED", "REANALISE_NECESSARIA"].includes(lifecycle);
-}
+const TIPOS_COM_ANALISE_AUTOMATICA = new Set(["faturamento_12_meses", "comprovante_faturamento", "declaracao_faturamento", "comprovante_residencia"]);
 const TIPOS_FISCAIS_SIMPLIFICADOS = new Set(["pgdas", "pgdas_d", "pgmei", "das_mei", "ccmei", "recibo_pgdas", "recibo_pgmei", "defis", "dasn_simei", "recibo_defis", "recibo_dasn_simei", "relatorio_receitas_mei"]);
 const TIPOS_FISCAIS_ECF = new Set(["ecf", "recibo_ecf", "ecd", "recibo_ecd", "dctf", "dctfweb", "mit", "darf", "livro_caixa", "efd_contribuicoes", "efd_icms_ipi", "efd"]);
 
@@ -417,23 +396,12 @@ function StatusAnaliseSlot({ item, tipo, onReler, relendo }: { item?: { nome: st
     </button>
   ) : null;
 
-  // A leitura interna pode extrair dezenas de campos, mas esta tela é de
-  // VALIDAÇÃO DOCUMENTAL, não de reprodução do documento. Cada card expõe
-  // somente as confirmações que determinam se o requisito está correto.
-  const chavesPermitidas = tipo === "cartao_cnpj"
-    ? new Set(["cnpj", "situacao_cadastral", "matriz_filial", "localizacao"])
-    : tipo === "qsa"
-      ? new Set(["cnpj", "socios_identificados", "administradores"])
-      : tipo === "enquadramento_tributario_cnpj"
-        ? new Set(["cnpj", "regime_tributario", "situacao_simples", "data_opcao_simples", "exclusao_agendada"])
-        : null;
   const campos = Object.entries(item.campos_principais || {})
-    .filter(([chave]) => !chavesPermitidas || chavesPermitidas.has(chave))
     .map(([chave, valor]) => {
       if (valor === null || valor === undefined || valor === "") return null;
       if (typeof valor === "boolean") return { chave, valor: valor ? "Sim" : "Não" };
       if (Array.isArray(valor)) {
-        const texto = valor.filter(Boolean).slice(0, 3).join(", ");
+        const texto = valor.filter(Boolean).join(", ");
         return texto ? { chave, valor: texto } : null;
       }
       return { chave, valor: String(valor) };
@@ -478,7 +446,7 @@ function StatusAnaliseSlot({ item, tipo, onReler, relendo }: { item?: { nome: st
                 onClick={() => setAberto((v) => !v)}
                 className="shrink-0 text-[9px] font-bold text-success underline decoration-dotted"
               >
-                {aberto ? "Ocultar" : "Validação"}
+                {aberto ? "ocultar" : "Dados da análise"}
               </button>
             )}
             {botaoReler}
@@ -499,61 +467,24 @@ function StatusAnaliseSlot({ item, tipo, onReler, relendo }: { item?: { nome: st
   }
 
   const falhou = item.status === "falha_leitura";
-  // CORREÇÃO (2026-09-05, Rodada 32, print real da tela em produção, empresa
-  // MEI "VILSON MARCIO DE LIMA": "continua com a mesma mensagem no QSA... que
-  // não existia antes, que já identificava corretamente quando é MEI"): um
-  // laudo já lido e correto, só marcado como desatualizado pelo mecanismo de
-  // versionamento (depois de um bump de regra/classificador -- ver
-  // `documentalLaudoVersioning.ts`), é uma situação DIFERENTE de "documento
-  // anexado e nunca lido ainda" -- a primeira já tem uma leitura válida
-  // esperando confirmação (basta clicar em "Reler"), a segunda nunca foi
-  // processada. Antes desta correção as duas caíam no mesmo selo "Aguardando
-  // análise", genérico e sem explicar por quê -- mesma classe de bug já
-  // corrigida na Rodada 31 para o selo do Acervo Documental
-  // (`estadoVisualDocumento`), aqui reaplicada ao card equivalente da seção
-  // "Identidade do CNPJ", que usa um caminho de dados totalmente separado
-  // (`server/routes/documentacao.ts`, `statusDocumento`/`montarQsaDocumentalDados`/
-  // `montarEnquadramentoDados`) e por isso não foi corrigido junto.
-  const reanaliseNecessaria = item.status === "reanalise_necessaria";
-  const aguardando = !item.analisado && !falhou && !reanaliseNecessaria;
+  const aguardando = !item.analisado && !falhou;
   // O card de Enquadramento Tributário já tem, logo abaixo da grade de Identidade
   // do CNPJ, um bloco dedicado explicando o que anexar (ECF/DCTF/DARF/Livro Caixa)
   // e um botão de ação, quando o regime efetivo ainda não foi confirmado. Repetir
   // "Revisão necessária" sem nenhuma ação aqui dentro do card era ruído -- pedido
-  // explícito do usuário para tirar isso "daqui". Falha de leitura, "aguardando
-  // análise" e "reanálise necessária" continuam aparecendo normalmente, em
-  // qualquer card -- as três precisam de uma ação (anexar, aguardar ou reler).
-  if (tipo === "enquadramento_tributario_cnpj" && !falhou && !aguardando && !reanaliseNecessaria) return null;
-  // CORREÇÃO (2026-09-05, Rodada 32, mesmo pedido do usuário -- "muito texto,
-  // aumentando muito o modal, e sem a opção de encolher"): o texto explicando
-  // o motivo (diagnóstico) fica atrás de um toggle "ver detalhes"/"ocultar"
-  // quando é longo o bastante para valer a pena encolher -- o rótulo do selo
-  // já diz o essencial (o quê) e o botão "Reler" já diz a ação (o quê fazer);
-  // o texto completo (o porquê, mais longo) só some da vista quando o usuário
-  // decide ocultar, nunca é cortado/perdido. Textos curtos continuam sempre
-  // visíveis, sem toggle -- não há o que encolher.
-  const diagnosticoLongo = (item.diagnostico?.length || 0) > 90;
+  // explícito do usuário para tirar isso "daqui". Falha de leitura e "aguardando
+  // análise" continuam aparecendo normalmente, em qualquer card.
+  if (tipo === "enquadramento_tributario_cnpj" && !falhou && !aguardando) return null;
   return (
     <div className={`rounded-md border px-2 py-1.5 ${falhou ? "border-destructive/20 bg-destructive/10" : "border-warning/20 bg-warning/10"}`}>
       <div className="flex items-center justify-between gap-2">
         <span className={`inline-flex items-center gap-1 text-[10px] font-black ${falhou ? "text-destructive" : "text-warning"}`}>
           <AlertTriangle className="h-3 w-3 shrink-0" />
-          {falhou ? "Falha na leitura" : reanaliseNecessaria ? "Reanálise necessária" : aguardando ? "Aguardando análise" : "Revisão necessária"}
+          {falhou ? "Falha na leitura" : aguardando ? "Aguardando análise" : "Revisão necessária"}
         </span>
-        <div className="flex shrink-0 items-center gap-1">
-          {item.diagnostico && diagnosticoLongo && (
-            <button
-              type="button"
-              onClick={() => setAberto((v) => !v)}
-              className={`shrink-0 text-[9px] font-bold underline decoration-dotted ${falhou ? "text-destructive" : "text-warning"}`}
-            >
-              {aberto ? "ocultar" : "ver detalhes"}
-            </button>
-          )}
-          {botaoReler}
-        </div>
+        {botaoReler}
       </div>
-      {item.diagnostico && (!diagnosticoLongo || aberto) && (
+      {item.diagnostico && (
         <p className={`mt-1 text-[9px] leading-relaxed ${falhou ? "text-destructive" : "text-warning"}`}>{item.diagnostico}</p>
       )}
     </div>
@@ -581,11 +512,12 @@ const TIPOS_GATILHO_ANALISE_IDENTIDADE = new Set(Object.keys(CHAVE_ANALISE_POR_S
 const CAMPO_ANALISE_LABEL: Record<string, string> = {
   cnpj: "CNPJ",
   data_opcao_simples: "Opção pelo Simples",
+  razao_social: "Razão social",
+  cnae: "CNAE",
   situacao_cadastral: "Situação",
-  matriz_filial: "Unidade",
-  localizacao: "Localização",
-  socios_identificados: "Integrantes do QSA",
-  administradores: "Administrador/Titular",
+  capital_social: "Capital social",
+  socios_identificados: "Sócios",
+  administradores: "Sócio-Administrador",
   regime_tributario: "Regime",
   situacao_simples: "Simples",
   exclusao_agendada: "Exclusão agendada",
@@ -792,10 +724,6 @@ export default function DocumentosEntidade({
   // o arquivo. Este estado controla o botão "Reanalisar" novo, por arquivo,
   // que resolve isso sem precisar reanexar nada.
   const [reanalisandoId, setReanalisandoId] = useState<string | null>(null);
-  // Evita solicitar automaticamente a mesma leitura várias vezes durante a
-  // mesma permanência na tela. O backend continua idempotente; este guard é
-  // apenas para reduzir chamadas/reloads no navegador.
-  const leiturasAutomaticasSolicitadasRef = useRef<Set<string>>(new Set());
   // CORREÇÃO (Rodada 27, 02/09/2026, pedido explícito do usuário -- "quero
   // que coloque... um botão pra reler... pra reanalisar os dados. Caso não
   // atualize automaticamente e também pra não precisar ficar trocando toda a
@@ -894,35 +822,75 @@ export default function DocumentosEntidade({
     setRelatorioModalAberto(false);
     setLoading(true);
     try {
-      // Rodada 38: primeira pintura = Acervo + laudos persistidos por arquivo.
-      // Não bloqueamos mais a tela esperando o dossiê completo. O endpoint de
-      // documentos já entrega resultado_analise persistido, então a leitura
-      // individual reaparece imediatamente — inclusive após refresh/redeploy.
-      const [data, observacoes, sociosEmpresa] = await Promise.all([
+      const [data, observacoes, sociosEmpresa, pipelineAtual, dossieAtual] = await Promise.all([
         apiFetch(`/api/documentos?${query}`),
         apiFetch(`/api/documentos/observacoes-slots?${new URLSearchParams({ entidade_tipo: entidadeTipo, entidade_id: entidadeId }).toString()}`).catch(() => []),
         entidadeTipo === "empresa" && empresaId
           ? apiFetch(`/api/empresas/${empresaId}/socios`).catch(() => [])
           : Promise.resolve([]),
+        entidadeTipo === "empresa" && empresaId
+          ? apiFetch(`/api/documentacao/empresa/${empresaId}/pipeline/status`).catch(() => null)
+          : Promise.resolve(null),
+        // Diagnóstico da Etapa 2/3 (Atos da Junta + Contrato Social/Alteração) --
+        // somente leitura aqui (sem processarSocietario), só pra exibir o que já
+        // foi analisado antes; a análise em si é disparada por iniciarAnaliseSocietaria().
+        entidadeTipo === "empresa" && empresaId
+          ? apiFetch(`/api/documentacao/empresa/${empresaId}/dossie`).catch(() => null)
+          : Promise.resolve(null),
       ]);
-
-      const lista = Array.isArray(data) ? data as DocumentoArquivo[] : [];
+      setPipeline(pipelineAtual);
+      setIdentidadeCnpj(dossieAtual?.identidade_cnpj || null);
+      const societariaAtual = dossieAtual?.documentacao_societaria || null;
+      setSocietaria(societariaAtual);
+      // Rodada 25 (02/09/2026, pedido explícito do usuário -- "eu quero que os
+      // cards pra anexar a documentação fiquem sempre visíveis, não é mais pra
+      // ter que ficar escondido... deixe só pra poder encolher, no card, com a
+      // análise documental" -- reportado ao abrir uma empresa de outro
+      // regime/tipo e ver a tela com um conjunto diferente de campos visíveis
+      // em relação a outra empresa): os campos complementares (não
+      // obrigatórios na Etapa 1) deixaram de ficar escondidos atrás de "Ver
+      // documentos complementares"/do marco societário (Atos da Junta
+      // aprovados ou dispensados por MEI) -- ver histórico da correção de
+      // 2026-09-01 logo abaixo, agora superada por este pedido mais amplo.
+      // Todos os campos do checklist ficam sempre visíveis, para qualquer
+      // empresa/regime/porte, desde a primeira carga da tela; o que continua
+      // colapsável é só o bloco de resultado da leitura DENTRO de cada card
+      // ("Dados da análise" por arquivo), nunca o card de anexo em si. Ver
+      // `slotsVisiveis` (removido) mais abaixo, onde a filtragem por
+      // obrigatório/complementar existia.
+      setMapaCredito(dossieAtual?.mapa_documental_credito || null);
+      const analisesPorArquivo = new Map<string, any>(
+        (Array.isArray(dossieAtual?.blocos) ? dossieAtual.blocos : [])
+          .flatMap((bloco: any) => Array.isArray(bloco?.documentos) ? bloco.documentos : [])
+          .filter((documento: any) => documento?.id && documento?.resultado_analise)
+          .map((documento: any) => [String(documento.id), documento] as [string, any]),
+      );
+      const lista = (Array.isArray(data) ? data : []).map((documento: DocumentoArquivo) => {
+        const enriquecido = analisesPorArquivo.get(String(documento.id));
+        return enriquecido
+          ? { ...documento, analisado: enriquecido.analisado, consistente: enriquecido.consistente, resultado_analise: enriquecido.resultado_analise }
+          : documento;
+      });
+      // O contrato de prestação de serviços (Destrava <-> empresa) não é documento
+      // de análise de crédito -- vive só na aba "Contratos Firmados". Filtrado
+      // apenas para entidadeTipo="empresa" (esta tela específica de Acervo
+      // Documental); o arquivo em si nunca é tocado, só não some aqui.
       const filtrada = entidadeTipo === "empresa"
         ? lista.filter((doc: DocumentoArquivo) => !TIPOS_FORA_DO_CHECKLIST_CREDITO.has(doc.tipo_documento))
         : lista;
       setDocs(filtrada);
-
       const observacoesMap: Record<string, string> = {};
       (Array.isArray(observacoes) ? observacoes : []).forEach((item: ObservacaoSlot) => {
         observacoesMap[chaveContextoSlot(item.tipo_documento, item.socio_id)] = item.observacao || "";
       });
+      // Compatibilidade com observações antigas gravadas junto ao arquivo: usa a
+      // mais recente como valor inicial, sem alterar ou excluir o registro legado.
       filtrada.forEach((doc: DocumentoArquivo) => {
         const documentoSlot = slotDoTipo(doc.tipo_documento);
         const chave = chaveContextoSlot(documentoSlot.tipoUpload, doc.socio_id);
         if (!observacoesMap[chave] && doc.observacoes) observacoesMap[chave] = doc.observacoes;
       });
       setObservacoesPorTipo(observacoesMap);
-
       const sociosLista = Array.isArray(sociosEmpresa) ? sociosEmpresa.filter((item: any) => item?.id) : [];
       setSocios(sociosLista);
       if (sociosLista.length) {
@@ -932,6 +900,15 @@ export default function DocumentosEntidade({
             const atual = copy[item.tipoUpload];
             const atualValido = !!atual && sociosLista.some((socio: SocioResumo) => socio.id === atual);
             if (atualValido) return;
+            // BUGFIX (2026-08-12): antes, ao remontar a tela (ex: sair e voltar ao
+            // perfil da empresa), o seletor sempre reiniciava no primeiro sócio em
+            // ordem alfabética -- se a Observação (ou qualquer documento) tivesse
+            // sido salva para outro sócio, ela parecia ter "sumido" (o dado
+            // continuava intacto no banco, só não era exibido, porque a chave
+            // exibida na tela dependia do sócio selecionado no momento). Agora
+            // preferimos, como seleção inicial, um sócio que já tenha documento
+            // ou observação registrada para este campo específico -- só cai no
+            // primeiro da lista quando nenhum sócio tem nada salvo ainda.
             const socioComDados = sociosLista.find((socio: SocioResumo) => (
               filtrada.some((doc: DocumentoArquivo) => doc.socio_id === socio.id && item.matchTipos.includes(doc.tipo_documento))
               || !!observacoesMap[chaveContextoSlot(item.tipoUpload, socio.id)]
@@ -941,69 +918,12 @@ export default function DocumentosEntidade({
           return copy;
         });
       }
-
-      // A tela já pode ser usada neste ponto. Pipeline e dossiê são resumos
-      // agregados; carregam em background e nunca seguram os cards individuais.
-      setLoading(false);
-      if (entidadeTipo === "empresa" && empresaId) {
-        void Promise.all([
-          apiFetch(`/api/documentacao/empresa/${empresaId}/pipeline/status`).catch(() => null),
-          apiFetch(`/api/documentacao/empresa/${empresaId}/dossie`).catch(() => null),
-        ]).then(([pipelineAtual, dossieAtual]) => {
-          if (pipelineAtual) setPipeline(pipelineAtual);
-          if (!dossieAtual) return;
-          setIdentidadeCnpj(dossieAtual?.identidade_cnpj || null);
-          setSocietaria(dossieAtual?.documentacao_societaria || null);
-          setMapaCredito(dossieAtual?.mapa_documental_credito || null);
-        }).catch(() => undefined);
-      }
     } catch (err: any) {
       toast.error(err?.message || "Erro ao carregar documentos.");
+    } finally {
       setLoading(false);
     }
   }, [entidadeId, query, entidadeTipo, empresaId]);
-
-  // Rodada 37: além do scheduler do backend, a própria tela garante a
-  // convergência imediata dos documentos já anexados que ainda não possuem
-  // laudo. Isso cobre acervos anteriores ao deploy e documentos cuja leitura
-  // automática foi iniciada em segundo plano mas ainda não apareceu na UI.
-  // A chamada é idempotente: primeiro consulta o status; só cria leitura nova
-  // quando realmente não existe uma em andamento/concluída.
-  useEffect(() => {
-    if (loading || !entidadeId || !docs.length) return;
-    const timer = window.setTimeout(() => {
-      const temAtosJunta = docs.some((doc) => doc.tipo_documento === "atos_junta_comercial" && doc.arquivo_disponivel !== false);
-      const pendentes = docs.filter((doc) => {
-        if (!tipoDocumentoTemLeituraAutomatica(doc.tipo_documento)) return false;
-        if (TIPOS_GATILHO_ANALISE_IDENTIDADE.has(doc.tipo_documento)) return false;
-        const exigeCrosscheckSocietario = ["contrato_social", "alteracao_contratual"].includes(doc.tipo_documento);
-        if (exigeCrosscheckSocietario) {
-          // Um laudo genérico do contrato não substitui o confronto com Atos da
-          // Junta. Só paramos quando o dossiê marcou este arquivo como analisado
-          // pela cadeia societária.
-          if (doc.analisado === true) return false;
-          if (!temAtosJunta) return false;
-        } else if (documentoTemResultadoDeLeitura(doc)) {
-          return false;
-        }
-        if (doc.arquivo_disponivel === false) return false;
-        if (leiturasAutomaticasSolicitadasRef.current.has(doc.id)) return false;
-        return true;
-      }).slice(0, 3);
-
-      if (!pendentes.length) return;
-      pendentes.forEach((doc) => leiturasAutomaticasSolicitadasRef.current.add(doc.id));
-      void Promise.allSettled(
-        pendentes.map((doc) => solicitarLeituraDocumento(doc, {
-          silencioso: true,
-          forcar: false,
-          somenteSeNecessario: true,
-          recarregar: false,
-        })),
-      ).then(() => carregar());
-    }, 1500);
-    return () => window.clearTimeout(timer);
-  }, [docs, loading, entidadeId, carregar]);
 
   // Dispara a análise da Etapa 1 (Cartão CNPJ + QSA + Enquadramento Tributário) e
   // faz o mesmo polling já usado em DossieCreditoEmpresa.tsx (recalcular) -- só
@@ -1546,69 +1466,31 @@ export default function DocumentosEntidade({
     }
   }
 
-  async function aguardarConclusaoLeitura(documentoId: string, recarregar = true) {
-    let ultimoStatus: any = null;
-    for (let tentativa = 0; tentativa < 30; tentativa += 1) {
-      ultimoStatus = await apiFetch(`/api/documentacao/ia/documentos/${documentoId}/status`).catch(() => null);
-      if (ultimoStatus?.concluido === true || ultimoStatus?.falhou === true) break;
-      await new Promise((resolve) => window.setTimeout(resolve, 1500));
-    }
-    if (recarregar) await carregar();
-    return ultimoStatus;
-  }
-
-  async function solicitarLeituraDocumento(
-    doc: DocumentoArquivo,
-    opcoes: { silencioso?: boolean; forcar?: boolean; somenteSeNecessario?: boolean; recarregar?: boolean } = {},
-  ) {
-    const silencioso = opcoes.silencioso === true;
-    const recarregar = opcoes.recarregar !== false;
-    if (!silencioso) setReanalisandoId(doc.id);
+  // CORREÇÃO (2026-08-31): força uma nova leitura de um documento JÁ
+  // anexado e já analisado -- necessário sempre que o motor de análise for
+  // corrigido/atualizado depois que o arquivo já tinha sido lido pela
+  // versão antiga (o laudo antigo, errado, nunca se atualiza sozinho). O
+  // processamento roda em segundo plano no servidor (`setImmediate`), então
+  // aguarda alguns segundos antes de recarregar a lista para dar tempo do
+  // novo resultado ser persistido; se ainda não tiver terminado, o
+  // resultado antigo aparece por mais alguns segundos até o usuário abrir
+  // "Dados da análise" de novo ou recarregar a página.
+  async function reanalisar(doc: DocumentoArquivo) {
+    setReanalisandoId(doc.id);
     try {
-      if (opcoes.somenteSeNecessario) {
-        const atual = await apiFetch(`/api/documentacao/ia/documentos/${doc.id}/status`).catch(() => null);
-        if (atual?.concluido === true) {
-          if (recarregar) await carregar();
-          return atual;
-        }
-        if (atual?.processando === true) {
-          return await aguardarConclusaoLeitura(doc.id, recarregar);
-        }
-      }
-
-      const resposta = await apiFetch(`/api/documentacao/ia/documentos/${doc.id}/extrair`, {
-        method: "POST",
-        body: JSON.stringify({ forcar: opcoes.forcar === true }),
-      });
-
-      // Contrato/Alteração usa cross-check síncrono contra Atos da Junta.
-      if (resposta?.analise) {
-        if (recarregar) await carregar();
-        if (!silencioso) toast.success("Nova leitura concluída.");
-        return { concluido: true, resultado: resposta.analise };
-      }
-
-      const final = await aguardarConclusaoLeitura(doc.id, recarregar);
-      if (!silencioso) {
-        if (final?.falhou) toast.error("A leitura foi executada, mas precisa de revisão. Veja o diagnóstico no documento.");
-        else if (final?.concluido) toast.success("Nova leitura concluída.");
-        else toast.info("A leitura continua em processamento e será atualizada automaticamente.");
-      }
-      return final;
+      await apiFetch(`/api/documentacao/ia/documentos/${doc.id}/extrair`, { method: "POST", body: JSON.stringify({}) });
+      toast.success("Nova leitura solicitada. Atualizando em instantes...");
+      setTimeout(() => { void carregar(); }, 4000);
     } catch (err: any) {
       const mensagem = String(err?.message || "");
-      if (!silencioso) toast.error(mensagem || "Erro ao solicitar leitura do documento.");
-      return null;
+      if (/ainda não implementado/i.test(mensagem)) {
+        toast.info("Este tipo de documento não tem reprocessamento automático disponível ainda.");
+      } else {
+        toast.error(mensagem || "Erro ao solicitar nova leitura do documento.");
+      }
     } finally {
-      if (!silencioso) setReanalisandoId((prev) => (prev === doc.id ? null : prev));
+      setReanalisandoId((prev) => (prev === doc.id ? null : prev));
     }
-  }
-
-  // O clique manual é uma releitura REAL, mesmo quando o laudo atual já está
-  // válido e usa a mesma versão do motor. O backend recebe `forcar=true` e
-  // cria uma nova tentativa sem apagar a conclusão anterior.
-  async function reanalisar(doc: DocumentoArquivo) {
-    await solicitarLeituraDocumento(doc, { forcar: true, silencioso: false, recarregar: true });
   }
 
   function marcarDocs(lista: DocumentoArquivo[], valor: boolean) {
@@ -2151,15 +2033,6 @@ export default function DocumentosEntidade({
                       : 0;
                     const uploading = uploadingTipo === chaveSlot;
                     const destaqueConfirmacaoRegime = regimeAConfirmar && tiposConfirmacaoRegime.has(tipo);
-                    // CORREÇÃO (Rodada 34, 05/09/2026): Atos da Junta Comercial e
-                    // Contrato Social são dispensados por lei para MEI (o
-                    // constitutivo do MEI é o CCMEI, não registro na Junta
-                    // Comercial) -- o backend já reconhece isso em
-                    // `atos_dispensados_por_mei` (`montarValidacaoSocietaria`,
-                    // devolvido em `societaria`), mas o selo abaixo era fixo,
-                    // sem checar essa dispensa. Ver `documentoSocietarioDispensadoPorMei`
-                    // em `shared/documentalPresentation.ts` para o critério completo.
-                    const dispensadoPorMei = documentoSocietarioDispensadoPorMei(tipo, societaria?.atos_dispensados_por_mei);
                     // Decisão de negócio (2026-08-30): a ordem CNPJ -> QSA -> Enquadramento ->
                     // confirmação de regime -> Atos da Junta -> Contrato Social/Alteração, e a
                     // ordem de consulta cadastral SCR -> CCS -> CCF, são ordens RECOMENDADAS de
@@ -2244,8 +2117,7 @@ export default function DocumentosEntidade({
                           <div className="min-w-0">
                             <div className="flex items-center gap-1.5 flex-wrap">
                               <p className="text-xs font-bold text-muted-foreground leading-tight">{documentoSlot.titulo}</p>
-                              {dispensadoPorMei && docsTipo.length === 0 && !satisfeitoPorOutro && <span className="text-[9px] font-bold px-1.5 py-0.5 rounded-full bg-success/20 text-success shrink-0">DISPENSADO (MEI)</span>}
-                              {!dispensadoPorMei && (documentoSlot.obrigatorio || destaqueConfirmacaoRegime) && !satisfeitoPorOutro && <span className="text-[9px] font-bold px-1.5 py-0.5 rounded-full bg-brand-navy text-primary-foreground shrink-0">OBRIGATÓRIO NA ETAPA</span>}
+                              {(documentoSlot.obrigatorio || destaqueConfirmacaoRegime) && !satisfeitoPorOutro && <span className="text-[9px] font-bold px-1.5 py-0.5 rounded-full bg-brand-navy text-primary-foreground shrink-0">OBRIGATÓRIO NA ETAPA</span>}
                               {(documentoSlot.descricao || tipo === "cartao_cnpj") && (
                                 <button
                                   type="button"
@@ -2363,7 +2235,6 @@ export default function DocumentosEntidade({
                                 const laudoErro = doc.resultado_validacao?.analise_regra_documental_erro || null;
                                 const resultadoInline = doc.resultado_analise || laudo || laudoErro || null;
                                 const temResultadoInline = Boolean(resultadoInline);
-                                const temLeituraReal = documentoTemResultadoDeLeitura(doc);
                                 // CORREÇÃO (2026-08-31, "isso é pra tirar, é já pra aparecer o
                                 // documento incompatível... isso pra todos que for incompatíveis"):
                                 // documento incompatível com o slot não fica mais atrás do clique
@@ -2372,14 +2243,9 @@ export default function DocumentosEntidade({
                                 // sem exigir nenhuma interação. Para os demais casos (documento
                                 // correto, com ou sem pendência de conteúdo), o comportamento de
                                 // clicar para expandir continua exatamente como antes.
-                                const estadoDocumento = temResultadoInline ? estadoVisualDocumento(resultadoInline, doc) : null;
-                                const documentoIncompativel = estadoDocumento === "incompativel";
-                                const leituraPrecisaAtencao = estadoDocumento === "revisao" || estadoDocumento === "reanalisar";
+                                const documentoIncompativel = temResultadoInline && estadoVisualDocumento(resultadoInline, doc) === "incompativel";
                                 const tipoTemAnaliseAutomatica = TIPOS_COM_ANALISE_AUTOMATICA.has(String(doc.tipo_documento || ""));
-                                const validacaoDocumentalConcluida = temLeituraReal
-                                  && !laudoErro
-                                  && estadoDocumento === "aprovado"
-                                  && doc.exige_revisao_humana !== true;
+                                const validacaoDocumentalConcluida = !!laudo && !laudoErro && doc.exige_revisao_humana !== true;
                                 const validadoComEvidencia = doc.validado === true
                                   && (!tipoTemAnaliseAutomatica || validacaoDocumentalConcluida);
                                 return (
@@ -2401,31 +2267,28 @@ export default function DocumentosEntidade({
                                       {doc.validado && !validadoComEvidencia && tipoTemAnaliseAutomatica && <span title="Ainda sem leitura documental conclusiva" className="text-warning shrink-0 text-[9px]">análise pendente</span>}
                                     </div>
                                     <p className="text-[9px] text-muted-foreground truncate">{formatDate(doc.criado_em)}</p>
-                                    {temResultadoInline && !documentoIncompativel && !leituraPrecisaAtencao && (
+                                    {temResultadoInline && !documentoIncompativel && (
                                       <button
                                         type="button"
                                         onClick={() => setLaudosExpandidos((prev) => ({ ...prev, [doc.id]: !prev[doc.id] }))}
                                         className={`mt-0.5 text-[9px] font-bold underline decoration-dotted ${laudoErro ? "text-destructive" : doc.exige_revisao_humana ? "text-warning" : "text-success"}`}
                                       >
-                                        {laudosExpandidos[doc.id] ? "Ocultar" : "Validação"}
+                                        {laudosExpandidos[doc.id] ? "Ocultar" : "Dados da análise"}
                                       </button>
                                     )}
                                   </div>
                                   <div className="flex items-center gap-0.5 shrink-0">
                                     <button type="button" title="Visualizar" onClick={() => visualizar(doc)} className="p-1 rounded-md hover:bg-primary/10 text-primary"><Eye className="w-3 h-3" /></button>
                                     <button type="button" title="Baixar" onClick={() => baixar(doc)} className="p-1 rounded-md hover:bg-muted text-muted-foreground"><Download className="w-3 h-3" /></button>
-                                    {tipoTemAnaliseAutomatica && !TIPOS_GATILHO_ANALISE_IDENTIDADE.has(String(doc.tipo_documento || "")) && (
+                                    {temResultadoInline && (
                                       <button
                                         type="button"
-                                        title={temLeituraReal
-                                          ? "Reler este documento e atualizar os dados validados"
-                                          : "Ler este documento agora e extrair os dados para validação"}
+                                        title="Forçar nova leitura deste documento (use depois de corrigir o arquivo, ou depois de uma atualização do motor de análise)"
                                         onClick={() => void reanalisar(doc)}
                                         disabled={reanalisandoId === doc.id}
-                                        className="inline-flex items-center gap-0.5 rounded-md px-1 py-0.5 text-[8px] font-bold text-primary hover:bg-primary/10 disabled:opacity-50"
+                                        className="p-1 rounded-md hover:bg-primary/10 text-primary disabled:opacity-50"
                                       >
-                                        <RefreshCw className={`w-2.5 h-2.5 ${reanalisandoId === doc.id ? "animate-spin" : ""}`} />
-                                        {reanalisandoId === doc.id ? "Lendo..." : temLeituraReal ? "Reler" : "Ler"}
+                                        <RefreshCw className={`w-3 h-3 ${reanalisandoId === doc.id ? "animate-spin" : ""}`} />
                                       </button>
                                     )}
                                     {permitirValidar && (
@@ -2436,7 +2299,7 @@ export default function DocumentosEntidade({
                                     {permitirExcluir && <button type="button" title="Excluir" onClick={() => excluir(doc.id)} className="p-1 rounded-md hover:bg-destructive/10 text-destructive"><Trash2 className="w-3 h-3" /></button>}
                                   </div>
                                   </div>
-                                  {(documentoIncompativel || leituraPrecisaAtencao || laudosExpandidos[doc.id]) && resultadoInline && <ResultadoAnaliseDocumento resultado={resultadoInline} documento={doc} compacto />}
+                                  {(documentoIncompativel || laudosExpandidos[doc.id]) && resultadoInline && <ResultadoAnaliseDocumento resultado={resultadoInline} documento={doc} compacto />}
                                 </div>
                                 );
                               })}

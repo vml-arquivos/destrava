@@ -9,7 +9,7 @@ Site institucional completo da **Destrava Crédito**, com simulador de emprésti
 | Frontend | React 18 + TypeScript + Tailwind CSS 4 |
 | Roteamento | Wouter |
 | Build | Vite 7 |
-| Backend | Express.js + Node.js 22 |
+| Backend | Express.js + Node.js 20 |
 | Banco de dados | PostgreSQL 17 (nativo) |
 | Deploy | Coolify + Docker |
 | Automação | n8n |
@@ -92,20 +92,7 @@ pnpm build
 pnpm start
 ```
 
-O container **não altera o banco por padrão** (`MIGRATE_ON_STARTUP=false`). Antes do deploy, valide e aplique a migração de forma controlada:
-
-```bash
-pnpm migrate -- --dry-run
-pnpm migrate
-```
-
-Depois da migração 104, reprocese os laudos ausentes ou produzidos por versões antigas:
-
-```bash
-pnpm backfill:laudos -- enqueue-and-run --retry-failed
-```
-
-Só habilite `MIGRATE_ON_STARTUP=true` quando a operação aceitar explicitamente migração transacional durante a inicialização.
+O `docker-entrypoint.sh` executa a migração do banco (`db/migrate.sql`) automaticamente antes de iniciar o servidor em todo redeploy.
 
 ## Criar Primeiro Colaborador
 

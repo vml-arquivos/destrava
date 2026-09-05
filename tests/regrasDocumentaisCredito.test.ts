@@ -1,11 +1,9 @@
 import { describe, expect, it } from 'vitest';
 import {
   calcularCoberturaDocumentalSocios,
-  regrasDocumentaisFallback,
   validarComprovanteEnderecoExtraido,
   validarFaturamentoExtraido,
 } from '../server/services/regrasDocumentaisCredito';
-import { obterPerfilAnaliseDocumental } from '../server/services/documentAnalysisProfiles';
 
 const referencia = new Date('2026-08-11T12:00:00Z');
 const empresa = { cnpj: '12.345.678/0001-90' };
@@ -65,35 +63,5 @@ describe('regras documentais de crédito', () => {
     expect(cobertura.total_socios).toBe(2);
     expect(cobertura.socios_completos).toBe(1);
     expect(cobertura.por_socio[1].tipos_faltantes).toEqual(['comprovante_residencia']);
-  });
-
-  // CORREÇÃO (Rodada 33, 05/09/2026, diagnóstico cruzado de duas pesquisas
-  // independentes -- "Manus AI" e GPT -- sobre a matriz documental de
-  // crédito): as duas concluem que o prazo de validade do comprovante de
-  // residência é prática de mercado, não obrigação legal ("não regra legal
-  // nacional encontrada"). A regra `socio_comprovante_residencia` estava
-  // rotulada `tipo_exigencia: 'obrigacao_legal'` -- o oposto do que as
-  // pesquisas confirmam.
-  it('CORREÇÃO Rodada 33: comprovante de residência do sócio é rotulado como política bancária, não obrigação legal', () => {
-    const regra = regrasDocumentaisFallback().find((item) => item.codigo === 'socio_comprovante_residencia');
-    expect(regra).toBeDefined();
-    expect(regra?.tipo_exigencia).toBe('politica_bancaria');
-  });
-
-  it('CORREÇÃO Rodada 33: o prazo de validade do comprovante de residência tem uma única fonte, compartilhada com documentAnalysisProfiles.ts', () => {
-    const regra = regrasDocumentaisFallback().find((item) => item.codigo === 'socio_comprovante_residencia');
-    const perfil = obterPerfilAnaliseDocumental('comprovante_residencia');
-    expect(regra?.validade_dias).toBe(perfil.validadePadraoDias);
-    expect(perfil.grauFonte).toBe('PRATICA_MERCADO');
-  });
-
-  it('CORREÇÃO Rodada 33: regras com citação confirmada por ambas as pesquisas (PGDAS-D, DEFIS, DASN-SIMEI, ECF) carregam fonte_normativa; comprovante de residência (política, não lei) não carrega', () => {
-    const regras = regrasDocumentaisFallback();
-    for (const codigo of ['empresa_pgdas', 'empresa_defis', 'empresa_dasn_simei', 'empresa_ecf']) {
-      const regra = regras.find((item) => item.codigo === codigo);
-      expect(regra?.fonte_normativa, `${codigo} deveria ter fonte_normativa`).toBeTruthy();
-    }
-    const comprovante = regras.find((item) => item.codigo === 'socio_comprovante_residencia');
-    expect(comprovante?.fonte_normativa ?? null).toBeNull();
   });
 });

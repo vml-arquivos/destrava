@@ -130,15 +130,14 @@ describe('Consistência Documental Avançada no motor 360', () => {
 });
 
 describe('busca das análises documentais persistidas', () => {
-  it('consulta todos os laudos ativos e versionados da empresa', async () => {
+  it('consulta apenas os três prompts especializados', async () => {
     const query = vi.fn().mockResolvedValue({ rows: [{ prompt_codigo: 'qsa_extract' }] });
     const resultado = await buscarAnalisesDocumentaisAvancadas('empresa-1', { query });
 
     expect(resultado.analises).toHaveLength(1);
     expect(resultado.falhaConsulta).toBe(false);
     expect(query).toHaveBeenCalledTimes(1);
-    expect(query.mock.calls[0][1]).toEqual(['empresa-1']);
-    expect(query.mock.calls[0][0]).toContain("dei.analysis_status = 'ATIVO'");
+    expect(query.mock.calls[0][1][1]).toEqual(['qsa_extract', 'simples_extract', 'atos_junta_extract']);
   });
 
   it('retorna vazio quando a tabela estiver ausente, sem marcar falha de consulta', async () => {
@@ -233,3 +232,4 @@ describe('Etapa 1 — Identidade do CNPJ', () => {
     expect(resultado.bloqueios).toContain('Sócio do QSA diverge da Receita Federal.');
   });
 });
+

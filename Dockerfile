@@ -89,7 +89,6 @@ RUN apt-get update \
        libnss3 \
        libpango-1.0-0 \
        poppler-utils \
-       unzip \
        tesseract-ocr \
        tesseract-ocr-por \
        tesseract-ocr-eng \
@@ -115,11 +114,7 @@ COPY --from=prod-deps --chown=node:node /app/node_modules ./node_modules
 COPY --from=builder --chown=node:node /app/package.json ./package.json
 COPY --from=builder --chown=node:node /app/dist ./dist
 COPY --from=builder --chown=node:node /app/scripts ./scripts
-COPY --from=builder --chown=node:node /app/db ./db
-COPY --from=builder --chown=node:node /app/docker-entrypoint.sh ./docker-entrypoint.sh
 COPY --from=builder --chown=node:node /app/BUILD_COMMIT ./BUILD_COMMIT
-
-RUN chmod 755 /app/docker-entrypoint.sh
 
 ENV NODE_ENV=production
 ENV PORT=4000
@@ -131,7 +126,6 @@ ENV REQUIRE_PERSISTENT_STORAGE=true
 ENV PERSISTENT_STORAGE_CONFIGURED=false
 ENV PUPPETEER_SKIP_CHROMIUM_DOWNLOAD=true
 ENV PUPPETEER_BROWSER_PROVIDER=sparticuz
-ENV MIGRATE_ON_STARTUP=false
 ENV HOME=/tmp
 ENV XDG_CONFIG_HOME=/tmp/.chromium-config
 ENV XDG_CACHE_HOME=/tmp/.chromium-cache
@@ -144,5 +138,4 @@ EXPOSE 4000
 HEALTHCHECK --interval=30s --timeout=10s --start-period=40s --retries=3 \
     CMD node -e "fetch('http://127.0.0.1:4000/api/health').then(r=>{if(!r.ok)process.exit(1)}).catch(()=>process.exit(1))"
 
-ENTRYPOINT ["/app/docker-entrypoint.sh"]
 CMD ["node", "dist/index.js"]

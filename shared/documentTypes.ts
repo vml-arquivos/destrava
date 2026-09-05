@@ -51,7 +51,6 @@ export const DOCUMENT_TYPE_CATALOG = [
   entry('contrato_assessoria', 'Contrato de assessoria', 'contrato', 'empresa', { tipoExigencia: 'obrigacao_legal' }),
   entry('contrato_social', 'Contrato social', 'societario', 'empresa', { tipoExigencia: 'obrigacao_legal' }),
   entry('alteracao_contratual', 'Alteração contratual', 'societario', 'empresa', { tipoExigencia: 'obrigacao_legal' }),
-  entry('requerimento_empresario', 'Requerimento de Empresário / Instrumento de Inscrição', 'societario', 'empresa', { tipoExigencia: 'obrigacao_legal' }),
   entry('contrato_gerado', 'Contrato gerado pelo sistema', 'contrato', 'empresa'),
   entry('contrato_assinado', 'Contrato assinado', 'contrato', 'empresa', { tipoExigencia: 'obrigacao_legal' }),
   entry('cartao_cnpj', 'Cartão CNPJ', 'cadastral', 'empresa', { aliases: ['cnpj_cartao'], analise: 'cartao_cnpj', promptCodigo: 'cnpj_receita_cartao' }),
@@ -61,7 +60,6 @@ export const DOCUMENT_TYPE_CATALOG = [
   entry('nire', 'NIRE / registro empresarial', 'societario', 'empresa', { tipoExigencia: 'obrigacao_legal' }),
   entry('estatuto', 'Estatuto social', 'societario', 'empresa', { tipoExigencia: 'obrigacao_legal' }),
   entry('ata', 'Ata societária', 'societario', 'empresa', { tipoExigencia: 'obrigacao_legal' }),
-  entry('registro_cartorio_pj', 'Registro no RCPJ / Cartório de Pessoas Jurídicas', 'societario', 'empresa', { tipoExigencia: 'obrigacao_legal' }),
   entry('procuracao', 'Procuração', 'societario', 'empresa', { tipoExigencia: 'obrigacao_legal' }),
   entry('registro_oab', 'Registro/ato da OAB', 'societario', 'empresa', { tipoExigencia: 'obrigacao_legal' }),
   entry('enquadramento_tributario_cnpj', 'Enquadramento tributário da empresa', 'fiscal', 'empresa', { fonteAutomatica: 'receita_federal', analise: 'simples_nacional', promptCodigo: 'simples_extract', bloco: 'enquadramento_tributario' }),
@@ -244,12 +242,8 @@ export function isUploadableDocumentType(tipo: unknown): boolean {
 
 export function documentAnalysisConfig(tipo: unknown): { tipo: string; promptCodigo: string } | null {
   const item = getDocumentCatalogEntry(tipo);
-  if (!item?.uploadavel) return null;
-  const tipoCanonico = canonicalizeDocumentType(item.tipo);
-  return {
-    tipo: item.analise || 'documento_generico',
-    promptCodigo: item.promptCodigo || `catalogo_${tipoCanonico}_extract`,
-  };
+  if (!item?.analise || !item.promptCodigo) return null;
+  return { tipo: item.analise, promptCodigo: item.promptCodigo };
 }
 
 export function documentTypesForScope(scope: DocumentEntityScope): string[] {
@@ -266,7 +260,7 @@ export const AUTOMATIC_DOCUMENT_TYPES = new Set(
   DOCUMENT_TYPE_CATALOG.filter((item) => item.fonteAutomatica && !item.uploadavel).map((item) => item.tipo),
 );
 
-export const DOCUMENT_CATALOG_VERSION = '2026.09.05';
+export const DOCUMENT_CATALOG_VERSION = '2026.08.29';
 
 export const LEGACY_DOCUMENT_TYPE_ALIASES: Readonly<Record<string, string>> = Object.freeze(
   DOCUMENT_TYPE_CATALOG.reduce<Record<string, string>>((aliases, item) => {
@@ -287,19 +281,16 @@ export function documentTypeCatalogForDatabase(): Array<{
   prompt_codigo: string | null;
   tipo_exigencia: DocumentRequirementKind;
 }> {
-  return DOCUMENT_TYPE_CATALOG.map((item) => {
-    const config = documentAnalysisConfig(item.tipo);
-    return {
-      tipo_documento: item.tipo,
-      nome_amigavel: item.nome,
-      categoria: item.categoria,
-      escopo: item.escopo,
-      uploadavel: item.uploadavel,
-      tipo_canonico: item.tipoCanonico || null,
-      fonte_automatica: item.fonteAutomatica || null,
-      analise: config?.tipo || null,
-      prompt_codigo: config?.promptCodigo || null,
-      tipo_exigencia: item.tipoExigencia || 'documento_complementar',
-    };
-  });
+  return DOCUMENT_TYPE_CATALOG.map((item) => ({
+    tipo_documento: item.tipo,
+    nome_amigavel: item.nome,
+    categoria: item.categoria,
+    escopo: item.escopo,
+    uploadavel: item.uploadavel,
+    tipo_canonico: item.tipoCanonico || null,
+    fonte_automatica: item.fonteAutomatica || null,
+    analise: item.analise || null,
+    prompt_codigo: item.promptCodigo || null,
+    tipo_exigencia: item.tipoExigencia || 'documento_complementar',
+  }));
 }
