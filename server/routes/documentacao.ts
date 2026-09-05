@@ -4211,6 +4211,81 @@ async function registrarExtracaoEspecializada(params: {
   }
 }
 
+router.get('/ia/documentos/:documentoId/status', auth, async (req: Request, res: Response) => {
+  try {
+    const arquivoId = req.params.documentoId;
+    const documentoResult = await pool.query(
+      `SELECT id, empresa_id, entidade_id, entidade_tipo, tipo_documento, resultado_validacao, exige_revisao_humana
+         FROM public.documentos_arquivos
+        WHERE id = $1
+          AND excluido_em IS NULL
+          AND COALESCE(status, 'ativo') <> 'excluido'
+        LIMIT 1`,
+      [arquivoId],
+    );
+    const documento = documentoResult.rows[0];
+    if (!documento) { res.status(404).json({ error: 'Documento não encontrado' }); return; }
+
+    const tipoDocumento = String(documento.tipo_documento || '');
+    const config = documentAnalysisConfig(tipoDocumento);
+    const promptCodigo = ['contrato_social', 'alteracao_contratual'].includes(tipoDocumento)
+      ? 'contrato_junta_crosscheck'
+      : (ANALISE_ESPECIALIZADA_POR_TIPO[tipoDocumento]?.promptCodigo || config?.promptCodigo || null);
+
+    let extracao: any = null;
+    if (promptCodigo && await tableExists('documentos_extracoes_ia')) {
+      const { rows } = await pool.query(
+        `SELECT id, status, analysis_status, resultado, erros, pendencias, processado_em, atualizado_em, criado_em
+           FROM public.documentos_extracoes_ia
+          WHERE arquivo_id = $1
+            AND prompt_codigo = $2
+          ORDER BY processado_em DESC NULLS LAST, atualizado_em DESC, criado_em DESC
+          LIMIT 1`,
+        [arquivoId, promptCodigo],
+      );
+      extracao = rows[0] || null;
+    }
+
+    const validacao = documento.resultado_validacao && typeof documento.resultado_validacao === 'object'
+      ? documento.resultado_validacao
+      : {};
+    const laudoArquivo = validacao.analise_regra_documental || null;
+    const erroArquivo = validacao.analise_regra_documental_erro || null;
+    const statusArquivo = String(validacao.analise_automatica_status || '').toLowerCase();
+    const statusExtracao = String(extracao?.status || '').toLowerCase();
+
+    // Contrato/alteração só é considerado concluído aqui quando o cross-check
+    // contra os Atos da Junta terminou. O laudo genérico individual pode existir,
+    // mas não substitui a validação da cadeia societária.
+    const exigeCrosscheckSocietario = ['contrato_social', 'alteracao_contratual'].includes(tipoDocumento);
+    const concluidoExtracao = ['concluido', 'revisao_humana'].includes(statusExtracao);
+    const falhouExtracao = statusExtracao === 'falhou';
+    const concluidoArquivo = !exigeCrosscheckSocietario && Boolean(laudoArquivo);
+    const falhouArquivo = !exigeCrosscheckSocietario && Boolean(erroArquivo);
+    const processando = ['pendente', 'processando'].includes(statusExtracao)
+      || (!exigeCrosscheckSocietario && ['pendente', 'processando'].includes(statusArquivo));
+
+    res.json({
+      documento_id: arquivoId,
+      tipo_documento: tipoDocumento,
+      prompt_codigo: promptCodigo,
+      suportado: Boolean(config),
+      processando,
+      concluido: concluidoExtracao || concluidoArquivo,
+      falhou: falhouExtracao || falhouArquivo,
+      status: statusExtracao || statusArquivo || (concluidoArquivo ? 'concluido' : falhouArquivo ? 'falhou' : 'nao_iniciado'),
+      analysis_status: extracao?.analysis_status || null,
+      exige_revisao_humana: documento.exige_revisao_humana === true,
+      resultado: extracao?.resultado || laudoArquivo || null,
+      erro: extracao?.erros?.[0] || erroArquivo || null,
+      processado_em: extracao?.processado_em || validacao.analise_automatica_concluida_em || null,
+    });
+  } catch (err: any) {
+    console.error('[GET /api/documentacao/ia/documentos/:documentoId/status]', err);
+    res.status(500).json({ error: 'Erro ao consultar status da leitura documental' });
+  }
+});
+
 router.post('/ia/documentos/:documentoId/extrair', auth, async (req: Request, res: Response) => {
   try {
     await ensureDocumentacaoSchema(pool);
