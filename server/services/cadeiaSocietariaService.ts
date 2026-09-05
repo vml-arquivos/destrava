@@ -11,6 +11,7 @@ export type DocumentoSocietarioAnalisado = {
   nome?: string | null;
   nire?: string | null;
   data_registro?: string | null;
+  numero_arquivamento?: string | null;
   tipo_ato?: string | null;
   consistente?: boolean;
 };
@@ -38,7 +39,12 @@ export function calcularCadeiaComprovacaoSocietaria(
     .sort((a, b) => String(b.data).localeCompare(String(a.data)));
 
   const documentos = (Array.isArray(documentosEntrada) ? documentosEntrada : [])
-    .map((item) => ({ ...item, data_registro: parseDate(item?.data_registro), nire: onlyDigits(item?.nire) || null }))
+    .map((item) => ({
+      ...item,
+      data_registro: parseDate(item?.data_registro),
+      nire: onlyDigits(item?.nire) || null,
+      numero_arquivamento: onlyDigits(item?.numero_arquivamento) || null,
+    }))
     .filter((item) => item.data_registro);
 
   const dataCorte = new Date(referencia);
@@ -60,8 +66,22 @@ export function calcularCadeiaComprovacaoSocietaria(
   }
 
   const comprovados = registrosRequeridos.map((registro) => {
-    const documento = documentos.find((item) => item.data_registro === registro.data && item.consistente !== false);
-    return { ...registro, comprovado: !!documento, documento_arquivo_id: documento?.arquivo_id || null, documento_nome: documento?.nome || null };
+    const numeroRegistro = onlyDigits(registro.numero) || null;
+    const documento = documentos.find((item) => {
+      if (item.data_registro !== registro.data || item.consistente === false) return false;
+      // Quando a Junta fornece número de arquivamento, a prova ideal precisa
+      // corresponder ao MESMO ato. Documento sem número registral não é tratado
+      // como correspondência exata só porque menciona a mesma data.
+      if (!numeroRegistro) return true;
+      return Boolean(item.numero_arquivamento && item.numero_arquivamento === numeroRegistro);
+    });
+    return {
+      ...registro,
+      comprovado: !!documento,
+      documento_arquivo_id: documento?.arquivo_id || null,
+      documento_nome: documento?.nome || null,
+      criterio_correspondencia: numeroRegistro ? 'data_e_numero_arquivamento' : 'data_registro',
+    };
   });
   const faltantes = comprovados.filter((item) => !item.comprovado);
   const registroBase = registrosRequeridos.at(-1) || null;
