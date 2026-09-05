@@ -28,11 +28,14 @@ describe('análise inline no Acervo Documental', () => {
   });
 
   it('abre o Acervo com laudos individuais antes de aguardar o dossiê completo', () => {
-    expect(acervo).toContain('primeira pintura RÁPIDA');
-    expect(acervo).toContain('setDocs(filtradaInicial)');
-    expect(acervo).toContain('setLoading(false)');
-    expect(acervo).toContain('void apiFetch(\`/api/documentacao/empresa/\${empresaId}/dossie\`)');
-    expect(acervo).toContain('Nunca regride um laudo real já exibido para um placeholder');
+    expect(acervo).toContain('Rodada 38: primeira pintura = Acervo + laudos persistidos por arquivo.');
+    expect(acervo).toContain('setDocs(filtrada);');
+    expect(acervo).toContain('A tela já pode ser usada neste ponto.');
+    expect(acervo).toContain('setLoading(false);');
+    expect(acervo).toContain('apiFetch(\`/api/documentacao/empresa/\${empresaId}/dossie\`)');
+    // O dossiê agregado só atualiza os resumos de etapa; não remonta/substitui
+    // a lista de documentos que já chegou com laudos persistidos.
+    expect(acervo).not.toContain('const analisesPorArquivo = new Map');
   });
 
   it('lista documentos já trazendo o último laudo persistido por arquivo', () => {
