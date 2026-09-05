@@ -2394,9 +2394,33 @@ export async function avaliarProntidaoIdentidadeCnpj(params: {
   // aviso, para o time continuar vendo o que precisa de revisão sem travar o avanço.
   for (const pendencia of params.enquadramentoPendencias.filter((p) => p.severidade === 'alta' || p.severidade === 'media')) addAviso(pendencia.mensagem);
 
-  const statusDocumento = (anexado: boolean, analisado: boolean, consistente: boolean, falha: boolean) => {
+  // CORREÇÃO (2026-09-05, Rodada 32 -- print real da tela em produção, empresa
+  // MEI "VILSON MARCIO DE LIMA 70010668187", pedido explícito do usuário
+  // depois de já ter recebido a Rodada 31: "continua com a mesma mensagem no
+  // QSA... que não existia antes, que já identificava corretamente quando é
+  // MEI"): `montarQsaDocumentalDados`/`montarEnquadramentoDados` (mais acima
+  // neste arquivo) já calculam corretamente `status_leitura:
+  // 'reanalise_necessaria'` para um laudo marcado desatualizado pelo
+  // versionamento (`analiseDesatualizada`, também neste arquivo) -- mas esta
+  // função, que monta o card "Identidade do CNPJ" (StatusAnaliseSlot,
+  // DocumentosEntidade.tsx), jogava esse sinal fora: só verificava
+  // `status_leitura === 'falha_leitura'` explicitamente, e qualquer outro
+  // valor de `analisado === false` (incluindo `reanalise_necessaria`) caía no
+  // mesmo `'aguardando_analise'` genérico usado para um documento que nunca
+  // foi lido -- gerando o selo errado "Aguardando análise" ao lado do texto
+  // certo ("O motor de leitura foi atualizado... clique em Reler"), a mesma
+  // classe de inconsistência selo/texto já corrigida na Rodada 31 para o
+  // Acervo Documental (`estadoVisualDocumento`), só que num componente
+  // diferente que aquela correção não tocava. Corrigido acrescentando um
+  // parâmetro explícito para o valor de `status_leitura`, checado ANTES da
+  // falha/aguardando -- regra geral, vale para qualquer documento que passe
+  // pelo mesmo mecanismo de versionamento (hoje QSA e Enquadramento
+  // Tributário/Simples Nacional, os dois únicos que chamam esta função com um
+  // `statusLeitura` que pode valer `reanalise_necessaria`).
+  const statusDocumento = (anexado: boolean, analisado: boolean, consistente: boolean, falha: boolean, statusLeitura?: string | null) => {
     if (consistente) return 'ok';
     if (!anexado) return 'nao_anexado';
+    if (statusLeitura === 'reanalise_necessaria') return 'reanalise_necessaria';
     if (falha) return 'falha_leitura';
     if (!analisado) return 'aguardando_analise';
     return 'divergente';
@@ -2415,7 +2439,7 @@ export async function avaliarProntidaoIdentidadeCnpj(params: {
     },
     qsa: {
       codigo: 'qsa', nome: 'QSA / Quadro Societário', anexado: qsaAnexado, analisado: qsaAnalisado, consistente: qsaConsistente,
-      status: statusDocumento(qsaAnexado, qsaAnalisado, qsaConsistente, params.qsaDados?.status_leitura === 'falha_leitura'),
+      status: statusDocumento(qsaAnexado, qsaAnalisado, qsaConsistente, params.qsaDados?.status_leitura === 'falha_leitura', params.qsaDados?.status_leitura),
       tipo_documento: 'qsa',
       tipo_leitura: 'qsa',
       qsa_leitura: true,
@@ -2437,7 +2461,7 @@ export async function avaliarProntidaoIdentidadeCnpj(params: {
     },
     enquadramento_tributario: {
       codigo: 'enquadramento_tributario', nome: 'Enquadramento Tributário', anexado: enquadramentoAnexado, analisado: enquadramentoAnalisado, consistente: enquadramentoConsistente,
-      status: statusDocumento(enquadramentoAnexado, enquadramentoAnalisado, enquadramentoConsistente, params.enquadramentoDados?.status_leitura === 'falha_leitura'),
+      status: statusDocumento(enquadramentoAnexado, enquadramentoAnalisado, enquadramentoConsistente, params.enquadramentoDados?.status_leitura === 'falha_leitura', params.enquadramentoDados?.status_leitura),
       // O enquadramento existe para dizer QUAL regime a empresa usa, porque é o
       // regime que define o restante da documentação exigida. Quando a empresa
       // está fora do Simples, a Consulta de Optantes não responde isso sozinha:

@@ -473,24 +473,61 @@ function StatusAnaliseSlot({ item, tipo, onReler, relendo }: { item?: { nome: st
   }
 
   const falhou = item.status === "falha_leitura";
-  const aguardando = !item.analisado && !falhou;
+  // CORREÇÃO (2026-09-05, Rodada 32, print real da tela em produção, empresa
+  // MEI "VILSON MARCIO DE LIMA": "continua com a mesma mensagem no QSA... que
+  // não existia antes, que já identificava corretamente quando é MEI"): um
+  // laudo já lido e correto, só marcado como desatualizado pelo mecanismo de
+  // versionamento (depois de um bump de regra/classificador -- ver
+  // `documentalLaudoVersioning.ts`), é uma situação DIFERENTE de "documento
+  // anexado e nunca lido ainda" -- a primeira já tem uma leitura válida
+  // esperando confirmação (basta clicar em "Reler"), a segunda nunca foi
+  // processada. Antes desta correção as duas caíam no mesmo selo "Aguardando
+  // análise", genérico e sem explicar por quê -- mesma classe de bug já
+  // corrigida na Rodada 31 para o selo do Acervo Documental
+  // (`estadoVisualDocumento`), aqui reaplicada ao card equivalente da seção
+  // "Identidade do CNPJ", que usa um caminho de dados totalmente separado
+  // (`server/routes/documentacao.ts`, `statusDocumento`/`montarQsaDocumentalDados`/
+  // `montarEnquadramentoDados`) e por isso não foi corrigido junto.
+  const reanaliseNecessaria = item.status === "reanalise_necessaria";
+  const aguardando = !item.analisado && !falhou && !reanaliseNecessaria;
   // O card de Enquadramento Tributário já tem, logo abaixo da grade de Identidade
   // do CNPJ, um bloco dedicado explicando o que anexar (ECF/DCTF/DARF/Livro Caixa)
   // e um botão de ação, quando o regime efetivo ainda não foi confirmado. Repetir
   // "Revisão necessária" sem nenhuma ação aqui dentro do card era ruído -- pedido
-  // explícito do usuário para tirar isso "daqui". Falha de leitura e "aguardando
-  // análise" continuam aparecendo normalmente, em qualquer card.
-  if (tipo === "enquadramento_tributario_cnpj" && !falhou && !aguardando) return null;
+  // explícito do usuário para tirar isso "daqui". Falha de leitura, "aguardando
+  // análise" e "reanálise necessária" continuam aparecendo normalmente, em
+  // qualquer card -- as três precisam de uma ação (anexar, aguardar ou reler).
+  if (tipo === "enquadramento_tributario_cnpj" && !falhou && !aguardando && !reanaliseNecessaria) return null;
+  // CORREÇÃO (2026-09-05, Rodada 32, mesmo pedido do usuário -- "muito texto,
+  // aumentando muito o modal, e sem a opção de encolher"): o texto explicando
+  // o motivo (diagnóstico) fica atrás de um toggle "ver detalhes"/"ocultar"
+  // quando é longo o bastante para valer a pena encolher -- o rótulo do selo
+  // já diz o essencial (o quê) e o botão "Reler" já diz a ação (o quê fazer);
+  // o texto completo (o porquê, mais longo) só some da vista quando o usuário
+  // decide ocultar, nunca é cortado/perdido. Textos curtos continuam sempre
+  // visíveis, sem toggle -- não há o que encolher.
+  const diagnosticoLongo = (item.diagnostico?.length || 0) > 90;
   return (
     <div className={`rounded-md border px-2 py-1.5 ${falhou ? "border-destructive/20 bg-destructive/10" : "border-warning/20 bg-warning/10"}`}>
       <div className="flex items-center justify-between gap-2">
         <span className={`inline-flex items-center gap-1 text-[10px] font-black ${falhou ? "text-destructive" : "text-warning"}`}>
           <AlertTriangle className="h-3 w-3 shrink-0" />
-          {falhou ? "Falha na leitura" : aguardando ? "Aguardando análise" : "Revisão necessária"}
+          {falhou ? "Falha na leitura" : reanaliseNecessaria ? "Reanálise necessária" : aguardando ? "Aguardando análise" : "Revisão necessária"}
         </span>
-        {botaoReler}
+        <div className="flex shrink-0 items-center gap-1">
+          {item.diagnostico && diagnosticoLongo && (
+            <button
+              type="button"
+              onClick={() => setAberto((v) => !v)}
+              className={`shrink-0 text-[9px] font-bold underline decoration-dotted ${falhou ? "text-destructive" : "text-warning"}`}
+            >
+              {aberto ? "ocultar" : "ver detalhes"}
+            </button>
+          )}
+          {botaoReler}
+        </div>
       </div>
-      {item.diagnostico && (
+      {item.diagnostico && (!diagnosticoLongo || aberto) && (
         <p className={`mt-1 text-[9px] leading-relaxed ${falhou ? "text-destructive" : "text-warning"}`}>{item.diagnostico}</p>
       )}
     </div>

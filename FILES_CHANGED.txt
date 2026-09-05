@@ -800,3 +800,32 @@ Arquivos de teste NOVOS ou AMPLIADOS: tests/acervoDocumentalFalhaRealVsAguardand
 
 Total desta rodada: 1 arquivo de código alterado + 1 arquivo de teste
 ampliado + 7 arquivos de documentação alterados = 9 arquivos.
+
+======================================================================
+Rodada 32 (esta entrega, 05/09/2026) -- card de QSA/Enquadramento
+Tributário na seção "Identidade do CNPJ" também confundia "reanálise
+necessária" com "aguardando análise" (a Rodada 31 só tinha corrigido o
+Acervo Documental); toggle "ver detalhes"/"ocultar" para o texto do
+aviso quando é longo
+======================================================================
+
+Arquivos existentes ALTERADOS nesta rodada:
+
+server/routes/documentacao.ts   (em avaliarProntidaoIdentidadeCnpj: statusDocumento ganhou o parâmetro opcional `statusLeitura`, checado antes de falha/aguardando -- quando vale 'reanalise_necessaria', o status exposto também vale isso, nunca mais 'aguardando_analise'; os dois pontos de chamada, QSA e Enquadramento Tributário, passam a repassar params.qsaDados?.status_leitura / params.enquadramentoDados?.status_leitura)
+client/src/components/documentos/DocumentosEntidade.tsx   (StatusAnaliseSlot: novo estado reanaliseNecessaria com selo próprio "Reanálise necessária"; novo toggle "ver detalhes"/"ocultar" para o texto de diagnóstico quando > ~90 caracteres, reaproveitando o mesmo estado `aberto` já usado pelo card de sucesso)
+CHANGELOG_CORRECOES.md
+PENDENCIAS_REAIS.md
+ROLLBACK_PLAN.md
+TEST_REPORT.md
+BUILD_REPORT.md
+FILES_CHANGED.txt (este arquivo)
+SHA256SUMS.txt
+
+Arquivos NOVOS -- testes:
+
+tests/statusReanaliseNecessariaIdentidadeCnpj.test.ts   (+4 testes -- QSA e Enquadramento Tributário expõem "reanalise_necessaria" corretamente, mais dois testes de não-regressão para "aguardando genuíno" e "falha real")
+tests/relerQsaEnquadramentoAposVersaoMudar.test.ts   (+2 testes -- mock de banco com estado, ponta a ponta: "Reler" limpa a pendência de forma duradoura, tanto na resposta imediata quanto numa carga de tela seguinte)
+
+Total desta rodada: 2 arquivos de código alterados + 2 arquivos de
+teste novos (6 testes) + 7 arquivos de documentação alterados = 11
+arquivos.
