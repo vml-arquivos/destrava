@@ -23,6 +23,8 @@ describe('análise inline no Acervo Documental', () => {
     expect(acervo).toContain('temLeituraReal ? "Reler" : "Ler"');
     expect(acervo).toContain('somenteSeNecessario: true');
     expect(acervo).toContain('/api/documentacao/ia/documentos/${doc.id}/status');
+    expect(acervo).toContain('const exigeCrosscheckSocietario = ["contrato_social", "alteracao_contratual"].includes(doc.tipo_documento)');
+    expect(acervo).toContain('if (doc.analisado === true) return false;');
   });
 
   it('backend expõe status universal e o clique manual força uma nova leitura real', () => {
