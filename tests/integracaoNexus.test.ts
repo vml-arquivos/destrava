@@ -305,11 +305,12 @@ describe("enviarPendenciaNexus", () => {
     } else {
       delete process.env.N8N_WEBHOOK_URL;
     }
-    if (originalEnv.NEXUS_API_TOKEN !== undefined) {
-      process.env.NEXUS_API_TOKEN = originalEnv.NEXUS_API_TOKEN;
-    } else {
-      delete process.env.NEXUS_API_TOKEN;
-    }
+    if (originalEnv.NEXUS_API_TOKEN !== undefined) process.env.NEXUS_API_TOKEN = originalEnv.NEXUS_API_TOKEN;
+    else delete process.env.NEXUS_API_TOKEN;
+    if (originalEnv.NEXUS_INTEGRATION_SECRET !== undefined) process.env.NEXUS_INTEGRATION_SECRET = originalEnv.NEXUS_INTEGRATION_SECRET;
+    else delete process.env.NEXUS_INTEGRATION_SECRET;
+    if (originalEnv.NEXUS_DESTRAVA_INTEGRATION_SECRET !== undefined) process.env.NEXUS_DESTRAVA_INTEGRATION_SECRET = originalEnv.NEXUS_DESTRAVA_INTEGRATION_SECRET;
+    else delete process.env.NEXUS_DESTRAVA_INTEGRATION_SECRET;
     limparCacheIdempotencia();
   });
 
@@ -467,6 +468,19 @@ describe("enviarPendenciaNexus", () => {
     const chamada = mockFetch.mock.calls[0];
     const headers = chamada[1].headers;
     expect(headers["Authorization"]).toBe("Bearer token-secreto-123");
+  });
+
+  it("aceita NEXUS_DESTRAVA_INTEGRATION_SECRET como fallback de Authorization", async () => {
+    process.env.NEXUS_WEBHOOK_URL = "https://nexus.exemplo.com/webhook";
+    delete process.env.NEXUS_API_TOKEN;
+    delete process.env.NEXUS_INTEGRATION_SECRET;
+    process.env.NEXUS_DESTRAVA_INTEGRATION_SECRET = "segredo-alias";
+    mockFetch.mockResolvedValue({ ok: true, status: 200, text: async () => "{}" });
+
+    await enviarPendenciaNexus(payloadValido());
+
+    const chamada = mockFetch.mock.calls[0];
+    expect(chamada[1].headers["Authorization"]).toBe("Bearer segredo-alias");
   });
 
   it("deve funcionar sem NEXUS_API_TOKEN (sem header Authorization)", async () => {
