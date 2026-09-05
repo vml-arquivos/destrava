@@ -4085,6 +4085,7 @@ async function registrarExtracaoEspecializada(params: {
   blocoEntidadeId: string | null;
   promptCodigo: string;
   promptVersao?: string;
+  forcar?: boolean;
 }) {
   const client = await pool.connect();
   try {
@@ -4136,11 +4137,16 @@ async function registrarExtracaoEspecializada(params: {
         && mesmaVersao
         && String(atual.analysis_signature || '') === expectedSignature
         && ['pendente', 'processando', 'falhou'].includes(statusAtual);
-      const laudoAtual = versionado
+      const laudoAtual = !params.forcar
+        && versionado
         && mesmaVersao
         && ['concluido', 'revisao_humana'].includes(statusAtual)
         && atual.analysis_status === 'ATIVO'
         && atual.analysis_signature === expectedSignature;
+      // `forcar=true` é exclusivo do clique manual "Reler": uma conclusão
+      // atual não bloqueia uma nova leitura real. Ainda preservamos o guard de
+      // processamento em andamento para impedir duas OCRs simultâneas do mesmo
+      // arquivo/prompt.
       deveProcessar = !(emAndamento || laudoAtual);
 
       if (emAndamento || laudoAtual || tentativaMesmaAssinatura) {
@@ -4289,7 +4295,7 @@ router.get('/ia/documentos/:documentoId/status', auth, async (req: Request, res:
 router.post('/ia/documentos/:documentoId/extrair', auth, async (req: Request, res: Response) => {
   try {
     await ensureDocumentacaoSchema(pool);
-    const { bloco_entidade_id, prompt_codigo } = req.body || {};
+    const { bloco_entidade_id, prompt_codigo, forcar } = req.body || {};
     const arquivoId = req.params.documentoId;
     const documentoResult = await pool.query(
       `SELECT id, empresa_id, entidade_id, entidade_tipo, tipo_documento
@@ -4360,6 +4366,7 @@ router.post('/ia/documentos/:documentoId/extrair', auth, async (req: Request, re
       arquivoId,
       blocoEntidadeId: bloco_entidade_id || null,
       promptCodigo: configuracao.promptCodigo,
+      forcar: forcar === true,
     });
 
     if (deveProcessar) {
