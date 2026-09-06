@@ -691,4 +691,58 @@ describe('extração documental local determinística', () => {
     expect(resultado.dados.assinatura_contador).toMatchObject({ presente: true, tipo: 'eletronica' });
   });
 
+  it('aceita o layout oficial de faturamento que imprime cargos sem a palavra assinatura', () => {
+    const resultado = analisarTextoDocumentoLocal('faturamento_12_meses', `
+      DECLARAÇÃO DE FATURAMENTO
+      CNPJ 52.008.360/0001-33
+      Agosto de 2025 R$ 30.000,00
+      TOTAL DO PERÍODO R$ 30.000,00
+      Brasília - DF, 04 de agosto de 2026.
+      Itamar Gonçalves Cunha Filho        PALUMA BURGER LTDA
+      Contador Responsável                 Representante Legal
+      CRCGO: 004102/O                      CNPJ: 52.008.360/0001-33
+    `);
+    expect(resultado.dados.data_assinatura).toBe('2026-08-04');
+    expect(resultado.dados.assinatura_socio_administrador.presente).toBe(true);
+    expect(resultado.dados.assinatura_contador.presente).toBe(true);
+  });
+
+  it('lê relatório empresarial consolidado com score, rating e data de consulta', () => {
+    const resultado = analisarTextoDocumentoLocal('consulta_bureau', `
+      ANÁLISE EMPRESARIAL, FINANCEIRA E SCR
+      SCR + LAUDO FINANCEIRO COMPLETO + SCORE EMPRESARIAL
+      PALUMA BURGER LTDA CNPJ 52.008.360/0001-33
+      PONTUAÇÃO RATING 985 AA
+      STATUS APROVADO_EXCELENTE
+      DATA E HORA 23/07/2026 às 12:17:21
+      PROTESTOS ESTADUAIS NADA CONSTA
+    `, 'consulta_serasa_cnpj');
+    expect(resultado.dados.documento_compativel).toBe(true);
+    expect(resultado.dados.cnpj).toBe('52.008.360/0001-33');
+    expect(resultado.dados.data_consulta).toBe('2026-07-23');
+    expect(resultado.dados.score).toBe(985);
+    expect(resultado.dados.rating).toBe('AA');
+    expect(resultado.dados.resultado_consulta).toContain('Relatório empresarial consolidado');
+  });
+
+  it('extrai o ato societário completo do instrumento chancelado pela Junta', () => {
+    const resultado = analisarTextoDocumentoLocal('contrato_social_alteracao', `
+      ALTERAÇÃO CONTRATUAL CONSOLIDADA
+      PALUMA BURGER LTDA — CNPJ 52.008.360/0001-33 — NIRE 52206183723
+      O sócio MARCOS HENRIQUE SOARES PIO retira-se da sociedade, cedendo e transferindo suas 65.000 quotas para o sócio ora admitido neste ato JONNATHAS RODRIGUES PIRES, brasileiro.
+      E por estarem assim justos e contratados, assinam o presente instrumento e mandam registrar e arquivar na Junta Comercial do Estado de Goiás.
+      Goiânia-GO, 02 de junho de 2025
+      ASSINATURA ELETRÔNICA
+      CERTIFICO O REGISTRO EM 06/06/2025 09:42 SOB Nº 20251505987.
+      NIRE: 52206183723. COM EFEITOS DO REGISTRO EM: 02/06/2025.
+    `);
+    expect(resultado.dados.cnpj).toBe('52.008.360/0001-33');
+    expect(resultado.dados.nire).toBe('52206183723');
+    expect(resultado.dados.data_documento).toBe('2025-06-02');
+    expect(resultado.dados.data_registro).toBe('2025-06-06');
+    expect(resultado.dados.numero_arquivamento).toBe('20251505987');
+    expect(resultado.dados.assinaturas).toHaveLength(1);
+    expect(resultado.dados.alteracoes_societarias).toHaveLength(1);
+  });
+
 });
