@@ -387,6 +387,13 @@ describe("construirSecoesAnaliseDocumento — validação objetiva", () => {
       { analisado: true, consistente: true, exige_revisao_humana: true },
     )).toBe("aprovado");
   });
+
+  it("aprova o contrato_junta concluído sem revisão mesmo sem campo satisfaz_requisito", () => {
+    expect(estadoVisualDocumento(
+      { status: "concluido", tipo_analise: "contrato_junta", revisao_humana_necessaria: false },
+      { tipo_documento: "contrato_social", analisado: true, exige_revisao_humana: true },
+    )).toBe("aprovado");
+  });
 });
 
 // CORREÇÃO (Rodada 34, 05/09/2026 -- print real da tela em produção: uma
