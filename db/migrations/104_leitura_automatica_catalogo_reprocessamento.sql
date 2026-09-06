@@ -52,7 +52,7 @@ UPDATE public.documentos_catalogo
 
 INSERT INTO public.ia_prompts_documentais
   (bloco_id, codigo, versao, nome, descricao, prompt_sistema, prompt_usuario_template, schema_saida, ativo)
-SELECT NULL,
+SELECT DISTINCT ON (c.prompt_codigo) NULL,
        c.prompt_codigo,
        CASE
          WHEN c.prompt_codigo = 'qsa_extract' THEN '5.1.0'
@@ -69,6 +69,7 @@ SELECT NULL,
  WHERE c.uploadavel = TRUE
    AND c.ativo = TRUE
    AND c.prompt_codigo IS NOT NULL
+ ORDER BY c.prompt_codigo, (c.tipo_canonico IS NULL) DESC, c.tipo_documento
 ON CONFLICT (codigo, versao) DO UPDATE SET
   nome = EXCLUDED.nome,
   descricao = EXCLUDED.descricao,
