@@ -222,3 +222,14 @@ describe('migration 098', () => {
     expect((aggregate.match(/Migration 098: catálogo documental/g) || []).length).toBe(1);
   });
 });
+
+describe('migration 104', () => {
+  it('deduplica prompts por código antes do upsert e está incorporada ao aggregate', () => {
+    const migration = fs.readFileSync(new URL('../db/migrations/104_leitura_automatica_catalogo_reprocessamento.sql', import.meta.url), 'utf8');
+    const aggregate = fs.readFileSync(new URL('../db/migrate.sql', import.meta.url), 'utf8');
+    expect(migration).toMatch(/SELECT DISTINCT ON \(c\.prompt_codigo\)/i);
+    expect(migration).toMatch(/ORDER BY c\.prompt_codigo, \(c\.tipo_canonico IS NULL\) DESC, c\.tipo_documento/i);
+    expect(aggregate).toMatch(/SELECT DISTINCT ON \(c\.prompt_codigo\) NULL, c\.prompt_codigo/i);
+    expect(aggregate).toMatch(/ORDER BY c\.prompt_codigo, \(c\.tipo_canonico IS NULL\) DESC, c\.tipo_documento/i);
+  });
+});
