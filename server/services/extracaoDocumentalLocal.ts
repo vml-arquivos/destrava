@@ -117,6 +117,10 @@ function primeiroCnpj(texto: string): string | null {
   return match?.[0] || null;
 }
 
+function primeiroCnpjOuBase(texto: string): string | null {
+  return primeiroCnpj(texto) || String(texto || '').match(/\b\d{2}\.?\d{3}\.?\d{3}\b/)?.[0] || null;
+}
+
 function formatarCnpj(value: string | null): string | null {
   const digits = onlyDigits(value);
   if (digits.length !== 14) return value;
@@ -150,6 +154,18 @@ function dataProximaDe(texto: string, expressao: RegExp): string | null {
   if (!match) return null;
   const data = match.slice(1).find((item) => item && /^\d{2}\/\d{2}\/\d{4}$/.test(item));
   return parseDate(data || null);
+}
+
+function parseDataPorExtenso(value: unknown): string | null {
+  const texto = textoNormalizado(value);
+  const meses: Record<string, string> = {
+    janeiro: '01', fevereiro: '02', marco: '03', abril: '04', maio: '05', junho: '06',
+    julho: '07', agosto: '08', setembro: '09', outubro: '10', novembro: '11', dezembro: '12',
+  };
+  const match = texto.match(/\b(\d{1,2})\s+de\s+([a-z]+)\s+de\s+(20\d{2})\b/);
+  if (!match) return parseDate(value);
+  const mes = meses[match[2]];
+  return mes ? `${match[3]}-${mes}-${match[1].padStart(2, '0')}` : parseDate(value);
 }
 
 function limparValor(value: string | null): string | null {
@@ -550,6 +566,9 @@ export function detectarRegimeTributarioDeclarado(texto: string): { regime: stri
   const lucroPresumido = afirmado('lucro presumido');
   const lucroReal = afirmado('lucro real');
   const lucroArbitrado = afirmado('lucro arbitrado');
+  const simplesNacional = /optante\s+pelo\s+simples\s+nacional|situacao\s+no\s+simples\s+nacional\W{0,8}optante/i.test(norm)
+    && !/nao\s+optante\s+pelo\s+simples\s+nacional|exclu[ií]d[oa]\s+do\s+simples/i.test(norm);
+  const simei = /optante\s+pelo\s+simei|situacao\s+no\s+simei\W{0,8}optante|certificado\s+da\s+condicao\s+de\s+microempreendedor\s+individual/i.test(norm);
   const { regime: regimeViaDarf, codigoNaoConfirmado } = regimeViaCodigoReceitaDarf(texto);
   // Imune/isenta só conta quando o texto fala do regime, não quando a palavra
   // aparece solta (ex: "isenta de multa").
@@ -560,6 +579,8 @@ export function detectarRegimeTributarioDeclarado(texto: string): { regime: stri
     lucroReal ? 'Lucro Real' : null,
     lucroPresumido ? 'Lucro Presumido' : null,
     lucroArbitrado ? 'Lucro Arbitrado' : null,
+    simplesNacional ? 'Simples Nacional' : null,
+    simei ? 'MEI / SIMEI' : null,
     regimeViaDarf,
   ].filter((item): item is string => Boolean(item)));
   if (regimesEncontrados.size > 1) return { regime: null, ambiguo: true };
@@ -798,20 +819,36 @@ function parseFaturamento12Meses(texto: string): { dados: Record<string, any>; c
   const norm = textoNormalizado(texto);
   const compativel = /faturamento|receita bruta|relacao de receitas|relação de receitas/.test(norm);
   const cnpj = formatarCnpj(primeiroCnpj(texto));
-  const meses = linhasTexto(texto)
+  const mesesPorNome: Record<string, string> = {
+    janeiro: '01', fevereiro: '02', marco: '03', abril: '04', maio: '05', junho: '06',
+    julho: '07', agosto: '08', setembro: '09', outubro: '10', novembro: '11', dezembro: '12',
+  };
+  const mesesNumericos = linhasTexto(texto)
     .filter((linha) => !/\bcnpj\b/i.test(linha))
     .filter((linha) => !/\b\d{2}\/\d{2}\/20\d{2}\b/.test(linha) || /r\$|faturamento|compet[eê]ncia|refer[eê]ncia/i.test(linha))
     .flatMap((linha) => Array.from(linha.matchAll(/\b(0?[1-9]|1[0-2])\s*[\/.\-]\s*(20\d{2}|\d{2})\b/g)))
     .map((match) => `${match[2].length === 2 ? `20${match[2]}` : match[2]}-${match[1].padStart(2, '0')}`);
-  const mesesReferencia = Array.from(new Set(meses)).sort();
-  const datas = Array.from(String(texto || '').matchAll(/\b(\d{2}\/\d{2}\/20\d{2})\b/g))
-    .map((match) => parseDate(match[1]))
-    .filter(Boolean) as string[];
-  const dataAssinatura = parseDate(
-    texto.match(/(?:assinado|assinatura|firmado|declaramos).{0,80}?(\d{2}\/\d{2}\/20\d{2})/is)?.[1]
-      || datas.at(-1)
+  const linhasFaturamento = linhasTexto(texto).filter((linha) => /R\$|faturamento mensal|m[eê]s\/ano/i.test(linha));
+  const mesesPorExtenso = Array.from(linhasFaturamento.join('\n').matchAll(/\b(janeiro|fevereiro|mar[cç]o|abril|maio|junho|julho|agosto|setembro|outubro|novembro|dezembro)\s+de\s+(20\d{2})\b/gi))
+    .map((match) => `${match[2]}-${mesesPorNome[textoNormalizado(match[1])] || '01'}`);
+  const mesesReferencia = Array.from(new Set([...mesesNumericos, ...mesesPorExtenso])).sort();
+  const competenciasMensais = linhasFaturamento.flatMap((linha) => {
+    const match = linha.match(/\b(janeiro|fevereiro|mar[cç]o|abril|maio|junho|julho|agosto|setembro|outubro|novembro|dezembro)\s+de\s+(20\d{2})\b/i);
+    if (!match) return [];
+    const competencia = `${match[2]}-${mesesPorNome[textoNormalizado(match[1])] || '01'}`;
+    const valor = numeroMonetario(linha.match(/R\$\s*[-\d.]+(?:,\d{1,2})?/)?.[0] || '');
+    return valor === null ? [] : [{ competencia, valor }];
+  });
+  const totalDoPeriodo = numeroMonetario(linhasFaturamento.find((linha) => /total\s+do\s+per[ií]odo/i.test(linha))?.match(/R\$\s*[-\d.]+(?:,\d{1,2})?/)?.[0] || '')
+    || (competenciasMensais.length ? Math.round(competenciasMensais.reduce((total, item) => total + item.valor, 0) * 100) / 100 : null);
+  const periodoAnalisado = texto.match(/per[ií]odo\s+apurado\s*:\s*(20\d{2}\/\d{2})\s+a\s+(20\d{2}\/\d{2})/i)?.slice(1) || null;
+  const dataDocumento = parseDataPorExtenso(
+    texto.match(/emitid[oa]\s+em\s*:\s*([^\n\r]+)/i)?.[1]
+      || texto.match(/\bBras[ií]lia\s*[-–—]\s*[^,\n]+,\s*([^\n\r]+)/i)?.[1]
       || null,
   );
+  const assinaturaMatch = texto.match(/(?:data\s+(?:de|da)\s+assinatura|assinad[oa]|assinatura|firmad[oa]).{0,80}?((?:\d{2}\/\d{2}\/20\d{2})|(?:\d{1,2}\s+de\s+[a-zç]+\s+de\s+20\d{2}))/is);
+  const dataAssinatura = parseDataPorExtenso(assinaturaMatch?.[1] || null);
   const eletronica = /assinado\s+(?:de\s+forma\s+)?(?:digital|eletronic)|assinatura\s+(?:digital|eletronic)|icp[\s-]*brasil|gov\.br/i.test(texto);
   const manual = /assinatura\s+manual|assinado\s+manualmente|assinatura\s+manuscrita/i.test(texto);
   const tipoAssinatura = eletronica ? 'eletronica' : manual ? 'manual' : null;
@@ -819,12 +856,16 @@ function parseFaturamento12Meses(texto: string): { dados: Record<string, any>; c
   const nomeContador = limparValor(texto.match(/(?:contador(?:a)?|respons[aá]vel\s+cont[aá]bil)\s*[:\-]\s*([^\n\r]{4,100})/i)?.[1] || null);
   const temSocio = /s[oó]cio(?:\s*-?administrador)?|administrador/i.test(texto) && /assinatura|assinado|firmado/i.test(texto);
   const temContador = /contador|crc|respons[aá]vel\s+cont[aá]bil/i.test(texto) && /assinatura|assinado|firmado/i.test(texto);
-  const confianca = clamp((compativel ? 0.25 : 0) + (cnpj ? 0.2 : 0) + (mesesReferencia.length ? 0.25 : 0) + (dataAssinatura ? 0.1 : 0) + (temSocio ? 0.1 : 0) + (temContador ? 0.1 : 0));
+  const confianca = clamp((compativel ? 0.25 : 0) + (cnpj ? 0.2 : 0) + (mesesReferencia.length ? 0.25 : 0) + (dataDocumento ? 0.1 : 0) + (dataAssinatura ? 0.1 : 0) + (temSocio ? 0.05 : 0) + (temContador ? 0.05 : 0));
   return {
     dados: {
       documento_compativel: compativel,
       cnpj,
       meses_referencia: mesesReferencia,
+      competencias_mensais: competenciasMensais,
+      total_12_meses: totalDoPeriodo,
+      periodo_analisado: periodoAnalisado,
+      data_documento: dataDocumento,
       data_assinatura: dataAssinatura,
       assinatura_socio_administrador: { presente: temSocio, nome: nomeSocio, tipo: tipoAssinatura },
       assinatura_contador: { presente: temContador, nome: nomeContador, tipo: tipoAssinatura },
@@ -1120,6 +1161,7 @@ export function detectarTipoComprovanteRegime(texto: string): TipoComprovanteReg
 }
 
 export function parseComprovanteRegime(tipoEsperado: TipoDocumentoLocal, texto: string): { dados: Record<string, any>; confianca: number } {
+  const fiscal = parseDocumentoGenerico(texto, tipoEsperado === 'pgdas_d' ? 'pgdas' : tipoEsperado);
   const base = parseSimples(texto);
   const tipoDetectado = detectarTipoComprovanteRegime(texto);
   // A identidade do documento vem exclusivamente do texto, sem consultar o
@@ -1132,6 +1174,7 @@ export function parseComprovanteRegime(tipoEsperado: TipoDocumentoLocal, texto: 
   const podeEvidenciarRegime = REGIMES_QUE_JUSTIFICAM_COMPROVANTE.has(String(base.dados.regime_tributario || ''));
   return {
     dados: {
+      ...fiscal.dados,
       ...base.dados,
       tipo_detectado: tipoDetectado,
       tipo_esperado: tipoEsperado,
@@ -1262,13 +1305,17 @@ function parseDocumentoGenerico(texto: string, tipoDocumentoEsperado?: string): 
   // é usado para declarar identidade ou compatibilidade: essa decisão
   // continua no classificador determinístico, a partir do conteúdo real.
   const perfil = obterPerfilAnaliseDocumental(tipoDocumentoEsperado || 'outros');
-  const cnpj = formatarCnpj(primeiroCnpj(texto));
+  const esperadoCpf = /(?:^|[_ -])cpf(?:$|[_ -])/i.test(String(tipoDocumentoEsperado || ''));
+  const cnpj = esperadoCpf ? null : formatarCnpj(primeiroCnpjOuBase(texto));
   const cpf = texto.match(/\b\d{3}\.?\d{3}\.?\d{3}-?\d{2}\b/)?.[0] || null;
   const razaoSocial = limparValor(valorAposRotulo(linhas, ['razão social', 'razao social', 'nome empresarial']));
   const entidadeConsultada = limparValor(valorAposRotulo(linhas, ['entidade consultada', 'contribuinte consultado', 'titular consultado'])) || razaoSocial;
   const orgaoEmissor = limparValor(valorAposRotulo(linhas, ['órgão emissor', 'orgao emissor', 'órgão expedidor', 'orgao expedidor']));
   const numeroDocumento = limparValor(valorAposRotulo(linhas, ['número do documento', 'numero do documento', 'número da certidão', 'numero da certidao']));
-  const protocolo = limparValor(valorAposRotulo(linhas, ['recibo ou protocolo', 'número do recibo', 'numero do recibo', 'protocolo']));
+  const protocolo = limparValor(valorAposRotulo(linhas, [
+    'recibo ou protocolo', 'número do recibo', 'numero do recibo', 'número da declaração',
+    'numero da declaracao', 'número da apuração', 'numero da apuracao', 'protocolo',
+  ]));
   const orgaoRegistro = limparValor(valorAposRotulo(linhas, ['órgão de registro', 'orgao de registro', 'cartório', 'cartorio', 'serventia']));
   const numeroRegistro = limparValor(valorAposRotulo(linhas, ['número do registro', 'numero do registro', 'registro nº', 'registro n°', 'número de ordem', 'numero de ordem']));
   const secionalOab = limparValor(valorAposRotulo(linhas, ['seccional da oab', 'seccional oab', 'conselho seccional']));
@@ -1276,7 +1323,7 @@ function parseDocumentoGenerico(texto: string, tipoDocumentoEsperado?: string): 
   const dataEmissao = dataProximaDe(
     texto,
     /(?:data\s+(?:de|da)\s+emiss[aã]o|emitid[oa]\s+em|data\s+da\s+consulta)\D{0,45}(\d{2}\/\d{2}\/\d{4})/i,
-  );
+  ) || parseDate(texto.match(/emitid[oa]\s+por\s*:[^\n\r]{0,100}?\b(\d{2}\/\d{2}\/\d{4})\b/i)?.[1] || null);
   const dataValidade = dataProximaDe(
     texto,
     /(?:data\s+(?:de|da)\s+validade|v[aá]lid[oa]\s+at[eé]|vencimento)\D{0,45}(\d{2}\/\d{2}\/\d{4})/i,
@@ -1285,11 +1332,11 @@ function parseDocumentoGenerico(texto: string, tipoDocumentoEsperado?: string): 
     texto,
     /(?:data\s+(?:do|de)\s+registro|registrad[oa]\s+em)\D{0,45}(\d{2}\/\d{2}\/\d{4})/i,
   );
-  const competenciaMatch = texto.match(/(?:compet[eê]ncia|per[ií]odo\s+de\s+apura[cç][aã]o|m[eê]s\s+de\s+refer[eê]ncia)\D{0,30}(0?[1-9]|1[0-2])\s*[\/\-]\s*(20\d{2})/i);
+  const competenciaMatch = texto.match(/(?:compet[eê]ncia|per[ií]odo\s+de\s+apura[cç][aã]o|m[eê]s\s+de\s+refer[eê]ncia)\D{0,30}(?:(\d{1,2})\s*[\/\-])?(0?[1-9]|1[0-2])\s*[\/\-]\s*(20\d{2})/i);
   let competencia: { inicio: string; fim: string } | null = null;
   if (competenciaMatch) {
-    const mes = Number(competenciaMatch[1]);
-    const ano = Number(competenciaMatch[2]);
+    const mes = Number(competenciaMatch[2]);
+    const ano = Number(competenciaMatch[3]);
     const ultimoDia = new Date(Date.UTC(ano, mes, 0)).getUTCDate();
     competencia = {
       inicio: `${ano}-${String(mes).padStart(2, '0')}-01`,
@@ -1308,7 +1355,7 @@ function parseDocumentoGenerico(texto: string, tipoDocumentoEsperado?: string): 
   const valorTotal = valorRotulado ? numeroMonetario(valorRotulado) : null;
   const dataConsulta = dataProximaDe(
     texto,
-    /(?:data\s+(?:de|da)\s+consulta|consultad[oa]\s+em|data[- ]base)\D{0,45}(\d{2}\/\d{2}\/\d{4})/i,
+    /(?:data(?:\s+e\s+hora)?\s+(?:de|da)\s+consulta|consultad[oa]\s+em|data[- ]base)\D{0,45}(\d{2}\/\d{2}\/\d{4})/i,
   ) || dataEmissao;
   const dataDocumento = dataProximaDe(
     texto,
@@ -1328,10 +1375,10 @@ function parseDocumentoGenerico(texto: string, tipoDocumentoEsperado?: string): 
   );
   const dataTransmissao = dataProximaDe(
     texto,
-    /(?:data\s+(?:de|da)\s+transmiss[aã]o|transmitid[oa]\s+em)\D{0,45}(\d{2}\/\d{2}\/\d{4})/i,
+    /(?:data(?:\s+e\s+hor[aá]rio)?\s+(?:de|da)\s+transmiss[aã]o|transmitid[oa]\s+em)\D{0,45}(\d{2}\/\d{2}\/\d{4})/i,
   );
   const anoCalendarioRaw = texto.match(/(?:ano[- ]calend[aá]rio|exerc[ií]cio)\D{0,20}(20\d{2})/i)?.[1] || null;
-  const dataBaseRaw = texto.match(/(?:data[- ]base|posi[cç][aã]o\s+em)\D{0,30}((?:\d{2}\/\d{2}\/20\d{2})|(?:0?[1-9]|1[0-2])\/20\d{2})/i)?.[1] || null;
+  const dataBaseRaw = texto.match(/(?:data[- ]base|m[eê]s\s+de\s+refer[eê]ncia|posi[cç][aã]o\s+em)\D{0,30}((?:\d{2}\/\d{2}\/20\d{2})|(?:0?[1-9]|1[0-2])\/20\d{2})/i)?.[1] || null;
   const dataBase = dataBaseRaw && /^\d{2}\/\d{2}\/\d{4}$/.test(dataBaseRaw) ? parseDate(dataBaseRaw) : dataBaseRaw;
   const nire = limparValor(valorAposRotulo(linhas, ['nire', 'número de identificação do registro de empresas', 'numero de identificacao do registro de empresas']));
   const nome = limparValor(valorAposRotulo(linhas, ['nome completo', 'nome do titular', 'titular', 'nome']));
@@ -1345,14 +1392,16 @@ function parseDocumentoGenerico(texto: string, tipoDocumentoEsperado?: string): 
   const outorgado = limparValor(valorAposRotulo(linhas, ['outorgado', 'procurador']));
   const poderes = limparValor(valorAposRotulo(linhas, ['poderes outorgados', 'poderes', 'finalidade da procuração', 'finalidade da procuracao']));
   const capitalSocialRaw = limparValor(valorAposRotulo(linhas, ['capital social', 'capital']));
-  const receitaBrutaRaw = limparValor(valorAposRotulo(linhas, ['receita bruta total', 'receita bruta', 'faturamento bruto']));
+  const linhaReceitaPa = linhas.find((linha) => /receita\s+bruta\s+do\s+pa/i.test(linha)) || null;
+  const receitaBrutaRaw = limparValor(linhaReceitaPa?.match(/(?:R\$\s*)?[-\d.]+(?:,\d{1,2})?/g)?.[0] || '')
+    || limparValor(valorAposRotulo(linhas, ['receita bruta total', 'total de receitas brutas', 'receita bruta', 'faturamento bruto']));
   const scoreRaw = limparValor(valorAposRotulo(linhas, ['score', 'pontuação', 'pontuacao']));
   const saldoRaw = limparValor(valorAposRotulo(linhas, ['saldo total', 'saldo devedor', 'saldo final', 'saldo']));
   const limiteRaw = limparValor(valorAposRotulo(linhas, ['limite total', 'limite de crédito', 'limite de credito', 'limite']));
   const codigoReceita = limparValor(valorAposRotulo(linhas, ['código de receita', 'codigo de receita', 'código da receita', 'codigo da receita']));
   const codigoAutenticidade = limparValor(valorAposRotulo(linhas, ['código de autenticidade', 'codigo de autenticidade', 'código de controle', 'codigo de controle', 'autenticação', 'autenticacao']));
   const naturezaJuridica = limparValor(valorAposRotulo(linhas, ['natureza jurídica', 'natureza juridica']));
-  const regimeTributario = limparValor(valorAposRotulo(linhas, ['regime tributário', 'regime tributario', 'forma de tributação', 'forma de tributacao']));
+  const regimeTributario = limparValor(valorAposRotulo(linhas, ['regime tributário', 'regime tributario', 'regime de apuração', 'regime de apuracao', 'forma de tributação', 'forma de tributacao']));
   const condicaoMei = /certificado da condi[cç][aã]o de microempreendedor individual|\bccmei\b/i.test(texto)
     ? true
     : null;
@@ -1493,7 +1542,7 @@ function parseConsultaDocumentalEspecializada(
     consulta_scr: /relatorio de emprestimos e financiamentos|sistema de informacoes de creditos|\bscr\b/i,
     consulta_ccs: /relatorio de contas e relacionamentos|cadastro de clientes do sistema financeiro|\bccs\b/i,
     consulta_ccf: /relatorio de cheques sem fundos|cadastro de emitentes de cheques sem fundos|\bccf\b/i,
-    consulta_cenprot: /\bcenprot\b|central.{0,60}protest|consulta.{0,60}protest/i,
+    consulta_cenprot: /\bcenprot\b|\bcenprod\b|central.{0,60}protest|consulta.{0,60}protest|pesquisa.{0,60}protest|protestos?\s+nos\s+cart[oó]rios|informa[cç][aã]o\s+sem\s+valor\s+de\s+certid[aã]o/i,
     consulta_bureau: /\bserasa\b|experian|score.{0,60}(?:cnpj|cpf)|relatorio.{0,60}(?:score|restricoes)/i,
   };
 
@@ -1519,21 +1568,50 @@ function parseConsultaDocumentalEspecializada(
     adicionais.resultado_consulta = base.dados.resultado_consulta
       || (/nada consta|nenhuma inscricao|nao possui inscricoes/i.test(norm) ? 'Sem inscrições identificadas' : null);
   } else if (tipo === 'consulta_scr') {
-    adicionais.instituicoes = valoresRotuladosMultiplos(linhas, ['instituição', 'instituicao', 'banco', 'credor']);
-    adicionais.saldo_devedor = base.dados.saldo ?? null;
-    adicionais.limites = base.dados.limites ?? null;
-    adicionais.atrasos = quantidadeRotulada(linhas, ['operações em atraso', 'operacoes em atraso', 'dívidas vencidas', 'dividas vencidas']);
+    const fimCorpoScr = linhas.findIndex((linha) => /^importante\b/i.test(linha));
+    const corpoScr = linhas.slice(0, fimCorpoScr >= 0 ? fimCorpoScr : linhas.length);
+    const instituicoesRotuladas = valoresRotuladosMultiplos(corpoScr, ['instituição', 'instituicao', 'banco', 'credor']);
+    const instituicoesScr = instituicoesRotuladas.length ? instituicoesRotuladas : corpoScr
+      .filter((linha) => /(?:\bs\.a\.?\b|sociedade de cr[eé]dito|\bip\b)/i.test(linha))
+      .map((linha) => limparValor(linha.replace(/\s+R\$.*$/i, '').replace(/^\s*\d+\s*/, '')))
+      .filter((linha): linha is string => Boolean(linha && !/^(institui[cç][aã]o|empr[eé]stimos|limite|d[ií]vidas|outros compromissos|os bancos|coobriga[cç][aã]o)/i.test(linha)));
+    const linhaReferencia = corpoScr.find((linha) => /m[eê]s\s+de\s+refer[eê]ncia/i.test(linha));
+    const valoresReferencia = linhaReferencia ? Array.from(linhaReferencia.matchAll(/R\$\s*[-\d.]+(?:,\d{1,2})?/g)).map((match) => numeroMonetario(match[0])).filter((valor): valor is number => valor !== null) : [];
+    const vencidasNoCorpo = corpoScr.some((linha) => /vencida|vencidas/i.test(linha) && /R\$/.test(linha));
+    adicionais.instituicoes = Array.from(new Set(instituicoesScr));
+    adicionais.saldo_devedor = base.dados.saldo ?? valoresReferencia[0] ?? null;
+    adicionais.limites = base.dados.limites ?? (valoresReferencia.length > 1 ? valoresReferencia.at(-1) : null);
+    adicionais.atrasos = quantidadeRotulada(linhas, ['operações em atraso', 'operacoes em atraso', 'dívidas vencidas', 'dividas vencidas']) ?? (vencidasNoCorpo ? null : 0);
+    adicionais.data_consulta = base.dados.data_consulta
+      || parseDate(texto.match(/data\s+e\s+hora[\s\S]{0,120}?(\d{2}\/\d{2}\/20\d{2})/i)?.[1] || null);
+    const situacaoScr = texto.match(/\bscr\b\s+(vencid[oa]|em\s+dia)\b/i)?.[1] || null;
+    adicionais.resultado_consulta = situacaoScr ? `SCR ${situacaoScr}` : null;
   } else if (tipo === 'consulta_ccs') {
-    adicionais.instituicoes = valoresRotuladosMultiplos(linhas, ['instituição', 'instituicao', 'banco']);
-    adicionais.datas_relacionamento = valoresRotuladosMultiplos(linhas, ['início do relacionamento', 'inicio do relacionamento', 'fim do relacionamento']);
+    const relacionamentos = linhas
+      .map((linha) => {
+        const match = linha.match(/^\s*(\d{2}\.\d{3}\.\d{3})\s*-\s*(.+?)\s+(\d{2}\/\d{2}\/\d{4})\s+(Ativo|\d{2}\/\d{2}\/\d{4})\s*$/i);
+        return match ? { instituicao: match[2].trim(), inicio: parseDate(match[3]), fim: /^ativo$/i.test(match[4]) ? null : parseDate(match[4]) } : null;
+      })
+      .filter((item): item is { instituicao: string; inicio: string | null; fim: string | null } => Boolean(item));
+    adicionais.relacionamentos = relacionamentos;
+    adicionais.instituicoes = relacionamentos.length
+      ? relacionamentos.map((item) => item.instituicao)
+      : valoresRotuladosMultiplos(linhas, ['instituição', 'instituicao', 'banco']);
+    adicionais.datas_relacionamento = relacionamentos.flatMap((item) => [item.inicio, item.fim]).filter(Boolean);
   } else if (tipo === 'consulta_ccf') {
     adicionais.ocorrencias = quantidadeRotulada(linhas, ['quantidade de ocorrências', 'quantidade de ocorrencias', 'cheques sem fundos']);
     adicionais.resultado_consulta = base.dados.resultado_consulta
-      || (/nenhum cheque|sem ocorrencias|nada consta/i.test(norm) ? 'Sem ocorrências identificadas' : null);
+      || (/nenhum cheque|sem ocorrencias|nada consta|não foi encontrado registro de cheque|nao foi encontrado registro de cheque/i.test(norm) ? 'Sem ocorrências identificadas' : null);
+    if (adicionais.ocorrencias === undefined || adicionais.ocorrencias === null) {
+      adicionais.ocorrencias = /nenhum cheque|sem ocorrencias|nada consta|não foi encontrado registro de cheque|nao foi encontrado registro de cheque/i.test(norm) ? 0 : null;
+    }
   } else if (tipo === 'consulta_cenprot') {
     adicionais.protestos = quantidadeRotulada(linhas, ['quantidade de protestos', 'protestos']);
     adicionais.resultado_consulta = base.dados.resultado_consulta
-      || (/nenhum protesto|sem protestos|nada consta/i.test(norm) ? 'Sem protestos identificados' : null);
+      || (/nenhum protesto|sem protestos|nada consta|não constam protestos|nao constam protestos/i.test(norm) ? 'Sem protestos identificados' : null);
+    if (adicionais.protestos === undefined || adicionais.protestos === null) {
+      adicionais.protestos = /nenhum protesto|sem protestos|nada consta|não constam protestos|nao constam protestos/i.test(norm) ? 0 : null;
+    }
   } else if (tipo === 'consulta_bureau') {
     adicionais.restricoes = quantidadeRotulada(linhas, ['quantidade de restrições', 'quantidade de restricoes', 'negativações', 'negativacoes']);
     adicionais.rating = limparValor(valorAposRotulo(linhas, ['rating', 'faixa de risco', 'faixa rating']));
@@ -1545,9 +1623,17 @@ function parseConsultaDocumentalEspecializada(
     Object.entries(adicionais).filter(([, valor]) => valor !== null && valor !== undefined && !(Array.isArray(valor) && valor.length === 0)),
   );
   const camposComprovados = { ...(base.dados.campos_comprovados || {}), ...adicionaisValidos };
+  // Relatórios consolidados podem conter outras decisões (falência, rating,
+  // faturamento) junto da seção SCR. Esses rótulos não são o resultado do SCR
+  // e não devem aparecer como situação de certidão/resultado da consulta.
+  if (tipo === 'consulta_scr') {
+    delete camposComprovados.situacao_certidao;
+    if (adicionais.resultado_consulta === null || adicionais.resultado_consulta === undefined) delete camposComprovados.resultado_consulta;
+  }
   const possuiIdentificador = Boolean(camposComprovados.cnpj || camposComprovados.cpf);
   const possuiData = Boolean(camposComprovados.data_consulta || camposComprovados.data_emissao || camposComprovados.data_base || camposComprovados.data_validade);
-  const confianca = clamp(base.confianca + (compativel ? 0.2 : 0) + (possuiIdentificador ? 0.08 : 0) + (possuiData ? 0.05 : 0));
+  const confianca = clamp(base.confianca + (compativel ? 0.2 : 0) + (possuiIdentificador ? 0.08 : 0) + (possuiData ? 0.05 : 0)
+    + (['consulta_scr', 'consulta_ccs', 'consulta_ccf', 'consulta_cenprot'].includes(tipo) && compativel ? 0.08 : 0));
 
   return {
     dados: {
@@ -1733,6 +1819,7 @@ export async function extrairDocumentoLocal(
     return { tipo, disponivel: true, legivel: false, mecanismo: 'pdftotext', texto: '', dados: {}, confianca: 0, motivo: 'Formato não suportado pelo leitor interno.' };
   }
 
+  let parcialTexto: { texto: string; dados: Record<string, any>; confianca: number } | null = null;
   if (isPdf) {
     try {
       const { stdout } = await execFileAsync(
@@ -1746,7 +1833,10 @@ export async function extrairDocumentoLocal(
         if (confianca >= Number(process.env.LOCAL_EXTRACTION_MIN_CONFIDENCE || 0.55)) {
           return { tipo, disponivel: true, legivel: true, mecanismo: 'pdftotext', texto, dados, confianca };
         }
-        // Camada textual incompleta: tenta OCR antes de recorrer à API externa.
+        // Camada textual incompleta: tenta OCR antes de recorrer à API externa,
+        // mas preserva o que foi lido para que os campos explícitos e as
+        // pendências cheguem ao laudo mesmo quando o ambiente não tem OCR.
+        parcialTexto = { texto, dados, confianca };
       }
     } catch (error: any) {
       if (error?.code === 'ENOENT') {
@@ -1775,6 +1865,21 @@ export async function extrairDocumentoLocal(
   }
 
   return {
+    ...(parcialTexto ? {
+      tipo,
+      disponivel: true,
+      legivel: false,
+      mecanismo: 'pdftotext' as const,
+      texto: parcialTexto.texto,
+      dados: {
+        ...parcialTexto.dados,
+        qualidade_extracao: 'BAIXA_QUALIDADE',
+        extracao_parcial: true,
+        motivo_extracao: ocr.motivo || 'OCR local não produziu texto adicional; dados textuais parciais preservados.',
+      },
+      confianca: parcialTexto.confianca,
+      motivo: ocr.motivo || 'OCR local não produziu texto adicional; dados textuais parciais preservados para revisão humana.',
+    } : {
     tipo,
     disponivel: ocr.disponivel,
     legivel: false,
@@ -1783,6 +1888,7 @@ export async function extrairDocumentoLocal(
     dados: {},
     confianca: 0,
     motivo: ocr.motivo || 'Documento sem texto legível pelo motor interno; revisão humana necessária.',
+    }),
   };
 
 }

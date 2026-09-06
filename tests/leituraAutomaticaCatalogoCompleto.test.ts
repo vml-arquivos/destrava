@@ -251,6 +251,89 @@ describe('cobertura integral da leitura automática documental', () => {
     expect(ccf.resultado_consulta).toBe('Sem ocorrências');
   });
 
+  it('reconhece os layouts reais anexados da Paluma sem confundir operador com titular', () => {
+    const ccs = analisarTextoDocumentoLocal('consulta_ccs', `
+      Relatório de Contas e Relacionamentos (CCS)
+      Nome: PALUMA BURGER LTDA
+      CPF/CNPJ: 52.008.360/0001-33
+      Banco ou Instituição     Início do relacionamento     Fim do relacionamento
+      08.561.701 - PAGSEGURO INTERNET IP S.A. 12/09/2023 Ativo
+      Relatório emitido por: 038.211.981-92 em 20/08/2026 11:30
+    `, 'ccs_cnpj').dados;
+    const ccf = analisarTextoDocumentoLocal('consulta_ccf', `
+      Relatório de Cheques sem Fundos (CCF)
+      Nome: PALUMA BURGER LTDA
+      CPF/CNPJ: 52.008.360/0001-33
+      Não foi encontrado registro de cheque devolvido.
+    `, 'ccf_cnpj').dados;
+    const scrTexto = `
+      Relatório de Empréstimos e Financiamentos (SCR)
+      Nome: PALUMA BURGER LTDA
+      CPF/CNPJ: 52.008.360
+      Período pesquisado: 07/2026 a 07/2026
+      Mês de referência: 07/2026 R$ 37.542,69 R$ 17.658,80
+      ITAÚ UNIBANCO S.A. R$ 529,91
+    `;
+    const scr = analisarTextoDocumentoLocal('consulta_scr', scrTexto, 'rating_bacen_cnpj').dados;
+    const classificacaoScr = classificarDocumentoDeterministico({
+      tipoEsperado: 'rating_bacen_cnpj',
+      texto: scrTexto,
+      dataEmissao: '2026-08-20',
+    });
+    const cenprot = analisarTextoDocumentoLocal('consulta_cenprot', `
+      INFORMAÇÃO SEM VALOR DE CERTIDÃO
+      Documento consultado 52.008.360/0001-33
+      Data e hora da consulta 20/08/2026 11:42
+      ✓ Não constam protestos nos cartórios participantes do Brasil
+    `, 'cenprod_cnpj').dados;
+    const faturamento = analisarTextoDocumentoLocal('faturamento_12_meses', `
+      DECLARAÇÃO DE FATURAMENTO DOS ÚLTIMOS 12 MESES
+      Emitido em: 04 de agosto de 2026
+      PALUMA BURGER LTDA | CNPJ: 52.008.360/0001-33
+      agosto de 2025 R$ 39.013,56
+      setembro de 2025 R$ 37.282,76
+      outubro de 2025 R$ 37.274,19
+      novembro de 2025 R$ 40.977,02
+      dezembro de 2025 R$ 38.011,98
+      janeiro de 2026 R$ 40.220,83
+      fevereiro de 2026 R$ 42.203,07
+      março de 2026 R$ 39.313,39
+      abril de 2026 R$ 43.142,40
+      maio de 2026 R$ 42.890,33
+      junho de 2026 R$ 41.357,82
+      julho de 2026 R$ 45.612,65
+      TOTAL DO PERÍODO R$ 487.300,00
+    `, 'faturamento_12_meses').dados;
+    const pgdas = analisarTextoDocumentoLocal('pgdas_d', `
+      Programa Gerador do Documento de Arrecadação do Simples Nacional - Declaratório
+      Período de Apuração: 01/07/2026 a 31/07/2026
+      CNPJ Matriz: 52.008.360/0001-33
+      Optante pelo Simples Nacional: Sim
+      Receita Bruta do PA (RPA) 36.923,49 0,00 36.923,49
+      Número da Declaração: 52008360202607001 Número do Recibo: 01.07.26229.0440173-6
+    `, 'pgdas').dados;
+
+    expect(ccs.instituicoes).toEqual(['PAGSEGURO INTERNET IP S.A.']);
+    expect(ccs.data_consulta).toBe('2026-08-20');
+    expect(ccf.ocorrencias).toBe(0);
+    expect(ccf.resultado_consulta).toBe('Sem ocorrências identificadas');
+    expect(scr.cnpj).toBe('52.008.360');
+    expect(scr.data_base).toBe('07/2026');
+    expect(scr.instituicoes).toEqual(['ITAÚ UNIBANCO S.A.']);
+    expect(classificacaoScr.identidade_status).toBe('IDENTIFICADO');
+    expect(cenprot.protestos).toBe(0);
+    expect(cenprot.resultado_consulta).toBe('Sem protestos identificados');
+    expect(documentAnalysisConfig('cenprod_cnpj')?.promptCodigo).toBe('cenprot_extract');
+    expect(faturamento.meses_referencia).toHaveLength(12);
+    expect(faturamento.competencias_mensais).toHaveLength(12);
+    expect(faturamento.total_12_meses).toBe(487300);
+    expect(faturamento.data_documento).toBe('2026-08-04');
+    expect(pgdas.documento_compativel).toBe(true);
+    expect(pgdas.regime_tributario).toBe('Simples Nacional');
+    expect(pgdas.competencia).toMatchObject({ inicio: '2026-07-01', fim: '2026-07-31' });
+    expect(pgdas.recibo_ou_protocolo).toContain('52008360202607001');
+  });
+
   it('extrai somente campos explicitamente rotulados no fallback genérico', () => {
     const { dados } = analisarTextoDocumentoLocal('documento_generico', `
       CERTIDÃO NEGATIVA DE DÉBITOS

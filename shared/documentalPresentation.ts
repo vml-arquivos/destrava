@@ -96,7 +96,7 @@ function camposExtraidosGenericos(resultado: any): DocumentoAnaliseCampo[] {
   const tecnicos = new Set([
     'texto', 'ocr_texto', 'campos_comprovados', 'campos_inferidos', 'evidencias', 'alertas', 'divergencias',
     'fonte_extracao', 'mecanismo_extracao', 'separacao_comprovado_inferido', 'documento_compativel',
-    'confianca', 'nivel_confianca', 'satisfaz_requisito', 'tipo_documento', 'tipo_esperado',
+    'confianca', 'nivel_confianca', 'satisfaz_requisito', 'status_documental', 'tipo_documento', 'tipo_esperado',
     // O histórico da Junta recebe um resumo próprio logo abaixo; despejar o
     // array bruto no card deixa a leitura ruim e ainda pode esconder as datas.
     'historico_arquivamentos',
@@ -569,7 +569,7 @@ function camposValidacaoObjetiva(resultado: any, documento: any, socios: any[] =
     return campos.slice(0, 5);
   }
 
-  if (/cenprot|protest/.test(tipo)) {
+  if (/cenprot|cenprod|protest/.test(tipo)) {
     const protestos = primeiroValor(resultado, ['protestos', 'quantidade_protestos'], ['Protestos', 'Quantidade de protestos']);
     adicionarIdentificadorObjetivo(campos, resultado);
     adicionarCampoObjetivo(campos, 'Resultado', primeiroValor(resultado, ['resultado_consulta', 'resultado', 'situacao'], ['Resultado', 'Situação']));

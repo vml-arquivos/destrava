@@ -119,6 +119,12 @@ export const DOCUMENT_TYPE_CATALOG = [
   entry('ccf_cpf', 'CCF do CPF', 'credito', 'socio', { analise: 'ccf', promptCodigo: 'ccf_extract' }),
   entry('cenprot_cnpj', 'CENPROT do CNPJ', 'credito', 'empresa', { analise: 'cenprot', promptCodigo: 'cenprot_extract', tipoExigencia: 'politica_bancaria' }),
   entry('cenprot_cpf', 'CENPROT do CPF', 'credito', 'socio', { analise: 'cenprot', promptCodigo: 'cenprot_extract' }),
+  // `CENPROD` aparece em integrações e rótulos legados como variação de
+  // `CENPROT` (Central Nacional de Protesto). Mantemos o nome antigo como
+  // entrada de primeira classe para que uploads e registros históricos não
+  // caiam no fallback genérico nem sejam tratados como um tipo desconhecido.
+  entry('cenprod_cnpj', 'CENPROD/CENPROT do CNPJ (legado)', 'credito', 'empresa', { tipoCanonico: 'cenprot_cnpj', analise: 'cenprot', promptCodigo: 'cenprot_extract', tipoExigencia: 'politica_bancaria' }),
+  entry('cenprod_cpf', 'CENPROD/CENPROT do CPF (legado)', 'credito', 'socio', { tipoCanonico: 'cenprot_cpf', analise: 'cenprot', promptCodigo: 'cenprot_extract' }),
   entry('consulta_serasa_cnpj', 'Consulta Serasa do CNPJ', 'credito', 'empresa', { aliases: ['score_serasa'], analise: 'serasa', promptCodigo: 'serasa_extract', tipoExigencia: 'politica_bancaria' }),
   entry('consulta_serasa_cpf', 'Consulta Serasa do CPF', 'credito', 'socio', { analise: 'serasa', promptCodigo: 'serasa_extract' }),
   entry('score_serasa', 'Score Serasa (legado)', 'credito', 'empresa', { tipoCanonico: 'consulta_serasa_cnpj', analise: 'serasa', promptCodigo: 'serasa_extract' }),
