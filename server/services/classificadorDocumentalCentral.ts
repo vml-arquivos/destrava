@@ -290,6 +290,15 @@ function temporalidade(input: ClassificacaoDocumentalInput): TemporalStatus {
 
   if (perfil.politicaTemporal === 'validade_expressa') return 'NAO_VERIFICADO';
   if (perfil.politicaTemporal === 'sem_validade_formal') return 'NAO_APLICAVEL';
+  // Snapshot não "vence" em 30 dias por força do órgão. A data apenas marca
+  // quando o estado foi consultado. Se houver data futura, bloqueia; caso
+  // contrário a temporalidade não reprova automaticamente. Uma política de
+  // crédito que exija recência deve ser configurada fora do leitor.
+  if (perfil.politicaTemporal === 'snapshot_atual' || perfil.politicaTemporal === 'politica_credito_configuravel') {
+    const dataReferencia = parseIso(input.dataEmissao) || validadeInicio;
+    if (dataReferencia && dataReferencia.getTime() > hojeDia.getTime() + 24 * 60 * 60 * 1000) return 'FUTURO';
+    return dataReferencia ? 'ATUAL' : 'NAO_APLICAVEL';
+  }
 
   const inicio = parseIso(input.competenciaInicio);
   const fim = parseIso(input.competenciaFim) || inicio;
