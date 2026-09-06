@@ -3893,6 +3893,12 @@ const ANALISE_ESPECIALIZADA_POR_TIPO: Partial<Record<string, { tipo: TipoAnalise
   qsa: { tipo: 'qsa', promptCodigo: 'qsa_extract' },
   simples_nacional: { tipo: 'simples_nacional', promptCodigo: 'simples_extract' },
   enquadramento_tributario_cnpj: { tipo: 'simples_nacional', promptCodigo: 'simples_extract' },
+  // O contrato/alteração é analisado em conjunto com os Atos da Junta. O
+  // mesmo prompt precisa estar no mapa usado pelo GET do acervo; caso
+  // contrário o POST de releitura persiste o cross-check corretamente, mas o
+  // card continua lendo `documentos_arquivos.resultado_validacao` antigo.
+  contrato_social: { tipo: 'contrato_junta', promptCodigo: 'contrato_junta_crosscheck' },
+  alteracao_contratual: { tipo: 'contrato_junta', promptCodigo: 'contrato_junta_crosscheck' },
   // DARF de IRPJ: o código de receita denuncia Presumido (2089), Real
   // (5993/3373) ou Arbitrado (5625) -- catálogo corrigido em
   // extracaoDocumentalLocal.ts (2026-08-30: 5993 estava classificado como

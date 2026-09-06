@@ -125,11 +125,16 @@ function detectarTipo(texto: string): { tipo: TipoDetectadoDocumental; evidencia
     ['CONTRATO_GERAL', /instrumento particular de contrato|contrato firmado entre|contratante.{0,160}contratad[oa]/, 'Contrato', 0.82],
     ['CARTAO_CNPJ', /comprovante de inscricao e de situacao cadastral|cadastro nacional da pessoa juridica/, 'Cartão CNPJ', 0.98],
     ['QSA', /quadro de socios e administradores|quadro societario|capital social.{0,80}(?:socio|titular)/, 'QSA', 0.92],
+    // Contratos e alterações frequentemente mencionam a Junta Comercial,
+    // NIRE e arquivamento no corpo do instrumento. Esses marcadores são
+    // evidência do registro, não da classe documental. Os títulos próprios
+    // precisam vencer o sinal amplo de certidão/atos para que o mesmo arquivo
+    // possa ser validado no slot de contrato e cruzado com a Junta.
+    ['ALTERACAO_CONTRATUAL', /alteracao contratual|consolidacao contratual/, 'Alteração Contratual', 0.95],
+    ['CONTRATO_SOCIAL', /contrato social|instrumento de constituicao de sociedade/, 'Contrato Social', 0.94],
     ['ATOS_JUNTA_COMERCIAL', /junta comercial|historico de arquivamentos|certidao simplificada.{0,80}nire/, 'Atos da Junta Comercial', 0.94],
     ['REGISTRO_CARTORIO_PJ', /registro civil (?:das |de )?pessoas juridicas|\brcpj\b|cartorio.{0,80}pessoas juridicas/, 'Registro no RCPJ', 0.94],
     ['REGISTRO_OAB', /registro de sociedade de advogados|certidao.{0,100}ordem dos advogados do brasil|conselho seccional.{0,100}registro/, 'Registro OAB', 0.93],
-    ['ALTERACAO_CONTRATUAL', /alteracao contratual|consolidacao contratual/, 'Alteração Contratual', 0.95],
-    ['CONTRATO_SOCIAL', /contrato social|instrumento de constituicao de sociedade/, 'Contrato Social', 0.94],
     ['REQUERIMENTO_EMPRESARIO', /requerimento de empresario|instrumento de inscricao de empresario individual/, 'Requerimento de Empresário', 0.95],
     ['ESTATUTO', /estatuto social/, 'Estatuto Social', 0.94],
     ['ATA', /ata (?:de assembleia|da assembleia|de reuniao)/, 'Ata societária', 0.92],

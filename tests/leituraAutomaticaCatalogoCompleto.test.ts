@@ -66,6 +66,32 @@ describe('cobertura integral da leitura automática documental', () => {
     });
   });
 
+  it('prioriza o título do instrumento societário sobre a menção à Junta Comercial', () => {
+    const alteracao = classificarDocumentoDeterministico({
+      tipoEsperado: 'contrato_social',
+      texto: `ALTERAÇÃO CONTRATUAL — SOCIEDADE EMPRESÁRIA LIMITADA
+        PALUMA BURGER LTDA — CNPJ 52.008.360/0001-33
+        devidamente arquivada na Junta Comercial de Goiás sob o NIRE 52206183723`,
+      hoje: new Date('2026-09-05T12:00:00.000Z'),
+    });
+    const atos = classificarDocumentoDeterministico({
+      tipoEsperado: 'atos_junta_comercial',
+      texto: 'JUNTA COMERCIAL DO ESTADO DE GOIÁS — CERTIDÃO ONLINE — HISTÓRICO DE ARQUIVAMENTOS — NIRE 52206183723',
+      hoje: new Date('2026-09-05T12:00:00.000Z'),
+    });
+
+    expect(alteracao).toMatchObject({
+      identidade_status: 'IDENTIFICADO',
+      tipo_detectado: 'ALTERACAO_CONTRATUAL',
+      satisfaz_requisito: true,
+    });
+    expect(atos).toMatchObject({
+      identidade_status: 'IDENTIFICADO',
+      tipo_detectado: 'ATOS_JUNTA_COMERCIAL',
+      satisfaz_requisito: true,
+    });
+  });
+
   it('distingue contratos operacionais e aceita CPEND no requisito federal', () => {
     const assessoria = classificarDocumentoDeterministico({
       tipoEsperado: 'contrato_assessoria',
