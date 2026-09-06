@@ -725,6 +725,20 @@ describe('extração documental local determinística', () => {
     expect(resultado.dados.resultado_consulta).toContain('Relatório empresarial consolidado');
   });
 
+  it('lê a data de consulta do laudo consolidado quando o PDF quebra o rótulo em DA TA', () => {
+    const resultado = analisarTextoDocumentoLocal('consulta_bureau', `
+      ANÁLI S E EM PRES ARI AL, FI NANCEI RA E S CR
+      SCR + LAUDO FINANCEIRO COMPLETO + SCORE EMPRESARIAL
+      CNPJ 52.008.360/0001-33
+      DA TA E HO RA
+      23/07/2026 às 12:17:21
+      PONTUAÇÃO PJ 985 RATING AA
+      PROTESTOS ESTADUAIS NADA CONSTA
+    `, 'consulta_serasa_cnpj');
+    expect(resultado.dados.documento_compativel).toBe(true);
+    expect(resultado.dados.data_consulta).toBe('2026-07-23');
+  });
+
   it('extrai o ato societário completo do instrumento chancelado pela Junta', () => {
     const resultado = analisarTextoDocumentoLocal('contrato_social_alteracao', `
       ALTERAÇÃO CONTRATUAL CONSOLIDADA
