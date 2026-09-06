@@ -1,5 +1,8 @@
 import { describe, expect, it } from 'vitest';
-import { analisarTextoDocumentoLocal, detectarRegimeTributarioDeclarado } from '../server/services/extracaoDocumentalLocal';
+import { mkdtemp, rm, writeFile } from 'node:fs/promises';
+import os from 'node:os';
+import path from 'node:path';
+import { analisarTextoDocumentoLocal, detectarRegimeTributarioDeclarado, extrairDocumentoLocal } from '../server/services/extracaoDocumentalLocal';
 import { compararEndereco } from '../server/utils/helpers';
 
 describe('extração documental local determinística', () => {
@@ -757,6 +760,56 @@ describe('extração documental local determinística', () => {
     expect(resultado.dados.numero_arquivamento).toBe('20251505987');
     expect(resultado.dados.assinaturas).toHaveLength(1);
     expect(resultado.dados.alteracoes_societarias).toHaveLength(1);
+  });
+
+  it('classifica uma foto empresarial JPEG decodificável sem exigir OCR textual', async () => {
+    const diretorio = await mkdtemp(path.join(os.tmpdir(), 'destrava-foto-'));
+    const arquivo = path.join(diretorio, 'fachada.jpg');
+    const sof = Buffer.alloc(17, 0);
+    sof[0] = 8;
+    sof.writeUInt16BE(900, 1);
+    sof.writeUInt16BE(1600, 3);
+    await writeFile(arquivo, Buffer.concat([
+      Buffer.from([0xff, 0xd8, 0xff, 0xc0, 0x00, 0x11]),
+      sof,
+      Buffer.alloc(12_000, 0),
+      Buffer.from([0xff, 0xd9]),
+    ]));
+    try {
+      const resultado = await extrairDocumentoLocal(arquivo, 'image/jpeg', 'documento_generico', 'foto_fachada');
+      expect(resultado.legivel).toBe(true);
+      expect(resultado.mecanismo).toBe('imagem_visual');
+      expect(resultado.dados.documento_compativel).toBe(true);
+      expect(resultado.dados.tipo_evidencia).toBe('fachada');
+      expect(resultado.dados.qualidade_imagem).toBe('adequada');
+      expect(resultado.dados.dimensoes_imagem).toEqual({ largura: 1600, altura: 900 });
+    } finally {
+      await rm(diretorio, { recursive: true, force: true });
+    }
+  });
+
+  it('não promove uma imagem empresarial pequena como evidência visual adequada', async () => {
+    const diretorio = await mkdtemp(path.join(os.tmpdir(), 'destrava-foto-baixa-'));
+    const arquivo = path.join(diretorio, 'fachada.jpg');
+    const sof = Buffer.alloc(17, 0);
+    sof[0] = 8;
+    sof.writeUInt16BE(200, 1);
+    sof.writeUInt16BE(320, 3);
+    await writeFile(arquivo, Buffer.concat([
+      Buffer.from([0xff, 0xd8, 0xff, 0xc0, 0x00, 0x11]),
+      sof,
+      Buffer.alloc(128, 0),
+      Buffer.from([0xff, 0xd9]),
+    ]));
+    try {
+      const resultado = await extrairDocumentoLocal(arquivo, 'image/jpeg', 'documento_generico', 'foto_fachada');
+      expect(resultado.legivel).toBe(false);
+      expect(resultado.dados.documento_compativel).toBe(true);
+      expect(resultado.dados.qualidade_imagem).toBe('insuficiente');
+      expect(resultado.motivo).toContain('qualidade');
+    } finally {
+      await rm(diretorio, { recursive: true, force: true });
+    }
   });
 
 });

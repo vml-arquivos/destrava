@@ -1684,7 +1684,25 @@ function normalizarDocumentoCatalogado(extraidos: any, tipoDocumento: string, em
   // independente desta classificação pela checagem de `tiposComprovacaoRegime`
   // acima (`regimeFoiComprovado`, usada em `satisfazRequisito` mais abaixo).
   const identidadeFlexivel = tipoDocumento === 'comprovante_regime_outro';
-  let classificacaoBase: ClassificacaoDocumentalResult = identidadeFlexivel
+  const evidenciaVisualEmpresarial = new Set(['foto_fachada', 'foto_interna_1', 'foto_interna_2', 'foto_interna_3']).has(String(tipoDocumento || '').toLowerCase());
+  const imagemVisualAdequada = evidenciaVisualEmpresarial
+    && bruto.documento_compativel === true
+    && String(bruto.qualidade_imagem || comprovados.qualidade_imagem || '').toLowerCase() === 'adequada';
+  let classificacaoBase: ClassificacaoDocumentalResult = evidenciaVisualEmpresarial
+    ? {
+        tipo_esperado: tipoDocumento,
+        tipo_detectado: String(bruto.tipo_detectado || 'FOTO_EMPRESARIAL').toUpperCase(),
+        satisfaz_requisito: imagemVisualAdequada,
+        identidade_status: 'IDENTIFICADO',
+        temporalidade_status: 'NAO_APLICAVEL',
+        cobertura_status: imagemVisualAdequada ? 'SATISFAZ' : 'NAO_SATISFAZ',
+        confianca: confianca ?? 0,
+        evidencias: [],
+        motivo: imagemVisualAdequada
+          ? 'Evidência visual empresarial decodificada, com dimensões e qualidade mínimas comprovadas.'
+          : 'A imagem foi recebida, mas a qualidade visual mínima não foi comprovada.',
+      }
+    : identidadeFlexivel
     ? {
         tipo_esperado: tipoDocumento,
         tipo_detectado: tipoDocumento as unknown as ClassificacaoDocumentalResult['tipo_detectado'],
@@ -1744,7 +1762,15 @@ function normalizarDocumentoCatalogado(extraidos: any, tipoDocumento: string, em
           : classificacaoBase.motivo,
       }
     : classificacaoBase;
-  const exigeIdentidadeFixa = !identidadeFlexivel && !['outros', 'outro'].includes(tipoDocumento);
+  if (evidenciaVisualEmpresarial && !imagemVisualAdequada) {
+    alertas.push({
+      codigo: 'foto_empresarial_qualidade_insuficiente',
+      mensagem: 'A foto empresarial foi recebida, mas a qualidade visual mínima não foi comprovada.',
+      severidade: 'alta',
+      recomendacao: 'Anexar uma foto nítida, com dimensões suficientes, mostrando a fachada ou as instalações da empresa.',
+    });
+  }
+  const exigeIdentidadeFixa = !identidadeFlexivel && !evidenciaVisualEmpresarial && !['outros', 'outro'].includes(tipoDocumento);
   if (exigeIdentidadeFixa) {
     if (classificacao.identidade_status === 'INCOMPATIVEL' || brutoIncompativel) {
       // CORREÇÃO (2026-08-31, "não é mais aceitável falha... não ler um outro
