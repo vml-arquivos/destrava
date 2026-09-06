@@ -851,7 +851,17 @@ export function estadoVisualDocumento(resultado: any = {}, documento: any = {}):
   // desse valor histórico; incompatibilidade e `satisfaz_requisito=false` já
   // foram tratados acima e continuam vencendo.
   const laudoConcluidoSatisfatorio = ["concluido", "concluida", "validado", "aprovado"].includes(status)
-    && (resultado?.satisfaz_requisito === true || dadosExtraidos?.satisfaz_requisito === true || classificacao?.satisfaz_requisito === true);
+    && (
+      resultado?.satisfaz_requisito === true
+      || dadosExtraidos?.satisfaz_requisito === true
+      || classificacao?.satisfaz_requisito === true
+      // Alguns leitores especializados, como `contrato_junta`, não expõem
+      // `satisfaz_requisito`; o contrato de conclusão é o par explícito
+      // `status=concluido` + `revisao_humana_necessaria=false`.
+      || resultado?.revisao_humana_necessaria === false
+      || dadosExtraidos?.revisao_humana_necessaria === false
+      || classificacao?.revisao_humana_necessaria === false
+    );
   if (laudoConcluidoSatisfatorio) {
     return "aprovado";
   }
