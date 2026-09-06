@@ -1776,14 +1776,19 @@ function parseConsultaDocumentalEspecializada(
   } else if (tipo === 'consulta_bureau') {
     adicionais.restricoes = quantidadeRotulada(linhas, ['quantidade de restrições', 'quantidade de restricoes', 'negativações', 'negativacoes']);
     adicionais.rating = limparValor(valorAposRotulo(linhas, ['rating', 'faixa de risco', 'faixa rating']));
+    const textoConsultaNormalizado = texto
+      .replace(/d\s*a\s*ta/gi, 'data')
+      .replace(/h[oó]\s*ra/gi, 'hora');
     const pontuacaoRating = texto.match(/pontua[cç][aã]o\s+rating\s+(\d{1,4})\s+([A-Z]{1,3})/i);
     const score = pontuacaoRating?.[1] ? Number(pontuacaoRating[1]) : Number(limparValor(valorAposRotulo(linhas, ['pontuação', 'pontuacao', 'score'])) || '') || null;
     const ratingComposto = pontuacaoRating?.[2] || texto.match(/\brating\s*:?\s*([A-Z]{1,3})\b/i)?.[1] || adicionais.rating || null;
     const compacta = texto.match(/data\s+consulta\D{0,30}(20\d{6})/i)?.[1] || null;
     const dataCompacta = compacta ? `${compacta.slice(0, 4)}-${compacta.slice(4, 6)}-${compacta.slice(6, 8)}` : null;
     const dataConsultaRelatorio = parseDate(
-      texto.match(/data\s+e\s+hora\D{0,120}(\d{2}\/\d{2}\/20\d{2})/i)?.[1]
-        || texto.match(/data\s+consulta\D{0,30}(\d{2}\/\d{2}\/20\d{2})/i)?.[1]
+      norm.match(/data\s+e\s+hora\D{0,180}(\d{2}\/\d{2}\/20\d{2})/i)?.[1]
+        || norm.match(/data\s+consulta\D{0,60}(\d{2}\/\d{2}\/20\d{2})/i)?.[1]
+        || textoConsultaNormalizado.match(/data\s+e\s+hora\D{0,180}(\d{2}\/\d{2}\/20\d{2})/i)?.[1]
+        || textoConsultaNormalizado.match(/data\s+consulta\D{0,60}(\d{2}\/\d{2}\/20\d{2})/i)?.[1]
         || dataCompacta,
     );
     const situacaoCredito = texto.match(/\b(APROVADO(?:_[A-Z]+)?|ALTO_RISCO|BAIXO_RISCO|MEDIO_RISCO|M[ÉE]DIO_RISCO|RECUSADO)\b/i)?.[1]
