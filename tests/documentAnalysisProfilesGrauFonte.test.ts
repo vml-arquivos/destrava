@@ -38,6 +38,12 @@ describe("matriz temporal documental oficial", () => {
     }
   });
 
+  it("recibo PGDAS exige prova de entrega, não os campos da declaração completa", () => {
+    const perfil = obterPerfilAnaliseDocumental("recibo_pgdas");
+    expect(perfil.camposObrigatorios).toEqual(["cnpj", "competencia", "recibo_ou_protocolo"]);
+    expect(perfil.camposObrigatorios).not.toContain("receita_bruta");
+  });
+
   it("comprovante de endereço usa política de crédito configurável, não validade nacional de 60/90 dias", () => {
     const perfil = obterPerfilAnaliseDocumental("comprovante_residencia");
     expect(perfil.grauFonte).toBe("PRATICA_MERCADO");
