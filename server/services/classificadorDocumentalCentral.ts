@@ -242,8 +242,8 @@ function autorizado(tipoEsperado: string, tipoDetectado: TipoDetectadoDocumental
   // CPEND é uma certidão federal válida (positiva com efeito de negativa),
   // não um tipo incompatível com o campo CND/CPEND. Documentos PGFN podem
   // trazer no título tanto PGFN quanto CND/CPEND.
-  if (tipoEsperado === 'CND') return ['CND', 'CPEND', 'PGFN'].includes(tipoDetectado);
-  if (tipoEsperado === 'PGFN') return ['PGFN', 'CND', 'CPEND'].includes(tipoDetectado);
+  if (tipoEsperado === 'CND') return ['CND', 'CPEND'].includes(tipoDetectado);
+  if (tipoEsperado === 'PGFN') return tipoDetectado === 'PGFN';
   if (tipoEsperado === 'DOCUMENTO_IDENTIDADE') return ['RG', 'CPF', 'CNH'].includes(tipoDetectado);
   if (tipoEsperado === 'CERTIDAO') return ['CND', 'CPEND', 'CNDT', 'CND_ESTADUAL', 'CND_MUNICIPAL'].includes(tipoDetectado);
   if (tipoEsperado === 'CONTRATO_GERAL') return ['CONTRATO_GERAL', 'CONTRATO_PRESTACAO_SERVICOS', 'CONTRATO_ASSESSORIA'].includes(tipoDetectado);
