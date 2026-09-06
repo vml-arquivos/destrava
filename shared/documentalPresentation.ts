@@ -758,6 +758,7 @@ function familiaTipoVisual(value: unknown): string {
   if (tipo.includes("dasn") || tipo.includes("simei")) return "dasn_simei";
   if (tipo.includes("compartilhamento") && tipo.includes("ecac")) return "compartilhamento_ecac";
   if (tipo.includes("contrato_social") || tipo.includes("alteracao_contratual")) return "contrato_societario";
+  if (tipo.includes("foto_empresarial") || tipo.includes("foto_fachada") || tipo.includes("foto_interna") || tipo === "fachada" || tipo.includes("instalacoes")) return "evidencia_visual_empresarial";
   return tipo;
 }
 

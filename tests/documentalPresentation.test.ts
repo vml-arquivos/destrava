@@ -206,6 +206,18 @@ describe("construirSecoesAnaliseDocumento — validação objetiva", () => {
     }, { tipo_documento: "foto_fachada" })).toBe("revisao");
   });
 
+  it("aceita FOTO_EMPRESARIAL como a família visual do slot foto_fachada", () => {
+    expect(estadoVisualDocumento({
+      status: "concluido",
+      status_documental: "DADO_COMPROVADO",
+      documento_compativel: true,
+      satisfaz_requisito: true,
+      identidade_status: "IDENTIFICADO",
+      tipo_esperado: "foto_fachada",
+      tipo_detectado: "FOTO_EMPRESARIAL",
+    }, { tipo_documento: "foto_fachada" })).toBe("aprovado");
+  });
+
   it("SCR mostra data-base/instituições e não inventa score ou negativação", () => {
     const secoes = construirSecoesAnaliseDocumento({
       conclusao: "Leitura concluída.",
