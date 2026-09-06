@@ -1585,10 +1585,19 @@ function normalizarDocumentoCatalogado(extraidos: any, tipoDocumento: string): {
     : regimeLido || (situacaoSimplesLida ? `Simples Nacional (${situacaoSimplesLida})` : null);
   const brutoIncompativel = bruto.documento_compativel === false;
   const confianca = normalizarConfianca(bruto.confianca ?? bruto.nivel_confianca);
+  const extracaoParcial = bruto.extracao_parcial === true || bruto.qualidade_extracao === 'BAIXA_QUALIDADE';
+  if (extracaoParcial) {
+    alertas.push({
+      codigo: 'documento_catalogado_baixa_qualidade',
+      mensagem: 'A leitura encontrou texto parcial, mas a qualidade não foi suficiente para comprovar todos os campos automaticamente.',
+      severidade: 'alta',
+      recomendacao: 'Reprocessar com OCR disponível ou conferir o PDF integralmente antes da decisão.',
+    });
+  }
   if (confianca !== null && confianca < 0.72) {
     alertas.push({ codigo: 'documento_catalogado_baixa_confianca', mensagem: 'A leitura automática ficou abaixo do limiar de confiança.', severidade: 'media', valor_documento: confianca, recomendacao: 'Conferir o arquivo inteiro e confirmar os campos extraídos.' });
   }
-  const chavesTecnicas = new Set(['documento_compativel', 'confianca', 'nivel_confianca', 'fonte_extracao', 'mecanismo_extracao', 'tipo_detectado']);
+  const chavesTecnicas = new Set(['documento_compativel', 'confianca', 'nivel_confianca', 'fonte_extracao', 'mecanismo_extracao', 'tipo_detectado', 'extracao_parcial', 'qualidade_extracao', 'motivo_extracao', 'motivo_extracao_parcial']);
   const haDadosExtraidos = Object.entries(brutoPersistivel).some(([chave, valor]) => (
     !chavesTecnicas.has(chave)
     && valor !== null && valor !== undefined && valor !== ''
@@ -1834,6 +1843,15 @@ function normalizarDocumentoCatalogado(extraidos: any, tipoDocumento: string): {
   // não prova. Só a identidade central (ou a confirmação local especializada
   // acima, convertida para IDENTIFICADO) pode satisfazer o requisito.
   const identidadeComprovada = classificacao.identidade_status === 'IDENTIFICADO';
+  const statusDocumental = classificacao.identidade_status === 'INCOMPATIVEL' || brutoIncompativel
+    ? 'DOCUMENTO_INCOMPATIVEL'
+    : extracaoParcial
+      ? 'BAIXA_QUALIDADE'
+      : camposObrigatoriosAusentes.length > 0
+        ? 'DADOS_INSUFICIENTES'
+        : !satisfazRequisito
+          ? 'REVISAO_NECESSARIA'
+          : 'DADO_COMPROVADO';
   const dados = {
     ...brutoPersistivel,
     ...dadosRegime,
@@ -1850,6 +1868,7 @@ function normalizarDocumentoCatalogado(extraidos: any, tipoDocumento: string): {
     competencia: bruto.competencia || { inicio: bruto.competencia_inicio || null, fim: bruto.competencia_fim || null },
     validade: bruto.validade || { inicio: bruto.validade_inicio || null, fim: bruto.validade_fim || null },
     separacao_comprovado_inferido: true,
+    status_documental: statusDocumental,
     tipo_esperado: classificacao.tipo_esperado,
     tipo_detectado: classificacao.tipo_detectado,
     satisfaz_requisito: satisfazRequisito,

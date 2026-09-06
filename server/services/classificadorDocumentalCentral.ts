@@ -92,7 +92,7 @@ function detectarTipo(texto: string): { tipo: TipoDetectadoDocumental; evidencia
     push('PGFN');
     return { tipo: 'PGFN', evidencias, confianca: 0.94 };
   }
-  if (/central nacional de protestos|\bcenprot\b/i.test(n)) {
+  if (/central nacional de protestos|\bcenprot\b|\bcenprod\b|(?:consulta|pesquisa).{0,60}protest|protestos?\s+nos\s+cart[oó]rios|informa[cç][aã]o\s+sem\s+valor\s+de\s+certid[aã]o/i.test(n)) {
     push('CENPROT');
     return { tipo: 'CENPROT', evidencias, confianca: 0.95 };
   }
@@ -205,7 +205,7 @@ function tipoEsperadoCanonico(tipoEsperado: string): string {
   if (n === 'cnd' || n.includes('cnd_')) return 'CND';
   if (n.includes('cadin')) return 'CADIN';
   if (n.includes('pgfn')) return 'PGFN';
-  if (n.includes('cenprot')) return 'CENPROT';
+  if (n.includes('cenprot') || n.includes('cenprod')) return 'CENPROT';
   if (n === 'rating_bacen_cnpj' || n === 'rating_bacen_cpf' || n === 'scr_cnpj' || n === 'scr_cpf') return 'SCR';
   if (n.includes('scr')) return 'SCR';
   if (n.includes('ccs')) return 'CCS';
@@ -248,6 +248,7 @@ function autorizado(tipoEsperado: string, tipoDetectado: TipoDetectadoDocumental
   if (tipoEsperado === 'DOCUMENTO_IDENTIDADE') return ['RG', 'CPF', 'CNH'].includes(tipoDetectado);
   if (tipoEsperado === 'CERTIDAO') return ['CND', 'CPEND', 'CNDT', 'CND_ESTADUAL', 'CND_MUNICIPAL'].includes(tipoDetectado);
   if (tipoEsperado === 'CONTRATO_GERAL') return ['CONTRATO_GERAL', 'CONTRATO_PRESTACAO_SERVICOS', 'CONTRATO_ASSESSORIA'].includes(tipoDetectado);
+  if (tipoEsperado === 'CONTRATO_SOCIAL') return ['CONTRATO_SOCIAL', 'ALTERACAO_CONTRATUAL'].includes(tipoDetectado);
   return false;
 }
 
@@ -269,8 +270,14 @@ function validarEscopoIdentidade(
   if (!escopo) return identidade;
 
   const temCnpj = /\b\d{2}\.?\d{3}\.?\d{3}\/?\d{4}-?\d{2}\b/.test(texto);
+  // Alguns relatórios do SCR exibem somente a raiz do CNPJ consultado
+  // (ex.: `52.008.360`) e também trazem o CPF do operador que emitiu o
+  // relatório. A raiz é evidência empresarial parcial; não pode ser tratada
+  // como ausência de CNPJ e gerar incompatibilidade por causa do CPF do
+  // operador.
+  const temCnpjBase = /\b\d{2}\.?\d{3}\.?\d{3}\b/.test(texto);
   const temCpf = /\b\d{3}\.?\d{3}\.?\d{3}-?\d{2}\b/.test(texto);
-  if ((escopo === 'CNPJ' && !temCnpj && temCpf) || (escopo === 'CPF' && !temCpf && temCnpj)) {
+  if ((escopo === 'CNPJ' && !temCnpj && !temCnpjBase && temCpf) || (escopo === 'CPF' && !temCpf && temCnpj)) {
     evidencias.push(`identificador ${escopo === 'CNPJ' ? 'CPF' : 'CNPJ'} incompatível com o escopo esperado ${escopo}`);
     return 'INCOMPATIVEL';
   }
