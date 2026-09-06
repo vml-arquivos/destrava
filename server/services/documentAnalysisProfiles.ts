@@ -6,8 +6,8 @@ export type DocumentTemporalPolicy =
   | 'competencia_mensal'
   | 'competencia_anual'
   | 'ultimos_12_meses'
-  | 'emissao_30_dias'
-  | 'emissao_60_dias';
+  | 'snapshot_atual'
+  | 'politica_credito_configuravel';
 
 // CORREÇÃO (Rodada 33, 05/09/2026, diagnóstico cruzado de duas pesquisas
 // independentes -- "Manus AI" e GPT -- sobre a matriz documental de crédito):
@@ -115,8 +115,14 @@ const CAMPOS_POR_CATEGORIA: Record<string, { obrigatorios: string[]; adicionais:
 // para o documento em si -- o sistema já prefere reconsulta automática via a
 // API gratuita de CNPJ nesses casos, ver Rodada 19).
 const POLITICA_POR_TIPO: Record<string, { politica: DocumentTemporalPolicy; dias?: number; grauFonte: GrauFonteRegraDocumental }> = {
-  cartao_cnpj: { politica: 'emissao_30_dias', dias: 30, grauFonte: 'PRATICA_MERCADO' },
-  comprovante_residencia: { politica: 'emissao_60_dias', dias: 60, grauFonte: 'PRATICA_MERCADO' },
+  // Cadastro/consulta atual: o órgão não define vencimento de 30 dias.
+  // A data de consulta/emissão é evidência de quando o snapshot foi obtido,
+  // não uma validade legal inventada pelo sistema.
+  cartao_cnpj: { politica: 'snapshot_atual', grauFonte: 'ORGAO_OFICIAL' },
+  // Não existe prazo nacional universal de 60/90 dias para comprovante de
+  // endereço. Eventual recência é política da operação/banco e deve chegar
+  // configurada pela regra de crédito, nunca nascer como validade legal.
+  comprovante_residencia: { politica: 'politica_credito_configuravel', grauFonte: 'PRATICA_MERCADO' },
   cnd_rfb_cnpj: { politica: 'validade_expressa', grauFonte: 'ORGAO_OFICIAL' },
   cnd_rfb_cpf: { politica: 'validade_expressa', grauFonte: 'ORGAO_OFICIAL' },
   pgfn_cnpj: { politica: 'validade_expressa', grauFonte: 'ORGAO_OFICIAL' },
@@ -128,20 +134,20 @@ const POLITICA_POR_TIPO: Record<string, { politica: DocumentTemporalPolicy; dias
   certidao: { politica: 'validade_expressa', grauFonte: 'ORGAO_OFICIAL' },
   // Bureau/cadastro -- snapshot, não certidão com prazo legal (ver comentário
   // acima). CADIN citado nominalmente pelas duas pesquisas.
-  situacao_fiscal_cnpj: { politica: 'emissao_30_dias', dias: 30, grauFonte: 'PRATICA_MERCADO' },
-  situacao_fiscal_cpf: { politica: 'emissao_30_dias', dias: 30, grauFonte: 'PRATICA_MERCADO' },
-  rating_bacen_cnpj: { politica: 'emissao_30_dias', dias: 30, grauFonte: 'PRATICA_MERCADO' },
-  rating_bacen_cpf: { politica: 'emissao_30_dias', dias: 30, grauFonte: 'PRATICA_MERCADO' },
-  ccs_cnpj: { politica: 'emissao_30_dias', dias: 30, grauFonte: 'PRATICA_MERCADO' },
-  ccs_cpf: { politica: 'emissao_30_dias', dias: 30, grauFonte: 'PRATICA_MERCADO' },
-  ccf_cnpj: { politica: 'emissao_30_dias', dias: 30, grauFonte: 'PRATICA_MERCADO' },
-  ccf_cpf: { politica: 'emissao_30_dias', dias: 30, grauFonte: 'PRATICA_MERCADO' },
-  cenprot_cnpj: { politica: 'emissao_30_dias', dias: 30, grauFonte: 'PRATICA_MERCADO' },
-  cenprot_cpf: { politica: 'emissao_30_dias', dias: 30, grauFonte: 'PRATICA_MERCADO' },
-  cadin_cnpj: { politica: 'emissao_30_dias', dias: 30, grauFonte: 'PRATICA_MERCADO' },
-  cadin_cpf: { politica: 'emissao_30_dias', dias: 30, grauFonte: 'PRATICA_MERCADO' },
-  consulta_serasa_cnpj: { politica: 'emissao_30_dias', dias: 30, grauFonte: 'PRATICA_MERCADO' },
-  consulta_serasa_cpf: { politica: 'emissao_30_dias', dias: 30, grauFonte: 'PRATICA_MERCADO' },
+  situacao_fiscal_cnpj: { politica: 'snapshot_atual', grauFonte: 'ORGAO_OFICIAL' },
+  situacao_fiscal_cpf: { politica: 'snapshot_atual', grauFonte: 'ORGAO_OFICIAL' },
+  rating_bacen_cnpj: { politica: 'snapshot_atual', grauFonte: 'ORGAO_OFICIAL' },
+  rating_bacen_cpf: { politica: 'snapshot_atual', grauFonte: 'ORGAO_OFICIAL' },
+  ccs_cnpj: { politica: 'snapshot_atual', grauFonte: 'ORGAO_OFICIAL' },
+  ccs_cpf: { politica: 'snapshot_atual', grauFonte: 'ORGAO_OFICIAL' },
+  ccf_cnpj: { politica: 'snapshot_atual', grauFonte: 'ORGAO_OFICIAL' },
+  ccf_cpf: { politica: 'snapshot_atual', grauFonte: 'ORGAO_OFICIAL' },
+  cenprot_cnpj: { politica: 'snapshot_atual', grauFonte: 'ORGAO_OFICIAL' },
+  cenprot_cpf: { politica: 'snapshot_atual', grauFonte: 'ORGAO_OFICIAL' },
+  cadin_cnpj: { politica: 'snapshot_atual', grauFonte: 'ORGAO_OFICIAL' },
+  cadin_cpf: { politica: 'snapshot_atual', grauFonte: 'ORGAO_OFICIAL' },
+  consulta_serasa_cnpj: { politica: 'snapshot_atual', grauFonte: 'PRATICA_MERCADO' },
+  consulta_serasa_cpf: { politica: 'snapshot_atual', grauFonte: 'PRATICA_MERCADO' },
   // Obrigações fiscais/acessórias com prazo em lei/instrução normativa/resolução.
   pgdas: { politica: 'competencia_mensal', grauFonte: 'LEI_NORMA' },
   pgmei: { politica: 'competencia_mensal', grauFonte: 'LEI_NORMA' },
@@ -348,9 +354,11 @@ export function obterPerfilAnaliseDocumental(tipoDocumento: string): DocumentAna
 
 export function descricaoPerfilParaPrompt(tipoDocumento: string): string {
   const perfil = obterPerfilAnaliseDocumental(tipoDocumento);
-  const notaFonte = perfil.grauFonte === 'PRATICA_MERCADO'
-    ? ' Este prazo é política de crédito/prática de mercado, não obrigação legal -- não apresente como exigência da lei.'
-    : '';
+  const notaFonte = perfil.politicaTemporal === 'politica_credito_configuravel'
+    ? ' A recência é política de crédito configurável, não validade legal -- não invente prazo.'
+    : perfil.grauFonte === 'PRATICA_MERCADO'
+      ? ' Esta exigência é política de crédito/prática de mercado, não obrigação legal.'
+      : '';
   return [
     `Campos essenciais deste tipo: ${perfil.camposObrigatorios.join(', ')}.`,
     `Também extraia, quando existirem: ${perfil.camposQuandoPresentes.join(', ')}.`,
