@@ -185,8 +185,8 @@ export const SECOES_DOCUMENTAIS: SecaoDocumento[] = [
     titulo: "Documentação da Empresa",
     descricao: "Todo o restante referente à empresa: contrato social, consultas e certidões do CNPJ, fiscal/tributário, faturamento, eCAC, fotos e outros.",
     slots: [
-      slot("Atos da Junta Comercial", "atos_junta_comercial", [], { obrigatorio: true, descricao: "Primeiro documento da Etapa 2. A IA identifica todos os atos e define quais contratos/alterações devem ser anexados até comprovar 12 meses. Para MEI, a dispensa é registrada automaticamente -- o MEI é dispensado por lei do registro na Junta Comercial; o documento constitutivo dele é o CCMEI (seção Fiscal/Tributário)." }),
-      slot("Contrato social e alterações contratuais", "contrato_social", ["alteracao_contratual"], { obrigatorio: true, descricao: "Lido depois dos Atos da Junta e conferido por número do ato, data de registro, NIRE, CNPJ e sócios do QSA. Para MEI, a dispensa é registrada automaticamente -- o documento constitutivo do MEI é o CCMEI (seção Fiscal/Tributário)." }),
+      slot("Atos da Junta Comercial", "atos_junta_comercial", [], { obrigatorio: true, descricao: "Primeiro documento da Etapa 2. A IA identifica todos os atos e define quais contratos/alterações devem ser anexados até comprovar 12 meses. Para MEI, a etapa societária usa o CCMEI e a formalização simplificada integrada; não exigir contrato social como se fosse LTDA." }),
+      slot("Contrato social e alterações contratuais", "contrato_social", ["alteracao_contratual"], { obrigatorio: true, descricao: "Lido depois dos Atos da Junta e conferido por número do ato, data de registro, NIRE, CNPJ e sócios do QSA. Para MEI, usar o CCMEI e os dados de formalização; não exigir contrato social/alterações como se fosse LTDA." }),
       slot("Requerimento de Empresário / Instrumento de Inscrição", "requerimento_empresario", ["alteracao_contratual"], { descricao: "Ato registral próprio do Empresário Individual não enquadrado como MEI." }),
       slot("Estatuto e atas vigentes", "estatuto", ["ata"], { descricao: "Atos de constituição, governança e representação de S.A., cooperativa, associação ou fundação, conforme a natureza jurídica." }),
       slot("Registro no RCPJ / Cartório de Pessoas Jurídicas", "registro_cartorio_pj", [], { descricao: "Registro civil do estatuto, ato constitutivo e alterações de associação ou fundação; não substitua por ato da Junta Comercial." }),
@@ -210,7 +210,7 @@ export const SECOES_DOCUMENTAIS: SecaoDocumento[] = [
       slot("Certidão estadual de regularidade fiscal", "cnd_estadual", ["certidao_estadual"], { descricao: "Comprova regularidade fiscal estadual." }),
       slot("Certidão municipal de regularidade fiscal", "cnd_municipal", ["certidao_municipal"], { descricao: "Comprova regularidade fiscal municipal." }),
       slot("Rating (CNPJ)", "consulta_serasa_cnpj"),
-      slot("PGDAS / PGMEI", "pgdas", ["pgmei", "pgdas_d"], { descricao: "Declaração mensal de faturamento para empresa optante do Simples Nacional ou MEI. Não se aplica a empresas não optantes." }),
+      slot("PGDAS / PGMEI", "pgdas", ["pgmei", "pgdas_d"], { descricao: "PGDAS-D apura mensalmente o Simples Nacional; PGMEI gera o DAS do MEI. O faturamento mensal do MEI é comprovado em documento próprio. Não se aplica a não optantes, salvo recibos/documentos históricos." }),
       slot("CCMEI", "ccmei", [], { descricao: "Comprovação da constituição e da condição de Microempreendedor Individual." }),
       slot("DAS-MEI", "das_mei", [], { descricao: "Documento de arrecadação do MEI, quando aplicável." }),
       slot("Recibo de entrega do PGDAS / PGMEI", "recibo_pgdas", ["recibo_pgmei"], { descricao: "Recibo correspondente ao PGDAS ou PGMEI anexado." }),
@@ -616,7 +616,12 @@ function ResumoLaudoDocumento({ analise }: { analise: any }) {
     badges.push({ label: "Assinaturas na mesma modalidade", value: dados.assinaturas_mesma_modalidade ? "Sim" : "Não confirmado" });
   } else if (dados.mes_referencia !== undefined) {
     badges.push({ label: "Mês de referência", value: dados.mes_referencia || "Não identificado" });
-    badges.push({ label: "Dentro da validade (2 meses)", value: dados.comprovante_dentro_validade ? "Sim" : "Não" });
+    if (dados.politica_recencia_max_meses !== null && dados.politica_recencia_max_meses !== undefined) {
+      badges.push({
+        label: "Recência da operação",
+        value: dados.comprovante_dentro_politica_recencia ? "Atende" : "Fora da política",
+      });
+    }
     badges.push({ label: "Titular confere com o sócio", value: dados.titular_confere_com_socio ? "Sim" : "Não" });
   }
   return (
