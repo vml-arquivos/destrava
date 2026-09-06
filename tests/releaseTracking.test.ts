@@ -13,6 +13,10 @@ describe("rastreabilidade do commit publicado", () => {
     const dockerfile = read("Dockerfile");
 
     expect(dockerfile).toContain('commit="$(cat .git/HEAD)"');
+    expect(dockerfile).toContain('ARG SOURCE_COMMIT');
+    expect(dockerfile).toContain('ARG GIT_COMMIT');
+    expect(dockerfile).toContain('ARG VCS_REF');
+    expect(dockerfile).toContain('ARG GITHUB_SHA');
     // Nota (2026-08-30): a asserção usava "\\\\n" (dupla barra literal no
     // Dockerfile), mas o Dockerfile em produção sempre usou "\n" (uma barra só
     // -- escape de nova linha do printf, correto para o shell). O teste estava
@@ -29,6 +33,9 @@ describe("rastreabilidade do commit publicado", () => {
     const server = read("server/index.ts");
 
     expect(server).toContain('fs.readFileSync(path.join(__dirname, "..", "BUILD_COMMIT"), "utf8")');
+    expect(server).toContain('process.env.SOURCE_COMMIT');
+    expect(server).toContain('process.env.GIT_COMMIT');
+    expect(server).toContain('process.env.GITHUB_SHA');
     expect(server).toContain('return "unknown";');
     expect(server).not.toContain('process.env.DESTRAVA_RELEASE || "fix66-destinatarios-ranking-nexus-20260810"');
   });
