@@ -25,6 +25,15 @@ export type TipoDocumentoLocal =
   | 'livro_caixa'
   | 'efd_contribuicoes'
   | 'efd_icms_ipi'
+  | 'certidao_regularidade'
+  | 'situacao_fiscal'
+  | 'consulta_cadin'
+  | 'consulta_pgfn'
+  | 'consulta_scr'
+  | 'consulta_ccs'
+  | 'consulta_ccf'
+  | 'consulta_cenprot'
+  | 'consulta_bureau'
   | 'documento_generico';
 
 export interface ExtracaoDocumentalLocalResult {
@@ -1433,6 +1442,127 @@ function parseDocumentoGenerico(texto: string, tipoDocumentoEsperado?: string): 
   };
 }
 
+
+type TipoConsultaDocumentalEspecializada =
+  | 'certidao_regularidade'
+  | 'situacao_fiscal'
+  | 'consulta_cadin'
+  | 'consulta_pgfn'
+  | 'consulta_scr'
+  | 'consulta_ccs'
+  | 'consulta_ccf'
+  | 'consulta_cenprot'
+  | 'consulta_bureau';
+
+function valoresRotuladosMultiplos(linhas: string[], aliases: string[]): string[] {
+  const aliasesNorm = aliases.map(textoNormalizado);
+  const valores: string[] = [];
+  for (const linha of linhas) {
+    const normalizada = textoNormalizado(linha);
+    const alias = aliasesNorm.find((item) => normalizada.startsWith(`${item}:`) || normalizada.startsWith(`${item} -`));
+    if (!alias) continue;
+    const valor = linha.replace(/^[^:\-]{1,80}[:\-]\s*/, '').trim();
+    if (valor && !valores.some((item) => textoNormalizado(item) === textoNormalizado(valor))) valores.push(valor);
+  }
+  return valores;
+}
+
+function quantidadeRotulada(linhas: string[], aliases: string[]): number | null {
+  const valor = limparValor(valorAposRotulo(linhas, aliases));
+  if (!valor) return null;
+  const numero = numeroInteiroBrasileiro(valor);
+  return numero !== null && numero >= 0 ? numero : null;
+}
+
+function parseConsultaDocumentalEspecializada(
+  tipo: TipoConsultaDocumentalEspecializada,
+  texto: string,
+  tipoDocumentoEsperado?: string,
+): { dados: Record<string, any>; confianca: number } {
+  const base = parseDocumentoGenerico(texto, tipoDocumentoEsperado);
+  const linhas = linhasTexto(texto);
+  const norm = textoNormalizado(texto);
+
+  const marcadores: Record<TipoConsultaDocumentalEspecializada, RegExp> = {
+    certidao_regularidade: /certidao.{0,100}(?:debitos|regularidade)|certificado de regularidade do fgts|\bcndt\b|banco nacional de devedores trabalhistas/i,
+    situacao_fiscal: /relatorio de situacao fiscal|consulta pendencias.{0,50}situacao fiscal|diagnostico fiscal/i,
+    consulta_cadin: /\bcadin\b|cadastro informativo de creditos nao quitados/i,
+    // Exige sinal de consulta/Regularize/inscrição. Uma CND conjunta também
+    // menciona PGFN e Dívida Ativa, mas isso NÃO a transforma em consulta PGFN.
+    consulta_pgfn: /regularize|consulta.{0,80}(?:inscricoes|divida ativa)|inscricoes? em divida ativa/i,
+    consulta_scr: /relatorio de emprestimos e financiamentos|sistema de informacoes de creditos|\bscr\b/i,
+    consulta_ccs: /relatorio de contas e relacionamentos|cadastro de clientes do sistema financeiro|\bccs\b/i,
+    consulta_ccf: /relatorio de cheques sem fundos|cadastro de emitentes de cheques sem fundos|\bccf\b/i,
+    consulta_cenprot: /\bcenprot\b|central.{0,60}protest|consulta.{0,60}protest/i,
+    consulta_bureau: /\bserasa\b|experian|score.{0,60}(?:cnpj|cpf)|relatorio.{0,60}(?:score|restricoes)/i,
+  };
+
+  let compativel = marcadores[tipo].test(norm);
+  // Guarda adicional PGFN: "certidão ... dívida ativa" continua sendo CND/CPEND.
+  if (tipo === 'consulta_pgfn' && /certidao.{0,160}(?:tributos federais|divida ativa da uniao)/i.test(norm) && !/regularize|consulta.{0,80}inscricoes/i.test(norm)) {
+    compativel = false;
+  }
+
+  const adicionais: Record<string, any> = {};
+  if (tipo === 'situacao_fiscal') {
+    adicionais.pendencias = valoresRotuladosMultiplos(linhas, ['pendência', 'pendencia', 'débito', 'debito', 'omissão', 'omissao']);
+    adicionais.resultado_consulta = base.dados.resultado_consulta
+      || (/sem pendencias|nenhuma pendencia|situacao regular/i.test(norm) ? 'Sem pendências identificadas' : null);
+  } else if (tipo === 'consulta_cadin') {
+    const quantidade = quantidadeRotulada(linhas, ['quantidade de registros', 'registros cadin', 'quantidade de pendências', 'quantidade de pendencias']);
+    adicionais.registros = quantidade;
+    adicionais.resultado_consulta = base.dados.resultado_consulta
+      || (/nada consta|nao (?:ha|possui) pendencias|nenhum registro/i.test(norm) ? 'Sem registros identificados' : null);
+    adicionais.escopo_consulta = /incluidas? pela receita federal|receita federal/i.test(norm) ? 'RFB' : null;
+  } else if (tipo === 'consulta_pgfn') {
+    adicionais.inscricoes = quantidadeRotulada(linhas, ['quantidade de inscrições', 'quantidade de inscricoes', 'inscrições', 'inscricoes']);
+    adicionais.resultado_consulta = base.dados.resultado_consulta
+      || (/nada consta|nenhuma inscricao|nao possui inscricoes/i.test(norm) ? 'Sem inscrições identificadas' : null);
+  } else if (tipo === 'consulta_scr') {
+    adicionais.instituicoes = valoresRotuladosMultiplos(linhas, ['instituição', 'instituicao', 'banco', 'credor']);
+    adicionais.saldo_devedor = base.dados.saldo ?? null;
+    adicionais.limites = base.dados.limites ?? null;
+    adicionais.atrasos = quantidadeRotulada(linhas, ['operações em atraso', 'operacoes em atraso', 'dívidas vencidas', 'dividas vencidas']);
+  } else if (tipo === 'consulta_ccs') {
+    adicionais.instituicoes = valoresRotuladosMultiplos(linhas, ['instituição', 'instituicao', 'banco']);
+    adicionais.datas_relacionamento = valoresRotuladosMultiplos(linhas, ['início do relacionamento', 'inicio do relacionamento', 'fim do relacionamento']);
+  } else if (tipo === 'consulta_ccf') {
+    adicionais.ocorrencias = quantidadeRotulada(linhas, ['quantidade de ocorrências', 'quantidade de ocorrencias', 'cheques sem fundos']);
+    adicionais.resultado_consulta = base.dados.resultado_consulta
+      || (/nenhum cheque|sem ocorrencias|nada consta/i.test(norm) ? 'Sem ocorrências identificadas' : null);
+  } else if (tipo === 'consulta_cenprot') {
+    adicionais.protestos = quantidadeRotulada(linhas, ['quantidade de protestos', 'protestos']);
+    adicionais.resultado_consulta = base.dados.resultado_consulta
+      || (/nenhum protesto|sem protestos|nada consta/i.test(norm) ? 'Sem protestos identificados' : null);
+  } else if (tipo === 'consulta_bureau') {
+    adicionais.restricoes = quantidadeRotulada(linhas, ['quantidade de restrições', 'quantidade de restricoes', 'negativações', 'negativacoes']);
+    adicionais.rating = limparValor(valorAposRotulo(linhas, ['rating', 'faixa de risco', 'faixa rating']));
+    adicionais.resultado_consulta = base.dados.resultado_consulta
+      || (/sem restricoes|nada consta/i.test(norm) ? 'Sem restrições identificadas' : null);
+  }
+
+  const adicionaisValidos = Object.fromEntries(
+    Object.entries(adicionais).filter(([, valor]) => valor !== null && valor !== undefined && !(Array.isArray(valor) && valor.length === 0)),
+  );
+  const camposComprovados = { ...(base.dados.campos_comprovados || {}), ...adicionaisValidos };
+  const possuiIdentificador = Boolean(camposComprovados.cnpj || camposComprovados.cpf);
+  const possuiData = Boolean(camposComprovados.data_consulta || camposComprovados.data_emissao || camposComprovados.data_base || camposComprovados.data_validade);
+  const confianca = clamp(base.confianca + (compativel ? 0.2 : 0) + (possuiIdentificador ? 0.08 : 0) + (possuiData ? 0.05 : 0));
+
+  return {
+    dados: {
+      ...base.dados,
+      ...adicionaisValidos,
+      campos_comprovados: camposComprovados,
+      documento_compativel: compativel,
+      tipo_detectado_local: compativel ? tipo : null,
+      confianca,
+      fonte_extracao: 'local_deterministica_especializada',
+    },
+    confianca,
+  };
+}
+
 export function analisarTextoDocumentoLocal(tipo: TipoDocumentoLocal, texto: string, tipoDocumentoEsperado?: string): { dados: Record<string, any>; confianca: number } {
   if (tipo === 'cartao_cnpj') return parseCartaoCnpj(texto);
   if (tipo === 'qsa') return parseQsa(texto);
@@ -1443,6 +1573,11 @@ export function analisarTextoDocumentoLocal(tipo: TipoDocumentoLocal, texto: str
   if (tipo === 'extrato_bancario') return parseExtratoBancario(texto);
   if (tipo === 'efd_contribuicoes') return parseEfdContribuicoes(texto);
   if (tipo === 'efd_icms_ipi') return parseEfdIcmsIpi(texto);
+  if (tipo === 'certidao_regularidade' || tipo === 'situacao_fiscal' || tipo === 'consulta_cadin'
+    || tipo === 'consulta_pgfn' || tipo === 'consulta_scr' || tipo === 'consulta_ccs'
+    || tipo === 'consulta_ccf' || tipo === 'consulta_cenprot' || tipo === 'consulta_bureau') {
+    return parseConsultaDocumentalEspecializada(tipo, texto, tipoDocumentoEsperado);
+  }
   if (tipo === 'documento_generico') return parseDocumentoGenerico(texto, tipoDocumentoEsperado);
   // ECF, DCTF/DCTFWeb, DARF e Livro Caixa compartilham a detecção
   // conservadora de regime, mas preservam sua própria compatibilidade documental.
