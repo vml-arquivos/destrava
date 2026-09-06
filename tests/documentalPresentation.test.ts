@@ -380,6 +380,13 @@ describe("construirSecoesAnaliseDocumento — validação objetiva", () => {
     expect(estadoVisualDocumento({}, { analisado: false, consistente: true })).toBe("aguardando");
     expect(estadoVisualDocumento({ status: "concluido", satisfaz_requisito: true }, { consistente: true })).toBe("aprovado");
   });
+
+  it("não deixa flag administrativo antigo manter amarelo um laudo novo satisfatório", () => {
+    expect(estadoVisualDocumento(
+      { status: "concluido", satisfaz_requisito: true },
+      { analisado: true, consistente: true, exige_revisao_humana: true },
+    )).toBe("aprovado");
+  });
 });
 
 // CORREÇÃO (Rodada 34, 05/09/2026 -- print real da tela em produção: uma
