@@ -44,6 +44,14 @@ describe("matriz temporal documental oficial", () => {
     expect(perfil.camposObrigatorios).not.toContain("receita_bruta");
   });
 
+  it("compartilhamento eCAC exige autorização oficial e token, não campos ausentes no PDF", () => {
+    expect(obterPerfilAnaliseDocumental("compartilhamento_ecac").camposObrigatorios).toEqual([
+      "autorizacao",
+      "registro_blockchain",
+      "token_autorizacao",
+    ]);
+  });
+
   it("comprovante de endereço usa política de crédito configurável, não validade nacional de 60/90 dias", () => {
     const perfil = obterPerfilAnaliseDocumental("comprovante_residencia");
     expect(perfil.grauFonte).toBe("PRATICA_MERCADO");

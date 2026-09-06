@@ -333,7 +333,7 @@ registrarPerfis(['alienacao_fiduciaria'], ['devedor', 'credor', 'bem', 'registro
 registrarPerfis(['aval'], ['avalista', 'devedor', 'obrigacao_garantida'], ['cpf', 'cnpj', 'valor', 'prazo', 'assinaturas']);
 registrarPerfis(['nota_promissoria'], ['emitente', 'beneficiario', 'valor', 'data_vencimento'], ['local_pagamento', 'avalistas', 'data_emissao', 'assinaturas']);
 
-registrarPerfis(['compartilhamento_ecac'], ['cnpj', 'autorizacao', 'data_inicio'], ['data_fim', 'destinatario', 'escopo_dados', 'situacao']);
+  registrarPerfis(['compartilhamento_ecac'], ['autorizacao', 'registro_blockchain', 'token_autorizacao'], ['cnpj', 'data_inicio', 'data_fim', 'destinatario', 'escopo_dados', 'situacao']);
 registrarPerfis(['foto_fachada', 'foto_interna_1', 'foto_interna_2', 'foto_interna_3'], ['tipo_evidencia', 'qualidade_imagem'], ['data_captura', 'local_declarado', 'geolocalizacao', 'fachada', 'instalacoes', 'equipamentos']);
 registrarPerfis(['outros'], [], ['tipo_detectado', 'entidade_relacionada', 'finalidade', 'datas', 'valores', 'situacao', 'assinaturas', 'evidencias']);
 

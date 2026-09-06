@@ -94,8 +94,10 @@ function detectarTipo(texto: string): { tipo: TipoDetectadoDocumental; evidencia
   // protestos, faturamento e QSA no mesmo PDF. Os marcadores das seções
   // internas não transformam esse arquivo em CENPROT/SCR isolado: o cabeçalho
   // e o bloco de score/rating são a evidência da classe composta.
-  const relatorioCreditoConsolidado = /analise empresarial.{0,100}(?:financeira|scr)|scr\s*\+\s*laudo financeiro|score empresarial|rating bacen|motor de credito/i.test(n)
-    && /(?:score|rating|analise empresarial|laudo financeiro)/i.test(n);
+  const relatorioCreditoConsolidado = (
+    /analise empresarial.{0,140}(?:financeira|scr)|scr\s*\+\s*laudo financeiro|score empresarial|pontuacao pj|rating bacen|motor de credito|laudo financeiro completo/i.test(n)
+    && /(?:score|rating|pontuacao|analise empresarial|laudo financeiro|motor de credito)/i.test(n)
+  );
   if (relatorioCreditoConsolidado) {
     push('relatório empresarial consolidado com score/rating');
     return { tipo: 'RELATORIO_CREDITO_CONSOLIDADO', evidencias, confianca: 0.96 };
