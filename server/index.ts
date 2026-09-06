@@ -114,6 +114,11 @@ function resolveDestravaRelease(): string {
   const configured = process.env.DESTRAVA_RELEASE?.trim();
   if (configured) return configured;
 
+  for (const candidate of [process.env.SOURCE_COMMIT, process.env.GIT_COMMIT, process.env.VCS_REF, process.env.GITHUB_SHA]) {
+    const value = candidate?.trim();
+    if (value && /^[0-9a-f]{40}$/i.test(value)) return value;
+  }
+
   try {
     // Docker builder writes this from `git rev-parse HEAD`; the runtime image
     // receives only the small artifact, not the repository or its credentials.

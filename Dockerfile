@@ -31,6 +31,11 @@ RUN --mount=type=cache,id=destrava-pnpm-prod,target=/pnpm/store \
 
 FROM build-deps AS builder
 
+ARG SOURCE_COMMIT
+ARG GIT_COMMIT
+ARG VCS_REF
+ARG GITHUB_SHA
+
 COPY . .
 
 # Coolify's build context does not reliably preserve .git metadata (observed
@@ -40,8 +45,9 @@ COPY . .
 # resolveDestravaRelease), so the build must never hard-fail over this --
 # a missing/invalid stamp here is a no-op at runtime, not an outage.
 RUN set -eu; \
-    commit="unknown"; \
-    if [ -f .git/HEAD ]; then \
+    commit="${SOURCE_COMMIT:-${GIT_COMMIT:-${VCS_REF:-${GITHUB_SHA:-unknown}}}}"; \
+    if [ "${#commit}" -ne 40 ] || [ -n "$(printf '%s' "$commit" | tr -d '0123456789abcdefABCDEF')" ]; then commit="unknown"; fi; \
+    if [ "$commit" = "unknown" ] && [ -f .git/HEAD ]; then \
       commit="$(cat .git/HEAD)"; \
       case "$commit" in \
         ref:\ *) ref="${commit#ref: }"; [ -f ".git/$ref" ] && commit="$(cat ".git/$ref")" ;; \

@@ -80,7 +80,14 @@ describe('AnaliseDocumentalService.analisarDocumentoCatalogado -- campo genéric
 
   beforeEach(() => {
     vi.clearAllMocks();
-    process.env = { ...originalEnv, GEMINI_API_KEY: 'chave-de-teste', DATA_DIR: FIXTURES_DIR, UPLOAD_DIR: FIXTURES_DIR };
+    process.env = {
+      ...originalEnv,
+      GEMINI_API_KEY: 'chave-de-teste',
+      DOCUMENT_EXTERNAL_AI_FALLBACK_ENABLED: 'true',
+      GEMINI_DOCUMENT_OCR_ENABLED: 'true',
+      DATA_DIR: FIXTURES_DIR,
+      UPLOAD_DIR: FIXTURES_DIR,
+    };
   });
 
   afterEach(() => {

@@ -113,6 +113,49 @@ describe('cobertura integral da leitura automática documental', () => {
     expect(pgfnNoSlotCnd).toMatchObject({ identidade_status: 'INCOMPATIVEL', satisfaz_requisito: false });
   });
 
+  it('classifica SCR nos slots CNPJ e CPF sem misturar o escopo do identificador', () => {
+    const scrCnpj = classificarDocumentoDeterministico({
+      tipoEsperado: 'rating_bacen_cnpj',
+      texto: 'RELATÓRIO DE EMPRÉSTIMOS E FINANCIAMENTOS (SCR) CNPJ: 12.345.678/0001-90',
+      dataEmissao: '2026-08-01',
+      hoje: new Date('2026-09-05T12:00:00.000Z'),
+    });
+    const scrCpf = classificarDocumentoDeterministico({
+      tipoEsperado: 'rating_bacen_cpf',
+      texto: 'RELATÓRIO DE EMPRÉSTIMOS E FINANCIAMENTOS (SCR) CPF: 123.456.789-00',
+      dataEmissao: '2026-08-01',
+      hoje: new Date('2026-09-05T12:00:00.000Z'),
+    });
+    const cpfNoSlotCnpj = classificarDocumentoDeterministico({
+      tipoEsperado: 'rating_bacen_cnpj',
+      texto: 'RELATÓRIO DE EMPRÉSTIMOS E FINANCIAMENTOS (SCR) CPF: 123.456.789-00',
+      dataEmissao: '2026-08-01',
+      hoje: new Date('2026-09-05T12:00:00.000Z'),
+    });
+
+    expect(scrCnpj).toMatchObject({ identidade_status: 'IDENTIFICADO', satisfaz_requisito: true });
+    expect(scrCpf).toMatchObject({ identidade_status: 'IDENTIFICADO', satisfaz_requisito: true });
+    expect(cpfNoSlotCnpj).toMatchObject({ identidade_status: 'INCOMPATIVEL', satisfaz_requisito: false });
+  });
+
+  it('rejeita CND de CPF no slot CNPJ e CND de CNPJ no slot CPF', () => {
+    const cpfNoSlotCnpj = classificarDocumentoDeterministico({
+      tipoEsperado: 'cnd_rfb_cnpj',
+      texto: 'CERTIDÃO NEGATIVA DE DÉBITOS. CPF: 123.456.789-00',
+      validadeFim: '2026-12-31',
+      hoje: new Date('2026-09-05T12:00:00.000Z'),
+    });
+    const cnpjNoSlotCpf = classificarDocumentoDeterministico({
+      tipoEsperado: 'cnd_rfb_cpf',
+      texto: 'CERTIDÃO NEGATIVA DE DÉBITOS. CNPJ: 12.345.678/0001-90',
+      validadeFim: '2026-12-31',
+      hoje: new Date('2026-09-05T12:00:00.000Z'),
+    });
+
+    expect(cpfNoSlotCnpj).toMatchObject({ identidade_status: 'INCOMPATIVEL', satisfaz_requisito: false });
+    expect(cnpjNoSlotCpf).toMatchObject({ identidade_status: 'INCOMPATIVEL', satisfaz_requisito: false });
+  });
+
   it('usa o mesmo despacho especializado no upload e no reprocessamento', async () => {
     const service = new AnaliseDocumentalService({} as any, vi.fn() as any);
     const qsa = vi.spyOn(service, 'analisarQSA').mockResolvedValue({ tipo_analise: 'qsa' } as any);

@@ -206,6 +206,7 @@ function tipoEsperadoCanonico(tipoEsperado: string): string {
   if (n.includes('cadin')) return 'CADIN';
   if (n.includes('pgfn')) return 'PGFN';
   if (n.includes('cenprot')) return 'CENPROT';
+  if (n === 'rating_bacen_cnpj' || n === 'rating_bacen_cpf' || n === 'scr_cnpj' || n === 'scr_cpf') return 'SCR';
   if (n.includes('scr')) return 'SCR';
   if (n.includes('ccs')) return 'CCS';
   if (n.includes('ccf')) return 'CCF';
@@ -248,6 +249,32 @@ function autorizado(tipoEsperado: string, tipoDetectado: TipoDetectadoDocumental
   if (tipoEsperado === 'CERTIDAO') return ['CND', 'CPEND', 'CNDT', 'CND_ESTADUAL', 'CND_MUNICIPAL'].includes(tipoDetectado);
   if (tipoEsperado === 'CONTRATO_GERAL') return ['CONTRATO_GERAL', 'CONTRATO_PRESTACAO_SERVICOS', 'CONTRATO_ASSESSORIA'].includes(tipoDetectado);
   return false;
+}
+
+function escopoIdentidadeEsperado(tipoEsperadoOriginal: string): 'CNPJ' | 'CPF' | null {
+  const tipo = canonicalizeDocumentType(tipoEsperadoOriginal);
+  if (tipo === 'cpf' || tipo.endsWith('_cpf')) return 'CPF';
+  if (tipo.endsWith('_cnpj')) return 'CNPJ';
+  return null;
+}
+
+function validarEscopoIdentidade(
+  tipoEsperadoOriginal: string,
+  texto: string,
+  identidade: IdentityStatus,
+  evidencias: string[],
+): IdentityStatus {
+  if (identidade === 'INCOMPATIVEL' || identidade === 'NAO_IDENTIFICADO') return identidade;
+  const escopo = escopoIdentidadeEsperado(tipoEsperadoOriginal);
+  if (!escopo) return identidade;
+
+  const temCnpj = /\b\d{2}\.?\d{3}\.?\d{3}\/?\d{4}-?\d{2}\b/.test(texto);
+  const temCpf = /\b\d{3}\.?\d{3}\.?\d{3}-?\d{2}\b/.test(texto);
+  if ((escopo === 'CNPJ' && !temCnpj && temCpf) || (escopo === 'CPF' && !temCpf && temCnpj)) {
+    evidencias.push(`identificador ${escopo === 'CNPJ' ? 'CPF' : 'CNPJ'} incompatível com o escopo esperado ${escopo}`);
+    return 'INCOMPATIVEL';
+  }
+  return identidade;
 }
 
 function tipoTemporalDetectado(tipo: TipoDetectadoDocumental, fallback: string): string {
@@ -356,18 +383,19 @@ export function classificarDocumentoDeterministico(input: ClassificacaoDocumenta
     : autorizado(tipoEsperado, detectado.tipo)
       ? 'IDENTIFICADO'
       : 'INCOMPATIVEL';
+  const identidadeComEscopo = validarEscopoIdentidade(input.tipoEsperado, normalizar(input.texto || ''), identidade, detectado.evidencias);
   const temporalidade_status = temporalidade({
     ...input,
     tipoEsperado: detectado.tipo === 'DOCUMENTO_NAO_IDENTIFICADO'
       ? input.tipoEsperado
       : tipoTemporalDetectado(detectado.tipo, input.tipoEsperado),
   });
-  const satisfaz = identidade === 'IDENTIFICADO'
+  const satisfaz = identidadeComEscopo === 'IDENTIFICADO'
     && (temporalidade_status === 'ATUAL' || temporalidade_status === 'NAO_APLICAVEL');
   const cobertura_status: CoverageStatus = satisfaz ? 'SATISFAZ' : 'NAO_SATISFAZ';
-  const motivo = identidade === 'INCOMPATIVEL'
+  const motivo = identidadeComEscopo === 'INCOMPATIVEL'
     ? `Esperado ${tipoEsperado}; detectado ${detectado.tipo}.`
-    : identidade === 'NAO_IDENTIFICADO'
+    : identidadeComEscopo === 'NAO_IDENTIFICADO'
       ? 'Não foi possível comprovar a identidade documental pelo texto disponível.'
       : temporalidade_status === 'FUTURO'
         ? 'A data informada está no futuro e não pode ser aceita automaticamente.'
@@ -389,7 +417,7 @@ export function classificarDocumentoDeterministico(input: ClassificacaoDocumenta
     tipo_esperado: tipoEsperado,
     tipo_detectado: detectado.tipo,
     satisfaz_requisito: satisfaz,
-    identidade_status: identidade,
+    identidade_status: identidadeComEscopo,
     temporalidade_status,
     cobertura_status,
     confianca: detectado.confianca,

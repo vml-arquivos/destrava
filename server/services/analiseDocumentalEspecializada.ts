@@ -1684,9 +1684,13 @@ function normalizarDocumentoCatalogado(extraidos: any, tipoDocumento: string): {
         validade: bruto.validade || { inicio: bruto.validade_inicio || null, fim: bruto.validade_fim || null },
       });
   const haEvidenciaEstruturada = evidencias.length > 0 || haDadosExtraidos || Object.values(comprovados).some((valor) => valor !== null && valor !== undefined && String(valor).trim() !== '');
+  const fonteLocalEspecializada = typeof bruto.fonte_extracao === 'string'
+    && bruto.fonte_extracao.startsWith('local_deterministica')
+    && tipoLeitorLocalDocumentoCatalogado(tipoDocumento) !== 'documento_generico';
   const confirmacaoAssistidaConfiavel = !identidadeFlexivel
     && classificacaoBase.identidade_status === 'NAO_IDENTIFICADO'
     && bruto.documento_compativel === true
+    && fonteLocalEspecializada
     && (confianca ?? 0) >= 0.75
     && haEvidenciaEstruturada;
   const temporalidadeAceita = classificacaoBase.temporalidade_status === 'ATUAL' || classificacaoBase.temporalidade_status === 'NAO_APLICAVEL';
@@ -1826,8 +1830,10 @@ function normalizarDocumentoCatalogado(extraidos: any, tipoDocumento: string): {
     && regimeFoiComprovado
     && certidaoFoiComprovada
     && camposObrigatoriosAusentes.length === 0;
-  const identidadeComprovada = classificacao.identidade_status === 'IDENTIFICADO'
-    || (classificacao.identidade_status === 'NAO_IDENTIFICADO' && bruto.documento_compativel === true);
+  // `documento_compativel` vindo de IA ou de parser desconhecido é uma alegação,
+  // não prova. Só a identidade central (ou a confirmação local especializada
+  // acima, convertida para IDENTIFICADO) pode satisfazer o requisito.
+  const identidadeComprovada = classificacao.identidade_status === 'IDENTIFICADO';
   const dados = {
     ...brutoPersistivel,
     ...dadosRegime,

@@ -412,6 +412,7 @@ describe('AnaliseDocumentalService com dependências isoladas', () => {
       const db = criarDbMock(empresa, [], { tipo_documento: 'efd_contribuicoes' });
       const extrator = async () => ({
         documento_compativel: true,
+        texto: 'EFD-CONTRIBUIÇÕES',
         campos_extraidos: { competencia: '2026-06' },
         confianca: 0.9,
       });
@@ -465,6 +466,7 @@ describe('AnaliseDocumentalService com dependências isoladas', () => {
       const db = criarDbMock(empresa, [], { tipo_documento: 'cadin_cnpj' });
       const extrator = async () => ({
         documento_compativel: true,
+        texto: 'CADIN — Cadastro Informativo de Créditos não Quitados do Setor Público Federal. CNPJ: 49.366.887/0001-25',
         situacao_certidao: 'positiva',
         campos_extraidos: { situacao: 'INCLUÍDO PELA RFB EM 23/11/2025' },
         confianca: 0.9,
@@ -528,6 +530,22 @@ describe('AnaliseDocumentalService com dependências isoladas', () => {
 
       expect(resultado.dados_extraidos.situacao_certidao).toBeNull();
       expect(resultado.alertas.some((a) => a.codigo === 'certidao_situacao_nao_identificada')).toBe(true);
+    });
+
+    it('não promove documento_compativel=true da IA a identidade comprovada sem evidência textual do tipo', async () => {
+      const db = criarDbMock(empresa, [], { tipo_documento: 'cadin_cnpj' });
+      const service = new AnaliseDocumentalService(db, async () => ({
+        documento_compativel: true,
+        situacao_certidao: 'negativa',
+        confianca: 0.98,
+      }));
+
+      const resultado = await service.analisarDocumentoCatalogado('empresa-1', 'doc-1', 'cadin_cnpj');
+
+      expect(resultado.dados_extraidos.identidade_status).toBe('NAO_IDENTIFICADO');
+      expect(resultado.dados_extraidos.documento_compativel).toBe(false);
+      expect(resultado.dados_extraidos.satisfaz_requisito).toBe(false);
+      expect(resultado.alertas.some((a) => a.codigo === 'documento_catalogado_tipo_nao_identificado')).toBe(true);
     });
 
     it('documentos fora da categoria cnd_cpend (ex.: ECF) nunca recebem o campo situacao_certidao -- sem regressão', async () => {
