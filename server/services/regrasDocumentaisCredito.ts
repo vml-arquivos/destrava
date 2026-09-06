@@ -1,13 +1,7 @@
 import { normalizarBasico, onlyDigits, parseDate } from '../utils/helpers';
-// CORREÇÃO (Rodada 33): o prazo de 60 dias do comprovante de residência
-// estava duplicado, como número mágico independente, aqui e em
-// `documentAnalysisProfiles.ts` -- com risco real de um dia divergirem sem
-// ninguém perceber. `documentAnalysisProfiles.ts` já é a fonte única de
-// `grauFonte`/política temporal por tipo de documento (ver diagnóstico da
-// Rodada 33), então passa a ser também a fonte única deste número; o literal
-// `60` abaixo (`VALIDADE_DIAS_COMPROVANTE_RESIDENCIA_FALLBACK`) fica só como
-// piso de segurança caso o perfil não devolva um valor, nunca como valor
-// normalmente usado.
+// A temporalidade legal/operacional de cada documento vem do perfil central.
+// Para comprovante de endereço não existe validade nacional fixa: eventual
+// limite de recência é política de crédito explícita, nunca número mágico.
 import { obterPerfilAnaliseDocumental } from './documentAnalysisProfiles';
 
 export type AlertaRegraDocumental = {
@@ -147,6 +141,7 @@ export function validarComprovanteEnderecoExtraido(
   dados: any,
   socioAlvoId: string | null = null,
   referencia: Date = new Date(),
+  politicaCredito: { maxMesesRecencia?: number | null } = {},
 ): { dados: Record<string, any>; alertas: AlertaRegraDocumental[] } {
   const alertas: AlertaRegraDocumental[] = [];
   if (dados?.documento_compativel === false) {
@@ -154,10 +149,17 @@ export function validarComprovanteEnderecoExtraido(
   }
   const mesReferencia = normalizarMesReferencia(dados?.mes_referencia || dados?.data_emissao || dados?.data_vencimento);
   const diferenca = mesReferencia ? diferencaMeses(referencia, mesReferencia) : null;
+  const maxMesesRecencia = Number.isFinite(Number(politicaCredito.maxMesesRecencia))
+    ? Math.max(0, Number(politicaCredito.maxMesesRecencia))
+    : null;
   if (!mesReferencia) {
-    alertas.push({ codigo: 'endereco_mes_referencia_nao_identificado', campo: 'mes_referencia', mensagem: 'O mês de referência do comprovante de endereço não foi identificado.', severidade: 'alta' });
-  } else if (diferenca === null || diferenca < 0 || diferenca > 2) {
-    alertas.push({ codigo: 'endereco_fora_validade_dois_meses', campo: 'mes_referencia', mensagem: 'O comprovante de endereço está fora da validade máxima de dois meses em relação ao mês atual.', severidade: 'alta', valor_documento: mesReferencia, recomendacao: 'Solicitar comprovante do mês atual ou de até dois meses anteriores.' });
+    // A data continua sendo um campo importante de evidência, mas sua ausência
+    // não cria "validade legal" inexistente. A revisão é de leitura/identidade.
+    alertas.push({ codigo: 'endereco_mes_referencia_nao_identificado', campo: 'mes_referencia', mensagem: 'O mês de referência do comprovante de endereço não foi identificado.', severidade: 'media', recomendacao: 'Confirmar a data do comprovante se a política da operação exigir recência.' });
+  } else if (diferenca !== null && diferenca < 0) {
+    alertas.push({ codigo: 'endereco_data_futura', campo: 'mes_referencia', mensagem: 'O comprovante de endereço possui referência futura.', severidade: 'alta', valor_documento: mesReferencia, recomendacao: 'Conferir a data do documento.' });
+  } else if (maxMesesRecencia !== null && (diferenca === null || diferenca > maxMesesRecencia)) {
+    alertas.push({ codigo: 'endereco_fora_politica_recencia', campo: 'mes_referencia', mensagem: `O comprovante está fora da política configurada de recência (máximo de ${maxMesesRecencia} mês(es)).`, severidade: 'alta', valor_documento: mesReferencia, recomendacao: 'Solicitar comprovante compatível com a política de crédito desta operação.' });
   }
 
   const sociosAtivos = (Array.isArray(socios) ? socios : []).filter((socio) => socio?.ativo !== false);
@@ -181,7 +183,15 @@ export function validarComprovanteEnderecoExtraido(
       socio_alvo_nome: socioAlvo?.nome || null,
       titular_confere_com_socio: titularConfere,
       exige_justificativa_titular: !!titular && !titularConfere,
-      comprovante_dentro_validade: diferenca !== null && diferenca >= 0 && diferenca <= 2,
+      politica_recencia_max_meses: maxMesesRecencia,
+      comprovante_dentro_politica_recencia: maxMesesRecencia === null
+        ? null
+        : diferenca !== null && diferenca >= 0 && diferenca <= maxMesesRecencia,
+      // Alias legado mantido apenas para compatibilidade de payload; null
+      // significa "nenhuma validade fixa configurada", nunca "inválido".
+      comprovante_dentro_validade: maxMesesRecencia === null
+        ? null
+        : diferenca !== null && diferenca >= 0 && diferenca <= maxMesesRecencia,
     },
     alertas,
   };
@@ -300,20 +310,11 @@ const FALLBACK_REGRAS_DOCUMENTAIS: RegraDocumentalCredito[] = [
   {
     codigo: 'socio_documento_id', tipo_documento: 'documento_socio', nome_amigavel: 'Documento de identificação do sócio', entidade_tipo: 'socio', escopo: 'socio', obrigatorio: true, permite_multiplos: true, condicao: { depois_etapa: 2 }, tipo_exigencia: 'obrigacao_legal', bloqueia_etapa: 3, versao: 'fallback-2026.08.29', ativo: true, fonte: 'matriz_estrategica_2026',
   },
-  // CORREÇÃO (Rodada 33, 05/09/2026, diagnóstico cruzado de duas pesquisas
-  // independentes -- "Manus AI" e GPT -- sobre a matriz documental de
-  // crédito): as duas pesquisas concluem que o prazo de validade do
-  // comprovante de residência (60/90 dias) "é prática, não regra legal
-  // nacional encontrada" -- ou seja, é política de crédito, não obrigação
-  // legal. Esta regra estava rotulada `tipo_exigencia: 'obrigacao_legal'`,
-  // o oposto do que as pesquisas confirmam; corrigido para
-  // `'politica_bancaria'`. `validade_dias: 60` é mantido (o número em si não
-  // está errado como política operacional -- só o rótulo de que tipo de
-  // exigência ele representa estava). `tipo_exigencia` é hoje só um campo de
-  // apresentação (nenhum código decide fluxo por `=== 'obrigacao_legal'`),
-  // então esta correção não muda `aplicabilidade`/`status`/bloqueio de etapa.
+  // Comprovante de endereço é exigência de política de crédito. Não há
+  // validade nacional de 60/90 dias; por isso o fallback não impõe prazo.
+  // Se uma linha/banco exigir recência, ela deve chegar em condicao/política.
   {
-    codigo: 'socio_comprovante_residencia', tipo_documento: 'comprovante_residencia', nome_amigavel: 'Comprovante de residência do sócio', entidade_tipo: 'socio', escopo: 'socio', obrigatorio: true, permite_multiplos: false, validade_dias: obterPerfilAnaliseDocumental('comprovante_residencia').validadePadraoDias ?? 60, condicao: { depois_etapa: 2 }, tipo_exigencia: 'politica_bancaria', bloqueia_etapa: 3, versao: 'fallback-2026.08.29', ativo: true, fonte: 'matriz_estrategica_2026',
+    codigo: 'socio_comprovante_residencia', tipo_documento: 'comprovante_residencia', nome_amigavel: 'Comprovante de residência do sócio', entidade_tipo: 'socio', escopo: 'socio', obrigatorio: true, permite_multiplos: false, validade_dias: null, condicao: { depois_etapa: 2 }, tipo_exigencia: 'politica_bancaria', bloqueia_etapa: 3, versao: 'fallback-2026.09.05', ativo: true, fonte: 'matriz_documental_oficial_2026',
   },
 ];
 
@@ -383,16 +384,27 @@ export type QueryableRules = { query: (text: string, values?: any[]) => Promise<
 const cacheRegrasDocumentais = new Map<string, { expiresAt: number; regras: RegraDocumentalCredito[] }>();
 
 function normalizarRegraBanco(row: any): RegraDocumentalCredito {
+  const tipoDocumento = String(row.tipo_documento || '');
+  const perfilTemporal = obterPerfilAnaliseDocumental(tipoDocumento);
+  // Bancos existentes podem conter 30/60/90 dias gravados por migrations
+  // históricas. Para tipos que a matriz oficial classifica como snapshot ou
+  // política configurável, esse número legado não pode ser convertido em
+  // "vencimento" automaticamente. Mantemos a linha do banco, mas neutralizamos
+  // somente o prazo fixo sem base normativa no runtime.
+  const validadeBanco = row.validade_dias == null ? null : Number(row.validade_dias);
+  const validadeNormalizada = ['snapshot_atual', 'politica_credito_configuravel'].includes(perfilTemporal.politicaTemporal)
+    ? null
+    : validadeBanco;
   return {
     codigo: String(row.codigo || ''),
-    tipo_documento: String(row.tipo_documento || ''),
+    tipo_documento: tipoDocumento,
     nome_amigavel: String(row.nome_amigavel || row.tipo_documento || 'Documento'),
     categoria: row.categoria || null,
     entidade_tipo: String(row.entidade_tipo || 'empresa'),
     escopo: String(row.escopo || 'empresa'),
     obrigatorio: row.obrigatorio === true,
     permite_multiplos: row.permite_multiplos === true,
-    validade_dias: row.validade_dias == null ? null : Number(row.validade_dias),
+    validade_dias: validadeNormalizada,
     condicao: row.condicao && typeof row.condicao === 'object' ? row.condicao : {},
     descricao: row.descricao || null,
     tipo_exigencia: row.tipo_exigencia || null,
