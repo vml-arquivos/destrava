@@ -150,26 +150,122 @@ describe("construirSecoesAnaliseDocumento — validação objetiva", () => {
     expect(serializado).not.toContain("texto que não deve poluir");
   });
 
-  it("Consulta de crédito mostra resultado objetivo e não reproduz a consulta", () => {
+  it("Serasa mostra restrições/score sem misturar semântica de SCR, CCS ou CCF", () => {
     const secoes = construirSecoesAnaliseDocumento({
       conclusao: "Leitura concluída.",
-      tipo_documento: "serasa",
+      tipo_documento: "consulta_serasa_cnpj",
       status: "concluido",
       satisfaz_requisito: true,
       dados_extraidos: {
-        possui_negativacao: false,
-        quantidade_negativacoes: 0,
+        cnpj: "12.345.678/0001-90",
+        resultado_consulta: "Sem restrições",
+        restricoes: [],
         score: 812,
         data_consulta: "2026-09-05",
         texto_integral_consulta: "conteúdo extenso da consulta",
       },
-    }, { tipo_documento: "serasa", analisado: true, consistente: true });
+    }, { tipo_documento: "consulta_serasa_cnpj", analisado: true, consistente: true });
 
     const serializado = JSON.stringify(secoes);
-    expect(serializado).toContain("Sem negativação identificada");
+    expect(serializado).toContain("Sem restrições");
     expect(serializado).toContain("812");
     expect(serializado).toContain("2026-09-05");
+    expect(serializado).not.toContain("Instituições");
+    expect(serializado).not.toContain("Cheques sem fundos");
     expect(serializado).not.toContain("conteúdo extenso da consulta");
+  });
+
+  it("SCR mostra data-base/instituições e não inventa score ou negativação", () => {
+    const secoes = construirSecoesAnaliseDocumento({
+      conclusao: "Leitura concluída.",
+      tipo_documento: "rating_bacen_cnpj",
+      status: "concluido",
+      satisfaz_requisito: true,
+      dados_extraidos: {
+        cnpj: "12.345.678/0001-90",
+        data_base: "2026-07",
+        instituicoes: [{ nome: "Banco A" }, { nome: "Banco B" }],
+        atrasos: [],
+        score: 999,
+      },
+    }, { tipo_documento: "rating_bacen_cnpj", analisado: true, consistente: true });
+
+    const serializado = JSON.stringify(secoes);
+    expect(serializado).toContain("Data-base");
+    expect(serializado).toContain("2026-07");
+    expect(serializado).toContain("Instituições");
+    expect(serializado).toContain("SCR identificado e conferido");
+    expect(serializado).not.toContain("Rating/Score");
+    expect(serializado).not.toContain("999");
+  });
+
+  it("CCS mostra relacionamentos sem saldo, score ou movimentações", () => {
+    const secoes = construirSecoesAnaliseDocumento({
+      conclusao: "Leitura concluída.",
+      tipo_documento: "ccs_cnpj",
+      status: "concluido",
+      satisfaz_requisito: true,
+      dados_extraidos: {
+        cnpj: "12.345.678/0001-90",
+        instituicoes: ["Banco A", "Banco B"],
+        datas_relacionamento: ["2020-01-01", "2024-05-01"],
+        data_consulta: "2026-09-05",
+        saldo: 123456,
+        score: 700,
+      },
+    }, { tipo_documento: "ccs_cnpj", analisado: true, consistente: true });
+
+    const serializado = JSON.stringify(secoes);
+    expect(serializado).toContain("Relacionamentos");
+    expect(serializado).toContain("CCS identificado e conferido");
+    expect(serializado).not.toContain("123456");
+    expect(serializado).not.toContain("700");
+    expect(serializado).not.toContain("Rating/Score");
+  });
+
+  it("CCF mostra quantidade de cheques sem fundos e não score", () => {
+    const secoes = construirSecoesAnaliseDocumento({
+      conclusao: "Leitura concluída.",
+      tipo_documento: "ccf_cnpj",
+      status: "concluido",
+      satisfaz_requisito: true,
+      dados_extraidos: {
+        cnpj: "12.345.678/0001-90",
+        resultado_consulta: "Sem ocorrências",
+        ocorrencias: [],
+        data_consulta: "2026-09-05",
+        score: 500,
+      },
+    }, { tipo_documento: "ccf_cnpj", analisado: true, consistente: true });
+
+    const serializado = JSON.stringify(secoes);
+    expect(serializado).toContain("Cheques sem fundos");
+    expect(serializado).toContain("Sem ocorrências");
+    expect(serializado).not.toContain("Rating/Score");
+    expect(serializado).not.toContain("500");
+  });
+
+  it("CADIN é snapshot de registros e não exibe validade inventada", () => {
+    const secoes = construirSecoesAnaliseDocumento({
+      conclusao: "Leitura concluída.",
+      tipo_documento: "cadin_cnpj",
+      status: "concluido",
+      satisfaz_requisito: true,
+      dados_extraidos: {
+        cnpj: "12.345.678/0001-90",
+        resultado_consulta: "Nada consta",
+        pendencias: [],
+        data_consulta: "2026-09-05",
+        data_validade: "2026-10-05",
+      },
+    }, { tipo_documento: "cadin_cnpj", analisado: true, consistente: true });
+
+    const serializado = JSON.stringify(secoes);
+    expect(serializado).toContain("Registros CADIN");
+    expect(serializado).toContain("Nada consta");
+    expect(serializado).toContain("2026-09-05");
+    expect(serializado).not.toContain("Validade");
+    expect(serializado).not.toContain("2026-10-05");
   });
 
   it("Certidão genérica mostra só regularidade, validade e vínculo básico", () => {

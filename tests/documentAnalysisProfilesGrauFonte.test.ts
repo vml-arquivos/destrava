@@ -1,32 +1,30 @@
 import { describe, expect, it } from "vitest";
-import { obterPerfilAnaliseDocumental } from "../server/services/documentAnalysisProfiles";
+import { obterPerfilAnaliseDocumental, descricaoPerfilParaPrompt } from "../server/services/documentAnalysisProfiles";
 
-// CORREÇÃO (Rodada 33, 05/09/2026, diagnóstico cruzado de duas pesquisas
-// independentes -- "Manus AI" e GPT -- sobre a matriz documental de crédito):
-// as duas pesquisas descrevem Cartão CNPJ, CADIN, SCR/rating Bacen, CCS, CCF,
-// Cenprot e Serasa como snapshot/consulta de cadastro ou bureau, SEM prazo de
-// validade com fonte normativa (CADIN citado nominalmente pelas duas como não
-// equivalente a uma CND federal) -- diferente das certidões com prazo
-// definido em serviço oficial (CND/PGFN, CRF/FGTS, CNDT, estaduais/municipais)
-// e das obrigações fiscais com prazo em lei (PGDAS-D, ECF, ECD, DEFIS etc.).
-// Este teste prova que a nova classificação `grauFonte` reflete essa
-// distinção sem alterar nenhum resultado de classificação temporal já
-// existente (politicaTemporal/validadePadraoDias continuam idênticos).
-describe("obterPerfilAnaliseDocumental -- grauFonte (Rodada 33)", () => {
-  it("bureau/cadastro (snapshot sem fonte normativa de prazo) é classificado como PRATICA_MERCADO, mantendo a política temporal já existente", () => {
+describe("matriz temporal documental oficial", () => {
+  it("cadastros e consultas públicas são snapshots, sem vencimento fixo inventado", () => {
     for (const tipo of [
-      "cartao_cnpj", "cadin_cnpj", "cadin_cpf", "rating_bacen_cnpj", "ccs_cnpj",
-      "ccf_cnpj", "cenprot_cnpj", "consulta_serasa_cnpj", "situacao_fiscal_cnpj",
+      "cartao_cnpj", "cadin_cnpj", "cadin_cpf", "pgfn_cnpj", "pgfn_cpf",
+      "rating_bacen_cnpj", "ccs_cnpj", "ccf_cnpj", "cenprot_cnpj", "situacao_fiscal_cnpj",
     ]) {
       const perfil = obterPerfilAnaliseDocumental(tipo);
-      expect(perfil.grauFonte).toBe("PRATICA_MERCADO");
-      expect(perfil.politicaTemporal).toBe("emissao_30_dias");
-      expect(perfil.validadePadraoDias).toBe(30);
+      expect(perfil.grauFonte).toBe("ORGAO_OFICIAL");
+      expect(perfil.politicaTemporal).toBe("snapshot_atual");
+      expect(perfil.validadePadraoDias).toBeNull();
     }
   });
 
-  it("certidões com validade definida por serviço oficial continuam ORGAO_OFICIAL, sem prazo fixo inventado", () => {
-    for (const tipo of ["cnd_rfb_cnpj", "pgfn_cnpj", "crf_fgts", "cndt", "cnd_estadual", "cnd_municipal"]) {
+  it("Serasa é snapshot de bureau privado/prática de crédito, sem validade legal fixa", () => {
+    for (const tipo of ["consulta_serasa_cnpj", "consulta_serasa_cpf"]) {
+      const perfil = obterPerfilAnaliseDocumental(tipo);
+      expect(perfil.grauFonte).toBe("PRATICA_MERCADO");
+      expect(perfil.politicaTemporal).toBe("snapshot_atual");
+      expect(perfil.validadePadraoDias).toBeNull();
+    }
+  });
+
+  it("certidões com validade definida pelo emissor continuam com validade expressa", () => {
+    for (const tipo of ["cnd_rfb_cnpj", "crf_fgts", "cndt", "cnd_estadual", "cnd_municipal"]) {
       const perfil = obterPerfilAnaliseDocumental(tipo);
       expect(perfil.grauFonte).toBe("ORGAO_OFICIAL");
       expect(perfil.politicaTemporal).toBe("validade_expressa");
@@ -34,28 +32,28 @@ describe("obterPerfilAnaliseDocumental -- grauFonte (Rodada 33)", () => {
     }
   });
 
-  it("obrigações fiscais por competência são LEI_NORMA", () => {
+  it("obrigações fiscais por competência continuam LEI_NORMA", () => {
     for (const tipo of ["pgdas", "dctf", "ecf", "ecd", "defis", "dasn_simei", "efd_contribuicoes"]) {
       expect(obterPerfilAnaliseDocumental(tipo).grauFonte).toBe("LEI_NORMA");
     }
   });
 
-  it("comprovante de residência é PRATICA_MERCADO (prazo de 60 dias é política, não lei -- ver diagnóstico da Rodada 33)", () => {
+  it("comprovante de endereço usa política de crédito configurável, não validade nacional de 60/90 dias", () => {
     const perfil = obterPerfilAnaliseDocumental("comprovante_residencia");
     expect(perfil.grauFonte).toBe("PRATICA_MERCADO");
-    expect(perfil.politicaTemporal).toBe("emissao_60_dias");
-    expect(perfil.validadePadraoDias).toBe(60);
+    expect(perfil.politicaTemporal).toBe("politica_credito_configuravel");
+    expect(perfil.validadePadraoDias).toBeNull();
+    expect(descricaoPerfilParaPrompt("comprovante_residencia")).toMatch(/recência é política de crédito configurável/i);
   });
 
-  it("tipo fora da tabela POLITICA_POR_TIPO (perfil genérico por categoria) devolve grauFonte nulo, sem inventar classificação", () => {
+  it("tipo desconhecido continua sem inventar política temporal", () => {
     const perfil = obterPerfilAnaliseDocumental("tipo_documento_totalmente_desconhecido_xyz");
     expect(perfil.grauFonte).toBeNull();
     expect(perfil.politicaTemporal).toBe("sem_validade_formal");
   });
 
-  it("descricaoPerfilParaPrompt avisa explicitamente quando o prazo é prática de mercado, para a IA nunca apresentar como obrigação legal", async () => {
-    const { descricaoPerfilParaPrompt } = await import("../server/services/documentAnalysisProfiles");
-    expect(descricaoPerfilParaPrompt("cadin_cnpj")).toMatch(/política de crédito\/prática de mercado, não obrigação legal/);
-    expect(descricaoPerfilParaPrompt("ecf")).not.toMatch(/política de crédito\/prática de mercado/);
+  it("snapshot público não recebe mensagem de prazo de prática de mercado", () => {
+    expect(descricaoPerfilParaPrompt("cadin_cnpj")).not.toMatch(/prazo.*30 dias/i);
+    expect(descricaoPerfilParaPrompt("cartao_cnpj")).not.toMatch(/prazo.*30 dias/i);
   });
 });

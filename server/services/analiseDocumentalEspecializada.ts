@@ -38,7 +38,11 @@ const { Pool } = pkg;
 // `extrairHibrido` para decidir quando um "false" da leitura local pode ser
 // usado diretamente, sem esperar confirmação da IA (ver comentário no local
 // de uso).
-const TIPOS_COMPROVANTE_REGIME_DETERMINISTICO = new Set<TipoDocumentoLocal>(['ecf', 'pgdas_d', 'dctf_mit', 'darf', 'ecd', 'livro_caixa']);
+const TIPOS_LEITURA_LOCAL_DETERMINISTICA = new Set<TipoDocumentoLocal>([
+  'ecf', 'pgdas_d', 'dctf_mit', 'darf', 'ecd', 'livro_caixa',
+  'certidao_regularidade', 'situacao_fiscal', 'consulta_cadin', 'consulta_pgfn',
+  'consulta_scr', 'consulta_ccs', 'consulta_ccf', 'consulta_cenprot', 'consulta_bureau',
+]);
 
 const TIPOS_SOCIETARIOS_COM_LEITOR_LOCAL = new Set([
   'contrato_social', 'alteracao_contratual', 'requerimento_empresario',
@@ -63,6 +67,15 @@ export function tipoLeitorLocalDocumentoCatalogado(tipoDocumento: string): TipoD
   if (tipoDocumento === 'livro_caixa') return 'livro_caixa';
   if (tipoCanonico === 'efd_contribuicoes') return 'efd_contribuicoes';
   if (tipoCanonico === 'efd_icms_ipi') return 'efd_icms_ipi';
+  if (['cnd_rfb_cnpj', 'cnd_rfb_cpf', 'crf_fgts', 'cndt', 'cnd_estadual', 'cnd_municipal'].includes(tipoCanonico)) return 'certidao_regularidade';
+  if (['situacao_fiscal_cnpj', 'situacao_fiscal_cpf'].includes(tipoCanonico)) return 'situacao_fiscal';
+  if (['cadin_cnpj', 'cadin_cpf'].includes(tipoCanonico)) return 'consulta_cadin';
+  if (['pgfn_cnpj', 'pgfn_cpf'].includes(tipoCanonico)) return 'consulta_pgfn';
+  if (['rating_bacen_cnpj', 'rating_bacen_cpf', 'scr_cnpj', 'scr_cpf'].includes(tipoCanonico)) return 'consulta_scr';
+  if (['ccs_cnpj', 'ccs_cpf'].includes(tipoCanonico)) return 'consulta_ccs';
+  if (['ccf_cnpj', 'ccf_cpf'].includes(tipoCanonico)) return 'consulta_ccf';
+  if (['cenprot_cnpj', 'cenprot_cpf'].includes(tipoCanonico)) return 'consulta_cenprot';
+  if (['consulta_serasa_cnpj', 'consulta_serasa_cpf', 'serasa_cnpj', 'serasa_cpf'].includes(tipoCanonico)) return 'consulta_bureau';
   if (TIPOS_SOCIETARIOS_COM_LEITOR_LOCAL.has(tipoCanonico)) return 'contrato_social_alteracao';
   return 'documento_generico';
 }
@@ -2051,7 +2064,7 @@ export class AnaliseDocumentalService {
     try {
       local = await extrairDocumentoLocal(resolvedPath, mimeType, tipo, tipoDocumentoEsperado);
       // CORREÇÃO (2026-08-31, bug real reportado em produção 3 vezes seguidas
-      // para o mesmo caso -- ver comentário em TIPOS_COMPROVANTE_REGIME_DETERMINISTICO):
+      // para o mesmo caso -- ver comentário em TIPOS_LEITURA_LOCAL_DETERMINISTICA):
       // a condição anterior só usava o resultado local diretamente quando ele
       // NÃO apontasse incompatibilidade -- ou seja, exatamente quando o
       // classificador determinístico mais precisava ser ouvido (encontrou um
@@ -2066,7 +2079,7 @@ export class AnaliseDocumentalService {
       // `documento_compativel` vem de heurísticas mais aproximadas, o
       // comportamento de pedir a segunda opinião da IA continua idêntico ao de
       // antes desta correção.
-      const classificacaoLocalEDeterministica = TIPOS_COMPROVANTE_REGIME_DETERMINISTICO.has(tipo);
+      const classificacaoLocalEDeterministica = TIPOS_LEITURA_LOCAL_DETERMINISTICA.has(tipo);
       const confiavelParaUsoDireto = local.legivel && local.confianca >= threshold
         && (classificacaoLocalEDeterministica || local.dados?.documento_compativel !== false);
       if (confiavelParaUsoDireto) {

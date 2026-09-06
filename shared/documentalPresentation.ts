@@ -445,6 +445,16 @@ function adicionarCampoObjetivo(campos: DocumentoAnaliseCampo[], label: string, 
   campos.push({ label, valor: formatado });
 }
 
+function adicionarIdentificadorObjetivo(campos: DocumentoAnaliseCampo[], resultado: any) {
+  const cnpj = primeiroValor(resultado, ['cnpj'], ['CNPJ']);
+  if (cnpj !== null && cnpj !== undefined && cnpj !== '') {
+    adicionarCampoObjetivo(campos, 'CNPJ', cnpj);
+    return;
+  }
+  const cpf = primeiroValor(resultado, ['cpf'], ['CPF']);
+  if (cpf !== null && cpf !== undefined && cpf !== '') adicionarCampoObjetivo(campos, 'CPF', cpf);
+}
+
 function statusObjetivo(resultado: any, documento: any): string {
   const estado = estadoVisualDocumento(resultado, documento);
   if (estado === 'aprovado') return 'Confirmado';
@@ -527,24 +537,90 @@ function camposValidacaoObjetiva(resultado: any, documento: any, socios: any[] =
     return campos.slice(0, 4);
   }
 
-  if (/serasa|rating|scr|ccs|ccf|cenprot|protest|negativ/.test(tipo)) {
-    const negativacoesBrutas = primeiroValor(resultado, ['quantidade_negativacoes', 'negativacoes', 'total_negativacoes'], ['Negativações', 'Quantidade de negativações']);
-    const negativacoes = Array.isArray(negativacoesBrutas) ? negativacoesBrutas.length : negativacoesBrutas;
-    const possuiNegativacao = primeiroValor(resultado, ['possui_negativacao', 'tem_negativacao'], ['Possui negativação']);
-    const quantidade = Number(negativacoes);
-    const semNegativacao = possuiNegativacao === false || (Number.isFinite(quantidade) && quantidade === 0);
-    const comNegativacao = possuiNegativacao === true || (Number.isFinite(quantidade) && quantidade > 0);
-    adicionarCampoObjetivo(campos, 'Resultado', semNegativacao
-      ? 'Sem negativação identificada'
-      : comNegativacao ? 'Com negativação identificada' : primeiroValor(resultado, ['resultado', 'situacao', 'status_consulta'], ['Resultado', 'Situação']));
-    adicionarCampoObjetivo(campos, 'Negativações', negativacoes);
-    adicionarCampoObjetivo(campos, 'Rating/Score', primeiroValor(resultado, ['rating', 'score', 'faixa_rating'], ['Rating', 'Score']));
-    adicionarCampoObjetivo(campos, 'Data da consulta', primeiroValor(resultado, ['data_consulta', 'data_emissao'], ['Data da consulta', 'Data de emissão']));
-    return campos.slice(0, 4);
+  if (/rating_bacen|(^|_)scr($|_)/.test(tipo)) {
+    const instituicoes = primeiroValor(resultado, ['instituicoes'], ['Instituições']);
+    const atrasos = primeiroValor(resultado, ['atrasos', 'dividas_vencidas', 'saldo_vencido'], ['Atrasos', 'Saldo vencido']);
+    adicionarIdentificadorObjetivo(campos, resultado);
+    adicionarCampoObjetivo(campos, 'Data-base', primeiroValor(resultado, ['data_base', 'competencia'], ['Data-base', 'Competência']));
+    adicionarCampoObjetivo(campos, 'Instituições', Array.isArray(instituicoes) ? instituicoes.length : instituicoes);
+    adicionarCampoObjetivo(campos, 'Crédito em atraso', Array.isArray(atrasos) ? atrasos.length : atrasos);
+    adicionarCampoObjetivo(campos, 'Resultado', aprovado ? 'SCR identificado e conferido' : statusObjetivo(resultado, documento));
+    return campos.slice(0, 5);
   }
 
-  if (/cnd|cndt|crf|cadin|pgfn|certidao|regularidade/.test(tipo)) {
-    adicionarCampoObjetivo(campos, 'CNPJ', primeiroValor(resultado, ['cnpj'], ['CNPJ']));
+  if (/(^|_)ccs($|_)/.test(tipo)) {
+    const instituicoes = primeiroValor(resultado, ['instituicoes'], ['Instituições']);
+    const relacionamentos = primeiroValor(resultado, ['datas_relacionamento', 'relacionamentos'], ['Datas de relacionamento', 'Relacionamentos']);
+    adicionarIdentificadorObjetivo(campos, resultado);
+    adicionarCampoObjetivo(campos, 'Instituições', Array.isArray(instituicoes) ? instituicoes.length : instituicoes);
+    adicionarCampoObjetivo(campos, 'Relacionamentos', Array.isArray(relacionamentos) ? relacionamentos.length : relacionamentos);
+    adicionarCampoObjetivo(campos, 'Data da consulta', primeiroValor(resultado, ['data_consulta', 'data_emissao'], ['Data da consulta', 'Data de emissão']));
+    adicionarCampoObjetivo(campos, 'Resultado', aprovado ? 'CCS identificado e conferido' : statusObjetivo(resultado, documento));
+    return campos.slice(0, 5);
+  }
+
+  if (/(^|_)ccf($|_)/.test(tipo)) {
+    const ocorrencias = primeiroValor(resultado, ['ocorrencias', 'quantidade_cheques'], ['Ocorrências', 'Quantidade de cheques']);
+    adicionarIdentificadorObjetivo(campos, resultado);
+    adicionarCampoObjetivo(campos, 'Resultado', primeiroValor(resultado, ['resultado_consulta', 'resultado', 'situacao'], ['Resultado', 'Situação']));
+    adicionarCampoObjetivo(campos, 'Cheques sem fundos', Array.isArray(ocorrencias) ? ocorrencias.length : ocorrencias);
+    adicionarCampoObjetivo(campos, 'Data da consulta', primeiroValor(resultado, ['data_consulta', 'data_emissao'], ['Data da consulta', 'Data de emissão']));
+    adicionarCampoObjetivo(campos, 'Validação', aprovado ? 'CCF identificado e conferido' : statusObjetivo(resultado, documento));
+    return campos.slice(0, 5);
+  }
+
+  if (/cenprot|protest/.test(tipo)) {
+    const protestos = primeiroValor(resultado, ['protestos', 'quantidade_protestos'], ['Protestos', 'Quantidade de protestos']);
+    adicionarIdentificadorObjetivo(campos, resultado);
+    adicionarCampoObjetivo(campos, 'Resultado', primeiroValor(resultado, ['resultado_consulta', 'resultado', 'situacao'], ['Resultado', 'Situação']));
+    adicionarCampoObjetivo(campos, 'Protestos', Array.isArray(protestos) ? protestos.length : protestos);
+    adicionarCampoObjetivo(campos, 'Data da consulta', primeiroValor(resultado, ['data_consulta', 'data_emissao'], ['Data da consulta', 'Data de emissão']));
+    adicionarCampoObjetivo(campos, 'Validação', aprovado ? 'Consulta de protesto conferida' : statusObjetivo(resultado, documento));
+    return campos.slice(0, 5);
+  }
+
+  if (/serasa|score_boavista|restricoes_/.test(tipo)) {
+    const restricoes = primeiroValor(resultado, ['restricoes', 'negativacoes', 'quantidade_negativacoes'], ['Restrições', 'Negativações']);
+    adicionarIdentificadorObjetivo(campos, resultado);
+    adicionarCampoObjetivo(campos, 'Resultado', primeiroValor(resultado, ['resultado_consulta', 'resultado', 'situacao'], ['Resultado', 'Situação']));
+    adicionarCampoObjetivo(campos, 'Restrições', Array.isArray(restricoes) ? restricoes.length : restricoes);
+    adicionarCampoObjetivo(campos, 'Rating/Score', primeiroValor(resultado, ['rating', 'score', 'faixa_rating'], ['Rating', 'Score']));
+    adicionarCampoObjetivo(campos, 'Data da consulta', primeiroValor(resultado, ['data_consulta', 'data_emissao'], ['Data da consulta', 'Data de emissão']));
+    return campos.slice(0, 5);
+  }
+
+  if (/cadin/.test(tipo)) {
+    const pendencias = primeiroValor(resultado, ['pendencias', 'registros', 'inclusoes'], ['Pendências', 'Registros']);
+    adicionarIdentificadorObjetivo(campos, resultado);
+    adicionarCampoObjetivo(campos, 'Resultado', primeiroValor(resultado, ['resultado_consulta', 'situacao_certidao', 'situacao', 'resultado'], ['Resultado', 'Situação']));
+    adicionarCampoObjetivo(campos, 'Registros CADIN', Array.isArray(pendencias) ? pendencias.length : pendencias);
+    adicionarCampoObjetivo(campos, 'Data da consulta', primeiroValor(resultado, ['data_consulta', 'data_emissao'], ['Data da consulta', 'Data de emissão']));
+    adicionarCampoObjetivo(campos, 'Validação', aprovado ? 'Consulta CADIN conferida' : statusObjetivo(resultado, documento));
+    return campos.slice(0, 5);
+  }
+
+  if (/situacao_fiscal/.test(tipo)) {
+    const pendencias = primeiroValor(resultado, ['pendencias', 'debitos'], ['Pendências', 'Débitos']);
+    adicionarIdentificadorObjetivo(campos, resultado);
+    adicionarCampoObjetivo(campos, 'Diagnóstico fiscal', primeiroValor(resultado, ['resultado_consulta', 'situacao', 'resultado'], ['Resultado', 'Situação']));
+    adicionarCampoObjetivo(campos, 'Pendências', Array.isArray(pendencias) ? pendencias.length : pendencias);
+    adicionarCampoObjetivo(campos, 'Data da consulta', primeiroValor(resultado, ['data_consulta', 'data_emissao'], ['Data da consulta', 'Data de emissão']));
+    adicionarCampoObjetivo(campos, 'Validação', aprovado ? 'Situação fiscal conferida' : statusObjetivo(resultado, documento));
+    return campos.slice(0, 5);
+  }
+
+  if (/pgfn/.test(tipo)) {
+    const inscricoes = primeiroValor(resultado, ['inscricoes', 'debitos'], ['Inscrições', 'Débitos']);
+    adicionarIdentificadorObjetivo(campos, resultado);
+    adicionarCampoObjetivo(campos, 'Resultado', primeiroValor(resultado, ['resultado_consulta', 'situacao', 'resultado'], ['Resultado', 'Situação']));
+    adicionarCampoObjetivo(campos, 'Inscrições', Array.isArray(inscricoes) ? inscricoes.length : inscricoes);
+    adicionarCampoObjetivo(campos, 'Data da consulta', primeiroValor(resultado, ['data_consulta', 'data_emissao'], ['Data da consulta', 'Data de emissão']));
+    adicionarCampoObjetivo(campos, 'Validação', aprovado ? 'Consulta PGFN conferida' : statusObjetivo(resultado, documento));
+    return campos.slice(0, 5);
+  }
+
+  if (/cnd|cndt|crf|certidao|regularidade/.test(tipo)) {
+    adicionarIdentificadorObjetivo(campos, resultado);
     adicionarCampoObjetivo(campos, 'Situação', primeiroValor(resultado, ['situacao_certidao', 'situacao', 'resultado'], ['Situação da certidão', 'Situação', 'Resultado']));
     adicionarCampoObjetivo(campos, 'Validade', primeiroValor(resultado, ['data_validade', 'validade_fim'], ['Data de validade', 'Validade']));
     adicionarCampoObjetivo(campos, 'Validação', aprovado ? 'Regularidade confirmada' : statusObjetivo(resultado, documento));
@@ -570,7 +646,7 @@ function camposValidacaoObjetiva(resultado: any, documento: any, socios: any[] =
   // Fallback universal: nunca despeja o objeto extraído na interface. Só
   // apresenta o mínimo necessário para comprovar identidade, temporalidade e
   // satisfação do requisito.
-  adicionarCampoObjetivo(campos, 'CNPJ/CPF', primeiroValor(resultado, ['cnpj', 'cpf'], ['CNPJ', 'CPF']));
+  adicionarIdentificadorObjetivo(campos, resultado);
   adicionarCampoObjetivo(campos, 'Competência/Período', primeiroValor(resultado, ['competencia', 'periodo_analisado', 'mes_referencia'], ['Competência', 'Período analisado']));
   adicionarCampoObjetivo(campos, 'Validade/Situação', primeiroValor(resultado, ['data_validade', 'situacao_certidao', 'situacao', 'temporalidade_status'], ['Data de validade', 'Situação', 'Situação temporal']));
   adicionarCampoObjetivo(campos, 'Validação', statusObjetivo(resultado, documento));

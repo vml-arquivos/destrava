@@ -36,8 +36,17 @@ describe('cobertura integral da leitura automática documental', () => {
     });
   });
 
-  it('usa parser genérico neutro fora das famílias especializadas', () => {
-    expect(tipoLeitorLocalDocumentoCatalogado('cndt')).toBe('documento_generico');
+  it('roteia consultas e certidões P0 para leitores internos específicos', () => {
+    expect(tipoLeitorLocalDocumentoCatalogado('cndt')).toBe('certidao_regularidade');
+    expect(tipoLeitorLocalDocumentoCatalogado('cnd_rfb_cnpj')).toBe('certidao_regularidade');
+    expect(tipoLeitorLocalDocumentoCatalogado('situacao_fiscal_cnpj')).toBe('situacao_fiscal');
+    expect(tipoLeitorLocalDocumentoCatalogado('cadin_cnpj')).toBe('consulta_cadin');
+    expect(tipoLeitorLocalDocumentoCatalogado('pgfn_cnpj')).toBe('consulta_pgfn');
+    expect(tipoLeitorLocalDocumentoCatalogado('rating_bacen_cnpj')).toBe('consulta_scr');
+    expect(tipoLeitorLocalDocumentoCatalogado('ccs_cnpj')).toBe('consulta_ccs');
+    expect(tipoLeitorLocalDocumentoCatalogado('ccf_cnpj')).toBe('consulta_ccf');
+    expect(tipoLeitorLocalDocumentoCatalogado('cenprot_cnpj')).toBe('consulta_cenprot');
+    expect(tipoLeitorLocalDocumentoCatalogado('consulta_serasa_cnpj')).toBe('consulta_bureau');
     expect(tipoLeitorLocalDocumentoCatalogado('contrato_social')).toBe('contrato_social_alteracao');
     expect(tipoLeitorLocalDocumentoCatalogado('efd_contribuicoes')).toBe('efd_contribuicoes');
     expect(tipoLeitorLocalDocumentoCatalogado('extrato_bancario')).toBe('extrato_bancario');
@@ -74,6 +83,36 @@ describe('cobertura integral da leitura automática documental', () => {
     expect(cpend).toMatchObject({ identidade_status: 'IDENTIFICADO', tipo_detectado: 'CPEND', satisfaz_requisito: true });
   });
 
+  it('mantém consulta PGFN separada da CND/CPEND federal', () => {
+    const pgfn = classificarDocumentoDeterministico({
+      tipoEsperado: 'pgfn_cnpj',
+      texto: 'PROCURADORIA-GERAL DA FAZENDA NACIONAL — REGULARIZE — consulta de inscrições em dívida ativa da União',
+      dataEmissao: '2026-09-05',
+      hoje: new Date('2026-09-05T12:00:00.000Z'),
+    });
+    const cndNoSlotPgfn = classificarDocumentoDeterministico({
+      tipoEsperado: 'pgfn_cnpj',
+      texto: 'CERTIDÃO NEGATIVA DE DÉBITOS RELATIVOS AOS TRIBUTOS FEDERAIS E À DÍVIDA ATIVA DA UNIÃO',
+      validadeFim: '2026-12-31',
+      hoje: new Date('2026-09-05T12:00:00.000Z'),
+    });
+    const pgfnNoSlotCnd = classificarDocumentoDeterministico({
+      tipoEsperado: 'cnd_rfb_cnpj',
+      texto: 'PROCURADORIA-GERAL DA FAZENDA NACIONAL — REGULARIZE — consulta de inscrições em dívida ativa da União',
+      dataEmissao: '2026-09-05',
+      hoje: new Date('2026-09-05T12:00:00.000Z'),
+    });
+
+    expect(pgfn).toMatchObject({
+      identidade_status: 'IDENTIFICADO',
+      tipo_detectado: 'PGFN',
+      temporalidade_status: 'ATUAL',
+      satisfaz_requisito: true,
+    });
+    expect(cndNoSlotPgfn).toMatchObject({ identidade_status: 'INCOMPATIVEL', satisfaz_requisito: false });
+    expect(pgfnNoSlotCnd).toMatchObject({ identidade_status: 'INCOMPATIVEL', satisfaz_requisito: false });
+  });
+
   it('usa o mesmo despacho especializado no upload e no reprocessamento', async () => {
     const service = new AnaliseDocumentalService({} as any, vi.fn() as any);
     const qsa = vi.spyOn(service, 'analisarQSA').mockResolvedValue({ tipo_analise: 'qsa' } as any);
@@ -87,6 +126,86 @@ describe('cobertura integral da leitura automática documental', () => {
     expect(qsa).toHaveBeenCalledWith('empresa-1', 'arquivo-1');
     expect(faturamento).toHaveBeenCalledWith('empresa-1', 'arquivo-2');
     expect(generico).toHaveBeenCalledWith('empresa-1', 'arquivo-3', 'cndt');
+  });
+
+  it('leitor CADIN identifica consulta e preserva escopo limitado à RFB', () => {
+    const { dados } = analisarTextoDocumentoLocal('consulta_cadin', `
+      CADIN — Cadastro Informativo de Créditos não Quitados do Setor Público Federal
+      CNPJ: 12.345.678/0001-90
+      Data da consulta: 05/09/2026
+      Resultado da consulta: Nada consta
+      Este relatório mostra pendências incluídas pela Receita Federal.
+      Quantidade de registros: 0
+    `, 'cadin_cnpj');
+
+    expect(dados).toMatchObject({
+      documento_compativel: true,
+      cnpj: '12.345.678/0001-90',
+      data_consulta: '2026-09-05',
+      resultado_consulta: 'Nada consta',
+      registros: 0,
+      escopo_consulta: 'RFB',
+      fonte_extracao: 'local_deterministica_especializada',
+    });
+  });
+
+  it('leitor PGFN não aceita CND conjunta como consulta Regularize', () => {
+    const consulta = analisarTextoDocumentoLocal('consulta_pgfn', `
+      PROCURADORIA-GERAL DA FAZENDA NACIONAL
+      REGULARIZE — Consulta de inscrições em dívida ativa
+      CNPJ: 12.345.678/0001-90
+      Data da consulta: 05/09/2026
+      Resultado da consulta: Nenhuma inscrição
+    `, 'pgfn_cnpj').dados;
+    const cnd = analisarTextoDocumentoLocal('consulta_pgfn', `
+      CERTIDÃO NEGATIVA DE DÉBITOS RELATIVOS AOS TRIBUTOS FEDERAIS E À DÍVIDA ATIVA DA UNIÃO
+      CNPJ: 12.345.678/0001-90
+      Válida até: 01/03/2027
+      PGFN
+    `, 'pgfn_cnpj').dados;
+
+    expect(consulta.documento_compativel).toBe(true);
+    expect(consulta.resultado_consulta).toBe('Nenhuma inscrição');
+    expect(cnd.documento_compativel).toBe(false);
+  });
+
+  it('leitores SCR, CCS e CCF extraem somente a semântica própria de cada relatório', () => {
+    const scr = analisarTextoDocumentoLocal('consulta_scr', `
+      RELATÓRIO DE EMPRÉSTIMOS E FINANCIAMENTOS (SCR)
+      CNPJ: 12.345.678/0001-90
+      Data-base: 07/2026
+      Instituição: Banco A
+      Instituição: Banco B
+      Saldo devedor: R$ 100.000,00
+      Limite total: R$ 150.000,00
+      Operações em atraso: 0
+    `, 'rating_bacen_cnpj').dados;
+    const ccs = analisarTextoDocumentoLocal('consulta_ccs', `
+      RELATÓRIO DE CONTAS E RELACIONAMENTOS EM BANCOS (CCS)
+      CNPJ: 12.345.678/0001-90
+      Data da consulta: 05/09/2026
+      Instituição: Banco A
+      Início do relacionamento: 01/01/2020
+    `, 'ccs_cnpj').dados;
+    const ccf = analisarTextoDocumentoLocal('consulta_ccf', `
+      RELATÓRIO DE CHEQUES SEM FUNDOS (CCF)
+      CNPJ: 12.345.678/0001-90
+      Data da consulta: 05/09/2026
+      Resultado da consulta: Sem ocorrências
+      Quantidade de ocorrências: 0
+    `, 'ccf_cnpj').dados;
+
+    expect(scr.documento_compativel).toBe(true);
+    expect(scr.instituicoes).toEqual(['Banco A', 'Banco B']);
+    expect(scr.atrasos).toBe(0);
+    expect(scr.saldo_devedor).toBe(100000);
+    expect(ccs.documento_compativel).toBe(true);
+    expect(ccs.instituicoes).toEqual(['Banco A']);
+    expect(ccs.saldo).toBeUndefined();
+    expect(ccs.limites).toBeUndefined();
+    expect(ccf.documento_compativel).toBe(true);
+    expect(ccf.ocorrencias).toBe(0);
+    expect(ccf.resultado_consulta).toBe('Sem ocorrências');
   });
 
   it('extrai somente campos explicitamente rotulados no fallback genérico', () => {
