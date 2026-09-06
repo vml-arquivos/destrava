@@ -43,7 +43,7 @@ export interface ExtracaoDocumentalLocalResult {
   tipo: TipoDocumentoLocal;
   disponivel: boolean;
   legivel: boolean;
-  mecanismo: 'pdftotext' | 'tesseract' | 'texto_estruturado';
+  mecanismo: 'pdftotext' | 'tesseract' | 'texto_estruturado' | 'imagem_visual';
   texto: string;
   dados: Record<string, any>;
   confianca: number;
@@ -1910,6 +1910,128 @@ async function extrairTextoEstruturado(arquivoPath: string, extension: string, t
   return linhas.join('\n').trim();
 }
 
+const TIPOS_EVIDENCIA_VISUAL_EMPRESARIAL = new Set([
+  'foto_fachada', 'foto_interna_1', 'foto_interna_2', 'foto_interna_3',
+]);
+
+function dimensoesImagem(buffer: Buffer, extension: string): { largura: number; altura: number } | null {
+  // JPEG: percorre os marcadores SOF, sem depender de OCR ou de texto embutido.
+  if (extension === '.jpg' || extension === '.jpeg') {
+    if (buffer.length < 4 || buffer[0] !== 0xff || buffer[1] !== 0xd8) return null;
+    let offset = 2;
+    while (offset + 9 < buffer.length) {
+      if (buffer[offset] !== 0xff) { offset += 1; continue; }
+      const marcador = buffer[offset + 1];
+      offset += 2;
+      if (marcador === 0xd8 || marcador === 0xd9) continue;
+      if (offset + 2 > buffer.length) return null;
+      const tamanho = buffer.readUInt16BE(offset);
+      if (tamanho < 2 || offset + tamanho > buffer.length) return null;
+      const ehSof = marcador >= 0xc0 && marcador <= 0xcf && ![0xc4, 0xc8, 0xcc].includes(marcador);
+      if (ehSof && tamanho >= 7) {
+        return { altura: buffer.readUInt16BE(offset + 3), largura: buffer.readUInt16BE(offset + 5) };
+      }
+      offset += tamanho;
+    }
+    return null;
+  }
+
+  // PNG: largura/altura estão no IHDR, sempre no mesmo offset.
+  if (extension === '.png' && buffer.length >= 24
+    && buffer.subarray(0, 8).equals(Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]))) {
+    return { largura: buffer.readUInt32BE(16), altura: buffer.readUInt32BE(20) };
+  }
+
+  // GIF: o cabeçalho também informa as dimensões do canvas.
+  if ((extension === '.gif') && buffer.length >= 10 && buffer.subarray(0, 3).toString('ascii') === 'GIF') {
+    return { largura: buffer.readUInt16LE(6), altura: buffer.readUInt16LE(8) };
+  }
+
+  return null;
+}
+
+async function extrairEvidenciaVisualEmpresarial(
+  arquivoPath: string,
+  extension: string,
+  mimeType: string,
+  tipoDocumentoEsperado?: string,
+): Promise<ExtracaoDocumentalLocalResult> {
+  const slotVisual = String(tipoDocumentoEsperado || '').toLowerCase();
+  const tipo = (TIPOS_EVIDENCIA_VISUAL_EMPRESARIAL.has(slotVisual)
+    ? slotVisual
+    : 'foto_fachada') as TipoDocumentoLocal;
+  try {
+    const buffer = await readFile(arquivoPath);
+    const dimensoes = dimensoesImagem(buffer, extension);
+    const tamanhoBytes = buffer.byteLength;
+    const qualidadeAdequada = Boolean(
+      dimensoes
+      && dimensoes.largura >= 640
+      && dimensoes.altura >= 360
+      && tamanhoBytes >= 10_000,
+    );
+    const tipoEvidencia = slotVisual === 'foto_fachada' ? 'fachada' : 'instalacoes';
+    const qualidadeImagem = qualidadeAdequada ? 'adequada' : 'insuficiente';
+    const evidencia = {
+      campo: 'qualidade_imagem',
+      valor: qualidadeImagem,
+      pagina: null,
+      trecho: dimensoes
+        ? `Imagem ${tipoEvidencia} decodificada: ${dimensoes.largura}x${dimensoes.altura}px; ${tamanhoBytes} bytes.`
+        : `Imagem ${tipoEvidencia} recebida em ${mimeType}, mas não foi possível comprovar suas dimensões.`,
+      confianca: qualidadeAdequada ? 0.92 : 0.35,
+    };
+    return {
+      tipo,
+      disponivel: true,
+      legivel: qualidadeAdequada,
+      mecanismo: 'imagem_visual',
+      texto: '',
+      dados: {
+        documento_compativel: true,
+        tipo_detectado: 'FOTO_EMPRESARIAL',
+        tipo_evidencia: tipoEvidencia,
+        qualidade_imagem: qualidadeImagem,
+        dimensoes_imagem: dimensoes,
+        tamanho_bytes: tamanhoBytes,
+        campos_comprovados: {
+          tipo_evidencia: tipoEvidencia,
+          qualidade_imagem: qualidadeImagem,
+          ...(slotVisual === 'foto_fachada' ? { fachada: true } : { instalacoes: true }),
+        },
+        evidencias: [evidencia],
+        fonte_extracao: 'local_deterministica_visual',
+      },
+      confianca: qualidadeAdequada ? 0.92 : 0.35,
+      motivo: qualidadeAdequada
+        ? undefined
+        : 'Imagem recebida, mas a qualidade/dimensão mínima não foi comprovada; revisão humana necessária.',
+    };
+  } catch (error: any) {
+    return {
+      tipo,
+      disponivel: error?.code !== 'ENOENT',
+      legivel: false,
+      mecanismo: 'imagem_visual',
+      texto: '',
+      dados: {
+        documento_compativel: true,
+        tipo_detectado: 'FOTO_EMPRESARIAL',
+        tipo_evidencia: slotVisual === 'foto_fachada' ? 'fachada' : 'instalacoes',
+        qualidade_imagem: 'nao_comprovada',
+        campos_comprovados: {
+          tipo_evidencia: slotVisual === 'foto_fachada' ? 'fachada' : 'instalacoes',
+          qualidade_imagem: 'nao_comprovada',
+        },
+        evidencias: [],
+        fonte_extracao: 'local_deterministica_visual',
+      },
+      confianca: 0,
+      motivo: String(error?.message || 'Não foi possível ler a imagem; revisão humana necessária.'),
+    };
+  }
+}
+
 async function executarTesseract(arquivo: string, timeout: number, maxBuffer: number): Promise<string> {
   const idiomas = process.env.LOCAL_OCR_LANGUAGES || 'por+eng';
   const { stdout } = await execFileAsync(
@@ -1987,6 +2109,10 @@ export async function extrairDocumentoLocal(
   const timeoutTexto = Number.isFinite(timeout) && timeout > 0 ? timeout : 15000;
   const timeoutOcr = Number.isFinite(ocrTimeout) && ocrTimeout > 0 ? ocrTimeout : 120000;
   const bufferMaximo = Number.isFinite(maxBuffer) && maxBuffer > 0 ? maxBuffer : 16 * 1024 * 1024;
+
+  if (isImage && TIPOS_EVIDENCIA_VISUAL_EMPRESARIAL.has(String(tipoDocumentoEsperado || '').toLowerCase())) {
+    return extrairEvidenciaVisualEmpresarial(arquivoPath, extension, effectiveMime, tipoDocumentoEsperado);
+  }
 
   if (isStructured) {
     try {
