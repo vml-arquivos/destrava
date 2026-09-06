@@ -4,8 +4,8 @@ import { obterPerfilAnaliseDocumental, descricaoPerfilParaPrompt } from "../serv
 describe("matriz temporal documental oficial", () => {
   it("cadastros e consultas públicas são snapshots, sem vencimento fixo inventado", () => {
     for (const tipo of [
-      "cartao_cnpj", "cadin_cnpj", "cadin_cpf", "rating_bacen_cnpj", "ccs_cnpj",
-      "ccf_cnpj", "cenprot_cnpj", "situacao_fiscal_cnpj",
+      "cartao_cnpj", "cadin_cnpj", "cadin_cpf", "pgfn_cnpj", "pgfn_cpf",
+      "rating_bacen_cnpj", "ccs_cnpj", "ccf_cnpj", "cenprot_cnpj", "situacao_fiscal_cnpj",
     ]) {
       const perfil = obterPerfilAnaliseDocumental(tipo);
       expect(perfil.grauFonte).toBe("ORGAO_OFICIAL");
@@ -24,7 +24,7 @@ describe("matriz temporal documental oficial", () => {
   });
 
   it("certidões com validade definida pelo emissor continuam com validade expressa", () => {
-    for (const tipo of ["cnd_rfb_cnpj", "pgfn_cnpj", "crf_fgts", "cndt", "cnd_estadual", "cnd_municipal"]) {
+    for (const tipo of ["cnd_rfb_cnpj", "crf_fgts", "cndt", "cnd_estadual", "cnd_municipal"]) {
       const perfil = obterPerfilAnaliseDocumental(tipo);
       expect(perfil.grauFonte).toBe("ORGAO_OFICIAL");
       expect(perfil.politicaTemporal).toBe("validade_expressa");
