@@ -44,16 +44,24 @@ describe('regras documentais de crédito', () => {
     expect(resultado.alertas.map((a) => a.codigo)).toContain('faturamento_assinaturas_modalidades_divergentes');
   });
 
-  it('aceita comprovante de junho em agosto e pede justificativa para terceiro', () => {
-    const resultado = validarComprovanteEnderecoExtraido(socios, { mes_referencia: '06/2026', nome_titular: 'Terceiro da Silva' }, 's1', referencia);
-    expect(resultado.dados.comprovante_dentro_validade).toBe(true);
-    expect(resultado.dados.exige_justificativa_titular).toBe(true);
-    expect(resultado.alertas.map((a) => a.codigo)).toContain('endereco_titular_diferente_socio');
+  it('não inventa validade de endereço quando a operação não configurou recência', () => {
+    const resultado = validarComprovanteEnderecoExtraido(socios, { mes_referencia: '01/2026', nome_titular: 'Terceiro da Silva' }, 's1', referencia);
+    expect(resultado.dados.comprovante_dentro_validade).toBeNull();
+    expect(resultado.dados.comprovante_dentro_politica_recencia).toBeNull();
+    expect(resultado.alertas.map((alerta) => alerta.codigo)).not.toContain('endereco_fora_politica_recencia');
+    expect(resultado.alertas.map((alerta) => alerta.codigo)).toContain('endereco_titular_diferente_socio');
   });
 
-  it('reprova comprovante anterior a dois meses', () => {
-    const resultado = validarComprovanteEnderecoExtraido(socios, { mes_referencia: '05/2026', nome_titular: 'Maria da Silva' }, 's1', referencia);
-    expect(resultado.alertas.map((a) => a.codigo)).toContain('endereco_fora_validade_dois_meses');
+  it('aplica recência somente quando a política de crédito informa o limite', () => {
+    const resultado = validarComprovanteEnderecoExtraido(
+      socios,
+      { mes_referencia: '05/2026', nome_titular: 'Maria da Silva' },
+      's1',
+      referencia,
+      { maxMesesRecencia: 2 },
+    );
+    expect(resultado.dados.comprovante_dentro_politica_recencia).toBe(false);
+    expect(resultado.alertas.map((alerta) => alerta.codigo)).toContain('endereco_fora_politica_recencia');
   });
 
   it('calcula cobertura separada para todos os sócios', () => {
