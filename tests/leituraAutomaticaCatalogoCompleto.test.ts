@@ -74,6 +74,36 @@ describe('cobertura integral da leitura automática documental', () => {
     expect(cpend).toMatchObject({ identidade_status: 'IDENTIFICADO', tipo_detectado: 'CPEND', satisfaz_requisito: true });
   });
 
+  it('mantém consulta PGFN separada da CND/CPEND federal', () => {
+    const pgfn = classificarDocumentoDeterministico({
+      tipoEsperado: 'pgfn_cnpj',
+      texto: 'PROCURADORIA-GERAL DA FAZENDA NACIONAL — REGULARIZE — consulta de inscrições em dívida ativa da União',
+      dataEmissao: '2026-09-05',
+      hoje: new Date('2026-09-05T12:00:00.000Z'),
+    });
+    const cndNoSlotPgfn = classificarDocumentoDeterministico({
+      tipoEsperado: 'pgfn_cnpj',
+      texto: 'CERTIDÃO NEGATIVA DE DÉBITOS RELATIVOS AOS TRIBUTOS FEDERAIS E À DÍVIDA ATIVA DA UNIÃO',
+      validadeFim: '2026-12-31',
+      hoje: new Date('2026-09-05T12:00:00.000Z'),
+    });
+    const pgfnNoSlotCnd = classificarDocumentoDeterministico({
+      tipoEsperado: 'cnd_rfb_cnpj',
+      texto: 'PROCURADORIA-GERAL DA FAZENDA NACIONAL — REGULARIZE — consulta de inscrições em dívida ativa da União',
+      dataEmissao: '2026-09-05',
+      hoje: new Date('2026-09-05T12:00:00.000Z'),
+    });
+
+    expect(pgfn).toMatchObject({
+      identidade_status: 'IDENTIFICADO',
+      tipo_detectado: 'PGFN',
+      temporalidade_status: 'ATUAL',
+      satisfaz_requisito: true,
+    });
+    expect(cndNoSlotPgfn).toMatchObject({ identidade_status: 'INCOMPATIVEL', satisfaz_requisito: false });
+    expect(pgfnNoSlotCnd).toMatchObject({ identidade_status: 'INCOMPATIVEL', satisfaz_requisito: false });
+  });
+
   it('usa o mesmo despacho especializado no upload e no reprocessamento', async () => {
     const service = new AnaliseDocumentalService({} as any, vi.fn() as any);
     const qsa = vi.spyOn(service, 'analisarQSA').mockResolvedValue({ tipo_analise: 'qsa' } as any);
