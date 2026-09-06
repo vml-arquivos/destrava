@@ -125,8 +125,10 @@ const POLITICA_POR_TIPO: Record<string, { politica: DocumentTemporalPolicy; dias
   comprovante_residencia: { politica: 'politica_credito_configuravel', grauFonte: 'PRATICA_MERCADO' },
   cnd_rfb_cnpj: { politica: 'validade_expressa', grauFonte: 'ORGAO_OFICIAL' },
   cnd_rfb_cpf: { politica: 'validade_expressa', grauFonte: 'ORGAO_OFICIAL' },
-  pgfn_cnpj: { politica: 'validade_expressa', grauFonte: 'ORGAO_OFICIAL' },
-  pgfn_cpf: { politica: 'validade_expressa', grauFonte: 'ORGAO_OFICIAL' },
+  // O slot PGFN da página é a consulta de inscrições/dívida ativa no
+  // Regularize, distinta da CND/CPEND conjunta RFB/PGFN. Portanto é snapshot.
+  pgfn_cnpj: { politica: 'snapshot_atual', grauFonte: 'ORGAO_OFICIAL' },
+  pgfn_cpf: { politica: 'snapshot_atual', grauFonte: 'ORGAO_OFICIAL' },
   crf_fgts: { politica: 'validade_expressa', grauFonte: 'ORGAO_OFICIAL' },
   cndt: { politica: 'validade_expressa', grauFonte: 'ORGAO_OFICIAL' },
   cnd_estadual: { politica: 'validade_expressa', grauFonte: 'ORGAO_OFICIAL' },
@@ -267,8 +269,10 @@ registrarPerfis(['certidao_nascimento'], ['nome', 'data_nascimento', 'numero_reg
 registrarPerfis(['averbacao_divorcio'], ['nomes', 'data_ato', 'numero_registro'], ['cartorio', 'regime_bens', 'partilha', 'averbacoes']);
 registrarPerfis(['certidao_obito'], ['nome', 'data_ato', 'numero_registro'], ['cpf', 'cartorio', 'livro', 'folha', 'termo']);
 
-registrarPerfis(['cnd_rfb_cnpj', 'pgfn_cnpj', 'crf_fgts', 'cndt', 'cnd_estadual', 'cnd_municipal'], ['cnpj', 'situacao_certidao', 'data_emissao', 'data_validade'], ['entidade_consultada', 'orgao_emissor', 'numero_certidao', 'codigo_autenticidade', 'debitos', 'pendencias', 'inscricao_estadual', 'inscricao_municipal']);
-registrarPerfis(['cnd_rfb_cpf', 'pgfn_cpf'], ['cpf', 'situacao_certidao', 'data_emissao', 'data_validade'], ['entidade_consultada', 'orgao_emissor', 'numero_certidao', 'codigo_autenticidade', 'debitos', 'pendencias']);
+registrarPerfis(['cnd_rfb_cnpj', 'crf_fgts', 'cndt', 'cnd_estadual', 'cnd_municipal'], ['cnpj', 'situacao_certidao', 'data_emissao', 'data_validade'], ['entidade_consultada', 'orgao_emissor', 'numero_certidao', 'codigo_autenticidade', 'debitos', 'pendencias', 'inscricao_estadual', 'inscricao_municipal']);
+registrarPerfis(['cnd_rfb_cpf'], ['cpf', 'situacao_certidao', 'data_emissao', 'data_validade'], ['entidade_consultada', 'orgao_emissor', 'numero_certidao', 'codigo_autenticidade', 'debitos', 'pendencias']);
+registrarPerfis(['pgfn_cnpj'], ['cnpj', 'resultado_consulta', 'data_consulta'], ['inscricoes', 'debitos', 'situacoes', 'valores', 'numero_inscricao']);
+registrarPerfis(['pgfn_cpf'], ['cpf', 'resultado_consulta', 'data_consulta'], ['inscricoes', 'debitos', 'situacoes', 'valores', 'numero_inscricao']);
 registrarPerfis(['cadin_cnpj'], ['cnpj', 'situacao_certidao', 'data_consulta'], ['ente_cadin', 'pendencias', 'data_inclusao', 'codigo_autenticidade']);
 registrarPerfis(['cadin_cpf'], ['cpf', 'situacao_certidao', 'data_consulta'], ['ente_cadin', 'pendencias', 'data_inclusao', 'codigo_autenticidade']);
 registrarPerfis(['certidao'], ['entidade_consultada', 'situacao_certidao', 'data_emissao'], ['cnpj', 'cpf', 'data_validade', 'orgao_emissor', 'numero_certidao', 'codigo_autenticidade']);
