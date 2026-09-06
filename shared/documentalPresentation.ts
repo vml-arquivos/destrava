@@ -845,6 +845,16 @@ export function estadoVisualDocumento(resultado: any = {}, documento: any = {}):
 
   const status = statusVisualNormalizado(resultado?.status || dadosExtraidos?.status || documento?.status);
   const conclusao = statusVisualNormalizado(resultado?.conclusao || documento?.observacao);
+  // `exige_revisao_humana` é um flag administrativo persistido no arquivo e
+  // pode permanecer true de uma leitura antiga. Um laudo novo e concluído que
+  // explicitamente satisfaz o requisito não pode continuar amarelo por causa
+  // desse valor histórico; incompatibilidade e `satisfaz_requisito=false` já
+  // foram tratados acima e continuam vencendo.
+  const laudoConcluidoSatisfatorio = ["concluido", "concluida", "validado", "aprovado"].includes(status)
+    && (resultado?.satisfaz_requisito === true || dadosExtraidos?.satisfaz_requisito === true || classificacao?.satisfaz_requisito === true);
+  if (laudoConcluidoSatisfatorio) {
+    return "aprovado";
+  }
   if (resultado?.revisao_humana_necessaria === true || dadosExtraidos?.revisao_humana_necessaria === true || documento?.exige_revisao_humana === true || ["revisao_humana", "falhou", "recusado", "pendente_validacao", "aguardando_analise"].includes(status)) {
     return "revisao";
   }
