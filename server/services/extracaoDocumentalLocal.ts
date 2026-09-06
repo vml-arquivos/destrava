@@ -34,6 +34,9 @@ export type TipoDocumentoLocal =
   | 'consulta_ccf'
   | 'consulta_cenprot'
   | 'consulta_bureau'
+  | 'defis'
+  | 'dasn_simei'
+  | 'compartilhamento_ecac'
   | 'documento_generico';
 
 export interface ExtracaoDocumentalLocalResult {
@@ -838,7 +841,7 @@ function parseFaturamento12Meses(texto: string): { dados: Record<string, any>; c
     const competencia = `${match[2]}-${mesesPorNome[textoNormalizado(match[1])] || '01'}`;
     const valor = numeroMonetario(linha.match(/R\$\s*[-\d.]+(?:,\d{1,2})?/)?.[0] || '');
     return valor === null ? [] : [{ competencia, valor }];
-  });
+  }).filter((item, indice, lista) => lista.findIndex((candidato) => candidato.competencia === item.competencia) === indice);
   const totalDoPeriodo = numeroMonetario(linhasFaturamento.find((linha) => /total\s+do\s+per[ií]odo/i.test(linha))?.match(/R\$\s*[-\d.]+(?:,\d{1,2})?/)?.[0] || '')
     || (competenciasMensais.length ? Math.round(competenciasMensais.reduce((total, item) => total + item.valor, 0) * 100) / 100 : null);
   const periodoAnalisado = texto.match(/per[ií]odo\s+apurado\s*:\s*(20\d{2}\/\d{2})\s+a\s+(20\d{2}\/\d{2})/i)?.slice(1) || null;
@@ -852,9 +855,15 @@ function parseFaturamento12Meses(texto: string): { dados: Record<string, any>; c
   const eletronica = /assinado\s+(?:de\s+forma\s+)?(?:digital|eletronic)|assinatura\s+(?:digital|eletronic)|icp[\s-]*brasil|gov\.br/i.test(texto);
   const manual = /assinatura\s+manual|assinado\s+manualmente|assinatura\s+manuscrita/i.test(texto);
   const tipoAssinatura = eletronica ? 'eletronica' : manual ? 'manual' : null;
-  const nomeSocio = limparValor(texto.match(/(?:s[oó]cio(?:\s*-?administrador)?|administrador)\s*[:\-]\s*([^\n\r]{4,100})/i)?.[1] || null);
-  const nomeContador = limparValor(texto.match(/(?:contador(?:a)?|respons[aá]vel\s+cont[aá]bil)\s*[:\-]\s*([^\n\r]{4,100})/i)?.[1] || null);
-  const temSocio = /s[oó]cio(?:\s*-?administrador)?|administrador/i.test(texto) && /assinatura|assinado|firmado/i.test(texto);
+  const nomeSocioAssinatura = texto.match(/assinado\s+digitalmente\s+([A-ZÀ-Ý][A-ZÀ-Ý ]{4,80})/)?.[1] || null;
+  const nomeContadorAssinatura = texto.match(/\b([A-ZÀ-Ý][A-ZÀ-Ý ]{8,80})\s+gov\.?\s*br\b/)?.[1] || null;
+  const nomeSocio = limparValor(nomeSocioAssinatura
+    || texto.match(/(?:s[oó]cio(?:\s*-?administrador)?|representante\s+legal)\s*[:\-]\s*([^\n\r]{4,100})/i)?.[1]
+    || null);
+  const nomeContador = limparValor(nomeContadorAssinatura
+    || texto.match(/(?:contador(?:a)?|respons[aá]vel\s+cont[aá]bil)\s*[:\-]\s*([^\n\r]{4,100})/i)?.[1]
+    || null);
+  const temSocio = /s[oó]cio(?:\s*-?administrador)?|administrador|representante\s+legal/i.test(texto) && /assinatura|assinado|firmado/i.test(texto);
   const temContador = /contador|crc|respons[aá]vel\s+cont[aá]bil/i.test(texto) && /assinatura|assinado|firmado/i.test(texto);
   const confianca = clamp((compativel ? 0.25 : 0) + (cnpj ? 0.2 : 0) + (mesesReferencia.length ? 0.25 : 0) + (dataDocumento ? 0.1 : 0) + (dataAssinatura ? 0.1 : 0) + (temSocio ? 0.05 : 0) + (temContador ? 0.05 : 0));
   return {
@@ -1176,6 +1185,10 @@ export function parseComprovanteRegime(tipoEsperado: TipoDocumentoLocal, texto: 
     dados: {
       ...fiscal.dados,
       ...base.dados,
+      receita_bruta: base.dados.receita_bruta ?? fiscal.dados.receita_bruta ?? null,
+      receita_bruta_pa: base.dados.receita_bruta_pa ?? fiscal.dados.receita_bruta_pa ?? null,
+      rbt12: base.dados.rbt12 ?? fiscal.dados.rbt12 ?? null,
+      regime_de_apuracao: fiscal.dados.regime_de_apuracao ?? null,
       tipo_detectado: tipoDetectado,
       tipo_esperado: tipoEsperado,
       documento_compativel: documentoCompativel,
@@ -1393,15 +1406,20 @@ function parseDocumentoGenerico(texto: string, tipoDocumentoEsperado?: string): 
   const poderes = limparValor(valorAposRotulo(linhas, ['poderes outorgados', 'poderes', 'finalidade da procuração', 'finalidade da procuracao']));
   const capitalSocialRaw = limparValor(valorAposRotulo(linhas, ['capital social', 'capital']));
   const linhaReceitaPa = linhas.find((linha) => /receita\s+bruta\s+do\s+pa/i.test(linha)) || null;
-  const receitaBrutaRaw = limparValor(linhaReceitaPa?.match(/(?:R\$\s*)?[-\d.]+(?:,\d{1,2})?/g)?.[0] || '')
+  const valoresReceitaPa = linhaReceitaPa?.match(/(?:R\$\s*)?[-\d.]+(?:,\d{1,2})?/g) || [];
+  const receitaBrutaRaw = limparValor(valoresReceitaPa.find((valor) => /\d/.test(valor)) || '')
     || limparValor(valorAposRotulo(linhas, ['receita bruta total', 'total de receitas brutas', 'receita bruta', 'faturamento bruto']));
+  const linhaRbt12 = linhas.find((linha) => /receita\s+bruta\s+acumulada\s+nos\s+doze\s+meses\s+anteriores/i.test(linha) && /\d/.test(linha)) || null;
+  const valoresRbt12 = linhaRbt12?.match(/(?:R\$\s*)?[-\d.]+(?:,\d{1,2})?/g) || [];
+  const rbt12Raw = limparValor(valoresRbt12.at(-1) || '');
   const scoreRaw = limparValor(valorAposRotulo(linhas, ['score', 'pontuação', 'pontuacao']));
   const saldoRaw = limparValor(valorAposRotulo(linhas, ['saldo total', 'saldo devedor', 'saldo final', 'saldo']));
   const limiteRaw = limparValor(valorAposRotulo(linhas, ['limite total', 'limite de crédito', 'limite de credito', 'limite']));
   const codigoReceita = limparValor(valorAposRotulo(linhas, ['código de receita', 'codigo de receita', 'código da receita', 'codigo da receita']));
   const codigoAutenticidade = limparValor(valorAposRotulo(linhas, ['código de autenticidade', 'codigo de autenticidade', 'código de controle', 'codigo de controle', 'autenticação', 'autenticacao']));
   const naturezaJuridica = limparValor(valorAposRotulo(linhas, ['natureza jurídica', 'natureza juridica']));
-  const regimeTributario = limparValor(valorAposRotulo(linhas, ['regime tributário', 'regime tributario', 'regime de apuração', 'regime de apuracao', 'forma de tributação', 'forma de tributacao']));
+  const regimeTributario = limparValor(valorAposRotulo(linhas, ['regime tributário', 'regime tributario', 'forma de tributação', 'forma de tributacao']));
+  const regimeDeApuracao = limparValor(valorAposRotulo(linhas, ['regime de apuração', 'regime de apuracao']));
   const condicaoMei = /certificado da condi[cç][aã]o de microempreendedor individual|\bccmei\b/i.test(texto)
     ? true
     : null;
@@ -1461,6 +1479,9 @@ function parseDocumentoGenerico(texto: string, tipoDocumentoEsperado?: string): 
     codigo_autenticidade: codigoAutenticidade,
     natureza_juridica: naturezaJuridica,
     regime_tributario: regimeTributario,
+    regime_de_apuracao: regimeDeApuracao,
+    receita_bruta_pa: receitaBrutaRaw ? numeroMonetario(receitaBrutaRaw) : null,
+    rbt12: rbt12Raw ? numeroMonetario(rbt12Raw) : null,
     condicao_mei: condicaoMei,
     assinaturas,
   }).filter(([, valor]) => valor !== null && valor !== undefined && valor !== ''));
@@ -1489,6 +1510,100 @@ function parseDocumentoGenerico(texto: string, tipoDocumentoEsperado?: string): 
     },
     confianca,
   };
+}
+
+function parseDeclaracaoDefis(texto: string): { dados: Record<string, any>; confianca: number } {
+  const base = parseDocumentoGenerico(texto, 'defis');
+  const norm = textoNormalizado(texto);
+  const periodoMatch = texto.match(/per[ií]odo\s+abrangido\s+pela\s+declara[cç][aã]o\s*:\s*(\d{2}\/\d{2}\/20\d{2})\s+a\s+(\d{2}\/\d{2}\/20\d{2})/i);
+  const competencia = periodoMatch
+    ? { inicio: parseDate(periodoMatch[1]), fim: parseDate(periodoMatch[2]) }
+    : null;
+  const anoCalendario = Number(texto.match(/ano[- ]calend[aá]rio\s+(20\d{2})/i)?.[1] || 0) || null;
+  const numeroDeclaracao = limparValor(texto.match(/n[uú]mero\s+da\s+declara[cç][aã]o\s*:\s*([\d-]+)/i)?.[1] || null);
+  const recibo = limparValor(texto.match(/n[uú]mero\s+do\s+recibo\s*:\s*([\d.\-]+)/i)?.[1] || null);
+  const dataTransmissao = dataProximaDe(
+    texto,
+    /data\s+e\s+hor[aá]rio\s+da\s+transmiss[aã]o(?:\s+da\s+declara[cç][aã]o)?\D{0,45}(\d{2}\/\d{2}\/20\d{2})/i,
+  );
+  const optanteSimples = /optante\s+pelo\s+simples\s+nacional\s*:\s*sim/i.test(texto);
+  const compativel = /declara[cç][aã]o\s+de\s+informa[cç][oõ]es\s+socioecon[oô]micas\s+e\s+fiscais|\bdefis\b/i.test(norm);
+  const dados = {
+    ...base.dados,
+    documento_compativel: compativel,
+    tipo_declaracao: 'DEFIS',
+    ano_calendario: anoCalendario,
+    competencia,
+    periodo: competencia,
+    numero_declaracao: numeroDeclaracao,
+    recibo_ou_protocolo: recibo || numeroDeclaracao || base.dados.recibo_ou_protocolo || null,
+    data_transmissao: dataTransmissao,
+    regime_tributario: optanteSimples ? 'Simples Nacional' : null,
+    opcao_simples: optanteSimples ? true : null,
+    campos_comprovados: {
+      ...(base.dados.campos_comprovados || {}),
+      ...(numeroDeclaracao ? { numero_declaracao: numeroDeclaracao } : {}),
+      ...(recibo ? { recibo_ou_protocolo: recibo } : {}),
+      ...(anoCalendario ? { ano_calendario: anoCalendario } : {}),
+      ...(competencia ? { competencia } : {}),
+      ...(dataTransmissao ? { data_transmissao: dataTransmissao } : {}),
+      ...(optanteSimples ? { regime_tributario: 'Simples Nacional' } : {}),
+    },
+    fonte_extracao: 'local_deterministica_especializada',
+  };
+  const confianca = clamp(base.confianca + (compativel ? 0.2 : 0) + (anoCalendario ? 0.08 : 0) + (recibo ? 0.08 : 0) + (dataTransmissao ? 0.05 : 0));
+  return { dados, confianca };
+}
+
+function parseDeclaracaoDasnSimei(texto: string): { dados: Record<string, any>; confianca: number } {
+  const base = parseDocumentoGenerico(texto, 'dasn_simei');
+  const norm = textoNormalizado(texto);
+  const anoCalendario = Number(texto.match(/ano[- ]calend[aá]rio\s+(20\d{2})/i)?.[1] || 0) || null;
+  const recibo = limparValor(texto.match(/n[uú]mero\s+do\s+recibo\s*:\s*([\d.\-]+)/i)?.[1] || null);
+  const dataTransmissao = dataProximaDe(texto, /data\s+e\s+hor[aá]rio\s+da\s+transmiss[aã]o\D{0,45}(\d{2}\/\d{2}\/20\d{2})/i);
+  const compativel = /declara[cç][aã]o\s+anual\s+do\s+simei|\bdasn[- ]?simei\b/i.test(norm);
+  const dados = {
+    ...base.dados,
+    documento_compativel: compativel,
+    tipo_declaracao: 'DASN-SIMEI',
+    ano_calendario: anoCalendario,
+    recibo_ou_protocolo: recibo || base.dados.recibo_ou_protocolo || null,
+    data_transmissao: dataTransmissao,
+    campos_comprovados: {
+      ...(base.dados.campos_comprovados || {}),
+      ...(anoCalendario ? { ano_calendario: anoCalendario } : {}),
+      ...(recibo ? { recibo_ou_protocolo: recibo } : {}),
+      ...(dataTransmissao ? { data_transmissao: dataTransmissao } : {}),
+    },
+    fonte_extracao: 'local_deterministica_especializada',
+  };
+  const confianca = clamp(base.confianca + (compativel ? 0.2 : 0) + (anoCalendario ? 0.08 : 0) + (recibo ? 0.08 : 0));
+  return { dados, confianca };
+}
+
+function parseCompartilhamentoEcac(texto: string): { dados: Record<string, any>; confianca: number } {
+  const norm = textoNormalizado(texto);
+  const compativel = /autorizar compartilhamento de dados|autorizacao de compartilhamento de dados|compartilhamento de dados.{0,100}(?:receita federal|rfb|blockchain)/i.test(norm);
+  const token = limparValor(texto.match(/(?:c[oó]digo|token)\s*(?:\(token\))?\s*(?:ou\s+qrcode)?\s*[^\n\r]*\n\s*([A-Za-z0-9]{20,})/i)?.[1] || null);
+  const concluida = /compartilhamento de dados foi conclu[ií]do|autoriza[cç][aã]o de compartilhamento de dados foi registrada/i.test(norm);
+  const dataInicio = dataProximaDe(texto, /(?:in[ií]cio|iniciado|vig[eê]ncia)\D{0,30}(\d{2}\/\d{2}\/20\d{2})/i);
+  const dados = {
+    documento_compativel: compativel,
+    autorizacao: concluida,
+    status_autorizacao: concluida ? 'concluida' : null,
+    token_autorizacao: token,
+    registro_blockchain: /blockchain/i.test(norm),
+    data_inicio: dataInicio,
+    campos_comprovados: {
+      ...(compativel ? { autorizacao: concluida } : {}),
+      ...(token ? { token_autorizacao: token } : {}),
+      ...(/blockchain/i.test(norm) ? { registro_blockchain: true } : {}),
+      ...(dataInicio ? { data_inicio: dataInicio } : {}),
+    },
+    fonte_extracao: 'local_deterministica_especializada',
+  };
+  const confianca = clamp((compativel ? 0.65 : 0) + (concluida ? 0.2 : 0) + (token ? 0.08 : 0) + (/blockchain/i.test(norm) ? 0.07 : 0));
+  return { dados, confianca };
 }
 
 
@@ -1659,12 +1774,21 @@ export function analisarTextoDocumentoLocal(tipo: TipoDocumentoLocal, texto: str
   if (tipo === 'extrato_bancario') return parseExtratoBancario(texto);
   if (tipo === 'efd_contribuicoes') return parseEfdContribuicoes(texto);
   if (tipo === 'efd_icms_ipi') return parseEfdIcmsIpi(texto);
+  if (tipo === 'defis') return parseDeclaracaoDefis(texto);
+  if (tipo === 'dasn_simei') return parseDeclaracaoDasnSimei(texto);
+  if (tipo === 'compartilhamento_ecac') return parseCompartilhamentoEcac(texto);
   if (tipo === 'certidao_regularidade' || tipo === 'situacao_fiscal' || tipo === 'consulta_cadin'
     || tipo === 'consulta_pgfn' || tipo === 'consulta_scr' || tipo === 'consulta_ccs'
     || tipo === 'consulta_ccf' || tipo === 'consulta_cenprot' || tipo === 'consulta_bureau') {
     return parseConsultaDocumentalEspecializada(tipo, texto, tipoDocumentoEsperado);
   }
-  if (tipo === 'documento_generico') return parseDocumentoGenerico(texto, tipoDocumentoEsperado);
+  if (tipo === 'documento_generico') {
+    const esperado = String(tipoDocumentoEsperado || '').toLowerCase();
+    if (esperado === 'defis' || esperado === 'recibo_defis') return parseDeclaracaoDefis(texto);
+    if (esperado === 'dasn_simei' || esperado === 'recibo_dasn_simei') return parseDeclaracaoDasnSimei(texto);
+    if (esperado === 'compartilhamento_ecac') return parseCompartilhamentoEcac(texto);
+    return parseDocumentoGenerico(texto, tipoDocumentoEsperado);
+  }
   // ECF, DCTF/DCTFWeb, DARF e Livro Caixa compartilham a detecção
   // conservadora de regime, mas preservam sua própria compatibilidade documental.
   if (tipo === 'ecf' || tipo === 'pgdas_d' || tipo === 'dctf_mit' || tipo === 'darf' || tipo === 'ecd' || tipo === 'livro_caixa') return parseComprovanteRegime(tipo, texto);
@@ -1829,8 +1953,26 @@ export async function extrairDocumentoLocal(
       );
       const texto = String(stdout || '').replace(/\u0000/g, '').trim();
       if (texto.length >= 20) {
-        const { dados, confianca } = analisarTextoDocumentoLocal(tipo, texto, tipoDocumentoEsperado);
-        if (confianca >= Number(process.env.LOCAL_EXTRACTION_MIN_CONFIDENCE || 0.55)) {
+        let { dados, confianca } = analisarTextoDocumentoLocal(tipo, texto, tipoDocumentoEsperado);
+        const minimoConfianca = Number(process.env.LOCAL_EXTRACTION_MIN_CONFIDENCE || 0.55);
+        const precisaOcrSuplementar = tipo === 'faturamento_12_meses'
+          && (!dados.assinatura_socio_administrador?.presente || !dados.assinatura_contador?.presente)
+          && String(process.env.LOCAL_OCR_SUPPLEMENT_ENABLED || 'true').toLowerCase() !== 'false';
+        if (precisaOcrSuplementar) {
+          const ocrSuplementar = await extrairTextoComOcrLocal(arquivoPath, true, timeoutOcr, bufferMaximo);
+          if (ocrSuplementar.texto.length >= 20) {
+            const combinado = `${texto}\n${ocrSuplementar.texto}`;
+            const resultadoCombinado = analisarTextoDocumentoLocal(tipo, combinado, tipoDocumentoEsperado);
+            if (resultadoCombinado.confianca >= confianca) {
+              dados = resultadoCombinado.dados;
+              confianca = resultadoCombinado.confianca;
+              if (dados.assinatura_socio_administrador?.presente && dados.assinatura_contador?.presente) {
+                return { tipo, disponivel: true, legivel: confianca >= minimoConfianca, mecanismo: 'tesseract', texto: combinado, dados, confianca };
+              }
+            }
+          }
+        }
+        if (confianca >= minimoConfianca) {
           return { tipo, disponivel: true, legivel: true, mecanismo: 'pdftotext', texto, dados, confianca };
         }
         // Camada textual incompleta: tenta OCR antes de recorrer à API externa,

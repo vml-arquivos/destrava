@@ -369,6 +369,30 @@ describe('validação documental especializada', () => {
     expect(alertas.map((a) => a.codigo)).toContain('contrato_socios_divergentes_qsa');
   });
 
+  it('não combina data de um ato com número de outro ato da Junta', () => {
+    const alertas = validarContratoComAtosJunta(
+      { documento_compativel: true, nire: '52206183723', data_registro: '2025-06-06', numero_arquivamento: '2519165' },
+      {
+        documento_compativel: true,
+        nire: '52206183723',
+        historico_arquivamentos: [
+          { numero: '2519165', data: '2024-03-22', tipo_ato: 'ALTERAÇÃO' },
+          { numero: '20251505987', data: '2025-06-06', tipo_ato: 'ALTERAÇÃO' },
+        ],
+      },
+    );
+    expect(alertas.some((a) => a.codigo === 'contrato_numero_ato_nao_localizado')).toBe(true);
+  });
+
+  it('bloqueia CNPJ da certidão da Junta pertencente a outra empresa', () => {
+    const alertas = validarContratoComAtosJunta(
+      { documento_compativel: true, nire: '52206183723', data_registro: '2025-06-06', cnpj: '52.008.360/0001-33' },
+      { documento_compativel: true, nire: '52206183723', cnpj: '98.765.432/0001-10', historico_arquivamentos: [{ numero: '20251505987', data: '2025-06-06', tipo_ato: 'ALTERAÇÃO' }] },
+      { cnpj: '52.008.360/0001-33' },
+    );
+    expect(alertas.some((a) => a.codigo === 'junta_cnpj_empresa_divergente' && a.severidade === 'critica')).toBe(true);
+  });
+
 });
 
 describe('AnaliseDocumentalService com dependências isoladas', () => {

@@ -538,6 +538,8 @@ const TIPOS_ETAPA1_PROMPT_CODIGO: Partial<Record<string, string>> = {
   qsa: 'qsa_extract',
   simples_nacional: 'simples_extract',
   enquadramento_tributario_cnpj: 'simples_extract',
+  contrato_social: 'contrato_junta_crosscheck',
+  alteracao_contratual: 'contrato_junta_crosscheck',
 };
 
 export function agendarAnaliseRegraDocumental(documento: any) {

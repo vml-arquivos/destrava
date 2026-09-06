@@ -100,17 +100,19 @@ function detectarTipo(texto: string): { tipo: TipoDetectadoDocumental; evidencia
     push('Situação Fiscal');
     return { tipo: 'SITUACAO_FISCAL', evidencias, confianca: 0.89 };
   }
-  if (/sistema de informacoes de credito|\bscr\b|registrato/i.test(n)) {
-    push('SCR');
-    return { tipo: 'SCR', evidencias, confianca: 0.92 };
-  }
-  if (/cadastro de clientes do sistema financeiro|\bccs\b/i.test(n)) {
+  // CCS/CCF têm marcadores próprios e precisam vencer o termo genérico
+  // "Registrato"/"SCR" que pode aparecer em rodapés ou textos de ajuda.
+  if (/relatorio de contas e relacionamentos\s*\(ccs\)|cadastro de clientes do sistema financeiro|\bccs\b/i.test(n)) {
     push('CCS');
     return { tipo: 'CCS', evidencias, confianca: 0.92 };
   }
-  if (/cadastro de emitentes de cheques sem fundos|\bccf\b/i.test(n)) {
+  if (/relatorio de cheques sem fundos\s*\(ccf\)|cadastro de emitentes de cheques sem fundos|\bccf\b/i.test(n)) {
     push('CCF');
     return { tipo: 'CCF', evidencias, confianca: 0.92 };
+  }
+  if (/sistema de informacoes de credito|\bscr\b|relatorio de emprestimos e financiamentos|registrato/i.test(n)) {
+    push('SCR');
+    return { tipo: 'SCR', evidencias, confianca: 0.92 };
   }
   if (/\bserasa\b/i.test(n)) {
     push('Serasa');
@@ -145,11 +147,11 @@ function detectarTipo(texto: string): { tipo: TipoDetectadoDocumental; evidencia
     ['CNDT', /certidao negativa de debitos trabalhistas|justica do trabalho.{0,80}certidao/, 'CNDT', 0.96],
     ['CND_ESTADUAL', /certidao.{0,40}(?:fazenda estadual|tributos estaduais|divida ativa estadual)/, 'CND estadual', 0.90],
     ['CND_MUNICIPAL', /certidao.{0,40}(?:fazenda municipal|tributos municipais|divida ativa municipal)/, 'CND municipal', 0.90],
+    ['DEFIS', /declaracao de informacoes socioeconomicas e fiscais|\bdefis\b/, 'DEFIS', 0.96],
+    ['DASN_SIMEI', /declaracao anual do simei|\bdasn[- ]simei\b/, 'DASN-SIMEI', 0.96],
     ['SIMPLES_NACIONAL', /consulta optantes|situacao no simples nacional|optante pelo simples nacional/, 'Simples Nacional', 0.96],
     ['PGMEI', /programa gerador do das para o mei|\bpgmei\b/, 'PGMEI', 0.96],
     ['DAS_MEI', /documento de arrecadacao do simples nacional.{0,80}simei|\bdas[- ]mei\b/, 'DAS-MEI', 0.94],
-    ['DEFIS', /declaracao de informacoes socioeconomicas e fiscais|\bdefis\b/, 'DEFIS', 0.96],
-    ['DASN_SIMEI', /declaracao anual do simei|\bdasn[- ]simei\b/, 'DASN-SIMEI', 0.96],
     ['CCMEI', /certificado da condicao de microempreendedor individual|\bccmei\b/, 'CCMEI', 0.97],
     ['EFD_CONTRIBUICOES', /efd[- ]contribuicoes|escrituracao fiscal digital.{0,80}(?:pis|cofins)|\|m400\||\|m800\|/, 'EFD-Contribuições', 0.97],
     ['EFD_ICMS_IPI', /efd.{0,30}icms.{0,10}ipi|escrituracao fiscal digital.{0,80}(?:icms|ipi)|\|e110\|/, 'EFD ICMS/IPI', 0.97],
@@ -178,7 +180,7 @@ function detectarTipo(texto: string): { tipo: TipoDetectadoDocumental; evidencia
     ['NOTA_PROMISSORIA', /nota promissoria/, 'Nota promissória', 0.96],
     ['AVAL', /avalista|garantidor solidario/, 'Aval', 0.88],
     ['GARANTIA', /instrumento de garantia|bem em garantia|laudo de avaliacao/, 'Documento de garantia', 0.82],
-    ['COMPARTILHAMENTO_ECAC', /compartilhamento.{0,60}e[- ]?cac|autoriza.{0,80}dados fiscais/, 'Compartilhamento eCAC', 0.90],
+    ['COMPARTILHAMENTO_ECAC', /compartilhamento.{0,60}e[- ]?cac|autoriza.{0,80}dados fiscais|autorizar compartilhamento de dados|autorizacao de compartilhamento de dados|compartilhamento de dados.{0,80}(?:receita federal|rfb|blockchain)/, 'Compartilhamento eCAC', 0.95],
   ];
   for (const [tipo, expressao, evidencia, confianca] of regras) {
     if (expressao.test(n)) {
@@ -398,7 +400,7 @@ export function classificarDocumentoDeterministico(input: ClassificacaoDocumenta
       : tipoTemporalDetectado(detectado.tipo, input.tipoEsperado),
   });
   const satisfaz = identidadeComEscopo === 'IDENTIFICADO'
-    && (temporalidade_status === 'ATUAL' || temporalidade_status === 'NAO_APLICAVEL');
+    && ['ATUAL', 'NAO_APLICAVEL', 'WINDOW_SUPPORT'].includes(temporalidade_status);
   const cobertura_status: CoverageStatus = satisfaz ? 'SATISFAZ' : 'NAO_SATISFAZ';
   const motivo = identidadeComEscopo === 'INCOMPATIVEL'
     ? `Esperado ${tipoEsperado}; detectado ${detectado.tipo}.`
@@ -413,7 +415,9 @@ export function classificarDocumentoDeterministico(input: ClassificacaoDocumenta
             : temporalidade_status === 'HISTORICO'
               ? 'O documento foi preservado como evidência histórica, mas não comprova a situação atual.'
               : temporalidade_status === 'WINDOW_SUPPORT'
-                ? 'O documento é histórico, mas a competência ainda está dentro da janela de faturamento dos últimos 12 meses -- pode continuar sendo necessário para completá-la.'
+                ? (satisfaz
+                  ? 'A competência mensal está dentro da janela de análise dos últimos 12 meses e o documento pode ser utilizado como evidência.'
+                  : 'O documento é histórico, mas a competência ainda está dentro da janela de faturamento dos últimos 12 meses -- pode continuar sendo necessário para completá-la.')
       : temporalidade_status === 'AINDA_NAO_EXIGIVEL'
         ? 'O documento pertence ao ano-calendário ainda corrente e não é exigível como atraso.'
         : satisfaz

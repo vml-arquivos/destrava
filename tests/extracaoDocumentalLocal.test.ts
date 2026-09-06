@@ -604,4 +604,57 @@ describe('extração documental local determinística', () => {
     expect(resultado.confianca).toBeGreaterThanOrEqual(0.72);
   });
 
+  it('extrai receita do PA e RBT12 do layout tabular do PGDAS sem confundir regime de apuração', () => {
+    const resultado = analisarTextoDocumentoLocal('pgdas_d', `
+      Programa Gerador do Documento de Arrecadação do Simples Nacional - Declaratório
+      CNPJ Matriz: 52.008.360/0001-33
+      Período de Apuração: 01/07/2026 a 31/07/2026
+      Optante pelo Simples Nacional: Sim
+      Regime de Apuração: Competência
+      Receita Bruta do PA (RPA) - Competência 36.923,49 0,00 36.923,49
+      Receita bruta acumulada nos doze meses anteriores 406.219,36 0,00 406.219,36
+      ao PA (RBT12)
+      Número da Declaração: 52008360202607001 Número do Recibo: 01.07.26229.0440173-6
+    `);
+    expect(resultado.dados.documento_compativel).toBe(true);
+    expect(resultado.dados.receita_bruta).toBe(36923.49);
+    expect(resultado.dados.receita_bruta_pa).toBe(36923.49);
+    expect(resultado.dados.rbt12).toBe(406219.36);
+    expect(resultado.dados.regime_tributario).toBe('Simples Nacional');
+    expect(resultado.dados.regime_de_apuracao).toBe('Competência');
+  });
+
+  it('separa regime de apuração e extrai ano, recibo e transmissão da DEFIS', () => {
+    const resultado = analisarTextoDocumentoLocal('documento_generico', `
+      Declaração de Informações Socioeconômicas e Fiscais - DEFIS
+      CNPJ: 52.008.360/0001-33
+      Declaração Retificadora Exercício 2026 Ano-Calendário 2025
+      Regime de Apuração: competência
+      Optante pelo Simples Nacional: Sim
+      Número da Declaração: 520083602025002 Número do Recibo: 02.07.26230.0312046-0
+      Data e Horário da transmissão da Declaração: 18/08/2026 13:58:49
+    `, 'defis');
+    expect(resultado.dados.documento_compativel).toBe(true);
+    expect(resultado.dados.ano_calendario).toBe(2025);
+    expect(resultado.dados.regime_tributario).toBe('Simples Nacional');
+    expect(resultado.dados.regime_de_apuracao).toBe('competência');
+    expect(resultado.dados.recibo_ou_protocolo).toBe('02.07.26230.0312046-0');
+    expect(resultado.dados.data_transmissao).toBe('2026-08-18');
+  });
+
+  it('reconhece as duas assinaturas digitais no rodapé OCR do faturamento', () => {
+    const resultado = analisarTextoDocumentoLocal('faturamento_12_meses', `
+      PALUMA BURGER LTDA CNPJ 52.008.360/0001-33
+      Agosto de 2025 R$ 30.000,00
+      TOTAL DO PERÍODO R$ 30.000,00
+      Brasília - DF, 04 de agosto de 2026.
+      Documento assinado digitalmente
+      Itamar Gonçalves Cunha Filho PALUMA BURGER LTDA
+      Contador Responsável Representante Legal
+      CRCGO: 004102/O
+    `);
+    expect(resultado.dados.assinatura_socio_administrador).toMatchObject({ presente: true, tipo: 'eletronica' });
+    expect(resultado.dados.assinatura_contador).toMatchObject({ presente: true, tipo: 'eletronica' });
+  });
+
 });

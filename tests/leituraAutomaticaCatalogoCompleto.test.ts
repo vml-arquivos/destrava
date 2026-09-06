@@ -450,8 +450,9 @@ describe('cobertura integral da leitura automática documental', () => {
     // meses, então passa a ser `WINDOW_SUPPORT` (ver `TemporalStatus` em
     // documentalLaudoVersioning.ts). O ponto original deste teste --
     // "2 meses atrás não é confundido com ATUAL" -- continua garantido por
-    // `satisfaz_requisito: false`.
-    expect(julho).toMatchObject({ satisfaz_requisito: false, temporalidade_status: 'WINDOW_SUPPORT' });
+    // `temporalidade_status: WINDOW_SUPPORT`, sem rebaixar a competência a
+    // ATUAL, mas satisfazendo a evidência mensal da janela rolling.
+    expect(julho).toMatchObject({ satisfaz_requisito: true, temporalidade_status: 'WINDOW_SUPPORT' });
   });
 
   it('reconcilia M400 e M800 sem somar a mesma base econômica duas vezes', () => {
@@ -539,8 +540,8 @@ describe('cobertura integral da leitura automática documental', () => {
       competenciaInicio: '2025-06-01', competenciaFim: '2025-06-30',
       hoje: new Date('2026-09-05T12:00:00.000Z'),
     });
-    expect(dentroDaJanela).toMatchObject({ satisfaz_requisito: false, temporalidade_status: 'WINDOW_SUPPORT' });
+    expect(dentroDaJanela).toMatchObject({ satisfaz_requisito: true, temporalidade_status: 'WINDOW_SUPPORT' });
     expect(foraDaJanela).toMatchObject({ satisfaz_requisito: false, temporalidade_status: 'HISTORICO' });
-    expect(dentroDaJanela.motivo).toMatch(/janela de faturamento/);
+    expect(dentroDaJanela.motivo).toMatch(/janela de análise/);
   });
 });

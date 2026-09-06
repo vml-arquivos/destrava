@@ -42,6 +42,7 @@ const TIPOS_LEITURA_LOCAL_DETERMINISTICA = new Set<TipoDocumentoLocal>([
   'ecf', 'pgdas_d', 'dctf_mit', 'darf', 'ecd', 'livro_caixa',
   'certidao_regularidade', 'situacao_fiscal', 'consulta_cadin', 'consulta_pgfn',
   'consulta_scr', 'consulta_ccs', 'consulta_ccf', 'consulta_cenprot', 'consulta_bureau',
+  'defis', 'dasn_simei', 'compartilhamento_ecac',
 ]);
 
 const TIPOS_SOCIETARIOS_COM_LEITOR_LOCAL = new Set([
@@ -58,6 +59,9 @@ export function tipoLeitorLocalDocumentoCatalogado(tipoDocumento: string): TipoD
   if (['simples_nacional', 'enquadramento_tributario_cnpj', 'comprovante_regime_outro'].includes(tipoDocumento)) return 'simples_nacional';
   if (tipoCanonico === 'comprovante_residencia') return 'comprovante_residencia';
   if (tipoCanonico === 'faturamento_12_meses') return 'faturamento_12_meses';
+  if (tipoCanonico === 'defis') return 'defis';
+  if (tipoCanonico === 'dasn_simei') return 'dasn_simei';
+  if (tipoCanonico === 'compartilhamento_ecac') return 'compartilhamento_ecac';
   if (tipoCanonico === 'extrato_bancario') return 'extrato_bancario';
   if (['ecf', 'recibo_ecf'].includes(tipoDocumento)) return 'ecf';
   if (['pgdas', 'pgdas_d', 'recibo_pgdas'].includes(tipoDocumento)) return 'pgdas_d';
@@ -943,6 +947,10 @@ export function validarContratoComAtosJunta(contrato: any, atos: any, empresa?: 
   const datasJunta = new Set(historico.map((item: any) => parseDate(item?.data)).filter(Boolean));
   const dataJuntaPrincipal = parseDate(atos?.data_registro);
   if (dataJuntaPrincipal) datasJunta.add(dataJuntaPrincipal);
+  const numeroContrato = onlyDigits(contrato?.numero_arquivamento);
+  const paresJunta = historico
+    .map((item: any) => ({ data: parseDate(item?.data), numero: onlyDigits(item?.numero) }))
+    .filter((item: any) => item.data);
 
   if (!dataContrato) {
     alertas.push({ codigo: 'contrato_data_registro_nao_identificada', campo: 'data_registro', mensagem: 'Não foi possível identificar a data de registro da alteração/contrato social.', severidade: 'alta', recomendacao: 'Conferir a certificação de registro na última página do documento.' });
@@ -971,11 +979,13 @@ export function validarContratoComAtosJunta(contrato: any, atos: any, empresa?: 
   if (cnpjContrato && cnpjEmpresa && cnpjContrato !== cnpjEmpresa) {
     alertas.push({ codigo: 'contrato_cnpj_empresa_divergente', campo: 'cnpj', mensagem: 'O CNPJ do contrato/alteração não corresponde à empresa analisada.', severidade: 'critica', valor_documento: contrato?.cnpj, valor_receita: empresa?.cnpj, recomendacao: 'Anexar o documento societário pertencente ao CNPJ da empresa.' });
   }
+  if (cnpjJunta && cnpjEmpresa && cnpjJunta !== cnpjEmpresa) {
+    alertas.push({ codigo: 'junta_cnpj_empresa_divergente', campo: 'cnpj', mensagem: 'O CNPJ dos Atos da Junta não corresponde à empresa analisada.', severidade: 'critica', valor_documento: atos?.cnpj, valor_receita: empresa?.cnpj, recomendacao: 'Anexar a certidão/lista de arquivamentos da empresa correta.' });
+  }
 
-  const numeroContrato = onlyDigits(contrato?.numero_arquivamento);
   const numerosJunta = new Set(historico.map((item: any) => onlyDigits(item?.numero)).filter(Boolean));
-  if (numeroContrato && numerosJunta.size > 0 && !numerosJunta.has(numeroContrato)) {
-    alertas.push({ codigo: 'contrato_numero_ato_nao_localizado', campo: 'numero_arquivamento', mensagem: 'O número do ato/arquivamento do contrato não foi localizado nos Atos da Junta Comercial.', severidade: 'alta', valor_documento: contrato?.numero_arquivamento, valor_receita: Array.from(numerosJunta), recomendacao: 'Conferir se o contrato/alteração corresponde a um ato listado na certidão da Junta.' });
+  if (numeroContrato && numerosJunta.size > 0 && !paresJunta.some((item: { data: string | null; numero: string }) => item.data === dataContrato && item.numero === numeroContrato)) {
+    alertas.push({ codigo: 'contrato_numero_ato_nao_localizado', campo: 'numero_arquivamento', mensagem: 'O par data de registro + número de arquivamento do contrato não foi localizado no mesmo ato da Junta.', severidade: 'alta', valor_documento: { data: dataContrato, numero: contrato?.numero_arquivamento }, valor_receita: paresJunta, recomendacao: 'Conferir se o contrato/alteração corresponde ao mesmo ato listado na certidão da Junta.' });
   }
 
   const sociosContrato = Array.isArray(contrato?.socios) ? contrato.socios : [];
@@ -1554,7 +1564,7 @@ function descreverTipoDetectadoResumido(tipoDetectado: unknown): string | null {
   return ROTULOS_TIPO_DETECTADO[chave] || null;
 }
 
-function normalizarDocumentoCatalogado(extraidos: any, tipoDocumento: string): {
+function normalizarDocumentoCatalogado(extraidos: any, tipoDocumento: string, empresa?: any): {
   dados: Record<string, any>;
   evidencias: AnaliseDocumentalGenericaResult['evidencias'];
   camposInferidos: Record<string, unknown>;
@@ -1673,7 +1683,7 @@ function normalizarDocumentoCatalogado(extraidos: any, tipoDocumento: string): {
   // independente desta classificação pela checagem de `tiposComprovacaoRegime`
   // acima (`regimeFoiComprovado`, usada em `satisfazRequisito` mais abaixo).
   const identidadeFlexivel = tipoDocumento === 'comprovante_regime_outro';
-  const classificacaoBase: ClassificacaoDocumentalResult = identidadeFlexivel
+  let classificacaoBase: ClassificacaoDocumentalResult = identidadeFlexivel
     ? {
         tipo_esperado: tipoDocumento,
         tipo_detectado: tipoDocumento as unknown as ClassificacaoDocumentalResult['tipo_detectado'],
@@ -1692,6 +1702,23 @@ function normalizarDocumentoCatalogado(extraidos: any, tipoDocumento: string): {
         competencia: bruto.competencia || { inicio: bruto.competencia_inicio || null, fim: bruto.competencia_fim || null },
         validade: bruto.validade || { inicio: bruto.validade_inicio || null, fim: bruto.validade_fim || null },
       });
+  const cnpjEsperado = onlyDigits(empresa?.cnpj);
+  const cnpjLido = onlyDigits(bruto.cnpj ?? comprovados.cnpj);
+  const tipoCanonicoDocumento = canonicalizeDocumentType(tipoDocumento);
+  const identidadeCnpjConfere = cnpjEsperado && cnpjLido
+    ? (tipoCanonicoDocumento === 'rating_bacen_cnpj' && cnpjLido.length === 8
+      ? cnpjEsperado.startsWith(cnpjLido)
+      : cnpjLido === cnpjEsperado)
+    : true;
+  if (cnpjEsperado && cnpjLido && !identidadeCnpjConfere && !identidadeFlexivel) {
+    classificacaoBase = {
+      ...classificacaoBase,
+      identidade_status: 'INCOMPATIVEL',
+      satisfaz_requisito: false,
+      cobertura_status: 'NAO_SATISFAZ',
+      motivo: `CNPJ do documento (${bruto.cnpj ?? comprovados.cnpj}) não corresponde à empresa analisada.`,
+    };
+  }
   const haEvidenciaEstruturada = evidencias.length > 0 || haDadosExtraidos || Object.values(comprovados).some((valor) => valor !== null && valor !== undefined && String(valor).trim() !== '');
   const fonteLocalEspecializada = typeof bruto.fonte_extracao === 'string'
     && bruto.fonte_extracao.startsWith('local_deterministica')
@@ -1702,7 +1729,7 @@ function normalizarDocumentoCatalogado(extraidos: any, tipoDocumento: string): {
     && fonteLocalEspecializada
     && (confianca ?? 0) >= 0.75
     && haEvidenciaEstruturada;
-  const temporalidadeAceita = classificacaoBase.temporalidade_status === 'ATUAL' || classificacaoBase.temporalidade_status === 'NAO_APLICAVEL';
+  const temporalidadeAceita = ['ATUAL', 'NAO_APLICAVEL', 'WINDOW_SUPPORT'].includes(classificacaoBase.temporalidade_status);
   const classificacao: ClassificacaoDocumentalResult = confirmacaoAssistidaConfiavel
     ? {
         ...classificacaoBase,
@@ -2212,6 +2239,23 @@ export class AnaliseDocumentalService {
     if (['simples_nacional', 'enquadramento_tributario_cnpj'].includes(tipoDocumento)) return this.analisarSimplesNacional(empresaId, arquivoId);
     if (tipoCanonico === 'faturamento_12_meses') return this.analisarFaturamento(empresaId, arquivoId);
     if (tipoDocumento === 'atos_junta_comercial') return this.analisarAtosJuntaComercial(empresaId, arquivoId);
+    if (['contrato_social', 'alteracao_contratual'].includes(tipoCanonico)) {
+      const atos = await this.db.query(
+        `SELECT id
+           FROM public.documentos_arquivos
+          WHERE (empresa_id = $1 OR (entidade_tipo = 'empresa' AND entidade_id = $1))
+            AND tipo_documento = 'atos_junta_comercial'
+            AND excluido_em IS NULL
+            AND COALESCE(status, 'ativo') <> 'excluido'
+          ORDER BY criado_em DESC NULLS LAST, id DESC
+          LIMIT 1`,
+        [empresaId],
+      );
+      const atosArquivoId = atos.rows?.[0]?.id;
+      if (atosArquivoId && String(atosArquivoId) !== String(arquivoId)) {
+        return this.analisarContratoComAtosJunta(empresaId, arquivoId, String(atosArquivoId));
+      }
+    }
     return this.analisarDocumentoCatalogado(empresaId, arquivoId, tipoDocumento);
   }
 
@@ -2306,10 +2350,10 @@ export class AnaliseDocumentalService {
     const tipoCanonico = canonicalizeDocumentType(tipoDocumento);
     const promptConfig = documentAnalysisConfig(tipoDocumento);
     const prompt = promptDocumentoCatalogado(tipoDocumento, catalogo.nome, catalogo.categoria, promptConfig?.promptCodigo || `catalogo_${tipoCanonico}`);
-    const { documento } = await this.carregarContexto(empresaId, arquivoId);
+    const { empresa, documento } = await this.carregarContexto(empresaId, arquivoId);
     const tipoLocal = tipoLeitorLocalDocumentoCatalogado(tipoDocumento);
     const extraidos = await this.extrairHibrido(documento.caminho_arquivo!, prompt, documento.mime_type || 'application/pdf', tipoLocal, true, tipoDocumento);
-    const normalizado = normalizarDocumentoCatalogado(extraidos, tipoDocumento);
+    const normalizado = normalizarDocumentoCatalogado(extraidos, tipoDocumento, empresa);
     const resultadoBase = criarResultado('documento_generico', empresaId, arquivoId, normalizado.dados, normalizado.alertas, this.ultimoModeloUsado);
     await persistirEvidenciasP0(this.db, empresaId, arquivoId, tipoDocumento, normalizado.dados, normalizado.evidencias, normalizado.textoFonte)
       .catch((error: any) => console.warn('[P0] Evidências temporais/rolling/bureau indisponíveis; laudo preservado:', error?.message || error));

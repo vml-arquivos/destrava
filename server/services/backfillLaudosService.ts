@@ -52,12 +52,14 @@ function workerId(value?: string): string {
 }
 
 function catalogPromptTypes(): string[] {
-  return DOCUMENT_TYPE_CATALOG
+  return Array.from(new Set(DOCUMENT_TYPE_CATALOG
     .filter((item) => Boolean(documentAnalysisConfig(item.tipo)))
-    .map((item) => item.tipo);
+    .map((item) => item.tipo)
+    .concat(['contrato_social', 'alteracao_contratual'])));
 }
 
 function catalogPrompt(tipoDocumento: string): string {
+  if (['contrato_social', 'alteracao_contratual'].includes(canonicalizeDocumentType(tipoDocumento))) return 'contrato_junta_crosscheck';
   return documentAnalysisConfig(tipoDocumento)?.promptCodigo || `catalogo_${tipoDocumento}`;
 }
 

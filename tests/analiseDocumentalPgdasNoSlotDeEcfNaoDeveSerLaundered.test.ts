@@ -60,7 +60,7 @@ function criarDbMock(caminhoArquivo: string, tipoDocumento: string) {
   return {
     async query(text: string) {
       if (text.includes('FROM public.empresas')) {
-        return { rows: [{ id: 'empresa-1', cnpj: '49.366.887/0001-25', razao_social: 'ZR Construcoes e Reformas Civis Ltda' }] };
+        return { rows: [{ id: 'empresa-1', cnpj: '11.222.333/0001-44', razao_social: 'Empresa Fictícia de Testes Ltda' }] };
       }
       if (text.includes('FROM public.socios_empresa')) return { rows: [] };
       if (text.includes('FROM public.documentos_arquivos')) {
