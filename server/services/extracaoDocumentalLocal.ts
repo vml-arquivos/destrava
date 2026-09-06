@@ -704,11 +704,17 @@ function parseContratoSocialAlteracao(texto: string): { dados: Record<string, an
       || valorAposRotulo(linhas, ['data de registro', 'data do registro', 'data de arquivamento']),
   );
   const dataEfeitos = parseDate(texto.match(/COM\s+EFEITOS\s+DO\s+REGISTRO\s+EM\s*[:\-]?\s*(\d{2}\/\d{2}\/\d{4})/i)?.[1] || null);
-  const dataDocumento = parseDate(
-    texto.match(/(?:Goi[aâ]nia|Bras[ií]lia|[A-ZÀ-Ú][\wÀ-ú\s]+)[\s\-\/]*[A-Z]{2}\s*,?\s*(\d{2}\s+de\s+[a-zç]+\s+de\s+\d{4})/i)?.[1]
-      || texto.match(/\b(\d{2}\/\d{2}\/\d{4})\b/)?.[1]
+  const dataDocumento = parseDate(texto.match(/\b(\d{2}\/\d{2}\/\d{4})\b/)?.[1] || null);
+  const dataDocumentoPorExtenso = parseDataPorExtenso(
+    texto.match(/(?:Goi[aâ]nia|Bras[ií]lia|[A-ZÀ-Ú][\wÀ-ú\s]+)[\s\-\/]*[A-Z]{2}\s*,?\s*(\d{1,2}\s+de\s+[a-zç]+\s+de\s+\d{4})/i)?.[1]
       || null,
-  );
+  ) || dataDocumento;
+  const blocoAssinatura = texto.match(/(?:assinam|assinado|assinatura eletr[oô]nica|identifica[cç][aã]o do\(s\) assinante\(s\))[\s\S]{0,900}/i)?.[0] || '';
+  const assinaturaEletronica = /assinatura eletr[oô]nica|assinado digitalmente|consta assinado digitalmente/i.test(blocoAssinatura);
+  const assinaturaDeclarada = /assinam o presente instrumento|assinado por todos de direito|assinatura/i.test(texto);
+  const assinaturas = assinaturaDeclarada
+    ? [{ presente: true, tipo: assinaturaEletronica ? 'eletronica' : 'declarada', evidencia: blocoAssinatura.replace(/\s+/g, ' ').trim().slice(0, 500) }]
+    : [];
 
   const tipoAto = /consolidacao contratual|consolidação contratual/.test(norm)
     ? 'Consolidação'
@@ -795,7 +801,7 @@ function parseContratoSocialAlteracao(texto: string): { dados: Record<string, an
       tipo_ato: tipoAto,
       data_registro: dataRegistro,
       data_efeitos_registro: dataEfeitos,
-      data_documento: dataDocumento,
+      data_documento: dataDocumentoPorExtenso,
       numero_arquivamento: numeroArquivamento,
       registro_atual_comprovado: Boolean(dataRegistro && numeroArquivamento),
       socios: quadroSocietarioFinal.length
@@ -811,6 +817,7 @@ function parseContratoSocialAlteracao(texto: string): { dados: Record<string, an
       quadro_societario_final: quadroSocietarioFinal,
       capital_social_anterior: capitalSocialAnterior,
       capital_social_atual: capitalSocialAtual,
+      assinaturas,
       confianca,
       fonte_extracao: 'local_deterministica',
     },
@@ -850,8 +857,14 @@ function parseFaturamento12Meses(texto: string): { dados: Record<string, any>; c
       || texto.match(/\bBras[ií]lia\s*[-–—]\s*[^,\n]+,\s*([^\n\r]+)/i)?.[1]
       || null,
   );
+  // O modelo oficial da declaração pode imprimir os nomes e, na linha
+  // seguinte, apenas os cargos "Contador Responsável" e "Representante
+  // Legal", sem a palavra literal "assinatura". Esse bloco é evidência dos
+  // dois signatários quando vem acompanhado do CRC/CNPJ do documento.
+  const assinaturaPorCargo = /contador(?:a)?\s+respons[aá]vel[\s\S]{0,120}representante\s+legal|representante\s+legal[\s\S]{0,120}contador(?:a)?\s+respons[aá]vel/i.test(texto)
+    && /\bcrc\b|contador(?:a)?\s+respons[aá]vel/i.test(texto);
   const assinaturaMatch = texto.match(/(?:data\s+(?:de|da)\s+assinatura|assinad[oa]|assinatura|firmad[oa]).{0,80}?((?:\d{2}\/\d{2}\/20\d{2})|(?:\d{1,2}\s+de\s+[a-zç]+\s+de\s+20\d{2}))/is);
-  const dataAssinatura = parseDataPorExtenso(assinaturaMatch?.[1] || null);
+  const dataAssinatura = parseDataPorExtenso(assinaturaMatch?.[1] || null) || (assinaturaPorCargo ? dataDocumento : null);
   const eletronica = /assinado\s+(?:de\s+forma\s+)?(?:digital|eletronic)|assinatura\s+(?:digital|eletronic)|icp[\s-]*brasil|gov\.br/i.test(texto);
   const manual = /assinatura\s+manual|assinado\s+manualmente|assinatura\s+manuscrita/i.test(texto);
   const tipoAssinatura = eletronica ? 'eletronica' : manual ? 'manual' : null;
@@ -863,8 +876,10 @@ function parseFaturamento12Meses(texto: string): { dados: Record<string, any>; c
   const nomeContador = limparValor(nomeContadorAssinatura
     || texto.match(/(?:contador(?:a)?|respons[aá]vel\s+cont[aá]bil)\s*[:\-]\s*([^\n\r]{4,100})/i)?.[1]
     || null);
-  const temSocio = /s[oó]cio(?:\s*-?administrador)?|administrador|representante\s+legal/i.test(texto) && /assinatura|assinado|firmado/i.test(texto);
-  const temContador = /contador|crc|respons[aá]vel\s+cont[aá]bil/i.test(texto) && /assinatura|assinado|firmado/i.test(texto);
+  const temSocio = /s[oó]cio(?:\s*-?administrador)?|administrador|representante\s+legal/i.test(texto)
+    && (/assinatura|assinado|firmado/i.test(texto) || assinaturaPorCargo);
+  const temContador = /contador|crc|respons[aá]vel\s+cont[aá]bil/i.test(texto)
+    && (/assinatura|assinado|firmado/i.test(texto) || assinaturaPorCargo);
   const confianca = clamp((compativel ? 0.25 : 0) + (cnpj ? 0.2 : 0) + (mesesReferencia.length ? 0.25 : 0) + (dataDocumento ? 0.1 : 0) + (dataAssinatura ? 0.1 : 0) + (temSocio ? 0.05 : 0) + (temContador ? 0.05 : 0));
   return {
     dados: {
@@ -1656,8 +1671,19 @@ function parseConsultaDocumentalEspecializada(
 ): { dados: Record<string, any>; confianca: number } {
   const base = parseDocumentoGenerico(texto, tipoDocumentoEsperado);
   const linhas = linhasTexto(texto);
-  const norm = textoNormalizado(texto);
+  const norm = textoNormalizado(texto)
+    .replace(/anali\s+s\s+e/g, 'analise')
+    .replace(/em\s+pres\s+ari\s+al/g, 'empresarial')
+    .replace(/pontua\s+ca\s+o/g, 'pontuacao')
+    .replace(/instituicoe\s+s/g, 'instituicoes')
+    .replace(/data\s+e\s+ho\s+ra/g, 'data e hora')
+    .replace(/d\s+a\s+ta/g, 'data')
+    .replace(/ho\s+ra/g, 'hora')
+    .replace(/pe\s+r[ií]odo/g, 'periodo')
+    .replace(/per\s+[ií]odo/g, 'periodo');
 
+  const relatorioCreditoConsolidado = /analise empresarial.{0,100}(?:financeira|scr)|scr\s*\+\s*laudo financeiro|score empresarial|rating bacen|motor de credito/i.test(norm)
+    && /(?:score|rating|analise empresarial|laudo financeiro)/i.test(norm);
   const marcadores: Record<TipoConsultaDocumentalEspecializada, RegExp> = {
     certidao_regularidade: /certidao.{0,100}(?:debitos|regularidade)|certificado de regularidade do fgts|\bcndt\b|banco nacional de devedores trabalhistas/i,
     situacao_fiscal: /relatorio de situacao fiscal|consulta pendencias.{0,50}situacao fiscal|diagnostico fiscal/i,
@@ -1673,6 +1699,7 @@ function parseConsultaDocumentalEspecializada(
   };
 
   let compativel = marcadores[tipo].test(norm);
+  if (tipo === 'consulta_bureau' && relatorioCreditoConsolidado) compativel = true;
   // Guarda adicional PGFN: "certidão ... dívida ativa" continua sendo CND/CPEND.
   if (tipo === 'consulta_pgfn' && /certidao.{0,160}(?:tributos federais|divida ativa da uniao)/i.test(norm) && !/regularize|consulta.{0,80}inscricoes/i.test(norm)) {
     compativel = false;
@@ -1705,11 +1732,19 @@ function parseConsultaDocumentalEspecializada(
     const valoresReferencia = linhaReferencia ? Array.from(linhaReferencia.matchAll(/R\$\s*[-\d.]+(?:,\d{1,2})?/g)).map((match) => numeroMonetario(match[0])).filter((valor): valor is number => valor !== null) : [];
     const vencidasNoCorpo = corpoScr.some((linha) => /vencida|vencidas/i.test(linha) && /R\$/.test(linha));
     adicionais.instituicoes = Array.from(new Set(instituicoesScr));
+    const quantidadeInstituicoes = Number(norm.match(/qtd\.?\s+instituicoes[\s\S]{0,100}?(\d+)/i)?.[1] || '') || null;
+    if (!adicionais.instituicoes.length && quantidadeInstituicoes) {
+      // O relatório consolidado informa a quantidade, não os nomes dos
+      // bancos. Mantemos a proveniência explícita em vez de inventar nomes.
+      adicionais.instituicoes = [{ quantidade: quantidadeInstituicoes, nomes_informados: false }];
+      adicionais.instituicoes_quantidade = quantidadeInstituicoes;
+    }
+    adicionais.data_base = norm.match(/\bperiodo[\s\S]{0,100}?(20\d{2}-\d{2})\b/i)?.[1] || null;
     adicionais.saldo_devedor = base.dados.saldo ?? valoresReferencia[0] ?? null;
     adicionais.limites = base.dados.limites ?? (valoresReferencia.length > 1 ? valoresReferencia.at(-1) : null);
     adicionais.atrasos = quantidadeRotulada(linhas, ['operações em atraso', 'operacoes em atraso', 'dívidas vencidas', 'dividas vencidas']) ?? (vencidasNoCorpo ? null : 0);
     adicionais.data_consulta = base.dados.data_consulta
-      || parseDate(texto.match(/data\s+e\s+hora[\s\S]{0,120}?(\d{2}\/\d{2}\/20\d{2})/i)?.[1] || null);
+      || parseDate(norm.match(/data\s+e\s+hora[\s\S]{0,120}?(\d{2}\/\d{2}\/20\d{2})/i)?.[1] || null);
     const situacaoScr = texto.match(/\bscr\b\s+(vencid[oa]|em\s+dia)\b/i)?.[1] || null;
     adicionais.resultado_consulta = situacaoScr ? `SCR ${situacaoScr}` : null;
   } else if (tipo === 'consulta_ccs') {
@@ -1741,8 +1776,24 @@ function parseConsultaDocumentalEspecializada(
   } else if (tipo === 'consulta_bureau') {
     adicionais.restricoes = quantidadeRotulada(linhas, ['quantidade de restrições', 'quantidade de restricoes', 'negativações', 'negativacoes']);
     adicionais.rating = limparValor(valorAposRotulo(linhas, ['rating', 'faixa de risco', 'faixa rating']));
-    adicionais.resultado_consulta = base.dados.resultado_consulta
-      || (/sem restricoes|nada consta/i.test(norm) ? 'Sem restrições identificadas' : null);
+    const pontuacaoRating = texto.match(/pontua[cç][aã]o\s+rating\s+(\d{1,4})\s+([A-Z]{1,3})/i);
+    const score = pontuacaoRating?.[1] ? Number(pontuacaoRating[1]) : Number(limparValor(valorAposRotulo(linhas, ['pontuação', 'pontuacao', 'score'])) || '') || null;
+    const ratingComposto = pontuacaoRating?.[2] || texto.match(/\brating\s*:?\s*([A-Z]{1,3})\b/i)?.[1] || adicionais.rating || null;
+    const compacta = texto.match(/data\s+consulta\D{0,30}(20\d{6})/i)?.[1] || null;
+    const dataCompacta = compacta ? `${compacta.slice(0, 4)}-${compacta.slice(4, 6)}-${compacta.slice(6, 8)}` : null;
+    const dataConsultaRelatorio = parseDate(
+      texto.match(/data\s+e\s+hora\D{0,120}(\d{2}\/\d{2}\/20\d{2})/i)?.[1]
+        || texto.match(/data\s+consulta\D{0,30}(\d{2}\/\d{2}\/20\d{2})/i)?.[1]
+        || dataCompacta,
+    );
+    const situacaoCredito = texto.match(/\b(APROVADO(?:_[A-Z]+)?|ALTO_RISCO|BAIXO_RISCO|MEDIO_RISCO|M[ÉE]DIO_RISCO|RECUSADO)\b/i)?.[1]
+      || null;
+    adicionais.score = score;
+    adicionais.rating = ratingComposto;
+    adicionais.data_consulta = base.dados.data_consulta || dataConsultaRelatorio;
+    adicionais.resultado_consulta = relatorioCreditoConsolidado
+      ? `Relatório empresarial consolidado${ratingComposto ? ` — rating ${ratingComposto}` : ''}${situacaoCredito ? ` — ${situacaoCredito}` : ''}`
+      : base.dados.resultado_consulta || (/sem restricoes|nada consta/i.test(norm) ? 'Sem restrições identificadas' : null);
   }
 
   const adicionaisValidos = Object.fromEntries(

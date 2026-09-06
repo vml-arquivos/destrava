@@ -43,7 +43,13 @@ function normalizar(value: unknown): string {
 }
 
 function detectarTipo(texto: string): { tipo: TipoDetectadoDocumental; evidencias: string[]; confianca: number } {
-  const n = normalizar(texto);
+  const n = normalizar(texto)
+    .replace(/anali\s+s\s+e/g, 'analise')
+    .replace(/em\s+pres\s+ari\s+al/g, 'empresarial')
+    .replace(/pontua\s+ca\s+o/g, 'pontuacao')
+    .replace(/instituicoe\s+s/g, 'instituicoes')
+    .replace(/data\s+e\s+ho\s+ra/g, 'data e hora')
+    .replace(/per\s+[ií]odo/g, 'periodo');
   const evidencias: string[] = [];
   const push = (evidencia: string) => { if (!evidencias.includes(evidencia)) evidencias.push(evidencia); };
 
@@ -83,6 +89,16 @@ function detectarTipo(texto: string): { tipo: TipoDetectadoDocumental; evidencia
   if (/certidao negativa de debitos|\bcnd\b/i.test(n)) {
     push('CND');
     return { tipo: 'CND', evidencias, confianca: 0.93 };
+  }
+  // Um relatório de análise empresarial pode reunir score/rating, SCR, CCF,
+  // protestos, faturamento e QSA no mesmo PDF. Os marcadores das seções
+  // internas não transformam esse arquivo em CENPROT/SCR isolado: o cabeçalho
+  // e o bloco de score/rating são a evidência da classe composta.
+  const relatorioCreditoConsolidado = /analise empresarial.{0,100}(?:financeira|scr)|scr\s*\+\s*laudo financeiro|score empresarial|rating bacen|motor de credito/i.test(n)
+    && /(?:score|rating|analise empresarial|laudo financeiro)/i.test(n);
+  if (relatorioCreditoConsolidado) {
+    push('relatório empresarial consolidado com score/rating');
+    return { tipo: 'RELATORIO_CREDITO_CONSOLIDADO', evidencias, confianca: 0.96 };
   }
   if (/cadastro informativo de creditos nao quitados|\bcadin\b/i.test(n)) {
     push('CADIN');
@@ -256,6 +272,8 @@ function autorizado(tipoEsperado: string, tipoDetectado: TipoDetectadoDocumental
   if (tipoEsperado === 'CERTIDAO') return ['CND', 'CPEND', 'CNDT', 'CND_ESTADUAL', 'CND_MUNICIPAL'].includes(tipoDetectado);
   if (tipoEsperado === 'CONTRATO_GERAL') return ['CONTRATO_GERAL', 'CONTRATO_PRESTACAO_SERVICOS', 'CONTRATO_ASSESSORIA'].includes(tipoDetectado);
   if (tipoEsperado === 'CONTRATO_SOCIAL') return ['CONTRATO_SOCIAL', 'ALTERACAO_CONTRATUAL'].includes(tipoDetectado);
+  if (tipoEsperado === 'SERASA') return ['SERASA', 'RELATORIO_CREDITO_CONSOLIDADO'].includes(tipoDetectado);
+  if (tipoEsperado === 'SCR') return ['SCR', 'RELATORIO_CREDITO_CONSOLIDADO'].includes(tipoDetectado);
   return false;
 }
 

@@ -1557,6 +1557,7 @@ const ROTULOS_TIPO_DETECTADO: Record<string, string> = {
   LIVRO_CAIXA: 'Livro Caixa', livro_caixa: 'Livro Caixa',
   CND: 'CND', CPEND: 'CPEND', CADIN: 'CADIN', PGFN: 'PGFN', CENPROT: 'CENPROT',
   SITUACAO_FISCAL: 'Situação Fiscal', SCR: 'SCR', CCS: 'CCS', CCF: 'CCF', SERASA: 'SERASA',
+  RELATORIO_CREDITO_CONSOLIDADO: 'Relatório empresarial consolidado (score/rating)',
 };
 function descreverTipoDetectadoResumido(tipoDetectado: unknown): string | null {
   const chave = String(tipoDetectado || '').trim();
