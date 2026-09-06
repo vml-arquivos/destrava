@@ -289,6 +289,10 @@ registrarPerfis(['consulta_serasa_cnpj', 'score_boavista', 'restricoes_cnpj'], [
 registrarPerfis(['consulta_serasa_cpf', 'restricoes_cpf_socio'], ['cpf', 'data_consulta', 'resultado_consulta'], ['score', 'restricoes', 'dividas', 'protestos', 'consultas', 'limites']);
 
 registrarPerfis(['pgdas'], ['cnpj', 'competencia', 'receita_bruta', 'recibo_ou_protocolo'], ['receitas_por_estabelecimento', 'receitas_por_atividade', 'anexos', 'segregacoes', 'rbt12', 'tributos', 'das', 'retificacao', 'data_transmissao']);
+// O recibo comprova entrega, competência e número do recibo; não é a
+// declaração completa e não pode ser reprovado pela ausência de receita_bruta.
+// Embora seja alias de `pgdas` no catálogo, conserva este perfil próprio.
+registrarPerfis(['recibo_pgdas'], ['cnpj', 'competencia', 'recibo_ou_protocolo'], ['receita_bruta', 'rbt12', 'regime_tributario', 'data_transmissao', 'autenticacao']);
 registrarPerfis(['pgmei', 'das_mei'], ['cnpj', 'competencia', 'valor_total'], ['vencimento', 'data_pagamento', 'situacao_pagamento', 'codigo_barras', 'autenticacao', 'recibo_ou_protocolo']);
 registrarPerfis(['ecf'], ['cnpj', 'periodo', 'regime_tributario', 'recibo_ou_protocolo'], ['irpj', 'csll', 'lalur', 'elacs', 'saldos', 'registros', 'assinaturas', 'hash', 'retificacao']);
 registrarPerfis(['ecd'], ['cnpj', 'periodo', 'recibo_ou_protocolo'], ['tipo_livro', 'saldos', 'demonstracoes', 'assinaturas', 'hash', 'retificacao']);
@@ -338,12 +342,13 @@ export function possuiPerfilIndividualDocumental(tipoDocumento: string): boolean
 }
 
 export function obterPerfilAnaliseDocumental(tipoDocumento: string): DocumentAnalysisProfile {
+  const tipoOriginal = String(tipoDocumento || '').trim().toLowerCase();
   const tipo = canonicalizeDocumentType(tipoDocumento);
   const item = getDocumentCatalogEntry(tipoDocumento) || getDocumentCatalogEntry(tipo);
   const categoria = item?.categoria || 'outros';
   const base = CAMPOS_POR_CATEGORIA[categoria] || CAMPOS_POR_CATEGORIA.outros;
   const temporal = POLITICA_POR_TIPO[tipo] || { politica: 'sem_validade_formal' as const, grauFonte: null };
-  const individual = CAMPOS_POR_TIPO[tipo];
+  const individual = CAMPOS_POR_TIPO[tipoOriginal] || CAMPOS_POR_TIPO[tipo];
   return {
     tipo,
     categoria,

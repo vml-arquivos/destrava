@@ -1336,7 +1336,11 @@ function parseDocumentoGenerico(texto: string, tipoDocumentoEsperado?: string): 
   const dataEmissao = dataProximaDe(
     texto,
     /(?:data\s+(?:de|da)\s+emiss[aã]o|emitid[oa]\s+em|data\s+da\s+consulta)\D{0,45}(\d{2}\/\d{2}\/\d{4})/i,
-  ) || parseDate(texto.match(/emitid[oa]\s+por\s*:[^\n\r]{0,100}?\b(\d{2}\/\d{2}\/\d{4})\b/i)?.[1] || null);
+  )
+    // Certidões RFB/PGFN usam “Emitida às HH:MM:SS do dia DD/MM/AAAA”.
+    // Horário e “do dia” fazem parte da evidência da própria emissão.
+    || parseDate(texto.match(/emitid[oa]\s+às?\s+\d{1,2}:\d{2}(?::\d{2})?\s+do\s+dia\s+(\d{2}\/\d{2}\/\d{4})/i)?.[1] || null)
+    || parseDate(texto.match(/emitid[oa]\s+por\s*:[^\n\r]{0,100}?\b(\d{2}\/\d{2}\/\d{4})\b/i)?.[1] || null);
   const dataValidade = dataProximaDe(
     texto,
     /(?:data\s+(?:de|da)\s+validade|v[aá]lid[oa]\s+at[eé]|vencimento)\D{0,45}(\d{2}\/\d{2}\/\d{4})/i,
@@ -1345,11 +1349,18 @@ function parseDocumentoGenerico(texto: string, tipoDocumentoEsperado?: string): 
     texto,
     /(?:data\s+(?:do|de)\s+registro|registrad[oa]\s+em)\D{0,45}(\d{2}\/\d{2}\/\d{4})/i,
   );
-  const competenciaMatch = texto.match(/(?:compet[eê]ncia|per[ií]odo\s+de\s+apura[cç][aã]o|m[eê]s\s+de\s+refer[eê]ncia)\D{0,30}(?:(\d{1,2})\s*[\/\-])?(0?[1-9]|1[0-2])\s*[\/\-]\s*(20\d{2})/i);
+  // Recibos PGDAS apresentam a competência em tabela, com várias colunas
+  // entre o rótulo e MM/AAAA. O formato da data continua restrito.
+  const competenciaMatch = texto.match(/(?:compet[eê]ncia|per[ií]odo\s+de\s+apura[cç][aã]o|m[eê]s\s+de\s+refer[eê]ncia)\D{0,500}(?:(\d{1,2})\s*[\/\-])?(0?[1-9]|1[0-2])\s*[\/\-]\s*(20\d{2})/i)
+    // No recibo PGDAS o rótulo e a competência ficam em uma tabela cuja
+    // coluna intermediária pode conter números e pontuação. Nesse formato,
+    // capture somente a célula isolada MM/AAAA da linha tabular.
+    || texto.match(/(?:^|\n)\s*(0?[1-9]|1[0-2])\/(20\d{2})(?=\s|$)/m);
   let competencia: { inicio: string; fim: string } | null = null;
   if (competenciaMatch) {
-    const mes = Number(competenciaMatch[2]);
-    const ano = Number(competenciaMatch[3]);
+    const formatoComRotulo = Boolean(competenciaMatch[3]);
+    const mes = Number(formatoComRotulo ? competenciaMatch[2] : competenciaMatch[1]);
+    const ano = Number(formatoComRotulo ? competenciaMatch[3] : competenciaMatch[2]);
     const ultimoDia = new Date(Date.UTC(ano, mes, 0)).getUTCDate();
     competencia = {
       inicio: `${ano}-${String(mes).padStart(2, '0')}-01`,

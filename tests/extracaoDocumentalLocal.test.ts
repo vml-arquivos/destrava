@@ -642,6 +642,40 @@ describe('extração documental local determinística', () => {
     expect(resultado.dados.data_transmissao).toBe('2026-08-18');
   });
 
+  it('extrai a data de emissão da CPEND no formato oficial “Emitida às ... do dia”', () => {
+    const resultado = analisarTextoDocumentoLocal('documento_generico', `
+      CERTIDÃO POSITIVA COM EFEITOS DE NEGATIVA DE DÉBITOS
+      Nome: PALUMA BURGER LTDA
+      CNPJ: 52.008.360/0001-33
+      Emitida às 11:02:55 do dia 20/08/2026 (hora e data de Brasília)
+      Válida até 16/02/2027.
+      Código de controle da certidão: 0188.7E30.06FB.13AC
+    `, 'cnd_rfb_cnpj');
+
+    expect(resultado.dados.data_emissao).toBe('2026-08-20');
+    expect(resultado.dados.data_validade).toBe('2027-02-16');
+    expect(resultado.dados.cnpj).toBe('52.008.360/0001-33');
+  });
+
+  it('extrai competência e recibo do recibo PGDAS em tabela com colunas intermediárias', () => {
+    const resultado = analisarTextoDocumentoLocal('documento_generico', `
+      RECIBO DE ENTREGA DA APURAÇÃO NO PGDAS-D
+      Nome Empresarial CNPJ da Matriz
+      PALUMA BURGER LTDA 52.008.360/0001-33
+      Período de Apuração Número da Apuração Receita Bruta Auferida
+      07/2026 52008360202607001 R$ 36.923,49
+      Data e Horário da Transmissão
+      17/08/2026 15:30:07
+      Número do Recibo
+      01.07.26229.0440173-6
+    `, 'recibo_pgdas');
+
+    expect(resultado.dados.cnpj).toBe('52.008.360/0001-33');
+    expect(resultado.dados.competencia).toEqual({ inicio: '2026-07-01', fim: '2026-07-31' });
+    expect(resultado.dados.recibo_ou_protocolo).toBe('01.07.26229.0440173-6');
+    expect(resultado.dados.data_transmissao).toBe('2026-08-17');
+  });
+
   it('reconhece as duas assinaturas digitais no rodapé OCR do faturamento', () => {
     const resultado = analisarTextoDocumentoLocal('faturamento_12_meses', `
       PALUMA BURGER LTDA CNPJ 52.008.360/0001-33
