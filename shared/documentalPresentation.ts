@@ -751,7 +751,9 @@ function familiaTipoVisual(value: unknown): string {
   if (tipo.includes("ccs")) return "ccs";
   if (tipo.includes("ccf")) return "ccf";
   if (tipo.includes("cenprot") || tipo.includes("cenprod") || tipo.includes("protest")) return "cenprot";
+  if (tipo.includes("cpend") || tipo === "cnd" || tipo.includes("cnd_") || tipo.includes("certidao_regularidade")) return "cnd";
   if (tipo.includes("scr") || tipo.includes("rating_bacen")) return "scr";
+  if (tipo.includes("serasa") || tipo.includes("bureau") || tipo.includes("relatorio_credito_consolidado")) return "credito_empresarial";
   if (tipo.includes("defis")) return "defis";
   if (tipo.includes("dasn") || tipo.includes("simei")) return "dasn_simei";
   if (tipo.includes("compartilhamento") && tipo.includes("ecac")) return "compartilhamento_ecac";
@@ -774,17 +776,30 @@ function familiaTipoVisual(value: unknown): string {
 function documentoMarcadoIncompativel(resultado: any, documento: any): boolean {
   const dadosExtraidos = resultado?.dados_extraidos && typeof resultado.dados_extraidos === "object" ? resultado.dados_extraidos : {};
   const classificacao = resultado?.classificacao || resultado?.classificacao_documental || resultado?.classificacao_central || dadosExtraidos?.classificacao || {};
+  const alertas = [
+    ...(Array.isArray(resultado?.alertas) ? resultado.alertas : []),
+    ...(Array.isArray(dadosExtraidos?.alertas) ? dadosExtraidos.alertas : []),
+  ].filter(Boolean);
+  const temSinalDeRevisaoPorEvidencia = resultado?.revisao_humana_necessaria === true
+    || dadosExtraidos?.revisao_humana_necessaria === true
+    || resultado?.status_documental === "REVISAO_HUMANA"
+    || dadosExtraidos?.status_documental === "REVISAO_HUMANA"
+    || alertas.some((alerta: any) => /baixa|nao_comprov|não_comprov|qualidade|confianca|confiança|nao_identificado|não_identificado/i.test(String(alerta?.codigo || alerta?.mensagem || "")));
+  const temIncompatibilidadeExplicita = alertas.some((alerta: any) => /tipo_incompativel|tipo_incompatível|identidade.*incompativ|cnpj.*diverg|cpf.*diverg|documento_incompativel|documento_incompatível/i.test(String(alerta?.codigo || alerta?.mensagem || "")));
   const identidade = statusVisualNormalizado(
     classificacao?.identidade_status || resultado?.identidade_status || dadosExtraidos?.identidade_status || resultado?.tipo_status,
   );
   const tipoEsperado = familiaTipoVisual(classificacao?.tipo_esperado || resultado?.tipo_esperado || dadosExtraidos?.tipo_esperado || documento?.tipo_documento);
   const tipoDetectado = familiaTipoVisual(classificacao?.tipo_detectado || resultado?.tipo_detectado || dadosExtraidos?.tipo_detectado);
   return Boolean(
-    resultado?.documento_compativel === false
-    || dadosExtraidos?.documento_compativel === false
-    || classificacao?.documento_compativel === false
+    temIncompatibilidadeExplicita
     || identidade === "incompativel"
-    || (tipoEsperado && tipoDetectado && tipoEsperado !== tipoDetectado),
+    || (!temSinalDeRevisaoPorEvidencia && (
+      resultado?.documento_compativel === false
+      || dadosExtraidos?.documento_compativel === false
+      || classificacao?.documento_compativel === false
+      || (tipoEsperado && tipoDetectado && tipoEsperado !== tipoDetectado)
+    )),
   );
 }
 
@@ -850,7 +865,7 @@ export function estadoVisualDocumento(resultado: any = {}, documento: any = {}):
   // explicitamente satisfaz o requisito não pode continuar amarelo por causa
   // desse valor histórico; incompatibilidade e `satisfaz_requisito=false` já
   // foram tratados acima e continuam vencendo.
-  const laudoConcluidoSatisfatorio = ["concluido", "concluida", "validado", "aprovado"].includes(status)
+  const laudoConcluidoSatisfatorio = ["concluido", "concluida", "validado", "aprovado", "dado_comprovado", "documento_compativel"].includes(status)
     && (
       resultado?.satisfaz_requisito === true
       || dadosExtraidos?.satisfaz_requisito === true

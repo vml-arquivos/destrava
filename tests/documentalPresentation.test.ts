@@ -175,6 +175,37 @@ describe("construirSecoesAnaliseDocumento — validação objetiva", () => {
     expect(serializado).not.toContain("conteúdo extenso da consulta");
   });
 
+  it("considera CPEND e relatório de crédito consolidado compatíveis nos slots equivalentes", () => {
+    expect(estadoVisualDocumento({
+      status: "concluido",
+      status_documental: "DADO_COMPROVADO",
+      documento_compativel: true,
+      satisfaz_requisito: true,
+      tipo_esperado: "CND",
+      tipo_detectado: "CPEND",
+    }, { tipo_documento: "cnd_rfb_cnpj" })).toBe("aprovado");
+
+    expect(estadoVisualDocumento({
+      status: "concluido",
+      status_documental: "DADO_COMPROVADO",
+      documento_compativel: true,
+      satisfaz_requisito: true,
+      tipo_esperado: "SERASA",
+      tipo_detectado: "RELATORIO_CREDITO_CONSOLIDADO",
+    }, { tipo_documento: "consulta_serasa_cnpj" })).toBe("aprovado");
+  });
+
+  it("mantém baixa qualidade como revisão, não como incompatibilidade", () => {
+    expect(estadoVisualDocumento({
+      status: "revisao_humana",
+      documento_compativel: false,
+      revisao_humana_necessaria: true,
+      tipo_esperado: "FOTO_FACHADA",
+      tipo_detectado: "DOCUMENTO_NAO_IDENTIFICADO",
+      alertas: [{ codigo: "documento_catalogado_baixa_qualidade" }],
+    }, { tipo_documento: "foto_fachada" })).toBe("revisao");
+  });
+
   it("SCR mostra data-base/instituições e não inventa score ou negativação", () => {
     const secoes = construirSecoesAnaliseDocumento({
       conclusao: "Leitura concluída.",

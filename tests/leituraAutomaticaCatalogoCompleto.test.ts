@@ -112,6 +112,24 @@ describe('cobertura integral da leitura automática documental', () => {
     });
   });
 
+  it('reconhece o cabeçalho quebrado do laudo SCR real antes de procurar protestos', () => {
+    const resultado = classificarDocumentoDeterministico({
+      tipoEsperado: 'consulta_serasa_cnpj',
+      texto: `ANÁLI S E EM PRES ARI AL, FI NANCEI RA E S CR
+        SCR + LAUDO FINANCEIRO COMPLETO + SCORE EMPRESARIAL
+        PONTUAÇÃO PJ 985 — RATING AA — MOTOR DE CRÉDITO
+        PROTESTOS ESTADUAIS — NADA CONSTA`,
+      dataEmissao: '2026-07-23',
+      hoje: new Date('2026-09-05T12:00:00.000Z'),
+    });
+
+    expect(resultado).toMatchObject({
+      identidade_status: 'IDENTIFICADO',
+      tipo_detectado: 'RELATORIO_CREDITO_CONSOLIDADO',
+      satisfaz_requisito: true,
+    });
+  });
+
   it('distingue contratos operacionais e aceita CPEND no requisito federal', () => {
     const assessoria = classificarDocumentoDeterministico({
       tipoEsperado: 'contrato_assessoria',
