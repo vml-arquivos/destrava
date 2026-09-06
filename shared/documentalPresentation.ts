@@ -599,7 +599,17 @@ function camposValidacaoObjetiva(resultado: any, documento: any, socios: any[] =
     return campos.slice(0, 5);
   }
 
-  if (/cnd|cndt|crf|pgfn|certidao|regularidade/.test(tipo)) {
+  if (/pgfn/.test(tipo)) {
+    const inscricoes = primeiroValor(resultado, ['inscricoes', 'debitos'], ['Inscrições', 'Débitos']);
+    adicionarCampoObjetivo(campos, 'CNPJ/CPF', primeiroValor(resultado, ['cnpj', 'cpf'], ['CNPJ', 'CPF']));
+    adicionarCampoObjetivo(campos, 'Resultado', primeiroValor(resultado, ['resultado_consulta', 'situacao', 'resultado'], ['Resultado', 'Situação']));
+    adicionarCampoObjetivo(campos, 'Inscrições', Array.isArray(inscricoes) ? inscricoes.length : inscricoes);
+    adicionarCampoObjetivo(campos, 'Data da consulta', primeiroValor(resultado, ['data_consulta', 'data_emissao'], ['Data da consulta', 'Data de emissão']));
+    adicionarCampoObjetivo(campos, 'Validação', aprovado ? 'Consulta PGFN conferida' : statusObjetivo(resultado, documento));
+    return campos.slice(0, 5);
+  }
+
+  if (/cnd|cndt|crf|certidao|regularidade/.test(tipo)) {
     adicionarCampoObjetivo(campos, 'CNPJ/CPF', primeiroValor(resultado, ['cnpj', 'cpf'], ['CNPJ', 'CPF']));
     adicionarCampoObjetivo(campos, 'Situação', primeiroValor(resultado, ['situacao_certidao', 'situacao', 'resultado'], ['Situação da certidão', 'Situação', 'Resultado']));
     adicionarCampoObjetivo(campos, 'Validade', primeiroValor(resultado, ['data_validade', 'validade_fim'], ['Data de validade', 'Validade']));
