@@ -745,6 +745,20 @@ function statusVisualNormalizado(value: unknown): string {
   return normalizar(value).replace(/[ -]+/g, "_");
 }
 
+function familiaTipoVisual(value: unknown): string {
+  const tipo = statusVisualNormalizado(value);
+  if (!tipo) return "";
+  if (tipo.includes("ccs")) return "ccs";
+  if (tipo.includes("ccf")) return "ccf";
+  if (tipo.includes("cenprot") || tipo.includes("cenprod") || tipo.includes("protest")) return "cenprot";
+  if (tipo.includes("scr") || tipo.includes("rating_bacen")) return "scr";
+  if (tipo.includes("defis")) return "defis";
+  if (tipo.includes("dasn") || tipo.includes("simei")) return "dasn_simei";
+  if (tipo.includes("compartilhamento") && tipo.includes("ecac")) return "compartilhamento_ecac";
+  if (tipo.includes("contrato_social") || tipo.includes("alteracao_contratual")) return "contrato_societario";
+  return tipo;
+}
+
 /**
  * A camada visual nunca transforma um laudo explicitamente incompatível,
  * stale, superseded, em reanálise ou com requisito não satisfeito em sucesso.
@@ -763,8 +777,8 @@ function documentoMarcadoIncompativel(resultado: any, documento: any): boolean {
   const identidade = statusVisualNormalizado(
     classificacao?.identidade_status || resultado?.identidade_status || dadosExtraidos?.identidade_status || resultado?.tipo_status,
   );
-  const tipoEsperado = statusVisualNormalizado(classificacao?.tipo_esperado || resultado?.tipo_esperado || dadosExtraidos?.tipo_esperado);
-  const tipoDetectado = statusVisualNormalizado(classificacao?.tipo_detectado || resultado?.tipo_detectado || dadosExtraidos?.tipo_detectado);
+  const tipoEsperado = familiaTipoVisual(classificacao?.tipo_esperado || resultado?.tipo_esperado || dadosExtraidos?.tipo_esperado || documento?.tipo_documento);
+  const tipoDetectado = familiaTipoVisual(classificacao?.tipo_detectado || resultado?.tipo_detectado || dadosExtraidos?.tipo_detectado);
   return Boolean(
     resultado?.documento_compativel === false
     || dadosExtraidos?.documento_compativel === false
