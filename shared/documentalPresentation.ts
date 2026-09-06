@@ -603,9 +603,8 @@ function camposValidacaoObjetiva(resultado: any, documento: any, socios: any[] =
     adicionarCampoObjetivo(campos, 'CNPJ/CPF', primeiroValor(resultado, ['cnpj', 'cpf'], ['CNPJ', 'CPF']));
     adicionarCampoObjetivo(campos, 'Situação', primeiroValor(resultado, ['situacao_certidao', 'situacao', 'resultado'], ['Situação da certidão', 'Situação', 'Resultado']));
     adicionarCampoObjetivo(campos, 'Validade', primeiroValor(resultado, ['data_validade', 'validade_fim'], ['Data de validade', 'Validade']));
-    adicionarCampoObjetivo(campos, 'Emissor', primeiroValor(resultado, ['orgao_emissor'], ['Órgão emissor', 'Emissor']));
     adicionarCampoObjetivo(campos, 'Validação', aprovado ? 'Regularidade confirmada' : statusObjetivo(resultado, documento));
-    return campos.slice(0, 5);
+    return campos.slice(0, 4);
   }
 
   if (/pgdas|defis|dasn|ecf|ecd|efd|dctf|darf|recibo/.test(tipo)) {
