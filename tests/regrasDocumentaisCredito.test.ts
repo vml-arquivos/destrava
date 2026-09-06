@@ -91,7 +91,9 @@ describe('regras documentais de crédito', () => {
   it('CORREÇÃO Rodada 33: o prazo de validade do comprovante de residência tem uma única fonte, compartilhada com documentAnalysisProfiles.ts', () => {
     const regra = regrasDocumentaisFallback().find((item) => item.codigo === 'socio_comprovante_residencia');
     const perfil = obterPerfilAnaliseDocumental('comprovante_residencia');
-    expect(regra?.validade_dias).toBe(perfil.validadePadraoDias);
+    expect(regra?.validade_dias).toBeNull();
+    expect(perfil.validadePadraoDias).toBeNull();
+    expect(perfil.politicaTemporal).toBe('politica_credito_configuravel');
     expect(perfil.grauFonte).toBe('PRATICA_MERCADO');
   });
 
