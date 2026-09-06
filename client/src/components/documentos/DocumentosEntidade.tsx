@@ -2384,7 +2384,7 @@ export default function DocumentosEntidade({
                                 const validacaoDocumentalConcluida = temLeituraReal
                                   && !laudoErro
                                   && estadoDocumento === "aprovado";
-                                const validadoComEvidencia = doc.validado === true
+                                const validadoComEvidencia = (doc.validado === true || validacaoDocumentalConcluida)
                                   && (!tipoTemAnaliseAutomatica || validacaoDocumentalConcluida);
                                 return (
                                 <div key={doc.id} className="rounded-md bg-card border border-border px-2 py-1">
@@ -2401,7 +2401,7 @@ export default function DocumentosEntidade({
                                           Gerado pela Destrava
                                         </span>
                                       )}
-                                      {validadoComEvidencia && <span title="Validado após leitura documental" className="text-success shrink-0"><CheckCircle className="w-2.5 h-2.5" /></span>}
+                                      {validadoComEvidencia && <span title="Validado após leitura documental" className="inline-flex items-center gap-0.5 text-success shrink-0 text-[8px] font-bold"><CheckCircle className="w-2.5 h-2.5" /> OK — validado</span>}
                                       {doc.validado && !validadoComEvidencia && tipoTemAnaliseAutomatica && <span title="Ainda sem leitura documental conclusiva" className="text-warning shrink-0 text-[9px]">análise pendente</span>}
                                       {documentoIncompativel && <span className="shrink-0 rounded-full bg-destructive/10 px-1.5 py-0.5 text-[8px] font-bold text-destructive">Documento incompatível</span>}
                                       {leituraPrecisaAtencao && <span className="shrink-0 rounded-full bg-warning/10 px-1.5 py-0.5 text-[8px] font-bold text-warning">Revisão necessária</span>}
@@ -2411,7 +2411,7 @@ export default function DocumentosEntidade({
                                       <button
                                         type="button"
                                         onClick={() => setLaudosExpandidos((prev) => ({ ...prev, [doc.id]: !prev[doc.id] }))}
-                                        className={`mt-0.5 text-[9px] font-bold underline decoration-dotted ${laudoErro ? "text-destructive" : doc.exige_revisao_humana ? "text-warning" : "text-success"}`}
+                                        className={`mt-0.5 text-[9px] font-bold underline decoration-dotted ${laudoErro || documentoIncompativel ? "text-destructive" : leituraPrecisaAtencao ? "text-warning" : "text-success"}`}
                                       >
                                         {laudosExpandidos[doc.id]
                                           ? "ocultar"
