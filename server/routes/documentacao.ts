@@ -35,6 +35,8 @@ import {
 import { obterLinhaDoTempoRegime, obterRegimeVigenteEm } from '../services/regimeTributarioTemporalService';
 import { obterFaturamentoRolling12Meses, type CompetenciaMensal } from '../services/faturamentoRolling12MesesService';
 import { obterCoberturaPorEmpresa } from '../services/coberturaEvidenciaBureauService';
+import { auditarArquivosDocumentais } from '../services/documentProcessingEvidence';
+import { aplicarRelatorioInicial, RELATORIO_INICIAL_VERSION } from '../services/relatorioInicialDocumentalService';
 
 const { Pool } = pkg;
 const pool = new Pool({
@@ -723,6 +725,7 @@ export async function montarRelatorioDocumental(dossie: any) {
     }
     return {
       codigo: documento.codigo || documento.tipo_documento || documento.bloco_codigo || 'documento',
+      arquivo_id: documento.id || documento.arquivo_id || null,
       tipo_documento: documento.tipo_documento || null,
       nome: documento.nome || documento.nome_original || documento.bloco_nome || documento.tipo_documento || 'Documento',
       bloco: documento.bloco_nome || documento.etapa || 'Análise documental',
@@ -784,8 +787,61 @@ export async function montarRelatorioDocumental(dossie: any) {
       ? 'Pendente de documentos e/ou correções'
       : 'Em complementação documental';
 
-  return {
+  const documentosPorIdRelatorio = new Map(documentosRelatorio.map((documento: any) => [String(documento.arquivo_id || ''), documento]));
+  const documentosIniciaisAnexados = documentosIniciais
+    .filter((documento: any) => documento?.anexado === true)
+    .map((documento: any) => ({
+      ...documento,
+      tipo_documento: documento.tipo_documento || documento.codigo || null,
+      nome: documento.nome || documento.codigo || 'Documento inicial',
+      resultado_analise: documento.resultado_analise || {
+        dados_extraidos: {
+          ...(documento.campos_principais || {}),
+          tipo_esperado: documento.codigo || null,
+        },
+        diagnostico: documento.diagnostico || null,
+      },
+    }));
+  const documentosBrutosInventario = Array.from(new Map(
+    [...documentosAnexados, ...documentosIniciaisAnexados].map((documento: any, index: number) => [
+      String(documento.id || documento.arquivo_id || `${documento.tipo_documento || 'documento'}:${index}`),
+      documento,
+    ]),
+  ).values());
+  const documentosInventario = documentosBrutosInventario.map((documento: any) => {
+    const chaveDocumento = String(documento.id || documento.arquivo_id || '');
+    const enriquecido = chaveDocumento ? documentosPorIdRelatorio.get(chaveDocumento) || {} : {};
+    return {
+      ...documento,
+      ...enriquecido,
+      arquivo_id: documento.id || documento.arquivo_id || enriquecido.arquivo_id || null,
+      nome: enriquecido.nome || documento.nome || documento.nome_original,
+      resultado_analise: enriquecido.resultado_analise || documento.resultado_analise || null,
+    };
+  });
+  const idsArquivosRelatorio = Array.from(new Set(documentosInventario.map((documento: any) => String(documento.id || documento.arquivo_id || '')).filter(Boolean)));
+  let evidenciasProcessamento = new Map<string, any>();
+  if (idsArquivosRelatorio.length) {
+    try {
+      const placeholders = idsArquivosRelatorio.map((_, index) => `$${index + 1}`).join(',');
+      const { rows: arquivos } = await pool.query(
+        `SELECT id, caminho_arquivo, nome_arquivo, nome_original, mime_type, tamanho_bytes,
+                entidade_tipo, entidade_id, metadados
+           FROM public.documentos_arquivos
+          WHERE id IN (${placeholders})
+            AND excluido_em IS NULL
+            AND COALESCE(status, 'ativo') <> 'excluido'`,
+        idsArquivosRelatorio,
+      );
+      evidenciasProcessamento = await auditarArquivosDocumentais(arquivos);
+    } catch (error: any) {
+      console.warn('[Relatório documental] Auditoria física dos arquivos indisponível:', error?.message || error);
+    }
+  }
+
+  const relatorioBase = {
     gerado_em: new Date().toISOString(),
+    versao_relatorio: RELATORIO_INICIAL_VERSION,
     empresa: dossie?.empresa || {},
     regime: {
       codigo: mapa.regime_identificado || 'nao_identificado',
@@ -851,6 +907,11 @@ export async function montarRelatorioDocumental(dossie: any) {
       documentos_faltantes: (Array.isArray(etapa.documentos) ? etapa.documentos : []).filter((documento: any) => documento.obrigatorio && !documento.anexado).length,
     })),
   };
+  return aplicarRelatorioInicial(relatorioBase, {
+    dossie,
+    documentos: documentosInventario,
+    evidencias: evidenciasProcessamento,
+  });
 }
 
 function compactarTextoPdf(value: unknown, maxLength = 320): string {
@@ -965,6 +1026,13 @@ function gerarHtmlRelatorioDocumental(relatorio: any): string {
   const etapas = Array.isArray(relatorio.proximas_etapas) ? relatorio.proximas_etapas : [];
   const resultadosAnalises = Array.isArray(relatorio.resultados_analises) ? relatorio.resultados_analises : [];
   const anotacoes = Array.isArray(relatorio.anotacoes) ? relatorio.anotacoes : [];
+  const inventarioInicial = Array.isArray(relatorio.inventario_documental) ? relatorio.inventario_documental : [];
+  const dadosCadastrais = Array.isArray(relatorio.dados_cadastrais_confirmados) ? relatorio.dados_cadastrais_confirmados : [];
+  const cruzamentos = Array.isArray(relatorio.cruzamentos_documentais) ? relatorio.cruzamentos_documentais : [];
+  const historicoSocietario = relatorio.historico_societario || {};
+  const pendenciasDetalhadas = Array.isArray(relatorio.pendencias_detalhadas) ? relatorio.pendencias_detalhadas : [];
+  const indicadoresFinanceiros = Array.isArray(relatorio.financeiro_credito?.faturamento?.indicadores) ? relatorio.financeiro_credito.faturamento.indicadores : [];
+  const indicadoresCredito = Array.isArray(relatorio.financeiro_credito?.credito?.indicadores) ? relatorio.financeiro_credito.credito.indicadores : [];
   const escapeLista = (items: unknown[]) => items.filter(Boolean).map((item: any) => `<li>${escapeHtmlRelatorio(typeof item === 'string' ? item : item.mensagem || item.recomendacao || item.nome || item.label || '')}</li>`).join('');
   const listaOuVazio = (items: unknown[], texto: string) => items.length ? `<ul>${escapeLista(items)}</ul>` : `<p class="empty">${escapeHtmlRelatorio(texto)}</p>`;
   const cardsHtml = cards.map(([label, value]) => `<div class="card"><span>${escapeHtmlRelatorio(label)}</span><strong>${escapeHtmlRelatorio(value)}</strong></div>`).join('');
@@ -1014,10 +1082,19 @@ function gerarHtmlRelatorioDocumental(relatorio: any): string {
   const blocosHtml = blocos.length ? `<table><thead><tr><th>Bloco</th><th>Status</th><th>Arquivos</th><th>Pendências/observações</th></tr></thead><tbody>${blocos.map((bloco: any) => `<tr><td>${escapeHtmlRelatorio(bloco.nome)}</td><td>${escapeHtmlRelatorio(bloco.status)}</td><td>${escapeHtmlRelatorio(bloco.documentos)}</td><td>${escapeHtmlRelatorio(bloco.pendencias?.length ? bloco.pendencias.map((item: any) => item.mensagem || item.recomendacao || item).join('; ') : 'Nenhuma pendência registrada')}</td></tr>`).join('')}</tbody></table>` : `<p class="empty">Nenhum bloco foi analisado até o momento.</p>`;
   const pendenciasHtml = pendencias.length ? `<div class="alerts">${listaOuVazio(pendencias.map((pendencia: any) => `${String(pendencia.severidade || 'atenção').toUpperCase()}: ${pendencia.mensagem || pendencia.recomendacao || pendencia.codigo}`), '')}</div>` : `<p class="empty">Nenhuma pendência adicional registrada.</p>`;
   const etapasHtml = etapas.length ? `<table><thead><tr><th>Etapa</th><th>Situação</th><th>Documentos faltantes</th></tr></thead><tbody>${etapas.map((etapa: any) => `<tr><td>${escapeHtmlRelatorio(`${etapa.numero || ''} — ${etapa.titulo || 'Etapa documental'}`)}</td><td>${etapa.bloqueada ? 'Aguardando etapa anterior' : 'Disponível para análise'}</td><td>${escapeHtmlRelatorio(etapa.documentos_faltantes)}</td></tr>`).join('')}</tbody></table>` : `<p class="empty">As próximas etapas ainda não foram calculadas.</p>`;
+  const inventarioInicialHtml = inventarioInicial.length ? `<table><thead><tr><th>Documento</th><th>Esperado/recebido</th><th>Lido</th><th>Tipo/status</th><th>Páginas</th><th>Pendência</th></tr></thead><tbody>${inventarioInicial.map((item: any) => `<tr><td><b>${escapeHtmlRelatorio(item.documento)}</b><small>${escapeHtmlRelatorio(item.arquivo || item.etapa || '')}</small></td><td>${item.esperado ? 'Sim' : 'Não'} / ${item.recebido ? 'Sim' : 'Não'}</td><td>${item.lido ? 'Sim' : 'Não'}</td><td>${escapeHtmlRelatorio(`${item.tipo_identificado || 'Tipo não confirmado'} — ${item.status || 'Sem status'}`)}</td><td>${escapeHtmlRelatorio(item.evidencia?.paginas_processadas ?? 'Não localizado')}</td><td>${escapeHtmlRelatorio(item.pendencia || 'Sem pendência registrada')}</td></tr>`).join('')}</tbody></table>` : `<p class="empty">Nenhum item foi inventariado.</p>`;
+  const cadastraisHtml = dadosCadastrais.length ? `<table><thead><tr><th>Campo</th><th>Valor</th><th>Status</th><th>Fonte e confiança</th></tr></thead><tbody>${dadosCadastrais.map((item: any) => `<tr><td>${escapeHtmlRelatorio(item.campo)}</td><td>${escapeHtmlRelatorio(item.valor || 'Não localizado')}</td><td>${escapeHtmlRelatorio(item.status)}</td><td>${escapeHtmlRelatorio(`${(item.fontes || []).join(', ') || 'Nenhuma fonte'} — ${item.confianca || 'não confirmada'}`)}</td></tr>`).join('')}</tbody></table>` : `<p class="empty">Dados cadastrais não localizados.</p>`;
+  const cruzamentosHtml = cruzamentos.length ? `<table><thead><tr><th>Dimensão</th><th>Status</th><th>Descrição</th><th>Fontes</th></tr></thead><tbody>${cruzamentos.map((item: any) => `<tr><td>${escapeHtmlRelatorio(item.dimensao)}</td><td>${escapeHtmlRelatorio(item.status)}</td><td>${escapeHtmlRelatorio(item.descricao)}</td><td>${escapeHtmlRelatorio((item.documentos || []).join(', ') || 'Não disponíveis')}</td></tr>`).join('')}</tbody></table>` : `<p class="empty">Nenhum cruzamento foi calculado.</p>`;
+  const historicoHtml = Array.isArray(historicoSocietario.eventos_cronologicos) && historicoSocietario.eventos_cronologicos.length
+    ? `<table><thead><tr><th>Data</th><th>Ato/número</th><th>Mudança</th><th>Fonte e impacto</th></tr></thead><tbody>${historicoSocietario.eventos_cronologicos.map((item: any) => `<tr><td>${escapeHtmlRelatorio(item.data || 'Não localizada')}</td><td>${escapeHtmlRelatorio(`${item.tipo_ato || 'Ato'} ${item.numero_arquivamento || ''}`)}</td><td>${escapeHtmlRelatorio(item.mudanca)}</td><td>${escapeHtmlRelatorio(`${item.fonte || 'Fonte não localizada'} — ${item.impacto || ''}`)}</td></tr>`).join('')}</tbody></table>`
+    : `<p class="empty">Nenhum evento societário detalhado foi localizado.</p>`;
+  const pendenciasDetalhadasHtml = pendenciasDetalhadas.length ? `<table><thead><tr><th>Categoria/prioridade</th><th>Impacto</th><th>Ação</th><th>Condição de resolução</th></tr></thead><tbody>${pendenciasDetalhadas.map((item: any) => `<tr><td>${escapeHtmlRelatorio(`${item.categoria || 'Pendência'} — ${item.prioridade || 'média'}`)}</td><td>${escapeHtmlRelatorio(item.impacto)}</td><td>${escapeHtmlRelatorio(`${item.acao || ''} Responsável: ${item.responsavel_sugerido || 'não definido'}`)}</td><td>${escapeHtmlRelatorio(item.condicao_resolucao)}</td></tr>`).join('')}</tbody></table>` : `<p class="success">Nenhuma pendência detalhada identificada.</p>`;
+  const indicadoresFinanceirosHtml = indicadoresFinanceiros.length ? `<ul>${indicadoresFinanceiros.map((item: any) => `<li>${escapeHtmlRelatorio(`${item.indicador}: ${item.valor} ${item.moeda || ''} — período: ${item.periodo || 'não localizado'} — fonte: ${item.fonte || 'não localizada'}`)}</li>`).join('')}</ul>` : `<p class="empty">Faturamento documentado não disponível.</p>`;
+  const indicadoresCreditoHtml = indicadoresCredito.length ? `<ul>${indicadoresCredito.map((item: any) => `<li>${escapeHtmlRelatorio(`${item.indicador}: ${item.valor} — consulta: ${item.data_consulta || 'não localizada'} — fonte: ${item.fonte || 'não localizada'}`)}</li>`).join('')}</ul>` : `<p class="empty">Nenhum indicador de crédito conclusivo localizado. Isso não equivale a ausência de restrições.</p>`;
 
   return `<!doctype html><html lang="pt-BR"><head><meta charset="utf-8"/><title>Relatório documental — ${escapeHtmlRelatorio(empresa.razao_social || empresa.nome_fantasia || 'Empresa')}</title><style>
   @page { size: A4; margin: 38mm 22mm 28mm; } * { box-sizing: border-box; } body { margin: 0; font-family: Arial, sans-serif; color: #172033; font-size: 9pt; line-height: 1.4; } h1 { color: #123b78; font-size: 20pt; margin: 0 0 4px; } h2 { color: #123b78; font-size: 13pt; margin: 22px 0 9px; border-bottom: 1px solid #d9e2ef; padding-bottom: 5px; page-break-after: avoid; } p { margin: 5px 0; } .subtitle { color: #64748b; font-size: 9pt; } .identity { background: #f1f7ff; border: 1px solid #cbdcf4; border-radius: 8px; padding: 12px; margin: 15px 0; } .meta { display: grid; grid-template-columns: 1.6fr 1fr 1fr; gap: 10px; margin-top: 8px; } .meta span, .card span, .field span { display: block; color: #64748b; font-size: 7.5pt; text-transform: uppercase; letter-spacing: .04em; } .meta strong { display: block; margin-top: 2px; } .cards { display: grid; grid-template-columns: repeat(5, 1fr); gap: 7px; margin: 12px 0 15px; } .card { border: 1px solid #d9e2ef; border-radius: 7px; padding: 8px; min-height: 53px; } .card strong { display: block; margin-top: 4px; font-size: 9.2pt; color: #123b78; } .legend { display: grid; grid-template-columns: repeat(3, 1fr); gap: 7px; margin: 10px 0 15px; } .legend div { border: 1px solid #d9e2ef; border-radius: 7px; padding: 8px; font-size: 8pt; } .green { color: #047857; } .orange { color: #c2410c; } .amber { color: #b45309; } table { width: 100%; border-collapse: collapse; margin: 5px 0 12px; page-break-inside: auto; } th { background: #123b78; color: #fff; text-align: left; font-size: 7.8pt; padding: 6px; } td { border-bottom: 1px solid #e5eaf1; vertical-align: top; padding: 6px; font-size: 8pt; } tr:nth-child(even) td { background: #f8fafc; } small { display: block; color: #64748b; font-size: 7.5pt; margin-top: 3px; } .doc, .stage { border: 1px solid #d9e2ef; border-radius: 8px; padding: 9px; margin: 7px 0; page-break-inside: auto; } .doc.compact { padding: 6px 10px; margin: 4px 0; page-break-inside: avoid; } .analyzed { border-left: 4px solid #10b981; } .needs-review { border-left: 4px solid #f59e0b; } .blocked { border-left: 4px solid #dc2626; } .waiting { border-left: 4px solid #f97316; } .missing { border-left: 4px solid #f59e0b; } .doc-head { display: flex; justify-content: space-between; gap: 12px; align-items: flex-start; } .doc-head > div { flex: 1; } .pill { display: inline-block; border-radius: 999px; padding: 3px 7px; font-size: 7.5pt; font-weight: bold; white-space: nowrap; } .pill.green { background: #d1fae5; } .pill.orange { background: #ffedd5; } .pill.red { background: #fee2e2; color: #991b1b; } .pill.amber { background: #fef3c7; } .pill.purple { background: #ede9fe; color: #6d28d9; } .result, .positive, .notes, .alerts, .facts { margin-top: 7px; padding: 7px; border-radius: 6px; } .result { background: #ecfdf5; border: 1px solid #bbf7d0; } .positive { background: #f0fdf4; border: 1px solid #bbf7d0; color: #166534; } .notes { background: #f8fafc; border: 1px solid #e2e8f0; } .facts { background: #eff6ff; border: 1px solid #bfdbfe; } .alerts { background: #fff7ed; border: 1px solid #fed7aa; color: #9a3412; } .fields { display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px; margin-top: 7px; } .field { background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 5px; padding: 6px; } .field strong { display: block; margin-top: 2px; overflow-wrap: anywhere; } ul { margin: 5px 0 3px; padding-left: 17px; } li { margin: 3px 0; } .success { background: #ecfdf5; border: 1px solid #a7f3d0; color: #047857; padding: 10px; border-radius: 7px; } .empty { color: #64748b; font-style: italic; padding: 4px 0; } .footer-note { margin-top: 18px; color: #64748b; font-size: 7.5pt; border-top: 1px solid #e5eaf1; padding-top: 8px; }
-  </style></head><body><h1>Relatório de análise documental</h1><p class="subtitle">Estado consolidado do acervo, das análises realizadas e dos documentos necessários para a próxima etapa.</p><div class="identity"><strong>${escapeHtmlRelatorio(empresa.razao_social || empresa.nome_fantasia || 'Empresa não identificada')}</strong><div class="meta"><div><span>CNPJ</span><strong>${escapeHtmlRelatorio(empresa.cnpj)}</strong></div><div><span>Regime tributário</span><strong>${escapeHtmlRelatorio(relatorio.regime?.descricao)}</strong></div><div><span>Relatório gerado em</span><strong>${escapeHtmlRelatorio(dataRelatorio(relatorio.gerado_em))}</strong></div></div></div><div class="cards">${cardsHtml}</div><div class="legend"><div><b class="green">Anexados e analisados</b><br/>Arquivo localizado com leitura ou validação concluída.</div><div><b class="orange">Aguardando análise</b><br/>Arquivo recebido, mas ainda não considerado validado.</div><div><b class="amber">Faltantes</b><br/>Documento que ainda precisa ser anexado.</div></div><h2>Resumo executivo</h2><p>${escapeHtmlRelatorio(relatorio.proxima_acao)}</p><h2>1. Documentos anexados e analisados</h2>${analisadosHtml}<h2>2. Documentos anexados e aguardando análise</h2>${pendentesAnaliseHtml}<h2>3. Documentos ainda faltantes para anexar</h2>${faltantesHtml}<h2>4. Resultados consolidados por etapa</h2>${resultadosHtml}<h2>5. Observações e anotações gerais</h2>${listaOuVazio(anotacoes, 'Nenhuma observação adicional registrada.')}<h2>6. Blocos e pendências operacionais</h2>${blocosHtml}${pendenciasHtml}<h2>7. Próximas etapas</h2>${etapasHtml}<p class="footer-note">Este relatório é uma fotografia do dossiê no momento da geração. Após anexar novos documentos, gere novamente o relatório para atualizar o estado da empresa.</p></body></html>`;
+  </style></head><body><h1>Relatório de análise documental</h1><p class="subtitle">Relatório inicial consolidado do acervo, com inventário por arquivo, evidências de processamento, cruzamentos e pendências.</p><div class="identity"><strong>${escapeHtmlRelatorio(empresa.razao_social || empresa.nome_fantasia || 'Empresa não identificada')}</strong><div class="meta"><div><span>CNPJ</span><strong>${escapeHtmlRelatorio(empresa.cnpj)}</strong></div><div><span>Regime tributário</span><strong>${escapeHtmlRelatorio(relatorio.regime?.descricao)}</strong></div><div><span>Aptidão documental</span><strong>${escapeHtmlRelatorio(relatorio.status_aptidao_documental || relatorio.status_geral)}</strong></div></div></div><div class="cards">${cardsHtml}</div><div class="legend"><div><b class="green">Anexados e analisados</b><br/>Arquivo localizado com leitura ou validação concluída.</div><div><b class="orange">Aguardando análise</b><br/>Arquivo recebido, mas ainda não considerado validado.</div><div><b class="amber">Faltantes</b><br/>Documento que ainda precisa ser anexado.</div></div><h2>Resumo executivo</h2><p><b>Conclusão preliminar:</b> ${escapeHtmlRelatorio(relatorio.status_aptidao_documental || relatorio.status_geral)}</p><p>${escapeHtmlRelatorio(relatorio.proxima_acao)}</p><h2>1. Inventário de todos os documentos e evidências de processamento</h2>${inventarioInicialHtml}<h2>2. Dados cadastrais confirmados</h2>${cadastraisHtml}<h2>3. Cruzamentos obrigatórios entre documentos</h2>${cruzamentosHtml}<h2>4. Histórico societário e alterações</h2><p><b>12 meses:</b> ${historicoSocietario.continuidade_12_meses ? `${escapeHtmlRelatorio(historicoSocietario.meses_comprovados || 12)} meses comprovados.` : 'não comprovados integralmente.'} <b>NIRE:</b> ${escapeHtmlRelatorio(historicoSocietario.nire || 'não localizado')}.</p>${historicoHtml}<h2>5. Situação financeira e crédito</h2><p><b>Faturamento:</b></p>${indicadoresFinanceirosHtml}<p><b>Rating, restrições e consultas:</b></p>${indicadoresCreditoHtml}<h2>6. Documentos anexados e analisados</h2>${analisadosHtml}<h2>7. Documentos anexados e aguardando análise</h2>${pendentesAnaliseHtml}<h2>8. Documentos ainda faltantes para anexar</h2>${faltantesHtml}<h2>9. Resultados consolidados por etapa</h2>${resultadosHtml}<h2>10. Pendências e recomendações</h2>${pendenciasDetalhadasHtml}<h2>11. Observações e anotações gerais</h2>${listaOuVazio(anotacoes, 'Nenhuma observação adicional registrada.')}<h2>12. Blocos e pendências operacionais</h2>${blocosHtml}${pendenciasHtml}<h2>13. Próximas etapas</h2>${etapasHtml}<p class="footer-note">Este relatório é uma fotografia do dossiê no momento da geração. Cada dado deve ser interpretado conforme sua fonte, status e limitação; ausência de informação não é confirmação. Após anexar novos documentos, gere novamente o relatório para atualizar o estado da empresa.</p></body></html>`;
 }
 
 function asNumber(value: unknown): number | null {
@@ -3335,6 +3412,65 @@ router.get('/empresa/:empresaId/dossie', auth, async (req: Request, res: Respons
   } catch (err: any) {
     console.error('[GET /api/documentacao/empresa/:empresaId/dossie]', err);
     res.status(500).json({ error: 'Erro ao montar dossiê de crédito' });
+  }
+});
+
+router.post('/empresa/:empresaId/relatorio/inicial', auth, async (req: Request, res: Response) => {
+  try {
+    const dossie = await montarDossieCreditoEmpresa(req.params.empresaId);
+    if (!dossie) { res.status(404).json({ error: 'Empresa não encontrada' }); return; }
+    const relatorio = await montarRelatorioDocumental(dossie);
+    const user = (req as any).colaborador || (req as any).user;
+    const { rows } = await pool.query(
+      `INSERT INTO public.documentacao_analises_ia
+        (entidade_tipo, entidade_id, empresa_id, tipo_analise, status, prompt_codigo, prompt_versao,
+         versao_modelo, entrada_contexto, resultado, score, nivel_confianca, risco_documental,
+         pendencias, criado_por)
+       VALUES ('empresa', $1, $1, 'relatorio_inicial_consolidado', 'concluido',
+               'relatorio_inicial_documental', $2, $3, $4::jsonb, $5::jsonb, NULL, NULL, $6, $7::jsonb, $8)
+       RETURNING id, criado_em, atualizado_em`,
+      [
+        req.params.empresaId,
+        RELATORIO_INICIAL_VERSION,
+        `documentacao:${RELATORIO_INICIAL_VERSION}`,
+        JSON.stringify({ tipo: 'relatorio_inicial_consolidado', versao: RELATORIO_INICIAL_VERSION, gerado_em: relatorio.gerado_em }),
+        JSON.stringify(relatorio),
+        relatorio.status_aptidao_documental || relatorio.status_geral || null,
+        JSON.stringify(relatorio.pendencias_detalhadas || relatorio.pendencias || []),
+        user?.id || null,
+      ],
+    );
+    res.status(201).json({
+      ...relatorio,
+      snapshot_id: rows[0]?.id || null,
+      persistencia: {
+        salvo: Boolean(rows[0]?.id),
+        criado_em: rows[0]?.criado_em || null,
+        atualizado_em: rows[0]?.atualizado_em || null,
+      },
+    });
+  } catch (err: any) {
+    console.error('[POST /api/documentacao/empresa/:empresaId/relatorio/inicial]', err);
+    res.status(500).json({ error: 'Erro ao gerar e persistir relatório inicial documental' });
+  }
+});
+
+router.get('/empresa/:empresaId/relatorio/inicial/historico', auth, async (req: Request, res: Response) => {
+  try {
+    const { rows } = await pool.query(
+      `SELECT id, tipo_analise, status, prompt_versao, versao_modelo, resultado,
+              risco_documental, pendencias, criado_em, atualizado_em
+         FROM public.documentacao_analises_ia
+        WHERE empresa_id = $1
+          AND tipo_analise = 'relatorio_inicial_consolidado'
+        ORDER BY criado_em DESC
+        LIMIT 50`,
+      [req.params.empresaId],
+    );
+    res.json(rows);
+  } catch (err: any) {
+    console.error('[GET /api/documentacao/empresa/:empresaId/relatorio/inicial/historico]', err);
+    res.status(500).json({ error: 'Erro ao buscar histórico do relatório inicial documental' });
   }
 });
 

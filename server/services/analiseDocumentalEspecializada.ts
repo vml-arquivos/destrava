@@ -2135,6 +2135,7 @@ export class AnaliseDocumentalService {
         confianca: local.confianca,
         fonte_extracao: 'local_deterministica',
         mecanismo_extracao: local.mecanismo,
+        paginas_processadas: local.paginas_processadas ?? null,
         ...(temTextoLocal ? { __texto_local: local.texto } : {}),
         extracao_parcial: true,
         motivo_extracao_parcial: local.motivo || String((motivo as any)?.message || motivo || 'Extração local abaixo do limiar de confiança.'),
@@ -2169,6 +2170,7 @@ export class AnaliseDocumentalService {
           confianca: local.confianca,
           fonte_extracao: 'local_deterministica',
           mecanismo_extracao: local.mecanismo,
+          paginas_processadas: local.paginas_processadas ?? null,
           ...(local.texto ? { __texto_local: local.texto } : {}),
         };
       }
@@ -2197,7 +2199,7 @@ export class AnaliseDocumentalService {
       // classificação determinística por trás dela tenha o texto real para
       // trabalhar.
       return local?.texto
-        ? { ...resultadoIa, __texto_local: local.texto }
+        ? { ...resultadoIa, paginas_processadas: local.paginas_processadas ?? null, __texto_local: local.texto }
         : resultadoIa;
     } catch (error: any) {
       // A ausência de Gemini não transforma uma leitura local executada em
