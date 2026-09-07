@@ -877,8 +877,10 @@ export default function DocumentosEntidade({
   // sem isso, a tela só dizia "liberado" e parava de orientar o usuário.
   const [mapaCredito, setMapaCredito] = useState<any>(null);
   const [relatorioDocumental, setRelatorioDocumental] = useState<any>(null);
+  const [historicoRelatorios, setHistoricoRelatorios] = useState<any[]>([]);
   const [carregandoRelatorio, setCarregandoRelatorio] = useState(false);
   const [baixandoRelatorioPdf, setBaixandoRelatorioPdf] = useState(false);
+  const [filtroRelatorio, setFiltroRelatorio] = useState("");
   // O relatório consolidado (seções 1 a 6, com o resultado documento a documento)
   // antes ficava sempre visível na própria página assim que carregado, empurrando
   // o checklist de anexação pra muito mais embaixo -- pedido explícito do usuário
@@ -1343,10 +1345,12 @@ export default function DocumentosEntidade({
     }
     setCarregandoRelatorio(true);
     try {
-      const relatorio = await apiFetch(`/api/documentacao/empresa/${empresaId}/relatorio`);
+      const relatorio = await apiFetch(`/api/documentacao/empresa/${empresaId}/relatorio/inicial`, { method: "POST" });
       setRelatorioDocumental(relatorio);
+      const historico = await apiFetch(`/api/documentacao/empresa/${empresaId}/relatorio/inicial/historico`).catch(() => []);
+      setHistoricoRelatorios(Array.isArray(historico) ? historico : []);
       setRelatorioModalAberto(true);
-      toast.success("Relatório da análise documental atualizado.");
+      toast.success("Relatório inicial documental gerado e salvo no histórico.");
     } catch (err: any) {
       toast.error(err?.message || "Não foi possível montar o relatório documental.");
     } finally {
@@ -1739,6 +1743,13 @@ export default function DocumentosEntidade({
     }).length;
   }
 
+  const termoFiltroRelatorio = filtroRelatorio.trim().toLowerCase();
+  const inventarioRelatorio = Array.isArray(relatorioDocumental?.inventario_documental)
+    ? relatorioDocumental.inventario_documental.filter((item: any) => !termoFiltroRelatorio || `${item.documento || ""} ${item.arquivo || ""} ${item.status || ""} ${item.etapa || ""}`.toLowerCase().includes(termoFiltroRelatorio))
+    : [];
+  const cruzamentosRelatorio = Array.isArray(relatorioDocumental?.cruzamentos_documentais) ? relatorioDocumental.cruzamentos_documentais : [];
+  const pendenciasDetalhadasRelatorio = Array.isArray(relatorioDocumental?.pendencias_detalhadas) ? relatorioDocumental.pendencias_detalhadas : [];
+
   if (!entidadeId) {
     return <div className="rounded-xl border border-border bg-muted p-4 text-sm text-muted-foreground">Selecione ou salve o cadastro antes de anexar documentos.</div>;
   }
@@ -1782,6 +1793,7 @@ export default function DocumentosEntidade({
                 <p className="mt-1 text-[11px] text-primary">Visualização completa do estado atual antes da geração do PDF. Atualizado em {new Date(relatorioDocumental.gerado_em || Date.now()).toLocaleString("pt-BR")} — {relatorioDocumental.regime?.descricao || "regime ainda não identificado"}.</p>
               </div>
               <div className="flex items-center gap-2 shrink-0">
+                <button type="button" onClick={() => document.getElementById("historico-relatorio-inicial")?.scrollIntoView({ behavior: "smooth", block: "start" })} className="inline-flex items-center justify-center gap-1.5 rounded-lg bg-card px-3 py-2 text-[11px] font-black text-muted-foreground shadow-sm ring-1 ring-border hover:bg-muted">Histórico ({historicoRelatorios.length})</button>
                 <button type="button" onClick={baixarRelatorioDocumentalPdf} disabled={baixandoRelatorioPdf} className="inline-flex items-center justify-center gap-1.5 rounded-lg bg-card px-3 py-2 text-[11px] font-black text-primary shadow-sm ring-1 ring-primary/30 hover:bg-primary/10 disabled:opacity-50">
                   {baixandoRelatorioPdf ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Download className="h-3.5 w-3.5" />}
                   {baixandoRelatorioPdf ? "Gerando..." : "Gerar PDF deste estado"}
@@ -1799,12 +1811,59 @@ export default function DocumentosEntidade({
             <div className="rounded-xl border border-border bg-card p-2.5"><p className="text-[9px] font-black uppercase text-muted-foreground">Blocos com registro</p><p className="mt-1 text-lg font-black text-foreground">{relatorioDocumental.resumo?.blocos_analisados ?? 0}</p></div>
           </div>
 
+          <div className="rounded-xl border border-primary/25 bg-primary/10 p-3">
+            <div className="flex flex-col gap-2 lg:flex-row lg:items-start lg:justify-between">
+              <div>
+                <p className="text-xs font-black text-primary">Relatório inicial consolidado</p>
+                <p className="mt-1 text-[10px] text-muted-foreground">Conclusão preliminar baseada somente nos documentos e laudos disponíveis no momento da geração.</p>
+              </div>
+              <span className="w-fit rounded-full bg-primary/15 px-2.5 py-1 text-[10px] font-black text-primary">{relatorioDocumental.status_aptidao_documental || "não concluído"}</span>
+            </div>
+            <div className="mt-3 grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
+              <div className="rounded-lg border border-border bg-card p-2"><p className="text-[9px] uppercase text-muted-foreground">Lidos</p><p className="text-sm font-black text-foreground">{relatorioDocumental.resumo?.documentos_lidos ?? 0}</p></div>
+              <div className="rounded-lg border border-border bg-card p-2"><p className="text-[9px] uppercase text-muted-foreground">Aprovados</p><p className="text-sm font-black text-success">{relatorioDocumental.resumo?.documentos_aprovados ?? 0}</p></div>
+              <div className="rounded-lg border border-border bg-card p-2"><p className="text-[9px] uppercase text-muted-foreground">Divergentes/incompatíveis</p><p className="text-sm font-black text-destructive">{(relatorioDocumental.resumo?.documentos_divergentes ?? 0) + (relatorioDocumental.resumo?.documentos_incompativeis ?? 0)}</p></div>
+              <div className="rounded-lg border border-border bg-card p-2"><p className="text-[9px] uppercase text-muted-foreground">Revisão humana</p><p className="text-sm font-black text-warning">{relatorioDocumental.resumo?.documentos_revisao_humana ?? 0}</p></div>
+            </div>
+            <p className="mt-3 text-[10px] text-muted-foreground">Versão {relatorioDocumental.versao_relatorio || "—"} {relatorioDocumental.snapshot_id ? `• snapshot ${relatorioDocumental.snapshot_id}` : "• não persistido"}.</p>
+          </div>
+
+          <div className="rounded-xl border border-border bg-card p-3">
+            <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
+              <div><p className="text-xs font-black text-foreground">Inventário e evidência de processamento</p><p className="mt-1 text-[10px] text-muted-foreground">Cada linha identifica o esperado, o recebido, a leitura, o tipo, o status e a evidência operacional.</p></div>
+              <input value={filtroRelatorio} onChange={(event) => setFiltroRelatorio(event.target.value)} placeholder="Filtrar documento, etapa ou status" className="h-8 w-full rounded-lg border border-border bg-background px-2.5 text-[10px] outline-none focus:ring-2 focus:ring-primary/30 md:w-64" />
+            </div>
+            <div className="mt-3 overflow-x-auto rounded-lg border border-border">
+              <table className="w-full min-w-[820px] text-left text-[10px]">
+                <thead className="bg-muted text-[9px] uppercase text-muted-foreground"><tr><th className="px-2 py-2">Documento</th><th className="px-2 py-2">Esperado/recebido</th><th className="px-2 py-2">Leitura</th><th className="px-2 py-2">Tipo/status</th><th className="px-2 py-2">Páginas</th><th className="px-2 py-2">Pendência/evidência</th></tr></thead>
+                <tbody>{inventarioRelatorio.map((item: any, index: number) => {
+                  const evidencia = item.evidencia || {};
+                  const sucesso = /Aprovado/.test(String(item.status || ""));
+                  const origem = item.arquivo_id ? docs.find((doc) => doc.id === item.arquivo_id) : null;
+                  const paginas = evidencia.paginas_processadas === null || evidencia.paginas_processadas === undefined ? "não localizado" : `${evidencia.paginas_processadas}${evidencia.paginas_documento ? ` / ${evidencia.paginas_documento}` : ""}`;
+                  return <tr key={`${item.codigo || item.documento}-${index}`} className="border-t border-border align-top"><td className="px-2 py-2"><p className="font-bold text-foreground">{item.documento}</p><p className="text-[9px] text-muted-foreground">{item.arquivo || item.etapa || "—"}</p>{origem ? <button type="button" onClick={() => void visualizar(origem)} className="mt-1 text-[9px] font-bold text-primary underline">Ver documento de origem</button> : null}</td><td className="px-2 py-2">{item.esperado ? "Sim" : "Não"} / {item.recebido ? "Sim" : "Não"}</td><td className="px-2 py-2">{item.lido ? <span className="font-bold text-success">Lido</span> : <span className="font-bold text-warning">Não lido</span>}<p className="text-[9px] text-muted-foreground">{evidencia.arquivo_aberto ? "arquivo aberto" : "arquivo não aberto"}</p></td><td className="px-2 py-2"><span className={`font-bold ${sucesso ? "text-success" : /Divergente|Incompatível|Revisão/.test(String(item.status || "")) ? "text-destructive" : "text-warning"}`}>{item.status}</span><p className="text-[9px] text-muted-foreground">{item.tipo_identificado || "tipo não confirmado"}</p></td><td className="px-2 py-2">{paginas}<p className="text-[9px] text-muted-foreground">{evidencia.paginas_documento ? "processadas / no arquivo" : evidencia.unidade_processada || "—"}</p></td><td className="px-2 py-2"><p>{item.pendencia || "Sem pendência registrada."}</p>{evidencia.campos_extraidos?.length ? <p className="mt-1 text-[9px] text-muted-foreground">Campos: {evidencia.campos_extraidos.slice(0, 4).join(", ")}</p> : null}{evidencia.campos_nao_localizados?.length ? <p className="mt-1 text-[9px] text-warning">Não localizados: {evidencia.campos_nao_localizados.join(", ")}</p> : null}</td></tr>;
+                })}</tbody>
+              </table>
+              {!inventarioRelatorio.length && <p className="p-3 text-[10px] text-muted-foreground">Nenhum item corresponde ao filtro atual.</p>}
+            </div>
+            <p className="mt-2 text-[9px] text-muted-foreground">Arquivos abertos: {relatorioDocumental.evidencia_processamento?.arquivos_abertos ?? 0}; páginas/unidades processadas: {relatorioDocumental.evidencia_processamento?.paginas_processadas ?? 0}; arquivos sem contagem: {relatorioDocumental.evidencia_processamento?.arquivos_sem_contagem_de_paginas ?? 0}.</p>
+          </div>
+
           <div className="rounded-xl border border-border bg-card p-3">
             <p className="text-[11px] font-black text-foreground">Como ler este relatório</p>
             <div className="mt-2 grid gap-2 text-[10px] text-muted-foreground md:grid-cols-3">
               <p><span className="font-black text-success">Anexados e analisados:</span> o arquivo foi localizado e existe resultado de leitura ou validação.</p>
               <p><span className="font-black text-warning">Aguardando análise:</span> o arquivo foi recebido, mas ainda não deve ser considerado validado.</p>
               <p><span className="font-black text-warning">Faltantes:</span> o documento ainda precisa ser anexado conforme o regime e a etapa do dossiê.</p>
+            </div>
+          </div>
+
+          <div id="historico-relatorio-inicial" className="rounded-xl border border-border bg-card p-3">
+            <p className="text-xs font-black text-foreground">Histórico de versões do relatório inicial</p>
+            <p className="mt-1 text-[10px] text-muted-foreground">Cada geração é salva como snapshot. Selecionar uma versão apenas altera a visualização; os documentos originais não são modificados.</p>
+            <div className="mt-3 grid gap-2 md:grid-cols-2">
+              {historicoRelatorios.map((snapshot: any, index: number) => <button key={snapshot.id || index} type="button" onClick={() => { if (snapshot.resultado) setRelatorioDocumental({ ...snapshot.resultado, snapshot_id: snapshot.id, persistencia: { salvo: true, criado_em: snapshot.criado_em, atualizado_em: snapshot.atualizado_em } }); }} className="rounded-lg border border-border bg-muted/40 p-2 text-left transition-colors hover:border-primary/40 hover:bg-primary/5"><div className="flex items-start justify-between gap-2"><p className="text-[10px] font-black text-foreground">Versão {snapshot.prompt_versao || snapshot.resultado?.versao_relatorio || "—"}</p><span className="text-[9px] font-bold text-success">{snapshot.status || "concluído"}</span></div><p className="mt-1 text-[9px] text-muted-foreground">{snapshot.criado_em ? new Date(snapshot.criado_em).toLocaleString("pt-BR") : "Data não localizada"} {snapshot.risco_documental ? `• ${snapshot.risco_documental}` : ""}</p></button>)}
+              {!historicoRelatorios.length && <p className="text-[10px] text-muted-foreground">Nenhuma versão persistida foi localizada.</p>}
             </div>
           </div>
 
@@ -1857,13 +1916,43 @@ export default function DocumentosEntidade({
           </div>
 
           <div className="rounded-xl border border-border bg-card p-3">
-            <p className="text-xs font-black text-foreground">5. Observações e anotações gerais</p>
+            <p className="text-xs font-black text-foreground">5. Dados cadastrais confirmados</p>
+            <div className="mt-3 grid gap-2 md:grid-cols-2">
+              {(Array.isArray(relatorioDocumental.dados_cadastrais_confirmados) ? relatorioDocumental.dados_cadastrais_confirmados : []).map((campo: any, index: number) => <div key={`${campo.campo}-${index}`} className="rounded-lg border border-border bg-muted/40 p-2"><div className="flex items-start justify-between gap-2"><p className="text-[10px] font-black text-foreground">{campo.campo}</p><span className={`text-[9px] font-bold ${campo.status === "divergente" ? "text-destructive" : campo.status === "não localizado" ? "text-warning" : "text-success"}`}>{campo.status}</span></div><p className="mt-1 text-[10px] text-foreground">{campo.valor || "Não localizado"}</p><p className="mt-1 text-[9px] text-muted-foreground">Fonte: {campo.fontes?.join(", ") || "nenhuma fonte"} • Confiança: {campo.confianca || "não confirmada"}</p></div>)}
+            </div>
+          </div>
+
+          <div className="rounded-xl border border-border bg-card p-3">
+            <p className="text-xs font-black text-foreground">6. Cruzamentos entre documentos</p>
+            <div className="mt-3 overflow-x-auto rounded-lg border border-border">
+              <table className="w-full min-w-[760px] text-left text-[10px]"><thead className="bg-muted text-[9px] uppercase text-muted-foreground"><tr><th className="px-2 py-2">Dimensão</th><th className="px-2 py-2">Resultado</th><th className="px-2 py-2">Descrição</th><th className="px-2 py-2">Fontes</th></tr></thead><tbody>{cruzamentosRelatorio.map((item: any, index: number) => <tr key={`${item.codigo}-${index}`} className="border-t border-border align-top"><td className="px-2 py-2 font-bold">{item.dimensao}</td><td className={`px-2 py-2 font-bold ${item.status === "consistente" ? "text-success" : item.status === "divergente" ? "text-destructive" : "text-warning"}`}>{item.status}</td><td className="px-2 py-2">{item.descricao}</td><td className="px-2 py-2 text-muted-foreground">{item.documentos?.join(", ") || "não disponíveis"}</td></tr>)}</tbody></table>
+            </div>
+          </div>
+
+          <div className="rounded-xl border border-primary/20 bg-primary/10 p-3">
+            <p className="text-xs font-black text-primary">7. Histórico societário e alterações</p>
+            <div className="mt-2 grid gap-2 sm:grid-cols-3"><div className="rounded-lg border border-border bg-card p-2"><p className="text-[9px] uppercase text-muted-foreground">Situação</p><p className="text-[10px] font-black">{relatorioDocumental.historico_societario?.status || "não confirmado"}</p></div><div className="rounded-lg border border-border bg-card p-2"><p className="text-[9px] uppercase text-muted-foreground">NIRE</p><p className="text-[10px] font-black">{relatorioDocumental.historico_societario?.nire || "não localizado"}</p></div><div className="rounded-lg border border-border bg-card p-2"><p className="text-[9px] uppercase text-muted-foreground">Cobertura</p><p className="text-[10px] font-black">{relatorioDocumental.historico_societario?.continuidade_12_meses ? `${relatorioDocumental.historico_societario.meses_comprovados || 12} meses comprovados` : "12 meses não comprovados"}</p></div></div>
+            <div className="mt-3 space-y-2">{(relatorioDocumental.historico_societario?.eventos_cronologicos || []).map((evento: any, index: number) => <div key={`${evento.data}-${evento.numero_arquivamento}-${index}`} className="rounded-lg border border-primary/20 bg-card p-2"><div className="flex flex-col gap-1 md:flex-row md:items-start md:justify-between"><p className="text-[10px] font-black">{evento.data || "Data não localizada"} {evento.tipo_ato ? `• ${evento.tipo_ato}` : ""}</p><span className="text-[9px] text-muted-foreground">{evento.numero_arquivamento || "Número não localizado"}</span></div><p className="mt-1 text-[10px]">{evento.mudanca}</p><p className="mt-1 text-[9px] text-muted-foreground">Fonte: {evento.fonte} • Impacto: {evento.impacto}</p></div>)}{!(relatorioDocumental.historico_societario?.eventos_cronologicos || []).length && <p className="text-[10px] text-muted-foreground">Nenhum evento societário detalhado foi localizado no laudo persistido.</p>}</div>
+          </div>
+
+          <div className="grid gap-4 lg:grid-cols-2">
+            <div className="rounded-xl border border-border bg-card p-3"><p className="text-xs font-black text-foreground">8. Situação financeira e faturamento</p><p className="mt-1 text-[10px] text-muted-foreground">Valores somente quando extraídos com fonte e período.</p><div className="mt-3 space-y-2">{(relatorioDocumental.financeiro_credito?.faturamento?.indicadores || []).map((item: any, index: number) => <div key={`${item.indicador}-${index}`} className="rounded-lg bg-muted/50 p-2"><p className="text-[10px] font-black">{item.indicador}: {item.valor} {item.moeda || ""}</p><p className="text-[9px] text-muted-foreground">Período: {item.periodo || "não localizado"} • Fonte: {item.fonte} • Natureza: {item.natureza}</p></div>)}{!(relatorioDocumental.financeiro_credito?.faturamento?.indicadores || []).length && <p className="text-[10px] text-warning">Não disponível nos documentos analisados.</p>}</div></div>
+            <div className="rounded-xl border border-border bg-card p-3"><p className="text-xs font-black text-foreground">9. Rating, crédito e restrições</p><p className="mt-1 text-[10px] text-muted-foreground">Ausência de menção não é tratada como ausência de restrição.</p><div className="mt-3 space-y-2">{(relatorioDocumental.financeiro_credito?.credito?.indicadores || []).map((item: any, index: number) => <div key={`${item.indicador}-${index}`} className="rounded-lg bg-muted/50 p-2"><p className="text-[10px] font-black">{item.indicador}: {item.valor}</p><p className="text-[9px] text-muted-foreground">Fonte: {item.fonte} • Consulta: {item.data_consulta || "não localizada"}</p></div>)}{!(relatorioDocumental.financeiro_credito?.credito?.indicadores || []).length && <p className="text-[10px] text-warning">Nenhum indicador conclusivo localizado.</p>}</div></div>
+          </div>
+
+          <div className="rounded-xl border border-destructive/20 bg-destructive/5 p-3">
+            <p className="text-xs font-black text-destructive">10. Pendências e recomendações</p>
+            <div className="mt-3 space-y-2">{pendenciasDetalhadasRelatorio.map((item: any, index: number) => <div key={`${item.codigo}-${index}`} className="rounded-lg border border-destructive/15 bg-card p-2"><div className="flex flex-col gap-1 md:flex-row md:items-start md:justify-between"><p className="text-[10px] font-black">{item.categoria}</p><span className="text-[9px] font-black uppercase text-destructive">{item.prioridade}</span></div><p className="mt-1 text-[10px]">{item.impacto}</p><p className="mt-1 text-[9px] text-muted-foreground">Ação: {item.acao} • Responsável: {item.responsavel_sugerido} • Resolução: {item.condicao_resolucao}</p></div>)}{!pendenciasDetalhadasRelatorio.length && <p className="text-[10px] text-success">Nenhuma pendência detalhada identificada.</p>}</div>
+          </div>
+
+          <div className="rounded-xl border border-border bg-card p-3">
+            <p className="text-xs font-black text-foreground">11. Observações e anotações gerais</p>
             <div className="mt-2 grid gap-1.5 md:grid-cols-2">{itensTextoRelatorio(relatorioDocumental.anotacoes).map((item, index) => <p key={index} className="rounded-lg bg-muted px-2.5 py-2 text-[10px] text-muted-foreground">• {item}</p>)}</div>
             {!relatorioDocumental.anotacoes?.length && <p className="mt-2 text-[10px] text-muted-foreground">Nenhuma observação adicional registrada.</p>}
           </div>
 
           <div className="rounded-xl border border-primary/20 bg-card p-3">
-            <p className="text-xs font-black text-primary">6. Próxima ação recomendada</p>
+            <p className="text-xs font-black text-primary">12. Próxima ação recomendada</p>
             <p className="mt-1 text-[10px] font-semibold text-foreground">{relatorioDocumental.proxima_acao}</p>
             {!!relatorioDocumental.pendencias?.length && <div className="mt-2 space-y-1">{relatorioDocumental.pendencias.map((pendencia: any, index: number) => <p key={`${pendencia.codigo}-${index}`} className="text-[10px] text-destructive">• <strong>{String(pendencia.severidade || "atenção").toUpperCase()}:</strong> {pendencia.mensagem || pendencia.recomendacao || pendencia.codigo}</p>)}</div>}
           </div>

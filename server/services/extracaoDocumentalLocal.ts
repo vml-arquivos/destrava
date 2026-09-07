@@ -47,6 +47,7 @@ export interface ExtracaoDocumentalLocalResult {
   texto: string;
   dados: Record<string, any>;
   confianca: number;
+  paginas_processadas?: number | null;
   motivo?: string;
 }
 
@@ -2003,6 +2004,7 @@ async function extrairEvidenciaVisualEmpresarial(
         fonte_extracao: 'local_deterministica_visual',
       },
       confianca: qualidadeAdequada ? 0.92 : 0.35,
+      paginas_processadas: 1,
       motivo: qualidadeAdequada
         ? undefined
         : 'Imagem recebida, mas a qualidade/dimensão mínima não foi comprovada; revisão humana necessária.',
@@ -2027,6 +2029,7 @@ async function extrairEvidenciaVisualEmpresarial(
         fonte_extracao: 'local_deterministica_visual',
       },
       confianca: 0,
+      paginas_processadas: 1,
       motivo: String(error?.message || 'Não foi possível ler a imagem; revisão humana necessária.'),
     };
   }
@@ -2040,6 +2043,20 @@ async function executarTesseract(arquivo: string, timeout: number, maxBuffer: nu
     { timeout, maxBuffer, encoding: 'utf8' },
   );
   return String(stdout || '').replace(/\u0000/g, '').trim();
+}
+
+async function contarPaginasPdfLocal(arquivoPath: string): Promise<number | null> {
+  try {
+    const { stdout } = await execFileAsync(
+      process.env.PDFINFO_BINARY || 'pdfinfo',
+      [arquivoPath],
+      { timeout: 15000, maxBuffer: 1024 * 1024, encoding: 'utf8' },
+    );
+    const match = String(stdout || '').match(/^Pages:\s*(\d+)/im);
+    return match ? Number(match[1]) : null;
+  } catch {
+    return null;
+  }
 }
 
 async function extrairTextoComOcrLocal(
@@ -2102,6 +2119,9 @@ export async function extrairDocumentoLocal(
   const isPdf = effectiveMime === 'application/pdf' || extension === '.pdf';
   const isImage = effectiveMime.startsWith('image/') || ['.png', '.jpg', '.jpeg', '.webp', '.tif', '.tiff', '.bmp'].includes(extension);
   const isStructured = ['.csv', '.docx', '.xlsx'].includes(extension);
+  const paginasProcessadas = isPdf
+    ? await contarPaginasPdfLocal(arquivoPath)
+    : isImage || isStructured ? 1 : null;
 
   const timeout = Number(process.env.LOCAL_PDF_TEXT_TIMEOUT_MS || 15000);
   const ocrTimeout = Number(process.env.LOCAL_OCR_TIMEOUT_MS || 120000);
@@ -2126,14 +2146,15 @@ export async function extrairDocumentoLocal(
         texto,
         dados: { ...dados, fonte_extracao: 'texto_estruturado_local' },
         confianca,
+        paginas_processadas: paginasProcessadas,
         motivo: texto.length >= 20 ? undefined : 'Arquivo estruturado sem conteúdo textual legível.',
       };
     } catch (error: any) {
-      return { tipo, disponivel: error?.code !== 'ENOENT', legivel: false, mecanismo: 'texto_estruturado', texto: '', dados: {}, confianca: 0, motivo: String(error?.message || 'Falha na leitura do arquivo estruturado.') };
+      return { tipo, disponivel: error?.code !== 'ENOENT', legivel: false, mecanismo: 'texto_estruturado', texto: '', dados: {}, confianca: 0, paginas_processadas: paginasProcessadas, motivo: String(error?.message || 'Falha na leitura do arquivo estruturado.') };
     }
   }
   if (!isPdf && !isImage) {
-    return { tipo, disponivel: true, legivel: false, mecanismo: 'pdftotext', texto: '', dados: {}, confianca: 0, motivo: 'Formato não suportado pelo leitor interno.' };
+    return { tipo, disponivel: true, legivel: false, mecanismo: 'pdftotext', texto: '', dados: {}, confianca: 0, paginas_processadas: paginasProcessadas, motivo: 'Formato não suportado pelo leitor interno.' };
   }
 
   let parcialTexto: { texto: string; dados: Record<string, any>; confianca: number } | null = null;
@@ -2160,13 +2181,13 @@ export async function extrairDocumentoLocal(
               dados = resultadoCombinado.dados;
               confianca = resultadoCombinado.confianca;
               if (dados.assinatura_socio_administrador?.presente && dados.assinatura_contador?.presente) {
-                return { tipo, disponivel: true, legivel: confianca >= minimoConfianca, mecanismo: 'tesseract', texto: combinado, dados, confianca };
+                return { tipo, disponivel: true, legivel: confianca >= minimoConfianca, mecanismo: 'tesseract', texto: combinado, dados, confianca, paginas_processadas: paginasProcessadas };
               }
             }
           }
         }
         if (confianca >= minimoConfianca) {
-          return { tipo, disponivel: true, legivel: true, mecanismo: 'pdftotext', texto, dados, confianca };
+          return { tipo, disponivel: true, legivel: true, mecanismo: 'pdftotext', texto, dados, confianca, paginas_processadas: paginasProcessadas };
         }
         // Camada textual incompleta: tenta OCR antes de recorrer à API externa,
         // mas preserva o que foi lido para que os campos explícitos e as
@@ -2213,6 +2234,7 @@ export async function extrairDocumentoLocal(
         motivo_extracao: ocr.motivo || 'OCR local não produziu texto adicional; dados textuais parciais preservados.',
       },
       confianca: parcialTexto.confianca,
+      paginas_processadas: paginasProcessadas,
       motivo: ocr.motivo || 'OCR local não produziu texto adicional; dados textuais parciais preservados para revisão humana.',
     } : {
     tipo,
@@ -2222,6 +2244,7 @@ export async function extrairDocumentoLocal(
     texto: ocr.texto,
     dados: {},
     confianca: 0,
+    paginas_processadas: paginasProcessadas,
     motivo: ocr.motivo || 'Documento sem texto legível pelo motor interno; revisão humana necessária.',
     }),
   };
