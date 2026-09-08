@@ -4,7 +4,7 @@ import { construirSecoesAnaliseDocumento, documentoSocietarioDispensadoPorMei, e
 describe("construirSecoesAnaliseDocumento — validação objetiva", () => {
   it("usa nome funcional e mantém o arquivo original apenas como referência", () => {
     expect(nomeFuncionalDocumento({ tipo_documento: "consulta_serasa_cnpj", nome: "R-G-52008360000133.pdf" })).toBe("Consulta Serasa do CNPJ");
-    expect(linhaObjetivaDocumento({
+    const linha = linhaObjetivaDocumento({
       tipo_documento: "consulta_serasa_cnpj",
       status: "concluido",
       satisfaz_requisito: true,
@@ -15,7 +15,9 @@ describe("construirSecoesAnaliseDocumento — validação objetiva", () => {
         score: 985,
         data_consulta: "2026-08-20",
       },
-    }, { tipo_documento: "consulta_serasa_cnpj", analisado: true, consistente: true }, "Consulta de Rating")).toContain("Consulta de Rating — CNPJ: 12.345.678/0001-90");
+    }, { tipo_documento: "consulta_serasa_cnpj", analisado: true, consistente: true }, "Consulta de Rating");
+    expect(linha).toContain("Consulta de Rating — CNPJ: 12.345.678/0001-90");
+    expect(linha).not.toContain("Leitura concluída");
     expect(linhaObjetivaDocumento({ tipo_documento: "consulta_serasa_cnpj", dados_extraidos: { data_consulta: "2026-08-20", rating: "A" }, status: "revisao_humana" }, { tipo_documento: "consulta_serasa_cnpj", analisado: true }, "Consulta de Rating", "Revisão necessária")).toContain("Data da consulta: 2026-08-20");
   });
 

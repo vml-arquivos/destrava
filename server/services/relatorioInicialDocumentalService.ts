@@ -16,6 +16,11 @@ function texto(value: unknown): string {
   return String(value ?? '').trim();
 }
 
+export function documentoAtivoParaRelatorio(documento: Record<string, any> = {}): boolean {
+  const status = texto(documento.status).normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
+  return !['excluido', 'excluida', 'deleted', 'removido', 'removida'].includes(status) && !documento.excluido_em;
+}
+
 function normalizar(value: unknown): string {
   return texto(value).normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().replace(/\s+/g, ' ').trim();
 }

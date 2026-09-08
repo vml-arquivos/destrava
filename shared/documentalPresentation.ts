@@ -961,7 +961,7 @@ function statusLinhaDocumento(estado: DocumentoEstadoVisual, statusOverride?: un
 }
 
 function textoResultadoGenerico(value: unknown): boolean {
-  return /^(leitura conclu[ií]da|documento lido|an[aá]lise conclu[ií]da|sem pend[eê]ncia registrada|documento validado)$/i.test(texto(value));
+  return /^(leitura conclu[ií]da(?:\s+(?:com|;)|[.;])|documento lido(?:\s|[.;])|an[aá]lise conclu[ií]da(?:\s|[.;])|sem pend[eê]ncia registrada|documento validado)[\s\S]*$/i.test(texto(value));
 }
 
 /**
