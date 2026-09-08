@@ -2,7 +2,7 @@ import { CLASSIFIER_VERSION, EXTRACTOR_VERSION, RULE_VERSION, SCHEMA_VERSION } f
 import type { DocumentProcessingEvidence } from './documentProcessingEvidence';
 import { linhaObjetivaDocumento, nomeFuncionalDocumento, resumoObjetivoDocumento } from '../../shared/documentalPresentation';
 
-export const RELATORIO_INICIAL_VERSION = '1.4.2';
+export const RELATORIO_INICIAL_VERSION = '1.4.3';
 
 type DocumentoRelatorio = Record<string, any>;
 export type ModoRelatorioDocumental = 'institucional' | 'interno';
@@ -243,13 +243,15 @@ function construirChecklistExecutivo(inventario: any[], cruzamentos: any[], hist
       datas: adicionarUnico([dados.data_consulta, dados.data_emissao, dados.data_registro, dados.data_ato, dados.data_validade]),
       data: primeiro(dados.data_consulta, dados.data_emissao, dados.data_registro, dados.data_ato, dados.data_validade) || null,
       tipos_documentais: adicionarUnico([item.codigo, item.tipo_documento, item.documento]),
-      classificacao: documentoEhSocio(item)
-        ? documentoEhConsultaCredito(item) || documentoEhConsultaFiscal(item) ? 'consulta_socio' : 'documentacao_socio'
-        : documentoEhInicial(item) || documentoEhSocietario(item) || /faturamento|extrato|receita|movimentacao|contrato|alteracao|junta|enquadramento|simples|pgdas|defis|ecf|dctf|darf/i.test(tipoDocumentoNormalizado(item))
-          ? 'documento_principal'
-          : documentoEhConsultaCredito(item) || documentoEhConsultaFiscal(item)
-            ? 'consulta_empresa'
-            : 'documento_principal',
+      classificacao: documentoEhInicial(item) || documentoEhSocietario(item) || /faturamento|extrato|receita|movimentacao|contrato|alteracao|junta|enquadramento|simples|pgdas|defis|ecf|dctf|darf/i.test(tipoDocumentoNormalizado(item))
+        ? 'documento_principal'
+        : /fgts|extrato|cnd|cpend|cndt|certidao|cadin|pgfn|pgdas|defis|ecf|dctf|darf|ecac|situacao fiscal|rating|scr|registrato|ccs|ccf|cenprot|serasa|bureau|protesto|inadimpl|restric|score|credito/i.test(textoCampos(item))
+          ? 'consulta_empresa'
+          : documentoEhSocio(item)
+            ? documentoEhConsultaCredito(item) || documentoEhConsultaFiscal(item) ? 'consulta_socio' : 'documentacao_socio'
+            : documentoEhConsultaCredito(item) || documentoEhConsultaFiscal(item)
+              ? 'consulta_empresa'
+              : 'documento_principal',
     };
     const existente = agrupados.get(chave);
     if (!existente) {
@@ -280,6 +282,10 @@ function construirChecklistExecutivo(inventario: any[], cruzamentos: any[], hist
   if (junta && historico?.nire) {
     const ato = historico.ato_mais_recente || {};
     junta.resultado = `NIRE: ${historico.nire}. Última alteração registrada em ${ato.data || 'data não localizada'}${ato.tipo ? ` (${ato.tipo})` : ''}. Ato conferido.`;
+    if (ato.data) {
+      junta.datas = adicionarUnico([...(junta.datas || []), ato.data]);
+      junta.data = junta.data || ato.data;
+    }
     if (historico.status === 'confirmado' && historico.continuidade_12_meses) junta.pendencia = null;
   }
   const contratos = itens.find((item) => item.nome === 'Contrato Social e Alterações');
@@ -287,6 +293,10 @@ function construirChecklistExecutivo(inventario: any[], cruzamentos: any[], hist
     contratos.status = 'Confirmado';
     const dataAto = historico.ato_mais_recente?.data || null;
     contratos.resultado = `Contrato e alterações confirmados${dataAto ? `; ato de ${dataAto}` : ''}${historico.nire ? `; NIRE ${historico.nire}` : ''}; datas e continuidade societária conferidos; ${historico.meses_comprovados || 12} meses comprovados.`;
+    if (dataAto) {
+      contratos.datas = adicionarUnico([...(contratos.datas || []), dataAto]);
+      contratos.data = contratos.data || dataAto;
+    }
     contratos.pendencia = null;
   }
   const pendencias = [
