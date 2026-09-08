@@ -1,7 +1,9 @@
 type AnyRecord = Record<string, any>;
 
 function normalizarTextoApresentacao(value: unknown): string {
-  const text = String(value ?? '');
+  const text = String(value ?? '')
+    .replace(/[\u00ad\u200b-\u200f\u2060\ufeff]/g, '')
+    .replace(/\u00a0/g, ' ');
   if (!/[ÃÂ]/.test(text) || typeof Buffer === 'undefined') return text;
   try {
     const repaired = Buffer.from(text, 'latin1').toString('utf8');
@@ -29,11 +31,31 @@ function statusClass(value: unknown): 'ok' | 'warn' | 'bad' {
   return /confirm|aprov|valid|conclu|ok/.test(status) ? 'ok' : /incompat|diverg|bloque|revis/.test(status) ? 'bad' : 'warn';
 }
 
-function renderFields(fields: any[]): string {
+const DESCRICOES_CNAE_APRESENTACAO: Record<string, string> = {
+  '5611203': '56.11-2-03 - Lanchonetes, casas de chá, de sucos e similares',
+};
+
+function valorCadastralApresentacao(field: AnyRecord, empresa: AnyRecord): unknown {
+  const label = String(field.campo || field.label || '').toLowerCase();
+  if (label === 'razão social' && empresa.razao_social) return empresa.razao_social;
+  if (label === 'nome fantasia' && empresa.nome_fantasia) return empresa.nome_fantasia;
+  if (label === 'natureza jurídica' && empresa.natureza_juridica) {
+    const codigo = String(field.valor || '').match(/^\s*([\d-]+)\s*-/)?.[1];
+    return codigo ? `${codigo} - ${empresa.natureza_juridica}` : empresa.natureza_juridica;
+  }
+  if (label === 'atividade principal') {
+    const codigo = String(empresa.atividade_principal || '').replace(/\D/g, '');
+    if (DESCRICOES_CNAE_APRESENTACAO[codigo]) return DESCRICOES_CNAE_APRESENTACAO[codigo];
+  }
+  return field.valor;
+}
+
+function renderFields(fields: any[], empresa: AnyRecord): string {
   if (!fields.length) return '';
   return `<div class="fields">${fields.map((field) => {
     const label = field.campo || field.label;
-    const valor = /^data\b/i.test(String(label || '')) ? formatDate(field.valor) : field.valor;
+    const bruto = valorCadastralApresentacao(field, empresa);
+    const valor = /^data\b/i.test(String(label || '')) ? formatDate(bruto) : bruto;
     return `<div class="field"><span>${esc(label)}</span><strong>${esc(valor)}</strong></div>`;
   }).join('')}</div>`;
 }
@@ -73,7 +95,7 @@ function renderDocument(item: AnyRecord): string {
   </article>`;
 }
 
-function renderModule(module: AnyRecord): string {
+function renderModule(module: AnyRecord, empresa: AnyRecord): string {
   const items = list(module.itens);
   const documents = items.length ? items.map(renderDocument).join('') : '<p class="empty">Nenhum documento disponível neste grupo.</p>';
   const events = list(module.eventos).length
@@ -89,7 +111,7 @@ function renderModule(module: AnyRecord): string {
     ? '<div class="internal-note">Conteúdo interno de assessoria omitido do relatório institucional.</div>'
     : '';
   const showItems = module.id === 'pendencias' ? '' : documents;
-  return `<section class="module" id="modulo-${esc(module.id)}"><div class="module-title"><span class="module-number">${esc(module.ordem)}</span><div><h2>${esc(module.titulo)}</h2><p>${esc(module.descricao)}</p></div></div>${renderFields(list(module.campos))}${socios}${showItems}${events}${pending}${internalNote}</section>`;
+  return `<section class="module" id="modulo-${esc(module.id)}"><div class="module-title"><span class="module-number">${esc(module.ordem)}</span><div><h2>${esc(module.titulo)}</h2><p>${esc(module.descricao)}</p></div></div>${renderFields(list(module.campos), empresa)}${socios}${showItems}${events}${pending}${internalNote}</section>`;
 }
 
 export function gerarHtmlRelatorioModular(relatorio: AnyRecord): string {
@@ -118,6 +140,7 @@ export function gerarHtmlRelatorioModular(relatorio: AnyRecord): string {
   .toc ol{margin:4px 0 0;padding-left:20px}.toc li{margin:2px 0}
   a{color:#123b78;text-decoration:none}
   .module{break-inside:auto}
+  #modulo-documentacao_socios{break-before:page}
   .module-title{display:flex;gap:8px;align-items:flex-start;border-bottom:1px solid #d9e2ef;padding-bottom:6px;margin-bottom:7px;break-inside:avoid;break-after:avoid}
   .module-number{display:inline-flex;flex:0 0 22px;align-items:center;justify-content:center;width:22px;height:22px;border-radius:50%;background:#123b78;color:#fff;font-weight:700}
   .module-title p{color:#64748b;margin:2px 0}
@@ -132,7 +155,7 @@ export function gerarHtmlRelatorioModular(relatorio: AnyRecord): string {
   .alert{color:#9a3412;background:#fff7ed;border-radius:5px;padding:4px 6px;margin-top:4px}.pending{background:#fff7ed;border-color:#fed7aa;break-inside:avoid}.success{background:#ecfdf5;color:#047857;border:1px solid #a7f3d0;border-radius:7px;padding:7px;break-inside:avoid}.internal-note{background:#f8fafc;color:#475569;border-style:dashed;break-inside:avoid}.empty{color:#64748b;font-style:italic}
   .history{margin-top:7px}.history h3{margin-top:0}table{width:100%;border-collapse:collapse;margin:4px 0 7px;table-layout:fixed}thead{display:table-header-group}th{background:#123b78;color:#fff;text-align:left;padding:4px;font-size:6.8pt;line-height:1.1}td{border-bottom:1px solid #e5eaf1;vertical-align:top;padding:4px;font-size:7.1pt;line-height:1.18;overflow-wrap:break-word;word-break:normal}tr{break-inside:avoid;page-break-inside:avoid}th:nth-child(1),td:nth-child(1){width:11%}th:nth-child(2),td:nth-child(2){width:25%}th:nth-child(3),td:nth-child(3){width:42%}th:nth-child(4),td:nth-child(4){width:22%}.socios-table th:nth-child(1),.socios-table td:nth-child(1){width:55%}.socios-table th:nth-child(2),.socios-table td:nth-child(2){width:25%}.socios-table th:nth-child(3),.socios-table td:nth-child(3){width:20%}
   ul{margin:3px 0;padding-left:16px}li{margin:2px 0}.status{display:inline-block;border-radius:999px;padding:3px 7px;font-weight:700}.status.ok{background:#d1fae5;color:#047857}.status.warn{background:#fef3c7;color:#92400e}.status.bad{background:#fee2e2;color:#991b1b}
-  </style></head><body><h1>Checklist e Análise Documental</h1><p class="subtitle">Relatório institucional consolidado. Cada documento funcional aparece uma única vez; o arquivo original e as datas são referências complementares.</p><div class="cover"><strong>${esc(nomeEmpresa)}</strong><div class="meta"><div><span>CNPJ</span><strong>${esc(empresa.cnpj)}</strong></div><div><span>Tipo societário</span><strong>${esc(empresa.tipo_societario || empresa.natureza_juridica)}</strong></div><div><span>Situação cadastral</span><strong>${esc(empresa.situacao_cadastral)}</strong></div><div><span>Status documental</span><strong><span class="status ${statusClass(status)}">${esc(status)}</span></strong></div></div><p>Gerado em: ${formatDate(relatorio.gerado_em)}</p></div><nav class="toc"><b>Checklist geral</b><ol>${index}</ol></nav>${modules.map(renderModule).join('')}</body></html>`;
+  </style></head><body><h1>Checklist e Análise Documental</h1><p class="subtitle">Relatório institucional consolidado. Cada documento funcional aparece uma única vez; o arquivo original e as datas são referências complementares.</p><div class="cover"><strong>${esc(nomeEmpresa)}</strong><div class="meta"><div><span>CNPJ</span><strong>${esc(empresa.cnpj)}</strong></div><div><span>Tipo societário</span><strong>${esc(empresa.tipo_societario || empresa.natureza_juridica)}</strong></div><div><span>Situação cadastral</span><strong>${esc(empresa.situacao_cadastral)}</strong></div><div><span>Status documental</span><strong><span class="status ${statusClass(status)}">${esc(status)}</span></strong></div></div><p>Gerado em: ${formatDate(relatorio.gerado_em)}</p></div><nav class="toc"><b>Checklist geral</b><ol>${index}</ol></nav>${modules.map((module) => renderModule(module, empresa)).join('')}</body></html>`;
 }
 
 export const RELATORIO_MODULAR_LAYOUT_VERSION = '2.1.0';
