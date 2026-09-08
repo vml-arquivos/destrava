@@ -76,6 +76,7 @@ describe('relatório documental modular', () => {
       { campo: 'Natureza jurídica', valor: '206-2 - Socie dade Em pre s ária Limitada' },
       { campo: 'Atividade principal', valor: '56.11-2-03 - Lanchone te s' },
     ];
+    relatorio.modulos_relatorio[1].itens[0].resultado = 'Cartão CNPJ — Razão social: PALUM A BURGER LTDA';
     const html = gerarHtmlRelatorioModular(relatorio);
     expect(html).toContain('PALUMA BURGER LTDA');
     expect(html).toContain('206-2 - Sociedade Empresária Limitada');
