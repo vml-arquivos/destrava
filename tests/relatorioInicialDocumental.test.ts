@@ -130,4 +130,41 @@ describe('relatório inicial documental', () => {
     expect(relatorio.cruzamentos_documentais.find((item: any) => item.codigo === 'identidade_empresarial')?.status).toBe('não confirmado');
     expect(relatorio.limitacoes.join(' ')).toMatch(/Faturamento documentado não localizado/);
   });
+
+  it('preserva conclusão consistente mesmo quando existe flag legada de revisão', () => {
+    const relatorio = aplicarRelatorioInicial({
+      gerado_em: '2026-09-07T00:00:00.000Z',
+      status_geral: 'Pendente',
+      empresa: dossie.empresa,
+      resumo: {},
+      documentos_analisados: [],
+      documentos_pendentes_analise: [],
+      documentos_faltantes: [],
+      pendencias: [],
+    }, {
+      dossie: { ...dossie, mapa_documental_credito: { etapas: [] } },
+      documentos: [{
+        arquivo_id: 'doc-contrato',
+        tipo_documento: 'contrato_social',
+        nome: 'contrato.pdf',
+        analisado: true,
+        consistente: true,
+        exige_revisao_humana: true,
+        status: 'ativo',
+        resultado_analise: { revisao_humana_necessaria: true, status_societario: 'atual', motivos_revisao: [] },
+      }, {
+        arquivo_id: 'doc-faturamento',
+        tipo_documento: 'faturamento_12_meses',
+        nome: 'faturamento.pdf',
+        analisado: true,
+        consistente: false,
+        status: 'Validado',
+        resultado_analise: { dados_extraidos: { documento_compativel: true }, revisao_humana_necessaria: true },
+      }],
+      evidencias: new Map(),
+    });
+
+    expect(relatorio.inventario_documental.find((item: any) => item.arquivo_id === 'doc-contrato')?.status).toBe('Aprovado');
+    expect(relatorio.inventario_documental.find((item: any) => item.arquivo_id === 'doc-faturamento')?.status).toBe('Aprovado');
+  });
 });
