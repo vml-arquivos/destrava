@@ -112,7 +112,7 @@ function estadoDocumento(documento: DocumentoRelatorio): 'aprovado' | 'ressalva'
     || dados.satisfaz_requisito === true
     || (dados.documento_compativel === true && statusConcluido)
     || laudoSocietarioConcluido;
-  const validadoLegado = /^(validado|ok|conclu[ií]do)$/i.test(texto(documento.pendencia))
+  const validadoLegado = /^(validado|ok|conclu[ií]do)$/i.test(texto(documento.pendencia || documento.observacao))
     && (documento.analisado === true || documento.lido === true)
     && documento.consistente !== false;
   const revisao = (documento.exige_revisao_humana === true || resultado.revisao_humana_necessaria === true || resultado.analysis_status === 'REANALISE_NECESSARIA')
