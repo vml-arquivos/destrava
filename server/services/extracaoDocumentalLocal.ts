@@ -681,7 +681,10 @@ function parseSimples(texto: string): { dados: Record<string, any>; confianca: n
 function parseContratoSocialAlteracao(texto: string): { dados: Record<string, any>; confianca: number } {
   const linhas = linhasTexto(texto);
   const norm = textoNormalizado(texto);
-  const compativel = /contrato social|alteracao contratual|alteração contratual|consolidacao contratual|consolidação contratual/.test(norm);
+  // Sinal textual: vocabulário comum de instrumentos societários (não é uma
+  // frase exclusiva de uma Junta ou UF). Assim como em parseAtosJunta, este
+  // é apenas um dos sinais de evidência -- não decide sozinho a identidade.
+  const indicadorTextual = /contrato social|alteracao contratual|alteração contratual|consolidacao contratual|consolidação contratual|instrumento particular de alteracao|instrumento particular de alteração/.test(norm);
   const cnpj = formatarCnpj(primeiroCnpj(texto));
   const razaoSocial = limparValor(valorAposRotulo(linhas, ['nome empresarial', 'razão social', 'razao social']))
     || limparValor(linhas.find((linha) => /\b(?:ltda|limitada|s\/a|sa|eireli)\b/i.test(linha) && !/sociedade empresaria|sociedade empresária/i.test(linha)) || null);
@@ -792,10 +795,26 @@ function parseContratoSocialAlteracao(texto: string): { dados: Record<string, an
 
   const campos = [nire, dataRegistro, razaoSocial, cnpj, tipoAto];
   const preenchidos = campos.filter(Boolean).length;
-  const confianca = clamp((compativel ? 0.15 : 0) + (nire ? 0.2 : 0) + (dataRegistro ? 0.2 : 0) + (preenchidos / campos.length) * 0.15 + (socios.length ? 0.15 : 0) + (alteracoesSocietarias.length ? 0.15 : 0));
+  const confianca = clamp((indicadorTextual ? 0.15 : 0) + (nire ? 0.2 : 0) + (dataRegistro ? 0.2 : 0) + (preenchidos / campos.length) * 0.15 + (socios.length ? 0.15 : 0) + (alteracoesSocietarias.length ? 0.15 : 0));
+
+  // Identidade por evidência: um NIRE ou número de arquivamento extraído por
+  // rótulo/certificação explícita é, por si só, prova de registro mercantil
+  // -- independente de a Junta emissora usar exatamente as frases acima.
+  // Uma reconstrução societária real (quadro final ou movimentação de
+  // quotas com data de registro) também confirma o documento mesmo sem o
+  // indicador textual. Ausência de todas as evidências é que caracteriza
+  // incompatibilidade real.
+  const evidenciasIdentidade: string[] = [];
+  if (indicadorTextual) evidenciasIdentidade.push('indicador_textual');
+  if (nire) evidenciasIdentidade.push('nire');
+  if (numeroArquivamento) evidenciasIdentidade.push('numero_arquivamento');
+  if ((quadroSocietarioFinal.length || alteracoesSocietarias.length) && dataRegistro) evidenciasIdentidade.push('reconstrucao_societaria');
+  const compativel = evidenciasIdentidade.length > 0;
+
   return {
     dados: {
       documento_compativel: compativel,
+      documento_identidade_evidencias: evidenciasIdentidade,
       cnpj,
       razao_social: razaoSocial,
       nire,
@@ -1057,10 +1076,20 @@ function parseExtratoBancario(texto: string): { dados: Record<string, any>; conf
 function parseAtosJunta(texto: string): { dados: Record<string, any>; confianca: number } {
   const linhas = linhasTexto(texto);
   const norm = textoNormalizado(texto);
-  const compativel = norm.includes('junta comercial') || norm.includes('lista de arquivamentos') || norm.includes('certidao simplificada') || norm.includes('servicos web') || norm.includes('nire');
+  // Sinal textual institucional: vocabulário comum a Juntas Comerciais de
+  // qualquer UF (nomes de sistema, rótulos de certidão/extrato), nunca o
+  // nome de uma Junta específica. Isso é apenas UM dos sinais de evidência;
+  // sozinho ele não decide mais a identidade do documento (ver abaixo).
+  const indicadorTextual = norm.includes('junta comercial') || norm.includes('lista de arquivamentos') || norm.includes('certidao simplificada') || norm.includes('servicos web') || norm.includes('nire') || norm.includes('registro mercantil') || norm.includes('redesim') || norm.includes('extrato de atos');
   const cnpj = formatarCnpj(primeiroCnpj(texto));
+  // A linha "solta" só é aceita como nome empresarial quando NÃO é, ela mesma,
+  // um cabeçalho de tipo de ato/evento (ex.: "ATO CONSTITUTIVO - EIRELI",
+  // "TRANSFORMAÇÃO AUTOMÁTICA DE EIRELI EM LTDA...") -- documentos que só
+  // listam "Atos disponíveis" (sem nenhum campo de nome empresarial) não têm
+  // como ter o nome inferido dali; extrair "não localizado" é mais correto
+  // do que inventar um nome a partir do título de um ato.
   const razaoSocial = limparValor(valorAposRotulo(linhas, ['nome empresarial', 'razão social', 'razao social']))
-    || limparValor(linhas.find((linha) => /\b(?:ltda|limitada|eireli|s\/?a)\b/i.test(linha) && !/qualificacao|socio|administrador/i.test(linha)) || null);
+    || limparValor(linhas.find((linha) => /\b(?:ltda|limitada|eireli|s\/?a)\b/i.test(linha) && !/qualificacao|socio|administrador|alterac|consolidac|constitu|transformac|extinc|enquadramento|evento|adicionar|data de aprova/i.test(linha)) || null);
   let nire = limparValor(valorAposRotulo(linhas, ['nire', 'número de identificação do registro de empresas', 'numero de identificacao do registro de empresas']));
   if (nire) nire = onlyDigits(nire) || nire;
   const capitalSocial = numeroMonetario(valorAposRotulo(linhas, ['capital social', 'capital social atual']));
@@ -1074,7 +1103,7 @@ function parseAtosJunta(texto: string): { dados: Record<string, any>; confianca:
     const row = linha.match(/^\s*(\d{5,15})\s+(\d{2}\/\d{2}\/\d{4})\s+(.+?)\s*$/);
     if (!row) continue;
     const tipo = limparValor(row[3]);
-    if (!tipo || !/(alterac|contrato|consolidac|enquadramento|constituic|transformac|extinc|ata|ordem judicial)/.test(textoNormalizado(tipo))) continue;
+    if (!tipo || !/(alterac|contrato|consolidac|enquadramento|constitu|transformac|extinc|\bata\b|ordem judicial)/.test(textoNormalizado(tipo))) continue;
     historico.push({ numero: row[1], data: parseDate(row[2]) || row[2], tipo_ato: tipo });
   }
 
@@ -1087,19 +1116,19 @@ function parseAtosJunta(texto: string): { dados: Record<string, any>; confianca:
       .filter(Boolean)
       .join(' ');
     const contextoNorm = textoNormalizado(contexto);
-    if (!/(alterac|contrato|consolidac|enquadramento|arquivamento|constituic|transformac|extinc|ata|ordem judicial)/.test(contextoNorm)) continue;
+    if (!/(alterac|contrato|consolidac|enquadramento|arquivamento|constitu|transformac|extinc|\bata\b|ordem judicial)/.test(contextoNorm)) continue;
     const numeroMatch = linha.match(/(?:numero|número|arquivamento)?\s*[:\-]?\s*(\d{5,15})\b/i)
       || contexto.match(/(?:numero|número|arquivamento)?\s*[:\-]?\s*(\d{5,15})\b/i);
     let tipoAto: string | null = null;
     const aposData = linha.slice((dataMatch.index || 0) + dataMatch[0].length).replace(/^\s*[-–—|:]\s*/, '').trim();
-    if (/(alterac|contrato|consolidac|enquadramento|constituic|ordem judicial|transformac|extinc|ata)/.test(textoNormalizado(aposData))) {
+    if (/(alterac|contrato|consolidac|enquadramento|constitu|ordem judicial|transformac|extinc|\bata\b)/.test(textoNormalizado(aposData))) {
       tipoAto = limparValor(aposData);
     }
     const candidatosTipo = [linhas[i - 1], linhas[i + 1], linhas[i - 2], linhas[i + 2]].filter(Boolean);
     for (const candidato of candidatosTipo) {
       if (tipoAto) break;
       const n = textoNormalizado(candidato);
-      if (/(alterac|contrato|consolidac|enquadramento|constituic|ordem judicial|transformac|extinc|ata)/.test(n)) {
+      if (/(alterac|contrato|consolidac|enquadramento|constitu|ordem judicial|transformac|extinc|\bata\b)/.test(n)) {
         tipoAto = limparValor(candidato.replace(/evento\(s\)\s*:/i, '').replace(/data de aprova[cç][aã]o\s*:/i, '').replace(/\s*[+]\s*adicionar\s*$/i, ''));
       }
     }
@@ -1113,7 +1142,7 @@ function parseAtosJunta(texto: string): { dados: Record<string, any>; confianca:
     .sort((a, b) => String(a.data).localeCompare(String(b.data)));
 
   if (!nire) {
-    const constituicao = historicoUnico.find((item) => /registro|constituic|contrato/.test(textoNormalizado(item.tipo_ato || '')) && onlyDigits(item.numero).length >= 10);
+    const constituicao = historicoUnico.find((item) => /registro|constitu|contrato/.test(textoNormalizado(item.tipo_ato || '')) && onlyDigits(item.numero).length >= 10);
     nire = constituicao ? onlyDigits(constituicao.numero) : null;
   }
   const alteracoes = historicoUnico.filter((item) => /alterac/.test(textoNormalizado(item.tipo_ato || '')));
@@ -1135,10 +1164,28 @@ function parseAtosJunta(texto: string): { dados: Record<string, any>; confianca:
 
   // O CNPJ é informativo: algumas Juntas (como a do DF) não o exibem na
   // listagem de atos. A confiança principal vem do NIRE e das datas.
-  const confianca = clamp((compativel ? 0.25 : 0) + (nire ? 0.3 : 0) + (historicoUnico.length ? 0.35 : 0) + (razaoSocial || cnpj ? 0.1 : 0));
+  const confianca = clamp((indicadorTextual ? 0.25 : 0) + (nire ? 0.3 : 0) + (historicoUnico.length ? 0.35 : 0) + (razaoSocial || cnpj ? 0.1 : 0));
+
+  // A identidade do documento é decidida por evidência, não por uma frase
+  // literal fixa: Juntas diferentes usam rótulos e sistemas diferentes
+  // ("REDESIM", "Serviços Web", "Extrato de Atos" etc.) e um documento real
+  // de Atos da Junta não pode ser marcado como incompatível só porque o
+  // texto não repete uma das frases específicas acima. O NIRE (número de
+  // registro na Junta, extraído por rótulo) e um histórico de arquivamentos
+  // genuinamente estruturado (data + ato) são, cada um, evidência
+  // suficiente por si só de que este É um documento de registro mercantil
+  // -- mesmo sem o indicador textual. Incompatibilidade real (nenhuma das
+  // evidências abaixo presente) continua sendo reportada como tal.
+  const evidenciasIdentidade: string[] = [];
+  if (indicadorTextual) evidenciasIdentidade.push('indicador_textual');
+  if (nire) evidenciasIdentidade.push('nire');
+  if (historicoUnico.length) evidenciasIdentidade.push('historico_arquivamentos');
+  const compativel = evidenciasIdentidade.length > 0;
+
   return {
     dados: {
       documento_compativel: compativel,
+      documento_identidade_evidencias: evidenciasIdentidade,
       cnpj,
       razao_social: razaoSocial,
       nire,

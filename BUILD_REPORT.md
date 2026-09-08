@@ -1,4 +1,37 @@
-# Relatório de Build — 31/08/2026 (atualizado, Rodada 17 — 02/09/2026: confirmação automática da Etapa 1, sem clicar em "Iniciar análise documental"; Rodada 18 — 02/09/2026: validação local sem IA/orientação de documento correto/menos texto repetido/espaço vazio preenchido; Rodada 19 — 02/09/2026: sincronização automática de CNPJ; Rodada 20 — 02/09/2026: Cartão CNPJ confirma e trava a situação cadastral contra a reversão automática; Rodada 21 — 02/09/2026: leitura automática sem clique, falso positivo de nome para Empresário Individual, telefone/e-mail via Cartão CNPJ; Rodada 22 — 02/09/2026: refinamento com os documentos reais, janela de 5 dias, trava de edição manual; Rodada 23 — 02/09/2026: leitura visível ao anexar Cartão CNPJ/QSA/Enquadramento; Rodada 24 — 02/09/2026: falha já pendente/travada passa a se resolver sozinha na tela, sem F5; Rodada 25 — 02/09/2026: todos os campos do checklist sempre visíveis, para qualquer empresa/regime; Rodada 26 — 02/09/2026: Cartão CNPJ também corrige o nome empresarial/razão social desatualizado na API gratuita; Rodada 27 — 02/09/2026: botão "Reler" manual em cada card da Etapa 1; Rodada 28 — 02/09/2026: grade de campos ilegível corrigida no Acervo Documental, botão "Reler" do Contrato Social confronta contra o Ato da Junta; Rodada 29 — 02/09/2026: auditoria própria de consistência entre tipos de empresa, três inconsistências corrigidas; Rodada 30 — 02/09/2026: cards do Acervo Documental nivelados quando fechados)
+# Relatório de Build — 31/08/2026 (atualizado, Rodada 17 — 02/09/2026: confirmação automática da Etapa 1, sem clicar em "Iniciar análise documental"; Rodada 18 — 02/09/2026: validação local sem IA/orientação de documento correto/menos texto repetido/espaço vazio preenchido; Rodada 19 — 02/09/2026: sincronização automática de CNPJ; Rodada 20 — 02/09/2026: Cartão CNPJ confirma e trava a situação cadastral contra a reversão automática; Rodada 21 — 02/09/2026: leitura automática sem clique, falso positivo de nome para Empresário Individual, telefone/e-mail via Cartão CNPJ; Rodada 22 — 02/09/2026: refinamento com os documentos reais, janela de 5 dias, trava de edição manual; Rodada 23 — 02/09/2026: leitura visível ao anexar Cartão CNPJ/QSA/Enquadramento; Rodada 24 — 02/09/2026: falha já pendente/travada passa a se resolver sozinha na tela, sem F5; Rodada 25 — 02/09/2026: todos os campos do checklist sempre visíveis, para qualquer empresa/regime; Rodada 26 — 02/09/2026: Cartão CNPJ também corrige o nome empresarial/razão social desatualizado na API gratuita; Rodada 27 — 02/09/2026: botão "Reler" manual em cada card da Etapa 1; Rodada 28 — 02/09/2026: grade de campos ilegível corrigida no Acervo Documental, botão "Reler" do Contrato Social confronta contra o Ato da Junta; Rodada 29 — 02/09/2026: auditoria própria de consistência entre tipos de empresa, três inconsistências corrigidas; Rodada 30 — 02/09/2026: cards do Acervo Documental nivelados quando fechados; Rodada 08/09/2026: identidade documental por evidência em Atos da Junta/Contrato Social)
+
+## Rodada 08/09/2026 — identidade documental por evidência (Atos da Junta / Contrato Social)
+
+Base desta rodada: `destravamain_30.zip`, extraído em ambiente limpo (`pnpm install --frozen-lockfile` executado do zero, sem `node_modules` pré-existente).
+
+### 1. Instalação de dependências
+`pnpm install --frozen-lockfile` -- concluída sem erros, lockfile respeitado (`packageManager: pnpm@10.4.1`). Nenhuma dependência adicionada, removida ou alterada nesta rodada.
+
+### 2. Typecheck
+`npx tsc --noEmit` -- concluído sem nenhum erro, antes e depois de cada alteração.
+
+### 3. Suíte de testes
+`npx vitest run` -- **114 arquivos / 1085 testes, todos passando** (12 testes em `tests/atosJuntaIdentidadePorEvidencia.test.ts`: 6 com fixtures sintéticas + 6 adicionados depois, usando o texto extraído exato dos dois documentos reais anexados pelo usuário -- ver `TEST_REPORT.md` e `CHANGELOG_CORRECOES.md`). Todos os demais arquivos já existentes na base, sem alteração de contagem.
+
+### 4. Build de produção
+`pnpm run build` -- concluído com sucesso.
+- JavaScript inicial: 98.7 kB gzip (limite 130 kB) -- OK
+- CSS inicial: 31.3 kB gzip (limite 45 kB) -- OK
+- Landing A1: 8.5 kB gzip (limite 20 kB) -- OK
+- `dist/index.js`: 2.5 MB (aviso de tamanho do esbuild, pré-existente, não é falha) -- `node --check dist/index.js` OK.
+- `dist/backfill-laudos.js`: 447.2 kB -- `node --check dist/backfill-laudos.js` OK.
+- Pré-renderização estática validada (meta tags OG, Twitter, canonical URL, React root, script bundle).
+
+### 5. Diff mínimo (verificado por `diff -rq` contra o zip original, excluindo `node_modules`/`dist`/`.vite`)
+Apenas 3 arquivos diferem do zip original:
+- `server/services/extracaoDocumentalLocal.ts` (correção de produção)
+- `shared/documentalPresentation.ts` (correção de produção -- mantém o novo campo de diagnóstico fora da tela do usuário final)
+- `tests/atosJuntaIdentidadePorEvidencia.test.ts` (novo, teste)
+
+Nenhum outro arquivo (frontend, rotas, migrations, configuração, outros serviços) foi tocado nesta rodada.
+
+---
+
 
 ## 1. Instalação de dependências
 `pnpm install --frozen-lockfile` -- concluída sem erros, lockfile respeitado (nenhuma dependência adicionada ou removida nesta rodada -- a correção é a remoção de uma única classe Tailwind).

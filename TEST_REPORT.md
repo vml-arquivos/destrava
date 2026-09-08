@@ -1,12 +1,40 @@
-# Relatório de Testes — 31/08/2026 (atualizado, Rodada 17 — 02/09/2026: confirmação automática da Etapa 1, sem clicar em "Iniciar análise documental"; Rodada 18 — 02/09/2026: validação local sem IA/orientação de documento correto/menos texto repetido; Rodada 19 — 02/09/2026: sincronização automática de CNPJ; Rodada 20 — 02/09/2026: Cartão CNPJ confirma e trava a situação cadastral contra a reversão automática; Rodada 21 — 02/09/2026: leitura automática sem clique, falso positivo de nome para Empresário Individual, telefone/e-mail via Cartão CNPJ; Rodada 22 — 02/09/2026: refinamento com os documentos reais, janela de 5 dias, trava de edição manual; Rodada 23 — 02/09/2026: leitura visível ao anexar Cartão CNPJ/QSA/Enquadramento; Rodada 24 — 02/09/2026: falha já pendente/travada passa a se resolver sozinha na tela, sem F5; Rodada 25 — 02/09/2026: todos os campos do checklist sempre visíveis, para qualquer empresa/regime; Rodada 26 — 02/09/2026: Cartão CNPJ também corrige o nome empresarial/razão social; Rodada 27 — 02/09/2026: botão "Reler" manual em cada card da Etapa 1; Rodada 28 — 02/09/2026: grade de campos ilegível corrigida, botão "Reler" do Contrato Social confronta contra o Ato da Junta; Rodada 29 — 02/09/2026: auditoria própria de consistência entre tipos de empresa, três inconsistências corrigidas; Rodada 30 — 02/09/2026: cards do Acervo Documental nivelados quando fechados)
+# Relatório de Testes — 31/08/2026 (atualizado, Rodada 17 — 02/09/2026: confirmação automática da Etapa 1, sem clicar em "Iniciar análise documental"; Rodada 18 — 02/09/2026: validação local sem IA/orientação de documento correto/menos texto repetido; Rodada 19 — 02/09/2026: sincronização automática de CNPJ; Rodada 20 — 02/09/2026: Cartão CNPJ confirma e trava a situação cadastral contra a reversão automática; Rodada 21 — 02/09/2026: leitura automática sem clique, falso positivo de nome para Empresário Individual, telefone/e-mail via Cartão CNPJ; Rodada 22 — 02/09/2026: refinamento com os documentos reais, janela de 5 dias, trava de edição manual; Rodada 23 — 02/09/2026: leitura visível ao anexar Cartão CNPJ/QSA/Enquadramento; Rodada 24 — 02/09/2026: falha já pendente/travada passa a se resolver sozinha na tela, sem F5; Rodada 25 — 02/09/2026: todos os campos do checklist sempre visíveis, para qualquer empresa/regime; Rodada 26 — 02/09/2026: Cartão CNPJ também corrige o nome empresarial/razão social; Rodada 27 — 02/09/2026: botão "Reler" manual em cada card da Etapa 1; Rodada 28 — 02/09/2026: grade de campos ilegível corrigida, botão "Reler" do Contrato Social confronta contra o Ato da Junta; Rodada 29 — 02/09/2026: auditoria própria de consistência entre tipos de empresa, três inconsistências corrigidas; Rodada 30 — 02/09/2026: cards do Acervo Documental nivelados quando fechados; Rodada 08/09/2026: identidade documental por evidência em Atos da Junta/Contrato Social)
 
-## Resultado final
+## Resultado final (Rodada 08/09/2026, base `destravamain_30.zip`, após validação com os 2 documentos reais)
 
 ```
-Test Files  101 passed (101)
-     Tests  910 passed (910)
-  Duration  ~46-65s
+Test Files  114 passed (114)
+     Tests  1085 passed (1085)
+  Duration  ~43s
 ```
+
+## Rodada 08/09/2026 (atualização) — validação com os dois documentos reais da missão, 2 bugs de extração adicionais corrigidos
+
+Os dois documentos reais citados na missão foram anexados: `CertidA_o_Online__Portal_do_Empreendedor_Goiano_3.pdf` (Documento A, já reconhecido) e `atos_da_junta_Vik.pdf` (Documento B, rejeitado antes da correção). O texto extraído exato dos dois foi usado para +6 testes em `tests/atosJuntaIdentidadePorEvidencia.test.ts` (describe "reprodução com os dois documentos reais da missão"):
+- Documento A real: `documento_compativel=true`, NIRE `52206183723`, razão social `PALUMA BURGER LTDA`, CNPJ, 4 arquivamentos e data de registro todos corretos -- idêntico ao comportamento anterior à correção (não-regressão com documento real).
+- Documento B real: `documento_compativel=true` (era `false` antes da correção da rodada) -- confirma o diagnóstico original.
+- Documento B real: NIRE `53600026039` corretamente inferido do Ato Constitutivo -- EIRELI (achado com o documento real: o radical de palavra-chave usado para reconhecer atos de registro não cobria "constitutivo", só "constituição"; corrigido).
+- Documento B real: `razao_social` corretamente `null` -- antes da correção desta atualização, era inventada como `"ATO CONSTITUTIVO - EIRELI"` (o título de um ato, confundido com nome de empresa por conter "EIRELI").
+- Documento B real: os 4 atos do histórico têm o tipo correto, sem contaminação entre blocos vizinhos.
+- Etapa 2 (`validarContratoComAtosJunta`) não gera mais o alerta de incompatibilidade para o Documento B real.
+
+Suíte completa após esta atualização: 114 arquivos / 1085 testes (1079 + 6). TypeScript limpo. Build de produção limpo, `node --check` OK em `dist/index.js` e `dist/backfill-laudos.js`.
+
+## Rodada 08/09/2026 — identidade documental por evidência (Atos da Junta / Contrato Social e Alterações)
+
+**Teste novo dedicado:** `tests/atosJuntaIdentidadePorEvidencia.test.ts` (+6 testes):
+1. Documento A (vocabulário usual -- "JUNTA COMERCIAL DO ESTADO DE GOIÁS", "LISTA DE ARQUIVAMENTOS") continua identificado como Atos da Junta -- prova de não-regressão.
+2. "Documento B" (mesma natureza documental, instituição fictícia/genérica, vocabulário e layout diferentes, nenhuma das frases literais reconhecidas) passa a ser identificado como Atos da Junta pela evidência de NIRE e histórico de arquivamentos -- prova da correção.
+3. "Documento B" como Contrato Social/Alteração (mesmo padrão: sem frase literal, com NIRE e certificação de registro) também passa a ser identificado -- prova de que a correção cobre os dois lados do par confrontado pela Etapa 2.
+4. Um documento genuinamente não relacionado (recibo de pagamento, sem nenhuma evidência de registro mercantil) continua corretamente marcado como incompatível -- prova de que não foi introduzido falso positivo.
+5. A Etapa 2 (`validarContratoComAtosJunta`) não gera mais os alertas `atos_junta_incompativel`/`contrato_societario_incompativel` para o Documento B, e não acusa divergência de NIRE indevida (os dois documentos batem).
+6. Um NIRE realmente divergente entre o contrato e a Junta continua bloqueado (`contrato_junta_nire_divergente`) mesmo com identidade evidenciada nos dois lados -- prova de que a correção não afrouxou o cruzamento real, só a identificação prévia.
+
+**Suíte pré-existente relevante, re-executada e confirmada sem nenhuma mudança de expectativa:** `tests/extracaoDocumentalLocal.test.ts` (45 testes, inclui os casos originais de Atos da Junta/Contrato Social/DF sem CNPJ), `tests/analiseDocumentalEspecializada.test.ts` (38 testes, inclui `validarContratoComAtosJunta`), `tests/documentacaoAnaliseEspecializada.integration.test.ts` (8 testes), `tests/documentacaoConclusaoIncompatibilidade.test.ts` (3 testes) -- todos batendo com o mesmo valor de `confianca`/`documento_compativel` de antes, porque todos os textos de teste já continham o indicador textual literal.
+
+**Suíte completa após a correção:** 114 arquivos / 1079 testes, todos passando (contagem = base original + 6 testes novos desta rodada). `npx tsc --noEmit` limpo. `pnpm run build` limpo, `node --check` OK em `dist/index.js` e `dist/backfill-laudos.js`.
+
+---
 
 ## Rodada 30 — correção puramente de CSS (remoção de `self-start`), sem teste automatizado dedicado, contagem de testes inalterada (910)
 

@@ -1,3 +1,8 @@
+# === Rodada 08/09/2026 (esta entrega, atualizada após validação com os 2 documentos reais) — arquivos alterados/novos, checksum atual ===
+92570e3e350e4cdc0fd6d283ce47415d1b2327038a545e354bc8b16f6863d4c5  server/services/extracaoDocumentalLocal.ts
+b6f866535b14d2f17a020925d6f48f4baa2cd861325b395398a0bdcca8598625  shared/documentalPresentation.ts
+229b623d1d72573be768c3e6800e0c8c39398401e0c368e10844d9cd483f802f  tests/atosJuntaIdentidadePorEvidencia.test.ts
+# === Histórico anterior (rodadas 1-6, 30-31/08/2026) — mantido como registro; pode não refletir o estado atual de todos os arquivos ===
 82e51fda37b381dbe0315c13ec9409e0483e39d83cb96fedbf1f8ce2ace0e9b3  .env.example
 77a6ecadf611fa6c348e14d2639689e00ca9f513edd40017d7f2cf9fc79b1014  ARQUITETURA_DOCUMENTAL_FINAL.md
 0a0ab2892f827dbca299ab233616fc6326da4ea34a9dc829a900798749cf8309  BUILD_REPORT.md

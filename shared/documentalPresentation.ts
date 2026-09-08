@@ -98,6 +98,10 @@ function camposExtraidosGenericos(resultado: any): DocumentoAnaliseCampo[] {
   const tecnicos = new Set([
     'texto', 'ocr_texto', 'campos_comprovados', 'campos_inferidos', 'evidencias', 'alertas', 'divergencias',
     'fonte_extracao', 'mecanismo_extracao', 'separacao_comprovado_inferido', 'documento_compativel',
+    // Sinais internos de identidade (ex.: ["nire", "historico_arquivamentos"])
+    // usados para decidir documento_compativel de forma explicável -- é
+    // diagnóstico técnico, não informação para o usuário final.
+    'documento_identidade_evidencias',
     'confianca', 'nivel_confianca', 'satisfaz_requisito', 'status_documental', 'tipo_documento', 'tipo_esperado',
     // O histórico da Junta recebe um resumo próprio logo abaixo; despejar o
     // array bruto no card deixa a leitura ruim e ainda pode esconder as datas.
