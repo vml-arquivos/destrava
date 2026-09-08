@@ -1751,8 +1751,11 @@ function parseConsultaDocumentalEspecializada(
   } else if (tipo === 'consulta_ccs') {
     const relacionamentos = linhas
       .map((linha) => {
-        const match = linha.match(/^\s*(\d{2}\.\d{3}\.\d{3})\s*-\s*(.+?)\s+(\d{2}\/\d{2}\/\d{4})\s+(Ativo|\d{2}\/\d{2}\/\d{4})\s*$/i);
-        return match ? { instituicao: match[2].trim(), inicio: parseDate(match[3]), fim: /^ativo$/i.test(match[4]) ? null : parseDate(match[4]) } : null;
+        // O CCS oficial deixa a coluna "Data de fim" vazia para relações
+        // ativas. O formato anterior exigia sempre uma quarta coluna e,
+        // por isso, descartava todas as linhas reais deste PDF.
+        const match = linha.match(/^\s*(\d{2}\.\d{3}\.\d{3})\s*-\s*(.+?)\s+(\d{2}\/\d{2}\/\d{4})(?:\s+(Ativo|\d{2}\/\d{2}\/\d{4}))?\s*$/i);
+        return match ? { instituicao: match[2].trim(), inicio: parseDate(match[3]), fim: !match[4] || /^ativo$/i.test(match[4]) ? null : parseDate(match[4]) } : null;
       })
       .filter((item): item is { instituicao: string; inicio: string | null; fim: string | null } => Boolean(item));
     adicionais.relacionamentos = relacionamentos;
