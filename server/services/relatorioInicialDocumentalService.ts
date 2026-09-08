@@ -2,7 +2,7 @@ import { CLASSIFIER_VERSION, EXTRACTOR_VERSION, RULE_VERSION, SCHEMA_VERSION } f
 import type { DocumentProcessingEvidence } from './documentProcessingEvidence';
 import { linhaObjetivaDocumento, nomeFuncionalDocumento, resumoObjetivoDocumento } from '../../shared/documentalPresentation';
 
-export const RELATORIO_INICIAL_VERSION = '1.2.0';
+export const RELATORIO_INICIAL_VERSION = '1.3.0';
 
 type DocumentoRelatorio = Record<string, any>;
 
@@ -94,11 +94,11 @@ function documentoForaDoChecklistExecutivo(item: any): boolean {
 
 function nomeChecklistExecutivo(item: any): string {
   const tipo = tipoDocumentoNormalizado(item);
-  if (/cartao cnpj|cnpj cartao/.test(tipo)) return 'Cartão do CNPJ';
+  if (/cartao[ _]cnpj|cnpj[ _]cartao/.test(tipo)) return 'Cartão do CNPJ';
   if (/(^|\s)qsa(\s|$)|quadro societario/.test(tipo)) return 'QSA';
-  if (/atos junta|junta comercial/.test(tipo)) return 'Ato da Junta Comercial';
-  if (/contrato social|alteracao contratual|contrato consolid/.test(tipo)) return 'Contrato Social e Alterações';
-  if (/rating|serasa|bureau|relatorio credito/.test(tipo)) return 'Consulta de Rating';
+  if (/atos[ _]junta|junta[ _]comercial/.test(tipo)) return 'Ato da Junta Comercial';
+  if (/contrato[ _]social|alteracao[ _]contratual|contrato[ _]consolid/.test(tipo)) return 'Contrato Social e Alterações';
+  if (/rating|serasa|bureau|relatorio[ _]credito/.test(tipo)) return 'Consulta de Rating';
   if (/faturamento/.test(tipo)) return 'Faturamento';
   if (/scr|registrato/.test(tipo)) return 'SCR/Registrato';
   if (/cnd|cpend|certidao/.test(tipo)) return item.documento || 'Certidão de Regularidade';
@@ -137,13 +137,14 @@ function resultadoExecutivo(item: any, status: string): string {
   const dados = dadosDocumento(item);
   const tipo = tipoDocumentoNormalizado(item);
   const resultado = resultadoDocumento(item);
+  if (status === 'Informativo' && !item.recebido) return 'Não anexado — sem pendência para a etapa atual.';
   if (status === 'Confirmado' && /(^|\s)qsa(\s|$)|quadro societario/.test(tipo)) {
     const socios = lista(resultado.socios_lidos || dados.socios_lidos || dados.socios || resultado.socios)
       .map((socio: any) => texto(socio?.nome || socio?.nome_socio || socio?.razao_social || socio))
       .filter(Boolean);
     return `Quadro societário confirmado com o CNPJ${socios.length ? `. Sócios/administradores: ${socios.slice(0, 3).join(', ')}` : ''}.`;
   }
-  if (status === 'Confirmado' && /contrato social|alteracao contratual|contrato consolid/.test(tipo)) {
+  if (status === 'Confirmado' && /contrato[ _]social|alteracao[ _]contratual|contrato[ _]consolid/.test(tipo)) {
     const data = primeiro(dados.data_registro, dados.contrato?.data_registro, resultado.data_registro);
     const arquivamento = primeiro(dados.numero_arquivamento, dados.contrato?.numero_arquivamento, resultado.numero_arquivamento);
     return `Contrato e alterações confirmados${data ? `; ato de ${data}` : ''}${arquivamento ? `, arquivamento ${arquivamento}` : ''}.`;
@@ -162,19 +163,21 @@ function resultadoExecutivo(item: any, status: string): string {
   return item.observacao || 'Resultado não confirmado.';
 }
 
-function construirChecklistExecutivo(inventario: any[], cruzamentos: any[], historico: any) {
+function construirChecklistExecutivo(inventario: any[], cruzamentos: any[], historico: any, documentos: DocumentoRelatorio[] = []) {
   const agrupados = new Map<string, any>();
   for (const item of inventario) {
     if (documentoForaDoChecklistExecutivo(item)) continue;
+    const fonte = documentos.find((documento) => String(documento.arquivo_id || documento.nome) === String(item.arquivo_id || item.arquivo));
+    const itemComFonte = fonte ? { ...fonte, ...item } : item;
     const nome = nomeChecklistExecutivo(item);
     const chave = /contrato social e alteracoes/i.test(nome) ? 'contrato_social_alteracoes' : normalizar(nome);
     let status = statusChecklistExecutivo(item);
-    const dados = dadosDocumento(item);
+    const dados = dadosDocumento(itemComFonte);
     if (/faturamento/.test(tipoDocumentoNormalizado(item)) && periodoFaturamento(dados).competencias !== 12 && status === 'Confirmado') status = 'Pendente';
     const atual = {
       nome,
       status,
-      resultado: resultadoExecutivo(item, status),
+      resultado: resultadoExecutivo(itemComFonte, status),
       pendencia: pendenciaExecutiva(item, status, dados),
       arquivo_id: item.arquivo_id || null,
       data: primeiro(dados.data_consulta, dados.data_emissao, dados.data_registro, dados.data_ato, dados.data_validade) || null,
@@ -521,15 +524,15 @@ function construirCruzamentos(dossie: Record<string, any>, documentos: Documento
     { codigo: 'identidade_empresarial', dimensao: 'Identidade empresarial', ...statusCruzamento(identidadeStatus, cnps.length > 1 ? `Foram encontrados CNPJs conflitantes: ${cnps.join(', ')}.` : cnps.length === 1 ? 'CNPJ único identificado nas fontes disponíveis; identificadores parciais não foram tratados como conflito.' : 'CNPJ completo não localizado nas fontes analisadas.'), documentos: docsIdentidade.map((doc) => doc.nome), valores: { cnpj: cnps, identificadores_parciais: cnpsBrutos.filter((cnpj) => cnpj.length !== 14) } },
     { codigo: 'constituicao', dimensao: 'Constituição', ...statusCruzamento(identidade.apto_para_avancar === true ? 'consistente' : 'não confirmado', identidade.apto_para_avancar === true ? 'A identidade cadastral inicial foi concluída; datas de constituição devem ser lidas nos documentos em que estiverem presentes.' : 'A constituição ainda não foi confirmada pela Etapa 1.'), documentos: docsIdentidade.map((doc) => doc.nome) },
     { codigo: 'alteracoes', dimensao: 'Alterações', ...statusCruzamento(societaria.analisado ? societaria.apto_para_avancar === true ? 'consistente' : societaria.bloqueios?.length ? 'divergente' : 'parcialmente consistente' : 'não confirmado', societaria.diagnostico || 'Histórico de alterações ainda não concluído.'), documentos: lista(societaria.documentos_analisados).map((doc) => doc.nome || doc.arquivo_id).filter(Boolean) },
-    { codigo: 'sociedade', dimensao: 'Sócios, administradores e representação', ...statusCruzamento(societaria.confronto_qsa?.status === 'confirmado' || identidade.validation?.qsaMatches === true ? 'consistente' : societaria.confronto_qsa?.status === 'divergente' ? 'divergente' : 'não confirmado', societaria.confronto_qsa?.descricao || 'O quadro societário não foi corroborado por múltiplas fontes.'), documentos: ['QSA', ...lista(societaria.documentos_analisados).map((doc) => doc.nome || doc.arquivo_id).filter(Boolean)] },
+    { codigo: 'sociedade', dimensao: 'Sócios, administradores e representação', ...statusCruzamento(societaria.confronto_qsa?.status === 'confirmado' || identidade.validation?.qsaMatches === true ? 'consistente' : societaria.confronto_qsa?.status === 'divergente' ? 'divergente' : 'não confirmado', societaria.confronto_qsa?.descricao || (societaria.confronto_qsa?.status === 'confirmado' || identidade.validation?.qsaMatches === true ? 'Quadro societário conferido com o CNPJ.' : 'O quadro societário não foi corroborado por múltiplas fontes.')), documentos: ['QSA', ...lista(societaria.documentos_analisados).map((doc) => doc.nome || doc.arquivo_id).filter(Boolean)] },
     { codigo: 'registro', dimensao: 'Registro, Junta e NIRE', ...statusCruzamento(societaria.nire_confere === true && societaria.data_confere === true ? 'consistente' : societaria.bloqueios?.some((item: any) => /NIRE|data|registro/i.test(texto(item))) ? 'divergente' : 'não confirmado', societaria.nire_confere === true ? 'NIRE conferido entre Junta e contrato.' : 'NIRE ou data do registro não foram confirmados integralmente.'), documentos: ['Atos da Junta Comercial', ...lista(societaria.documentos_analisados).map((doc) => doc.nome || doc.arquivo_id).filter(Boolean)] },
     { codigo: 'tributacao', dimensao: 'Tributação e enquadramento', ...statusCruzamento(valorRegime(dossie, documentos) ? 'consistente' : 'não confirmado', valorRegime(dossie, documentos) ? `Regime identificado: ${valorRegime(dossie, documentos)}.` : 'Regime tributário não confirmado por fonte suficiente.'), documentos: porTipo(/pgdas|defis|simples|enquadramento|ecf|dctf|darf|livro/i).map((doc) => doc.nome) },
     { codigo: 'atividade', dimensao: 'Atividade econômica e objeto social', ...statusCruzamento('não confirmado', 'O relatório só conclui atividade quando o CNAE ou objeto social estiverem presentes e corroborados.'), documentos: porTipo(/cnpj|contrato|estatuto|junta/i).map((doc) => doc.nome) },
     { codigo: 'endereco', dimensao: 'Endereço', ...statusCruzamento('não confirmado', 'O endereço será marcado como consistente somente quando o mesmo valor for localizado em mais de uma fonte.'), documentos: porTipo(/cnpj|contrato|resid|endereco/i).map((doc) => doc.nome) },
     { codigo: 'situacao_cadastral', dimensao: 'Situação cadastral', ...statusCruzamento(empresa.situacao_cadastral ? 'consistente' : 'não confirmado', empresa.situacao_cadastral ? `Situação cadastrada: ${empresa.situacao_cadastral}.` : 'Situação cadastral não localizada.'), documentos: docsIdentidade.map((doc) => doc.nome) },
     { codigo: 'obrigacoes_certidoes', dimensao: 'Obrigações e certidões', ...statusCruzamento(inventario.some((item) => item.status === 'Divergente' || item.status === 'Incompatível comprovado') ? 'divergente' : inventario.some((item) => item.status === 'Não enviado') ? 'parcialmente consistente' : 'consistente', 'A situação foi calculada a partir do inventário de documentos esperados, recebidos e lidos.'), documentos: inventario.filter((item) => /cert|cnd|cadin|pgfn|fgts|cndt|pgdas|defis/i.test(item.documento)).map((item) => item.documento) },
-    { codigo: 'credito', dimensao: 'Crédito, rating e restrições', ...statusCruzamento(porTipo(/scr|ccs|ccf|cenprot|serasa|rating|bureau/i).length ? 'consistente' : 'não disponível', porTipo(/scr|ccs|ccf|cenprot|serasa|rating|bureau/i).length ? 'Há fontes de crédito anexadas; as conclusões detalhadas dependem dos campos efetivamente lidos.' : 'Nenhuma fonte de crédito foi localizada no acervo.'), documentos: porTipo(/scr|ccs|ccf|cenprot|serasa|rating|bureau/i).map((doc) => doc.nome) },
-    { codigo: 'financeiro', dimensao: 'Financeiro e faturamento', ...statusCruzamento(porTipo(/faturamento|receita|movimentacao|extrato/i).length ? 'consistente' : 'não disponível', porTipo(/faturamento|receita|movimentacao|extrato/i).length ? 'Há documento financeiro anexado; os valores são exibidos somente quando extraídos com período e fonte.' : 'Faturamento documentado não localizado.'), documentos: porTipo(/faturamento|receita|movimentacao|extrato/i).map((doc) => doc.nome) },
+    { codigo: 'credito', dimensao: 'Crédito, rating e restrições', ...statusCruzamento(porTipo(/scr|ccs|ccf|cenprot|serasa|rating|bureau/i).length ? 'consistente' : 'não disponível', porTipo(/scr|ccs|ccf|cenprot|serasa|rating|bureau/i).length ? `Fontes anexadas: ${porTipo(/scr|ccs|ccf|cenprot|serasa|rating|bureau/i).map((doc) => { const dados = resultado(doc); return primeiro(dados.rating, dados.score, dados.resultado_consulta, dados.resultado) || doc.tipo_documento; }).filter(Boolean).join('; ')}.` : 'Nenhuma fonte de crédito foi localizada no acervo.'), documentos: porTipo(/scr|ccs|ccf|cenprot|serasa|rating|bureau/i).map((doc) => doc.nome) },
+    { codigo: 'financeiro', dimensao: 'Financeiro e faturamento', ...statusCruzamento(porTipo(/faturamento|receita|movimentacao|extrato/i).length ? 'consistente' : 'não disponível', porTipo(/faturamento|receita|movimentacao|extrato/i).length ? `Documento financeiro anexado; o período e a cobertura são exibidos quando extraídos do laudo.` : 'Faturamento documentado não localizado.'), documentos: porTipo(/faturamento|receita|movimentacao|extrato/i).map((doc) => doc.nome) },
     { codigo: 'documentos_obrigatorios', dimensao: 'Documentos obrigatórios', ...statusCruzamento(inventario.some((item) => item.status === 'Não enviado' && item.esperado) ? 'parcialmente consistente' : 'consistente', inventario.some((item) => item.status === 'Não enviado' && item.esperado) ? 'Há documentos obrigatórios não anexados.' : 'Não há ausência obrigatória identificada pelo mapa atual.'), documentos: inventario.filter((item) => item.esperado).map((item) => item.documento) },
   ];
   return resultados;
@@ -571,7 +574,7 @@ function construirHistoricoSocietario(dossie: Record<string, any>) {
   return {
     status: societaria.apto_para_avancar === true ? 'confirmado' : societaria.analisado ? 'parcialmente confirmado' : 'não confirmado',
     continuidade_12_meses: societaria.continuidade_12_meses_comprovada === true,
-    meses_comprovados: societaria.meses_comprovados ?? null,
+    meses_comprovados: societaria.meses_comprovados > 0 ? societaria.meses_comprovados : societaria.continuidade_12_meses_comprovada === true ? 12 : null,
     registros_faltantes: lista(societaria.registros_faltantes),
     nire: societaria.nire_junta || null,
     ato_mais_recente: { data: societaria.data_ato_junta || null, tipo: societaria.tipo_ato_junta || null, numero: societaria.numero_ato_junta || null },
@@ -660,7 +663,7 @@ export function aplicarRelatorioInicial(base: Record<string, any>, params: Relat
   const historicoSocietario = construirHistoricoSocietario(params.dossie);
   const financeiroCredito = construirFinanceiroECredito(documentosExecutivos);
   const pendenciasDetalhadas = construirPendencias(params.dossie, documentosExecutivos, inventario, cruzamentos);
-  const checklistExecutivo = construirChecklistExecutivo(inventario, cruzamentos, historicoSocietario);
+  const checklistExecutivo = construirChecklistExecutivo(inventario, cruzamentos, historicoSocietario, params.documentos);
   const idsInformativos = new Set(inventario.filter((item: any) => item.coberto_por_outro).map((item: any) => String(item.arquivo_id || item.arquivo)));
   const estados = documentosExecutivos.filter((documento) => !idsInformativos.has(String(documento.arquivo_id || documento.nome))).map(estadoDocumento);
   const resumoAtual = objeto(base.resumo);
