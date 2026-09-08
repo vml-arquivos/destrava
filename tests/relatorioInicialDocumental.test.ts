@@ -70,6 +70,10 @@ describe('relatório inicial documental', () => {
 
     expect(relatorio.inventario_documental).toHaveLength(2);
     expect(relatorio.inventario_documental.find((item: any) => item.codigo === 'cartao_cnpj')?.evidencia.paginas_processadas).toBe(2);
+    expect(relatorio.inventario_documental.find((item: any) => item.codigo === 'cartao_cnpj')?.documento).toBe('Cartão CNPJ');
+    expect(relatorio.inventario_documental.find((item: any) => item.codigo === 'cartao_cnpj')?.arquivo).toBe('cartao.pdf');
+    expect(relatorio.inventario_documental.find((item: any) => item.codigo === 'cartao_cnpj')?.linha_objetiva).toContain('Cartão CNPJ');
+    expect(relatorio.inventario_documental.find((item: any) => item.codigo === 'cartao_cnpj')?.linha_objetiva).toContain('CNPJ: 12.345.678/0001-90');
     expect(relatorio.inventario_documental.find((item: any) => item.codigo === 'qsa')?.status).toBe('Não enviado');
     expect(relatorio.pendencias_detalhadas.some((item: any) => item.categoria === 'documento não enviado')).toBe(true);
     expect(relatorio.status_aptidao_documental).toBe('pendente de complementação');

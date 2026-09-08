@@ -1,7 +1,8 @@
 import { CLASSIFIER_VERSION, EXTRACTOR_VERSION, RULE_VERSION, SCHEMA_VERSION } from './documentalLaudoVersioning';
 import type { DocumentProcessingEvidence } from './documentProcessingEvidence';
+import { linhaObjetivaDocumento, nomeFuncionalDocumento, resumoObjetivoDocumento } from '../../shared/documentalPresentation';
 
-export const RELATORIO_INICIAL_VERSION = '1.0.0';
+export const RELATORIO_INICIAL_VERSION = '1.1.0';
 
 type DocumentoRelatorio = Record<string, any>;
 
@@ -218,9 +219,10 @@ function construirInventario(params: RelatorioInicialParams) {
     const estado = estadoDocumento(documento);
     const tipo = tipoConfirmado(documento);
     const dados = dadosDocumento(documento);
+    const nomeFuncional = nomeFuncionalDocumento(documento, esperado.nome || esperado.codigo);
     return {
       codigo: esperado.codigo || documento.tipo_documento || null,
-      documento: esperado.nome || documento.nome || documento.tipo_documento || 'Documento',
+      documento: nomeFuncional,
       arquivo_id: documento.arquivo_id || null,
       arquivo: documento.nome || documento.nome_original || null,
       etapa: esperado.etapa || documento.bloco || null,
@@ -233,19 +235,22 @@ function construirInventario(params: RelatorioInicialParams) {
       consistente: documento.consistente === true ? true : estado === 'incompativel' || estado === 'divergente' ? false : null,
       status: rotuloEstado(estado),
       pendencia: estado === 'aprovado' || estado === 'ressalva' ? null : documento.observacao || resultadoDocumento(documento).diagnostico || 'A análise precisa ser concluída ou revisada.',
+      resultado_objetivo: resumoObjetivoDocumento(resultadoDocumento(documento), documento, rotuloEstado(estado)),
+      linha_objetiva: linhaObjetivaDocumento(resultadoDocumento(documento), documento, nomeFuncional, rotuloEstado(estado)),
       evidencia: gerarEvidencia(documento, params.evidencias.get(String(documento.arquivo_id || ''))),
     };
   });
   const extras = recebidos.filter((documento) => !usado.has(String(documento.arquivo_id || documento.nome))).map((documento) => {
     const estado = estadoDocumento(documento);
     const tipo = tipoConfirmado(documento);
+    const nomeFuncional = nomeFuncionalDocumento(documento);
     const requisitoCobertoPorOutro = estado === 'nao_lido' && esperados.some((esperado) => correspondeAoEsperado(documento, esperado)
       && recebidos.some((outro) => String(outro.arquivo_id || outro.nome) !== String(documento.arquivo_id || documento.nome)
         && correspondeAoEsperado(outro, esperado)
         && ['aprovado', 'ressalva'].includes(estadoDocumento(outro))));
     return {
       codigo: documento.tipo_documento || null,
-      documento: documento.nome || documento.tipo_documento || 'Documento anexado',
+      documento: nomeFuncional,
       arquivo_id: documento.arquivo_id || null,
       arquivo: documento.nome || documento.nome_original || null,
       etapa: documento.bloco || 'Acervo documental',
@@ -259,6 +264,8 @@ function construirInventario(params: RelatorioInicialParams) {
       coberto_por_outro: requisitoCobertoPorOutro,
       status: requisitoCobertoPorOutro ? 'Informativo — requisito já coberto' : rotuloEstado(estado),
       pendencia: requisitoCobertoPorOutro || estado === 'aprovado' || estado === 'ressalva' ? null : documento.observacao || 'Documento anexado fora da lista de exigências ou sem conclusão suficiente.',
+      resultado_objetivo: resumoObjetivoDocumento(resultadoDocumento(documento), documento, requisitoCobertoPorOutro ? 'Informativo' : rotuloEstado(estado)),
+      linha_objetiva: linhaObjetivaDocumento(resultadoDocumento(documento), documento, nomeFuncional, requisitoCobertoPorOutro ? 'Informativo' : rotuloEstado(estado)),
       evidencia: gerarEvidencia(documento, params.evidencias.get(String(documento.arquivo_id || ''))),
     };
   });
