@@ -116,7 +116,9 @@ function estadoDocumento(documento: DocumentoRelatorio): 'aprovado' | 'ressalva'
     && !conclusivoPorEvidencia;
   if (revisao && documento.analisado === true) return 'revisao_humana';
   if (documento.analisado !== true) return 'nao_lido';
-  if (conclusivoPorEvidencia && (lista(resultado.alertas).length > 0 || texto(resultado.diagnostico).length > 0)) return 'ressalva';
+  const alertaRelevante = lista(resultado.alertas).some((item) => /erro|diverg|incomp|revis|pend|ausen|falt|ileg[ií]vel|não confere|nao confere/i.test(texto(item?.codigo || item?.mensagem || item)));
+  const diagnosticoRelevante = /erro|diverg|incomp|revis|pend|ausen|falt|ileg[ií]vel|não confere|nao confere/i.test(texto(resultado.diagnostico));
+  if (conclusivoPorEvidencia && (alertaRelevante || diagnosticoRelevante)) return 'ressalva';
   if (conclusivoPorEvidencia) return 'aprovado';
   return 'pendente';
 }
