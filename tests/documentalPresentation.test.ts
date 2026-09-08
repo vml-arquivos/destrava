@@ -21,6 +21,24 @@ describe("construirSecoesAnaliseDocumento — validação objetiva", () => {
     expect(linhaObjetivaDocumento({ tipo_documento: "consulta_serasa_cnpj", dados_extraidos: { data_consulta: "2026-08-20", rating: "A" }, status: "revisao_humana" }, { tipo_documento: "consulta_serasa_cnpj", analisado: true }, "Consulta de Rating", "Revisão necessária")).toContain("Data da consulta: 2026-08-20");
   });
 
+  it("preserva a classe C- do bureau e não confunde o título RATING DE CRÉDITO com DE", () => {
+    const linha = linhaObjetivaDocumento({
+      tipo_documento: "consulta_serasa_cnpj",
+      status: "concluido",
+      satisfaz_requisito: true,
+      resultado_consulta: "Relatório empresarial consolidado — rating C- — Recusado",
+      dados_extraidos: {
+        cnpj: "18.706.347/0001-10",
+        rating: "C-",
+        data_consulta: "2026-08-03",
+      },
+    }, { tipo_documento: "consulta_serasa_cnpj", analisado: true, consistente: true }, "Consulta de Rating");
+
+    expect(linha).toContain("Rating/Score: C-");
+    expect(linha).not.toContain("rating DE");
+    expect(linha).not.toContain("Rating/Score: DE");
+  });
+
   it("Cartão CNPJ mostra só confirmação cadastral essencial, sem reproduzir o cartão", () => {
     const secoes = construirSecoesAnaliseDocumento({
       conclusao: "Leitura concluída; documento considerado consistente.",

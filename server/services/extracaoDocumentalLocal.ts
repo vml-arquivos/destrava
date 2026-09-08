@@ -1776,18 +1776,28 @@ function parseConsultaDocumentalEspecializada(
     }
   } else if (tipo === 'consulta_bureau') {
     adicionais.restricoes = quantidadeRotulada(linhas, ['quantidade de restrições', 'quantidade de restricoes', 'negativações', 'negativacoes']);
-    adicionais.rating = limparValor(valorAposRotulo(linhas, ['rating', 'faixa de risco', 'faixa rating']));
+    const ratingPermitido = /^(?:AAA|AA|A|BBB|BB|B|C-?|D|E)$/i;
+    const ratingPorPontuacao = texto.match(/pontua[cç][aã]o\s+(?:pj\s+)?rating\s+\d{1,4}\s+([A-Z]{1,3}-?)/i)?.[1] || null;
+    const ratingPorRotuloExplicito = texto.match(/rating\s+(?:bacen|serasa|score)\s*:\s*([A-Z]{1,3}-?)/i)?.[1] || null;
+    const ratingPorClassificacao = texto.match(/classifica[cç][aã]o\s+do\s+risco\s+de\s+cr[eé]dito[ \t]+([A-Z]{1,3}-?)/i)?.[1] || null;
+    const ratingRotulado = limparValor(valorAposRotulo(linhas, ['rating', 'faixa de risco', 'faixa rating']));
+    const ratingCandidate = [ratingPorPontuacao, ratingPorRotuloExplicito, ratingPorClassificacao, ratingRotulado]
+      .map((valor) => limparValor(valor || ''))
+      .filter((valor): valor is string => Boolean(valor))
+      .find((valor) => ratingPermitido.test(valor)) || null;
+    adicionais.rating = ratingCandidate;
     const textoConsultaNormalizado = texto
       .replace(/d\s*a\s*ta/gi, 'data')
       .replace(/h[oó]\s*ra/gi, 'hora');
-    const pontuacaoRating = texto.match(/pontua[cç][aã]o\s+rating\s+(\d{1,4})\s+([A-Z]{1,3})/i);
+    const pontuacaoRating = texto.match(/pontua[cç][aã]o\s+rating\s+(\d{1,4})\s+([A-Z]{1,3}-?)/i);
     const score = pontuacaoRating?.[1] ? Number(pontuacaoRating[1]) : Number(limparValor(valorAposRotulo(linhas, ['pontuação', 'pontuacao', 'score'])) || '') || null;
-    const ratingComposto = pontuacaoRating?.[2] || texto.match(/\brating\s*:?\s*([A-Z]{1,3})\b/i)?.[1] || adicionais.rating || null;
+    const ratingComposto = pontuacaoRating?.[2] || ratingCandidate;
     const compacta = texto.match(/data\s+consulta\D{0,30}(20\d{6})/i)?.[1] || null;
     const dataCompacta = compacta ? `${compacta.slice(0, 4)}-${compacta.slice(4, 6)}-${compacta.slice(6, 8)}` : null;
     const dataConsultaRelatorio = parseDate(
       norm.match(/data\s+e\s+hora\D{0,180}(\d{2}\/\d{2}\/20\d{2})/i)?.[1]
         || norm.match(/data\s+consulta\D{0,60}(\d{2}\/\d{2}\/20\d{2})/i)?.[1]
+        || norm.match(/\bdata\D{0,40}(\d{2}\/\d{2}\/20\d{2})/i)?.[1]
         || textoConsultaNormalizado.match(/data\s+e\s+hora\D{0,180}(\d{2}\/\d{2}\/20\d{2})/i)?.[1]
         || textoConsultaNormalizado.match(/data\s+consulta\D{0,60}(\d{2}\/\d{2}\/20\d{2})/i)?.[1]
         || dataCompacta,
@@ -1806,6 +1816,22 @@ function parseConsultaDocumentalEspecializada(
     Object.entries(adicionais).filter(([, valor]) => valor !== null && valor !== undefined && !(Array.isArray(valor) && valor.length === 0)),
   );
   const camposComprovados = { ...(base.dados.campos_comprovados || {}), ...adicionaisValidos };
+  const dadosBase = { ...base.dados };
+  if (tipo === 'consulta_bureau') {
+    // O parser genérico pode interpretar rótulos do relatório de crédito como
+    // campos de certidão e converter ausência de score/limite em zero. Esses
+    // valores não são evidência do bureau e não devem contaminar a análise.
+    delete dadosBase.situacao_certidao;
+    delete camposComprovados.situacao_certidao;
+    if (!Object.prototype.hasOwnProperty.call(adicionaisValidos, 'score')) {
+      delete dadosBase.score;
+      delete camposComprovados.score;
+    }
+    if (!Object.prototype.hasOwnProperty.call(adicionaisValidos, 'limites')) {
+      delete dadosBase.limites;
+      delete camposComprovados.limites;
+    }
+  }
   // Relatórios consolidados podem conter outras decisões (falência, rating,
   // faturamento) junto da seção SCR. Esses rótulos não são o resultado do SCR
   // e não devem aparecer como situação de certidão/resultado da consulta.
@@ -1820,7 +1846,7 @@ function parseConsultaDocumentalEspecializada(
 
   return {
     dados: {
-      ...base.dados,
+      ...dadosBase,
       ...adicionaisValidos,
       campos_comprovados: camposComprovados,
       documento_compativel: compativel,
