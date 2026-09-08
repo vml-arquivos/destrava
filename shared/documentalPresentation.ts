@@ -477,7 +477,6 @@ function camposValidacaoObjetiva(resultado: any, documento: any, socios: any[] =
     || motivosRevisao.length > 0;
   const societarioConsistente = /atos_junta|junta_comercial|contrato_social|alteracao_contratual/.test(tipo)
     && documento?.consistente === true
-    && Boolean(resultado?.status_societario)
     && !revisaoExplicita
     && !documentoMarcadoIncompativel(resultado, documento);
   const aprovado = estadoVisualDocumento(resultado, documento) === 'aprovado' || societarioConsistente;
