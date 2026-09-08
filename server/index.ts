@@ -513,6 +513,7 @@ async function existeEmpresaComCnpj(cnpj: string, ignorarId?: string): Promise<b
     `SELECT 1 FROM empresas
       WHERE regexp_replace(COALESCE(cnpj,''), '[^0-9]', '', 'g') = $1
         AND COALESCE(arquivado_por_duplicidade, false) = false
+        AND COALESCE(cadastro_status, '') <> 'removido'
         ${whereId}
       LIMIT 1`,
     params
@@ -527,7 +528,9 @@ async function existeClientePFComCpf(cpf: string, ignorarId?: string): Promise<b
   const { rows } = await pool.query(
     `SELECT 1 FROM clientes_pf
       WHERE regexp_replace(COALESCE(cpf,''), '[^0-9]', '', 'g') = $1
+        AND COALESCE(ativo, true) = true
         AND COALESCE(arquivado_por_duplicidade, false) = false
+        AND COALESCE(cadastro_status, '') <> 'removido'
         ${whereId}
       LIMIT 1`,
     params
@@ -543,6 +546,7 @@ async function existeLeadComDocumento(doc: string, ignorarId?: string): Promise<
     `SELECT 1 FROM leads
       WHERE regexp_replace(COALESCE(cpf_cnpj,''), '[^0-9]', '', 'g') = $1
         AND COALESCE(arquivado_por_duplicidade, false) = false
+        AND COALESCE(cadastro_status, '') <> 'removido'
         ${whereId}
       LIMIT 1`,
     params
@@ -1511,6 +1515,102 @@ async function startServer() {
     console.error('[startup] Aviso: falha ao auto-criar tabelas de faturamento/contratos:', err.message);
     // Não aborta o servidor — pode ser que as tabelas já existam com constraints diferentes
   }
+
+  // ─── AUTO-REPAIR: recadastro após exclusão/arquivamento ─────────────────────
+  // Instalações antigas criaram UNIQUE(cpf) em clientes_pf e o índice 046
+  // considerava apenas o arquivamento por duplicidade. Assim, um registro
+  // apagado logicamente (ativo=false/cadastro_status=removido) continuava
+  // bloqueando o mesmo CPF em um novo cadastro. A unicidade de negócio deve
+  // valer somente para registros reutilizáveis.
+  try {
+    await pool.query(`
+      DO $$
+      DECLARE
+        constraint_name TEXT;
+      BEGIN
+        IF to_regclass('public.empresas') IS NOT NULL THEN
+          FOR constraint_name IN
+            SELECT con.conname
+              FROM pg_constraint con
+              JOIN pg_class rel ON rel.oid = con.conrelid
+              JOIN pg_namespace ns ON ns.oid = rel.relnamespace
+             WHERE ns.nspname = 'public'
+               AND rel.relname = 'empresas'
+               AND con.contype = 'u'
+               AND (
+                 SELECT array_to_string(array_agg(att.attname::TEXT ORDER BY ordinality), ',')
+                   FROM unnest(con.conkey) WITH ORDINALITY AS keys(attnum, ordinality)
+                   JOIN pg_attribute att ON att.attrelid = con.conrelid AND att.attnum = keys.attnum
+               ) = 'cnpj'
+          LOOP
+            EXECUTE format('ALTER TABLE public.empresas DROP CONSTRAINT IF EXISTS %I', constraint_name);
+          END LOOP;
+        END IF;
+        IF to_regclass('public.clientes_pf') IS NOT NULL THEN
+          FOR constraint_name IN
+            SELECT con.conname
+              FROM pg_constraint con
+              JOIN pg_class rel ON rel.oid = con.conrelid
+              JOIN pg_namespace ns ON ns.oid = rel.relnamespace
+             WHERE ns.nspname = 'public'
+               AND rel.relname = 'clientes_pf'
+               AND con.contype = 'u'
+               AND (
+                 SELECT array_to_string(array_agg(att.attname::TEXT ORDER BY ordinality), ',')
+                   FROM unnest(con.conkey) WITH ORDINALITY AS keys(attnum, ordinality)
+                   JOIN pg_attribute att ON att.attrelid = con.conrelid AND att.attnum = keys.attnum
+               ) = 'cpf'
+          LOOP
+            EXECUTE format('ALTER TABLE public.clientes_pf DROP CONSTRAINT IF EXISTS %I', constraint_name);
+          END LOOP;
+        END IF;
+        IF to_regclass('public.leads') IS NOT NULL THEN
+          FOR constraint_name IN
+            SELECT con.conname
+              FROM pg_constraint con
+              JOIN pg_class rel ON rel.oid = con.conrelid
+              JOIN pg_namespace ns ON ns.oid = rel.relnamespace
+             WHERE ns.nspname = 'public'
+               AND rel.relname = 'leads'
+               AND con.contype = 'u'
+               AND (
+                 SELECT array_to_string(array_agg(att.attname::TEXT ORDER BY ordinality), ',')
+                   FROM unnest(con.conkey) WITH ORDINALITY AS keys(attnum, ordinality)
+                   JOIN pg_attribute att ON att.attrelid = con.conrelid AND att.attnum = keys.attnum
+               ) = 'cpf_cnpj'
+          LOOP
+            EXECUTE format('ALTER TABLE public.leads DROP CONSTRAINT IF EXISTS %I', constraint_name);
+          END LOOP;
+        END IF;
+      END $$;
+
+      DROP INDEX IF EXISTS public.ux_clientes_pf_cpf_unico_ativo;
+      CREATE UNIQUE INDEX IF NOT EXISTS ux_clientes_pf_cpf_unico_ativo
+        ON public.clientes_pf ((regexp_replace(COALESCE(cpf,''), '[^0-9]', '', 'g')))
+       WHERE length(regexp_replace(COALESCE(cpf,''), '[^0-9]', '', 'g')) = 11
+         AND COALESCE(ativo, true) = true
+         AND COALESCE(arquivado_por_duplicidade, false) = false
+         AND COALESCE(cadastro_status, '') <> 'removido';
+
+      DROP INDEX IF EXISTS public.ux_empresas_cnpj_unico_ativo;
+      CREATE UNIQUE INDEX IF NOT EXISTS ux_empresas_cnpj_unico_ativo
+        ON public.empresas ((regexp_replace(COALESCE(cnpj,''), '[^0-9]', '', 'g')))
+       WHERE length(regexp_replace(COALESCE(cnpj,''), '[^0-9]', '', 'g')) = 14
+         AND COALESCE(arquivado_por_duplicidade, false) = false
+         AND COALESCE(cadastro_status, '') <> 'removido';
+
+      DROP INDEX IF EXISTS public.ux_leads_documento_unico_ativo;
+      CREATE UNIQUE INDEX IF NOT EXISTS ux_leads_documento_unico_ativo
+        ON public.leads ((regexp_replace(COALESCE(cpf_cnpj,''), '[^0-9]', '', 'g')))
+       WHERE length(regexp_replace(COALESCE(cpf_cnpj,''), '[^0-9]', '', 'g')) IN (11,14)
+         AND COALESCE(arquivado_por_duplicidade, false) = false
+         AND COALESCE(cadastro_status, '') <> 'removido';
+    `);
+    console.log('[startup] Unicidade de cadastro ajustada para ignorar registros removidos.');
+  } catch (err: any) {
+    console.error('[AUTO-REPAIR recadastro] migration pendente:', err?.message || err);
+  }
+
   // ─── AUTO-CREATE: Acompanhamento Financeiro (migration 024) ──────────────────
   // Garante que as 4 tabelas do módulo financeiro e a coluna de permissão
   // existam em produção mesmo sem execução manual da migration 024.
@@ -5934,7 +6034,7 @@ async function startServer() {
 
       if (tipo === "todos" || tipo === "clientes_pf") {
         const params: any[] = [];
-        const conds = [`(COALESCE(cadastro_completo, false) = false OR COALESCE(bloqueado_operacional, false) = true OR COALESCE(arquivado_por_duplicidade, false) = true) AND COALESCE(cadastro_status, '') <> 'removido'`];
+        const conds = [`COALESCE(ativo, true) = true AND (COALESCE(cadastro_completo, false) = false OR COALESCE(bloqueado_operacional, false) = true OR COALESCE(arquivado_por_duplicidade, false) = true) AND COALESCE(cadastro_status, '') <> 'removido'`];
         if (busca) { params.push(term); conds.push(`(nome ILIKE $1 OR cpf ILIKE $1 OR email ILIKE $1)`); }
         const { rows } = await pool.query(
           `SELECT id, 'cliente_pf' AS tipo, nome, cpf AS documento, email, telefone,
@@ -6218,6 +6318,7 @@ async function startServer() {
         conditions.push(`(e.razao_social ILIKE $${idx} OR e.nome_fantasia ILIKE $${idx} OR e.cnpj ILIKE $${idx} OR e.responsavel_nome ILIKE $${idx} OR e.telefone ILIKE $${idx})`);
       }
       const incluirIncompletos = ["1", "true", "sim"].includes(String(req.query.incluir_incompletos || "").toLowerCase());
+      conditions.push(`COALESCE(e.cadastro_status, '') <> 'removido'`);
       if (!incluirIncompletos) {
         conditions.push(`COALESCE(e.arquivado_por_duplicidade, false) = false`);
         conditions.push(`COALESCE(e.bloqueado_operacional, false) = false`);
@@ -6257,7 +6358,10 @@ async function startServer() {
       const limitRaw = Number(req.query.limit || req.query.limite || 100);
       const limit = Math.min(Math.max(Number.isFinite(limitRaw) ? limitRaw : 100, 1), 500);
       const params: any[] = [];
-      const conditions: string[] = ["COALESCE(e.arquivado_por_duplicidade, false) = false"];
+      const conditions: string[] = [
+        "COALESCE(e.arquivado_por_duplicidade, false) = false",
+        "COALESCE(e.cadastro_status, '') <> 'removido'",
+      ];
 
       if (!isGestor && colaborador?.id) {
         params.push(colaborador.id);
@@ -6446,6 +6550,7 @@ async function startServer() {
         if (hasEmpresaColumn("arquivado_por_duplicidade")) conditions.push(`COALESCE(e.arquivado_por_duplicidade, false) = false`);
         if (hasEmpresaColumn("bloqueado_operacional")) conditions.push(`COALESCE(e.bloqueado_operacional, false) = false`);
       }
+      if (hasEmpresaColumn("cadastro_status")) conditions.push(`COALESCE(e.cadastro_status, '') <> 'removido'`);
 
       const joinClauses: string[] = [];
       if (hasColaboradores && hasEmpresaColumn("captador_id")) joinClauses.push("LEFT JOIN colaboradores cap ON cap.id = e.captador_id");
@@ -8217,7 +8322,7 @@ async function startServer() {
   app.get("/api/empresas/:id", auth, async (req: Request, res: Response) => {
     try {
       if (!(await requireEmpresaAccess(req, res, req.params.id))) return;
-      const { rows } = await pool.query("SELECT * FROM empresas WHERE id = $1", [req.params.id]);
+      const { rows } = await pool.query("SELECT * FROM empresas WHERE id = $1 AND COALESCE(cadastro_status, '') <> 'removido'", [req.params.id]);
       if (rows.length === 0) { res.status(404).json({ error: "Empresa não encontrada" }); return; }
       res.json(rows[0]);
     } catch (err) {
@@ -12434,10 +12539,10 @@ ${(temTest1 || temTest2) ? `
       // incompleto=1 → retorna apenas incompletos/duplicados
       // padrão → apenas cadastro_completo=true e não bloqueados
       const whereExtra = (todos === '1' || todos === 'true')
-        ? `AND COALESCE(c.bloqueado_operacional, false) = false AND COALESCE(c.arquivado_por_duplicidade, false) = false`
+        ? `AND COALESCE(c.bloqueado_operacional, false) = false AND COALESCE(c.arquivado_por_duplicidade, false) = false AND COALESCE(c.cadastro_status, '') <> 'removido'`
         : (incompleto === '1' || incompleto === 'true')
-          ? `AND (COALESCE(c.cadastro_completo, false) = false OR COALESCE(c.arquivado_por_duplicidade, false) = true)`
-          : `AND COALESCE(c.cadastro_completo, false) = true AND COALESCE(c.bloqueado_operacional, false) = false AND COALESCE(c.arquivado_por_duplicidade, false) = false`;
+          ? `AND (COALESCE(c.cadastro_completo, false) = false OR COALESCE(c.arquivado_por_duplicidade, false) = true) AND COALESCE(c.cadastro_status, '') <> 'removido'`
+          : `AND COALESCE(c.cadastro_completo, false) = true AND COALESCE(c.bloqueado_operacional, false) = false AND COALESCE(c.arquivado_por_duplicidade, false) = false AND COALESCE(c.cadastro_status, '') <> 'removido'`;
       const { rows } = await pool.query(
         `SELECT c.id, c.nome, c.cpf, c.rg, c.data_nascimento, c.email, c.telefone,
                 c.endereco, c.cidade, c.uf, c.cep, c.profissao, c.estado_civil,
@@ -12450,7 +12555,7 @@ ${(temTest1 || temTest2) ? `
                 c.cadastro_status, c.cadastro_pendencias, c.cadastro_completo, c.bloqueado_operacional, c.arquivado_por_duplicidade, c.duplicado_de
            FROM clientes_pf c
            LEFT JOIN colaboradores cb ON cb.id = c.cadastrado_por
-          WHERE c.ativo = true ${whereExtra}
+          WHERE c.ativo = true AND COALESCE(c.cadastro_status, '') <> 'removido' ${whereExtra}
           ORDER BY c.created_at DESC, c.nome`
       );
       res.json(rows);
@@ -12467,6 +12572,7 @@ ${(temTest1 || temTest2) ? `
         `SELECT id, nome, cpf, rg, email, telefone, cidade, uf
            FROM clientes_pf
           WHERE ativo = true
+            AND COALESCE(cadastro_status, '') <> 'removido'
             AND COALESCE(cadastro_completo, false) = true
             AND COALESCE(bloqueado_operacional, false) = false
             AND COALESCE(arquivado_por_duplicidade, false) = false
@@ -12484,7 +12590,7 @@ ${(temTest1 || temTest2) ? `
 
   app.get('/api/clientes-pf/:id', auth, async (req: Request, res: Response) => {
     try {
-      const { rows } = await pool.query('SELECT * FROM clientes_pf WHERE id=$1', [req.params.id]);
+      const { rows } = await pool.query("SELECT * FROM clientes_pf WHERE id=$1 AND COALESCE(cadastro_status, '') <> 'removido'", [req.params.id]);
       if (!rows.length) { res.status(404).json({ error: 'Cliente não encontrado' }); return; }
       res.json(rows[0]);
     } catch (err: any) {
@@ -20386,7 +20492,10 @@ Responda em JSON com:
           COALESCE(e.cnpj,'') || ' ' || COALESCE(e.email,'') || ' ' || COALESCE(e.telefone,'')
         )`;
         const totalResult = await pool.query(
-          `SELECT COUNT(*)::int AS total FROM empresas e WHERE ($1 = '' OR ${buscaEmpresa} LIKE $2)`,
+          `SELECT COUNT(*)::int AS total FROM empresas e
+            WHERE COALESCE(e.arquivado_por_duplicidade, false) = false
+              AND COALESCE(e.cadastro_status, '') <> 'removido'
+              AND ($1 = '' OR ${buscaEmpresa} LIKE $2)`,
           [q, like]
         );
         total = Number(totalResult.rows[0]?.total || 0);
@@ -20397,7 +20506,9 @@ Responda em JSON com:
                   e.created_at, NULL::timestamptz AS updated_at,
                   e.nome_fantasia, e.cidade, e.estado, e.responsavel_nome
              FROM empresas e
-            WHERE ($1 = '' OR ${buscaEmpresa} LIKE $2)
+            WHERE COALESCE(e.arquivado_por_duplicidade, false) = false
+              AND COALESCE(e.cadastro_status, '') <> 'removido'
+              AND ($1 = '' OR ${buscaEmpresa} LIKE $2)
             ORDER BY lower(COALESCE(NULLIF(e.razao_social,''), NULLIF(e.nome_fantasia,''), 'Empresa sem nome')), e.id
             LIMIT $3 OFFSET $4`,
           [q, like, limit, offset]
@@ -20409,7 +20520,11 @@ Responda em JSON com:
           COALESCE(c.email,'') || ' ' || COALESCE(c.telefone,'')
         )`;
         const totalResult = await pool.query(
-          `SELECT COUNT(*)::int AS total FROM clientes_pf c WHERE ($1 = '' OR ${buscaPf} LIKE $2)`,
+          `SELECT COUNT(*)::int AS total FROM clientes_pf c
+            WHERE COALESCE(c.ativo, true) = true
+              AND COALESCE(c.arquivado_por_duplicidade, false) = false
+              AND COALESCE(c.cadastro_status, '') <> 'removido'
+              AND ($1 = '' OR ${buscaPf} LIKE $2)`,
           [q, like]
         );
         total = Number(totalResult.rows[0]?.total || 0);
@@ -20420,7 +20535,10 @@ Responda em JSON com:
                   c.created_at, NULL::timestamptz AS updated_at,
                   NULL::text AS nome_fantasia, NULL::text AS cidade, NULL::text AS estado, NULL::text AS responsavel_nome
              FROM clientes_pf c
-            WHERE ($1 = '' OR ${buscaPf} LIKE $2)
+            WHERE COALESCE(c.ativo, true) = true
+              AND COALESCE(c.arquivado_por_duplicidade, false) = false
+              AND COALESCE(c.cadastro_status, '') <> 'removido'
+              AND ($1 = '' OR ${buscaPf} LIKE $2)
             ORDER BY lower(COALESCE(NULLIF(c.nome,''), 'Pessoa física sem nome')), c.id
             LIMIT $3 OFFSET $4`,
           [q, like, limit, offset]
@@ -20434,13 +20552,18 @@ Responda em JSON com:
                  e.created_at, NULL::timestamptz AS updated_at,
                  e.nome_fantasia, e.cidade, e.estado, e.responsavel_nome
             FROM empresas e
+           WHERE COALESCE(e.arquivado_por_duplicidade, false) = false
+             AND COALESCE(e.cadastro_status, '') <> 'removido'
           UNION ALL
           SELECT 'pessoa_fisica'::text AS entidade_tipo, c.id::text AS id,
                  COALESCE(NULLIF(c.nome,''), 'Pessoa física sem nome') AS nome,
                  c.cpf AS documento, c.email, c.telefone, c.status,
                  c.created_at, NULL::timestamptz AS updated_at,
                  NULL::text AS nome_fantasia, NULL::text AS cidade, NULL::text AS estado, NULL::text AS responsavel_nome
-            FROM clientes_pf c`;
+            FROM clientes_pf c
+           WHERE COALESCE(c.ativo, true) = true
+             AND COALESCE(c.arquivado_por_duplicidade, false) = false
+             AND COALESCE(c.cadastro_status, '') <> 'removido'`;
         const buscaTodos = `lower(
           COALESCE(nome,'') || ' ' || COALESCE(documento,'') || ' ' ||
           COALESCE(email,'') || ' ' || COALESCE(telefone,'')
