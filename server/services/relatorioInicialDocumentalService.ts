@@ -188,9 +188,12 @@ function construirInventario(params: RelatorioInicialParams) {
   const esperados: Array<Record<string, any>> = lista(mapa.etapas).flatMap((etapa) => lista(etapa?.documentos).map((documento) => ({ ...objeto(documento), etapa: etapa?.titulo || `Etapa ${etapa?.numero || ''}`.trim() })));
   const recebidos = params.documentos;
   const usado = new Set<string>();
-  const encontrarRecebido = (esperado: Record<string, any>) => recebidos.find((documento) => {
+  const correspondeAoEsperado = (documento: DocumentoRelatorio, esperado: Record<string, any>) => {
     const tipos = lista(esperado.tipos_arquivo).map(String);
-    const match = tipos.includes(String(documento.tipo_documento)) || String(esperado.codigo || '') === String(documento.tipo_documento || '');
+    return tipos.includes(String(documento.tipo_documento)) || String(esperado.codigo || '') === String(documento.tipo_documento || '');
+  };
+  const encontrarRecebido = (esperado: Record<string, any>) => recebidos.find((documento) => {
+    const match = correspondeAoEsperado(documento, esperado);
     if (match) usado.add(String(documento.arquivo_id || documento.nome));
     return match;
   });
@@ -236,6 +239,10 @@ function construirInventario(params: RelatorioInicialParams) {
   const extras = recebidos.filter((documento) => !usado.has(String(documento.arquivo_id || documento.nome))).map((documento) => {
     const estado = estadoDocumento(documento);
     const tipo = tipoConfirmado(documento);
+    const requisitoCobertoPorOutro = estado === 'nao_lido' && esperados.some((esperado) => correspondeAoEsperado(documento, esperado)
+      && recebidos.some((outro) => String(outro.arquivo_id || outro.nome) !== String(documento.arquivo_id || documento.nome)
+        && correspondeAoEsperado(outro, esperado)
+        && ['aprovado', 'ressalva'].includes(estadoDocumento(outro))));
     return {
       codigo: documento.tipo_documento || null,
       documento: documento.nome || documento.tipo_documento || 'Documento anexado',
@@ -249,8 +256,9 @@ function construirInventario(params: RelatorioInicialParams) {
       tipo_identificado: tipo.identificado,
       dados_completos: camposExtraidos(documento).length > 0,
       consistente: documento.consistente === true ? true : estado === 'incompativel' || estado === 'divergente' ? false : null,
-      status: rotuloEstado(estado),
-      pendencia: estado === 'aprovado' || estado === 'ressalva' ? null : documento.observacao || 'Documento anexado fora da lista de exigências ou sem conclusão suficiente.',
+      coberto_por_outro: requisitoCobertoPorOutro,
+      status: requisitoCobertoPorOutro ? 'Informativo — requisito já coberto' : rotuloEstado(estado),
+      pendencia: requisitoCobertoPorOutro || estado === 'aprovado' || estado === 'ressalva' ? null : documento.observacao || 'Documento anexado fora da lista de exigências ou sem conclusão suficiente.',
       evidencia: gerarEvidencia(documento, params.evidencias.get(String(documento.arquivo_id || ''))),
     };
   });
@@ -458,7 +466,8 @@ export function aplicarRelatorioInicial(base: Record<string, any>, params: Relat
   const historicoSocietario = construirHistoricoSocietario(params.dossie);
   const financeiroCredito = construirFinanceiroECredito(params.documentos);
   const pendenciasDetalhadas = construirPendencias(params.dossie, params.documentos, inventario, cruzamentos);
-  const estados = params.documentos.map(estadoDocumento);
+  const idsInformativos = new Set(inventario.filter((item: any) => item.coberto_por_outro).map((item: any) => String(item.arquivo_id || item.arquivo)));
+  const estados = params.documentos.filter((documento) => !idsInformativos.has(String(documento.arquivo_id || documento.nome))).map(estadoDocumento);
   const resumoAtual = objeto(base.resumo);
   const resumo = {
     ...resumoAtual,
