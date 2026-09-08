@@ -470,7 +470,17 @@ function camposValidacaoObjetiva(resultado: any, documento: any, socios: any[] =
   const tipo = tipoDocumentoResumo(resultado, documento);
   const dados = dadosValidacao(resultado);
   const campos: DocumentoAnaliseCampo[] = [];
-  const aprovado = estadoVisualDocumento(resultado, documento) === 'aprovado';
+  const motivosRevisao = Array.isArray(resultado?.motivos_revisao) ? resultado.motivos_revisao : [];
+  const revisaoExplicita = resultado?.revisao_humana_necessaria === true
+    || dados?.revisao_humana_necessaria === true
+    || documento?.exige_revisao_humana === true
+    || motivosRevisao.length > 0;
+  const societarioConsistente = /atos_junta|junta_comercial|contrato_social|alteracao_contratual/.test(tipo)
+    && documento?.consistente === true
+    && Boolean(resultado?.status_societario)
+    && !revisaoExplicita
+    && !documentoMarcadoIncompativel(resultado, documento);
+  const aprovado = estadoVisualDocumento(resultado, documento) === 'aprovado' || societarioConsistente;
 
   if (/cartao_cnpj|cnpj_cartao/.test(tipo)) {
     adicionarCampoObjetivo(campos, 'CNPJ', primeiroValor(resultado, ['cnpj'], ['CNPJ']));
