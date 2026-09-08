@@ -151,7 +151,7 @@ describe('relatório inicial documental', () => {
         consistente: true,
         exige_revisao_humana: true,
         status: 'ativo',
-        resultado_analise: { revisao_humana_necessaria: true, status_societario: 'atual', motivos_revisao: [] },
+        resultado_analise: { revisao_humana_necessaria: true, status_societario: 'atual', motivos_revisao: [], diagnostico: 'Confronto factual concluído com o QSA vigente.' },
       }, {
         arquivo_id: 'doc-faturamento',
         tipo_documento: 'faturamento_12_meses',
