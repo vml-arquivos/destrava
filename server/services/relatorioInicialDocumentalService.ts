@@ -113,13 +113,13 @@ function estadoDocumento(documento: DocumentoRelatorio): 'aprovado' | 'ressalva'
     || (dados.documento_compativel === true && statusConcluido)
     || laudoSocietarioConcluido;
   const validadoLegado = /^(validado|ok|conclu[ií]do)$/i.test(texto(documento.pendencia))
-    && documento.analisado === true
+    && (documento.analisado === true || documento.lido === true)
     && documento.consistente !== false;
   const revisao = (documento.exige_revisao_humana === true || resultado.revisao_humana_necessaria === true || resultado.analysis_status === 'REANALISE_NECESSARIA')
     && !conclusivoPorEvidencia
     && !validadoLegado;
   if (revisao && documento.analisado === true) return 'revisao_humana';
-  if (documento.analisado !== true) return 'nao_lido';
+  if (documento.analisado !== true && !validadoLegado) return 'nao_lido';
   const alertaRelevante = lista(resultado.alertas).some((item) => /erro|diverg|incomp|revis|pend|ausen|falt|ileg[ií]vel|não confere|nao confere/i.test(texto(item?.codigo || item?.mensagem || item)));
   const diagnosticoRelevante = /erro|diverg|incomp|revis|pend|ausen|falt|ileg[ií]vel|não confere|nao confere/i.test(texto(resultado.diagnostico));
   if (conclusivoPorEvidencia && (alertaRelevante || diagnosticoRelevante)) return 'ressalva';

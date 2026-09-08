@@ -164,7 +164,7 @@ describe('relatório inicial documental', () => {
         arquivo_id: 'doc-legado',
         tipo_documento: 'atos_junta_comercial',
         nome: 'atos-legado.pdf',
-        analisado: true,
+        lido: true,
         pendencia: 'validado',
         resultado_analise: { status: 'Pendente' },
       }],
