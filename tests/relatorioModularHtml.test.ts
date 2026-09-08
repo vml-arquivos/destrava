@@ -62,6 +62,23 @@ describe('relatório documental modular', () => {
     expect(html).not.toContain('Pendência: Pendência:');
   });
 
+  it('mantém a classificação C- do bureau no checklist e no resultado do PDF', () => {
+    const relatorio = relatorioFixture();
+    relatorio.modulos_relatorio[2].itens = [{
+      arquivo_id: 'rating-file',
+      nome: 'Consulta de Rating',
+      status_validacao: 'Informativo',
+      arquivo_original: 'SPC SERASA CNPJ.pdf',
+      data: '2026-08-03',
+      resultado: 'Consulta de rating em bureau privado — Resultado: Relatório empresarial consolidado — rating C- — Recusado — Rating/Score: C-',
+    }];
+    const html = gerarHtmlRelatorioModular(relatorio);
+    expect(html).toContain('rating C-');
+    expect(html).toContain('Rating/Score: C-');
+    expect(html).not.toContain('rating DE');
+    expect(html).not.toContain('Rating/Score: DE');
+  });
+
   it('prioriza o cadastro autoritativo para campos cadastrais corrompidos na apresentação', () => {
     const relatorio = relatorioFixture();
     relatorio.empresa = {

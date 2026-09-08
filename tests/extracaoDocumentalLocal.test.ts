@@ -728,6 +728,35 @@ describe('extração documental local determinística', () => {
     expect(resultado.dados.resultado_consulta).toContain('Relatório empresarial consolidado');
   });
 
+  it('não interpreta o “DE” do título RATING DE CRÉDITO como classificação do bureau', () => {
+    const resultado = analisarTextoDocumentoLocal('consulta_bureau', `
+      RATING DE CRÉDITO BANCÁRIO
+      Data: 03/08/2026, 12:08:18
+      RAZÃO SOCIAL VIK CONSTRUCOES E REFORMAS LTDA ME
+      CNPJ 18.706.347/0001-10
+      Conclusão de Análise Inteligente: Recusado
+      CLASSIFICAÇÃO DO RISCO DE CRÉDITO
+      C-
+      AAA
+      AA
+      A
+      BBB
+      BB
+      B
+      C
+      C-
+      Classificação do Risco de Crédito C- -
+      Rating BACEN: C-
+    `, 'consulta_serasa_cnpj');
+
+    expect(resultado.dados.documento_compativel).toBe(true);
+    expect(resultado.dados.rating).toBe('C-');
+    expect(resultado.dados.rating).not.toBe('DE');
+    expect(resultado.dados.resultado_consulta).toContain('rating C-');
+    expect(resultado.dados.data_consulta).toBe('2026-08-03');
+    expect(resultado.dados.situacao_certidao).toBeUndefined();
+  });
+
   it('lê a data de consulta do laudo consolidado quando o PDF quebra o rótulo em DA TA', () => {
     const resultado = analisarTextoDocumentoLocal('consulta_bureau', `
       ANÁLI S E EM PRES ARI AL, FI NANCEI RA E S CR

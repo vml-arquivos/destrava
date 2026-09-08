@@ -1,7 +1,10 @@
 import crypto from 'node:crypto';
 
 export const CLASSIFIER_VERSION = '2026.09.05';
-export const EXTRACTOR_VERSION = 'local-2026.09.04';
+// A leitura de bureau passou a distinguir a classe documental (C-) do
+// preposição “DE” no título “RATING DE CRÉDITO”; laudos anteriores precisam
+// ser reprocessados para não continuar exibindo a classificação incorreta.
+export const EXTRACTOR_VERSION = 'local-2026.09.08';
 // CORREÇÃO (2026-08-31, caso real ZR CONSTRUCOES -- PGDAS aceito no slot de
 // ECF): bump obrigatório sempre que `extrairHibrido`/`normalizarDocumentoCatalogado`
 // mudam como um documento é classificado. Sem este bump, um laudo já
