@@ -551,7 +551,15 @@ function camposValidacaoObjetiva(resultado: any, documento: any, socios: any[] =
   if (/rating_bacen|(^|_)scr($|_)/.test(tipo)) {
     const instituicoes = primeiroValor(resultado, ['instituicoes'], ['Instituições']);
     const atrasos = primeiroValor(resultado, ['atrasos', 'dividas_vencidas', 'saldo_vencido'], ['Atrasos', 'Saldo vencido']);
+    const motor = primeiroValor(resultado, ['motor_credito'], []);
     adicionarIdentificadorObjetivo(campos, resultado);
+    if (motor && typeof motor === 'object') {
+      adicionarCampoObjetivo(campos, 'Rating BACEN', primeiroValor(resultado, ['rating_bacen', 'motor_credito.rating_bacen'], ['Rating BACEN']));
+      adicionarCampoObjetivo(campos, 'Score', primeiroValor(resultado, ['motor_credito.score', 'score'], ['Score']));
+      adicionarCampoObjetivo(campos, 'Decisão', primeiroValor(resultado, ['motor_credito.decisao', 'decisao_credito'], ['Decisão']));
+      adicionarCampoObjetivo(campos, 'Valor sugerido', primeiroValor(resultado, ['motor_credito.valor_sugerido'], ['Valor sugerido']));
+      return campos.slice(0, 5);
+    }
     adicionarCampoObjetivo(campos, 'Data-base', primeiroValor(resultado, ['data_base', 'competencia'], ['Data-base', 'Competência']));
     adicionarCampoObjetivo(campos, 'Instituições', Array.isArray(instituicoes) ? instituicoes.length : instituicoes);
     adicionarCampoObjetivo(campos, 'Crédito em atraso', Array.isArray(atrasos) ? atrasos.length : atrasos);
@@ -590,9 +598,17 @@ function camposValidacaoObjetiva(resultado: any, documento: any, socios: any[] =
     return campos.slice(0, 5);
   }
 
-  if (/serasa|score_boavista|restricoes_/.test(tipo)) {
+  if (/serasa|score_boavista|restricoes_|consulta_bureau/.test(tipo)) {
     const restricoes = primeiroValor(resultado, ['restricoes', 'negativacoes', 'quantidade_negativacoes'], ['Restrições', 'Negativações']);
+    const motor = primeiroValor(resultado, ['motor_credito'], []);
     adicionarIdentificadorObjetivo(campos, resultado);
+    if (motor && typeof motor === 'object') {
+      adicionarCampoObjetivo(campos, 'Rating BACEN', primeiroValor(resultado, ['rating_bacen', 'motor_credito.rating_bacen'], ['Rating BACEN']));
+      adicionarCampoObjetivo(campos, 'Score', primeiroValor(resultado, ['motor_credito.score', 'score'], ['Score']));
+      adicionarCampoObjetivo(campos, 'Decisão', primeiroValor(resultado, ['motor_credito.decisao', 'decisao_credito'], ['Decisão']));
+      adicionarCampoObjetivo(campos, 'Valor sugerido', primeiroValor(resultado, ['motor_credito.valor_sugerido'], ['Valor sugerido']));
+      return campos.slice(0, 5);
+    }
     adicionarCampoObjetivo(campos, 'Resultado', primeiroValor(resultado, ['resultado_consulta', 'resultado', 'situacao'], ['Resultado', 'Situação']));
     adicionarCampoObjetivo(campos, 'Restrições', Array.isArray(restricoes) ? restricoes.length : restricoes);
     adicionarCampoObjetivo(campos, 'Rating/Score', primeiroValor(resultado, ['rating', 'score', 'faixa_rating'], ['Rating', 'Score']));

@@ -757,6 +757,76 @@ describe('extração documental local determinística', () => {
     expect(resultado.dados.situacao_certidao).toBeUndefined();
   });
 
+  it('usa o Rating BACEN do Motor de Crédito, e não o rating do bloco SCORE PJ', () => {
+    const resultado = analisarTextoDocumentoLocal('consulta_bureau', `
+      ANÁLISE EMPRESARIAL, FINANCEIRA E SCR
+      SCORE PJ
+      PONTUAÇÃO RATING 242 C
+      STATUS ALTO_RISCO
+      RESUMO MOTOR DE CRÉDITO SCR vencido — ocorrências de atenção: R$ 0,00
+      MOTOR DE CRÉDITO
+      DECISÃO                         VALOR SUGERIDO
+      Recusado                       R$ 0,00
+      PARCELA SUGERIDA                TAXA JUROS
+      R$ 0,00                         0%
+      RATING BACEN                    PARCELAS
+      G                               0
+      SCORE                            NEGOCIAR COM CLIENTE
+      242                              Não
+    `, 'rating_bacen_cnpj');
+
+    expect(resultado.dados.documento_compativel).toBe(true);
+    expect(resultado.dados.rating).toBe('G');
+    expect(resultado.dados.rating_bacen).toBe('G');
+    expect(resultado.dados.score).toBe(242);
+    expect(resultado.dados.motor_credito).toMatchObject({
+      decisao: 'Recusado',
+      valor_sugerido: 0,
+      parcela_sugerida: 0,
+      taxa_juros: '0%',
+      rating_bacen: 'G',
+      parcelas: 0,
+      score: 242,
+      negociar_com_cliente: 'Não',
+    });
+    expect(resultado.dados.resultado_consulta).toContain('rating G');
+    expect(resultado.dados.resultado_consulta).not.toContain('rating C');
+    expect(resultado.dados.situacao).toBeUndefined();
+  });
+
+  it('lê o Motor de Crédito mesmo quando o PDF quebra os rótulos em espaços internos', () => {
+    const resultado = analisarTextoDocumentoLocal('consulta_scr', `
+      RELATÓRIO SCR E LAUDO FINANCEIRO
+      CNPJ 00.000.000/0001-00
+      SCORE PJ
+      PONTUA ÇÃO 985 RATING AA
+      MOTOR DE CRÉDITO
+      DE CISÃO                         VA LOR SUGE RIDO
+      Aprovado                        R$ 195.000,00
+      PA RCE LA SUGE RIDA              TA XA JUROS
+      R$ 3.250,00                      1,49% a 2,59% ao mês
+      RA TING BA CE N                  PA RCE LAS
+      AA                               24 a 60
+      SCORE                            NE GOCIA R COM CLIE NTE
+      985                              Sim
+    `, 'rating_bacen_cnpj');
+
+    expect(resultado.dados.documento_compativel).toBe(true);
+    expect(resultado.dados.rating).toBe('AA');
+    expect(resultado.dados.rating_bacen).toBe('AA');
+    expect(resultado.dados.motor_credito).toMatchObject({
+      decisao: 'Aprovado',
+      valor_sugerido: 195000,
+      parcela_sugerida: 3250,
+      taxa_juros: '1,49% a 2,59% ao mes',
+      rating_bacen: 'AA',
+      parcelas: '24 a 60',
+      score: 985,
+      negociar_com_cliente: 'Sim',
+    });
+    expect(resultado.dados.resultado_consulta).toContain('rating AA');
+  });
+
   it('lê a data de consulta do laudo consolidado quando o PDF quebra o rótulo em DA TA', () => {
     const resultado = analisarTextoDocumentoLocal('consulta_bureau', `
       ANÁLI S E EM PRES ARI AL, FI NANCEI RA E S CR
