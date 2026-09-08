@@ -160,11 +160,19 @@ describe('relatório inicial documental', () => {
         consistente: false,
         status: 'Validado',
         resultado_analise: { dados_extraidos: { documento_compativel: true }, revisao_humana_necessaria: true },
+      }, {
+        arquivo_id: 'doc-legado',
+        tipo_documento: 'atos_junta_comercial',
+        nome: 'atos-legado.pdf',
+        analisado: true,
+        pendencia: 'validado',
+        resultado_analise: { status: 'Pendente' },
       }],
       evidencias: new Map(),
     });
 
     expect(relatorio.inventario_documental.find((item: any) => item.arquivo_id === 'doc-contrato')?.status).toBe('Aprovado');
     expect(relatorio.inventario_documental.find((item: any) => item.arquivo_id === 'doc-faturamento')?.status).toBe('Aprovado');
+    expect(relatorio.inventario_documental.find((item: any) => item.arquivo_id === 'doc-legado')?.status).toBe('Aprovado');
   });
 });
