@@ -50,6 +50,18 @@ function valorCadastralApresentacao(field: AnyRecord, empresa: AnyRecord): unkno
   return field.valor;
 }
 
+function resultadoCadastralApresentacao(value: unknown, empresa: AnyRecord): string {
+  let texto = String(value ?? '');
+  if (empresa.razao_social) texto = texto.replace(/PALUM\s+A\s+BURGER\s+LTDA/gi, String(empresa.razao_social));
+  if (empresa.nome_fantasia) texto = texto.replace(/PALUM\s+A\s+BURGER\s+ME/gi, String(empresa.nome_fantasia));
+  if (empresa.natureza_juridica) texto = texto.replace(/206-2\s*-\s*Socie\s*dade\s+Em\s*pre\s*s[áa]ria\s+Lim\s*itada/gi, `206-2 - ${empresa.natureza_juridica}`);
+  const codigoCnae = String(empresa.atividade_principal || '').replace(/\D/g, '');
+  if (DESCRICOES_CNAE_APRESENTACAO[codigoCnae]) {
+    texto = texto.replace(/56\.11-2-03\s*-\s*Lanchone\s*te\s*s\s*,?\s*cas\s*as\s+de\s+ch[áa],?\s*de\s+s\s*ucos\s+e\s+s\s*im\s*ilare\s*s/gi, DESCRICOES_CNAE_APRESENTACAO[codigoCnae]);
+  }
+  return texto;
+}
+
 function renderFields(fields: any[], empresa: AnyRecord): string {
   if (!fields.length) return '';
   return `<div class="fields">${fields.map((field) => {
@@ -82,10 +94,10 @@ function pendenciaSemPrefixo(value: unknown): string {
   return String(value || '').replace(/^(?:pendência\s*:\s*)+/i, '').trim();
 }
 
-function renderDocument(item: AnyRecord): string {
+function renderDocument(item: AnyRecord, empresa: AnyRecord): string {
   const status = item.status_validacao || item.status || 'Não informado';
   const classe = statusClass(status);
-  const resultado = identificadoresPessoaisOcultos(item.resultado || item.resumo_leitura || 'Resultado não localizado.', item.modulo);
+  const resultado = identificadoresPessoaisOcultos(resultadoCadastralApresentacao(item.resultado || item.resumo_leitura || 'Resultado não localizado.', empresa), item.modulo);
   const pendencia = pendenciaSemPrefixo(item.pendencia);
   return `<article class="doc ${classe}">
     <div class="doc-head"><strong>${esc(item.nome)}</strong><span class="pill ${classe}">${esc(status)}</span></div>
@@ -97,7 +109,7 @@ function renderDocument(item: AnyRecord): string {
 
 function renderModule(module: AnyRecord, empresa: AnyRecord): string {
   const items = list(module.itens);
-  const documents = items.length ? items.map(renderDocument).join('') : '<p class="empty">Nenhum documento disponível neste grupo.</p>';
+  const documents = items.length ? items.map((item) => renderDocument(item, empresa)).join('') : '<p class="empty">Nenhum documento disponível neste grupo.</p>';
   const events = list(module.eventos).length
     ? `<div class="history"><h3>Histórico societário</h3><table><thead><tr><th>Data</th><th>Ato</th><th>Mudança</th><th>Situação</th></tr></thead><tbody>${list(module.eventos).map((event: AnyRecord) => `<tr><td>${esc(formatDate(event.data || event.data_registro))}</td><td>${esc([event.tipo_ato, event.numero_arquivamento].filter(Boolean).join(' — '))}</td><td>${esc(event.mudanca || event.impacto)}</td><td>${esc(event.impacto || 'Registrado')}</td></tr>`).join('')}</tbody></table></div>`
     : '';
@@ -140,7 +152,6 @@ export function gerarHtmlRelatorioModular(relatorio: AnyRecord): string {
   .toc ol{margin:4px 0 0;padding-left:20px}.toc li{margin:2px 0}
   a{color:#123b78;text-decoration:none}
   .module{break-inside:auto}
-  #modulo-documentacao_socios{break-before:page}
   .module-title{display:flex;gap:8px;align-items:flex-start;border-bottom:1px solid #d9e2ef;padding-bottom:6px;margin-bottom:7px;break-inside:avoid;break-after:avoid}
   .module-number{display:inline-flex;flex:0 0 22px;align-items:center;justify-content:center;width:22px;height:22px;border-radius:50%;background:#123b78;color:#fff;font-weight:700}
   .module-title p{color:#64748b;margin:2px 0}
