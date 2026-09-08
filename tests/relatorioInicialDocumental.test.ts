@@ -288,4 +288,69 @@ describe('relatório inicial documental', () => {
     expect(checklist.some((item: any) => /assessoria|contrato operacional/i.test(item.nome))).toBe(false);
     expect(relatorio.pendencias_detalhadas.some((item: any) => item.categoria === 'faturamento desatualizado')).toBe(true);
   });
+
+  it('usa o laudo do arquivo correspondente para completar Junta, contrato e faturamento', () => {
+    const relatorio = aplicarRelatorioInicial({
+      gerado_em: '2026-09-08T00:00:00.000Z',
+      status_geral: 'Pendente',
+      empresa: dossie.empresa,
+      resumo: {},
+      documentos_analisados: [],
+      documentos_pendentes_analise: [],
+      documentos_faltantes: [],
+      pendencias: [],
+    }, {
+      dossie: {
+        ...dossie,
+        mapa_documental_credito: {
+          etapas: [{
+            numero: 2,
+            titulo: 'Societário',
+            documentos: [
+              { codigo: 'atos_junta_comercial', nome: 'Certidão da Junta', tipos_arquivo: ['atos_junta_comercial'], obrigatorio: true },
+              { codigo: 'contrato_social', nome: 'Contrato social', tipos_arquivo: ['contrato_social'], obrigatorio: true },
+              { codigo: 'faturamento_12_meses', nome: 'Faturamento', tipos_arquivo: ['faturamento_12_meses'], obrigatorio: true },
+              { codigo: 'cndt', nome: 'CNDT', tipos_arquivo: ['cndt'], obrigatorio: false },
+            ],
+          }],
+        },
+        documentacao_societaria: {
+          analisado: true,
+          apto_para_avancar: true,
+          nire_junta: '52206183723',
+          nire_confere: true,
+          data_confere: true,
+          data_ato_junta: '2025-06-06',
+          continuidade_12_meses_comprovada: true,
+          meses_comprovados: 0,
+          documentos_analisados: [],
+        },
+      },
+      documentos: [{
+        arquivo_id: 'doc-junta', tipo_documento: 'atos_junta_comercial', nome: 'certidao.pdf', analisado: true, consistente: true,
+        resultado_analise: { dados_extraidos: { nire: '52206183723', historico_arquivamentos: [{ data: '2025-06-06', numero: '20251505987', tipo_ato: 'ALTERAÇÃO' }] }, satisfaz_requisito: true },
+      }, {
+        arquivo_id: 'doc-contrato', tipo_documento: 'contrato_social', nome: 'contrato.pdf', analisado: true, consistente: true,
+        resultado_analise: { dados_extraidos: { contrato: { data_registro: '2025-06-06', numero_arquivamento: '20251505987' } }, satisfaz_requisito: true },
+      }, {
+        arquivo_id: 'doc-faturamento', tipo_documento: 'faturamento_12_meses', nome: 'faturamento.pdf', analisado: true, consistente: true,
+        resultado_analise: { dados_extraidos: { documento_compativel: true, periodo_analisado: ['2025/08', '2026/07'], competencias_mensais: Array.from({ length: 12 }, (_, indice) => ({ competencia: `2025-${String(indice + 8).padStart(2, '0')}` })) } },
+      }],
+      evidencias: new Map(),
+    });
+
+    const checklist = relatorio.checklist_executivo.itens;
+    const junta = checklist.find((item: any) => item.nome === 'Ato da Junta Comercial');
+    const contrato = checklist.find((item: any) => item.nome === 'Contrato Social e Alterações');
+    const faturamento = checklist.find((item: any) => item.nome === 'Faturamento');
+    const cndt = checklist.find((item: any) => item.nome === 'CNDT');
+    expect(junta?.resultado).toMatch(/NIRE: 52206183723/);
+    expect(junta?.resultado).toMatch(/2025-06-06/);
+    expect(contrato?.resultado).toMatch(/2025-06-06/);
+    expect(contrato?.resultado).not.toMatch(/Revisar/);
+    expect(faturamento?.status).toBe('Confirmado');
+    expect(faturamento?.resultado).toMatch(/2025\/08 a 2026\/07/);
+    expect(faturamento?.resultado).toMatch(/12 meses/);
+    expect(cndt?.status).toBe('Informativo');
+  });
 });
