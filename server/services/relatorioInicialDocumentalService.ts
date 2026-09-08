@@ -2,7 +2,7 @@ import { CLASSIFIER_VERSION, EXTRACTOR_VERSION, RULE_VERSION, SCHEMA_VERSION } f
 import type { DocumentProcessingEvidence } from './documentProcessingEvidence';
 import { linhaObjetivaDocumento, nomeFuncionalDocumento, resumoObjetivoDocumento } from '../../shared/documentalPresentation';
 
-export const RELATORIO_INICIAL_VERSION = '1.1.0';
+export const RELATORIO_INICIAL_VERSION = '1.2.0';
 
 type DocumentoRelatorio = Record<string, any>;
 
@@ -51,6 +51,171 @@ function valorLegivel(value: unknown): string | null {
 
 function resultadoDocumento(documento: DocumentoRelatorio): Record<string, any> {
   return objeto(documento.resultado_analise || documento.resultado_validacao?.analise_regra_documental);
+}
+
+function tipoDocumentoNormalizado(documento: DocumentoRelatorio): string {
+  return normalizar(documento.tipo_documento || documento.codigo || documento.documento || documento.nome);
+}
+
+function periodoFaturamento(dados: Record<string, any>): { inicio: string | null; fim: string | null; competencias: number | null; texto: string | null } {
+  const periodo = dados.periodo_analisado;
+  const valores = Array.isArray(periodo)
+    ? periodo.map((item) => texto(item)).filter(Boolean)
+    : texto(periodo).split(/\s+a\s+|,|;/i).map((item) => item.trim()).filter(Boolean);
+  const inicio = valores[0] || null;
+  const fim = valores[valores.length - 1] || inicio;
+  const parseMes = (value: string | null) => {
+    const match = String(value || '').match(/(20\d{2})\s*[/\-.]\s*(0?[1-9]|1[0-2])/);
+    return match ? Number(match[1]) * 12 + Number(match[2]) : null;
+  };
+  const inicioNumero = parseMes(inicio);
+  const fimNumero = parseMes(fim);
+  const diferenca = inicioNumero !== null && fimNumero !== null && fimNumero >= inicioNumero
+    ? fimNumero - inicioNumero + 1
+    : null;
+  const competenciasObservadas = Array.isArray(dados.competencias_mensais) && dados.competencias_mensais.length
+    ? dados.competencias_mensais.length
+    : Array.isArray(dados.meses_referencia) && dados.meses_referencia.length
+      ? dados.meses_referencia.length
+      : null;
+  const competencias = competenciasObservadas || diferenca;
+  return {
+    inicio,
+    fim,
+    competencias,
+    texto: inicio && fim && inicio !== fim ? `${inicio} a ${fim}${competencias ? ` (${competencias} competências)` : ''}` : inicio,
+  };
+}
+
+function documentoForaDoChecklistExecutivo(item: any): boolean {
+  const tipo = tipoDocumentoNormalizado(item);
+  return /contrato[ _]assessoria|contrato[ _]geral|contrato[ _]prestacao|contratos[ _]gerados|foto[ _]fachada|foto[ _]empresa|foto[ _]interna|\boutros?\b/.test(tipo);
+}
+
+function nomeChecklistExecutivo(item: any): string {
+  const tipo = tipoDocumentoNormalizado(item);
+  if (/cartao cnpj|cnpj cartao/.test(tipo)) return 'Cartão do CNPJ';
+  if (/(^|\s)qsa(\s|$)|quadro societario/.test(tipo)) return 'QSA';
+  if (/atos junta|junta comercial/.test(tipo)) return 'Ato da Junta Comercial';
+  if (/contrato social|alteracao contratual|contrato consolid/.test(tipo)) return 'Contrato Social e Alterações';
+  if (/rating|serasa|bureau|relatorio credito/.test(tipo)) return 'Consulta de Rating';
+  if (/faturamento/.test(tipo)) return 'Faturamento';
+  if (/scr|registrato/.test(tipo)) return 'SCR/Registrato';
+  if (/cnd|cpend|certidao/.test(tipo)) return item.documento || 'Certidão de Regularidade';
+  return item.documento || item.nome || 'Documento';
+}
+
+function statusChecklistExecutivo(item: any): 'Confirmado' | 'Aprovado com ressalva' | 'Pendente' | 'Incompatível' | 'Não anexado' | 'Informativo' {
+  const status = normalizar(item.status);
+  if (!item.recebido && item.esperado === false) return 'Informativo';
+  if (!item.recebido) return 'Não anexado';
+  if (status.includes('informativo')) return 'Informativo';
+  if (status.includes('incompat')) return 'Incompatível';
+  if (status.includes('revis') || status.includes('pend') || status.includes('nao lido') || status.includes('não lido')) return 'Pendente';
+  if (status.includes('ressalva')) return 'Aprovado com ressalva';
+  if (status.includes('aprov') || status.includes('valid') || status.includes('requisito satisfeito') || status.includes('confirm')) return 'Confirmado';
+  return 'Pendente';
+}
+
+function limparStatusDaLinha(value: unknown): string {
+  return texto(value).replace(/\s*[—-]\s*status\s*:\s*[^.]+\.?\s*$/i, '').trim();
+}
+
+function pendenciaExecutiva(item: any, status: string, dados: Record<string, any>): string | null {
+  const tipo = tipoDocumentoNormalizado(item);
+  if (status === 'Não anexado') return `Pendência: anexar ${nomeChecklistExecutivo(item)}.`;
+  if (status === 'Incompatível') return `Pendência: substituir pelo documento correto para ${nomeChecklistExecutivo(item)}.`;
+  if (/faturamento/.test(tipo) && periodoFaturamento(dados).competencias !== 12) return 'Pendência: apresentar faturamento atualizado dos últimos 12 meses.';
+  if (status === 'Pendente' || status === 'Aprovado com ressalva') {
+    const motivo = texto(item.pendencia || item.resultado_analise?.diagnostico || item.observacao);
+    return `Pendência: ${motivo || `confirmar ${nomeChecklistExecutivo(item)} com a fonte original.`}`;
+  }
+  return null;
+}
+
+function resultadoExecutivo(item: any, status: string): string {
+  const dados = dadosDocumento(item);
+  const tipo = tipoDocumentoNormalizado(item);
+  const resultado = resultadoDocumento(item);
+  if (status === 'Confirmado' && /(^|\s)qsa(\s|$)|quadro societario/.test(tipo)) {
+    const socios = lista(resultado.socios_lidos || dados.socios_lidos || dados.socios || resultado.socios)
+      .map((socio: any) => texto(socio?.nome || socio?.nome_socio || socio?.razao_social || socio))
+      .filter(Boolean);
+    return `Quadro societário confirmado com o CNPJ${socios.length ? `. Sócios/administradores: ${socios.slice(0, 3).join(', ')}` : ''}.`;
+  }
+  if (status === 'Confirmado' && /contrato social|alteracao contratual|contrato consolid/.test(tipo)) {
+    const data = primeiro(dados.data_registro, dados.contrato?.data_registro, resultado.data_registro);
+    const arquivamento = primeiro(dados.numero_arquivamento, dados.contrato?.numero_arquivamento, resultado.numero_arquivamento);
+    return `Contrato e alterações confirmados${data ? `; ato de ${data}` : ''}${arquivamento ? `, arquivamento ${arquivamento}` : ''}.`;
+  }
+  if (/faturamento/.test(tipo)) {
+    const periodo = periodoFaturamento(dados);
+    if (!periodo.texto) return 'Período dos últimos 12 meses não localizado.';
+    return periodo.competencias === 12
+      ? `Período: ${periodo.texto}. Documento cobre os últimos 12 meses.`
+      : `Período: ${periodo.texto}. Documento não cobre os últimos 12 meses.`;
+  }
+  const linha = limparStatusDaLinha(item.linha_objetiva || item.resultado_objetivo);
+  if (linha) return linha;
+  if (!item.recebido) return 'Documento ainda não anexado.';
+  if (status === 'Confirmado') return 'Resultado confirmado.';
+  return item.observacao || 'Resultado não confirmado.';
+}
+
+function construirChecklistExecutivo(inventario: any[], cruzamentos: any[], historico: any) {
+  const agrupados = new Map<string, any>();
+  for (const item of inventario) {
+    if (documentoForaDoChecklistExecutivo(item)) continue;
+    const nome = nomeChecklistExecutivo(item);
+    const chave = /contrato social e alteracoes/i.test(nome) ? 'contrato_social_alteracoes' : normalizar(nome);
+    let status = statusChecklistExecutivo(item);
+    const dados = dadosDocumento(item);
+    if (/faturamento/.test(tipoDocumentoNormalizado(item)) && periodoFaturamento(dados).competencias !== 12 && status === 'Confirmado') status = 'Pendente';
+    const atual = {
+      nome,
+      status,
+      resultado: resultadoExecutivo(item, status),
+      pendencia: pendenciaExecutiva(item, status, dados),
+      arquivo_id: item.arquivo_id || null,
+      data: primeiro(dados.data_consulta, dados.data_emissao, dados.data_registro, dados.data_ato, dados.data_validade) || null,
+    };
+    const existente = agrupados.get(chave);
+    if (!existente) {
+      agrupados.set(chave, atual);
+      continue;
+    }
+    existente.resultado = Array.from(new Set([existente.resultado, atual.resultado].filter(Boolean))).join(' ');
+    existente.pendencia = existente.pendencia || atual.pendencia;
+    if (['Incompatível', 'Pendente', 'Não anexado'].includes(atual.status) || existente.status === 'Informativo') existente.status = atual.status;
+    existente.data = existente.data || atual.data;
+  }
+  const itens = Array.from(agrupados.values());
+  const faturamentoPendente = itens.some((item) => item.nome === 'Faturamento' && item.status === 'Pendente');
+  const codigosAcionaveis = new Set(['identidade_empresarial', 'alteracoes', 'sociedade', 'registro', 'tributacao', 'obrigacoes_certidoes', 'credito', 'financeiro', 'documentos_obrigatorios']);
+  const confirmacoes = cruzamentos
+    .filter((item) => ['identidade_empresarial', 'alteracoes', 'sociedade', 'registro', 'tributacao', 'credito', 'financeiro'].includes(item.codigo))
+    .filter((item) => !(item.codigo === 'financeiro' && faturamentoPendente))
+    .map((item) => ({ dimensao: item.dimensao, status: item.status, texto: item.descricao }))
+    .filter((item) => item.status === 'consistente' || item.status === 'confirmado');
+  const eventos = lista(historico?.eventos_cronologicos).filter((evento) => evento?.data || evento?.numero_arquivamento);
+  const junta = itens.find((item) => item.nome === 'Ato da Junta Comercial');
+  if (junta && historico?.nire) {
+    const ato = historico.ato_mais_recente || {};
+    junta.resultado = `NIRE: ${historico.nire}. Última alteração registrada em ${ato.data || 'data não localizada'}${ato.tipo ? ` (${ato.tipo})` : ''}. Ato conferido.`;
+    if (historico.status === 'confirmado' && historico.continuidade_12_meses) junta.pendencia = null;
+  }
+  const contratos = itens.find((item) => item.nome === 'Contrato Social e Alterações');
+  if (contratos && historico?.status === 'confirmado') {
+    contratos.resultado = `${contratos.resultado} NIRE, datas e continuidade societária conferidos; ${historico.meses_comprovados || 12} meses comprovados.`;
+    contratos.pendencia = null;
+  }
+  const pendencias = [
+    ...itens.filter((item) => item.pendencia).map((item) => ({ documento: item.nome, acao: item.pendencia })),
+    ...cruzamentos
+      .filter((item) => codigosAcionaveis.has(item.codigo) && ['divergente', 'parcialmente consistente', 'não confirmado'].includes(item.status))
+      .map((item) => ({ documento: item.dimensao, acao: `Pendência: ${item.descricao}` })),
+  ];
+  return { itens, confirmacoes, pendencias, eventos };
 }
 
 function dadosDocumento(documento: DocumentoRelatorio): Record<string, any> {
@@ -343,13 +508,17 @@ function construirCruzamentos(dossie: Record<string, any>, documentos: Documento
   const porTipo = (padrao: RegExp) => documentos.filter((doc) => padrao.test(`${doc.tipo_documento} ${doc.nome}`));
   const resultado = (doc: DocumentoRelatorio) => dadosDocumento(doc);
   const docsIdentidade = porTipo(/cnpj|qsa|enquadramento|simples/i);
-  const cnps = Array.from(new Set([
+  const cnpsBrutos = Array.from(new Set([
     somenteDigitos(empresa.cnpj),
     ...docsIdentidade.map((doc) => somenteDigitos(primeiro(resultado(doc).cnpj, resultado(doc).cnpj_empresa, resultado(doc).cnpj_documento))),
   ].filter(Boolean)));
+  // Identificadores truncados, como "52.008.360" em alguns relatórios de
+  // bureau, não são um segundo CNPJ. Eles não podem derrubar a identidade
+  // confirmada pelo CNPJ completo de 14 dígitos.
+  const cnps = cnpsBrutos.filter((cnpj) => cnpj.length === 14);
   const identidadeStatus = cnps.length <= 1 && cnps.length > 0 ? 'consistente' : cnps.length > 1 ? 'divergente' : 'não confirmado';
   const resultados: Array<Record<string, any>> = [
-    { codigo: 'identidade_empresarial', dimensao: 'Identidade empresarial', ...statusCruzamento(identidadeStatus, cnps.length > 1 ? `Foram encontrados CNPJs conflitantes: ${cnps.join(', ')}.` : cnps.length === 1 ? 'CNPJ único identificado nas fontes disponíveis.' : 'CNPJ não localizado nas fontes analisadas.'), documentos: docsIdentidade.map((doc) => doc.nome), valores: { cnpj: cnps } },
+    { codigo: 'identidade_empresarial', dimensao: 'Identidade empresarial', ...statusCruzamento(identidadeStatus, cnps.length > 1 ? `Foram encontrados CNPJs conflitantes: ${cnps.join(', ')}.` : cnps.length === 1 ? 'CNPJ único identificado nas fontes disponíveis; identificadores parciais não foram tratados como conflito.' : 'CNPJ completo não localizado nas fontes analisadas.'), documentos: docsIdentidade.map((doc) => doc.nome), valores: { cnpj: cnps, identificadores_parciais: cnpsBrutos.filter((cnpj) => cnpj.length !== 14) } },
     { codigo: 'constituicao', dimensao: 'Constituição', ...statusCruzamento(identidade.apto_para_avancar === true ? 'consistente' : 'não confirmado', identidade.apto_para_avancar === true ? 'A identidade cadastral inicial foi concluída; datas de constituição devem ser lidas nos documentos em que estiverem presentes.' : 'A constituição ainda não foi confirmada pela Etapa 1.'), documentos: docsIdentidade.map((doc) => doc.nome) },
     { codigo: 'alteracoes', dimensao: 'Alterações', ...statusCruzamento(societaria.analisado ? societaria.apto_para_avancar === true ? 'consistente' : societaria.bloqueios?.length ? 'divergente' : 'parcialmente consistente' : 'não confirmado', societaria.diagnostico || 'Histórico de alterações ainda não concluído.'), documentos: lista(societaria.documentos_analisados).map((doc) => doc.nome || doc.arquivo_id).filter(Boolean) },
     { codigo: 'sociedade', dimensao: 'Sócios, administradores e representação', ...statusCruzamento(societaria.confronto_qsa?.status === 'confirmado' || identidade.validation?.qsaMatches === true ? 'consistente' : societaria.confronto_qsa?.status === 'divergente' ? 'divergente' : 'não confirmado', societaria.confronto_qsa?.descricao || 'O quadro societário não foi corroborado por múltiplas fontes.'), documentos: ['QSA', ...lista(societaria.documentos_analisados).map((doc) => doc.nome || doc.arquivo_id).filter(Boolean)] },
@@ -451,6 +620,18 @@ function construirPendencias(dossie: Record<string, any>, documentos: DocumentoR
   for (const documento of documentos) {
     const estado = estadoDocumento(documento);
     const resultado = resultadoDocumento(documento);
+    if (/faturamento/.test(tipoDocumentoNormalizado(documento)) && periodoFaturamento(dadosDocumento(documento)).competencias !== 12) {
+      pendencias.push({
+        codigo: `faturamento_12_meses_${documento.arquivo_id || documento.tipo_documento}`,
+        categoria: 'faturamento desatualizado',
+        prioridade: 'alta',
+        impacto: 'O documento não comprova a janela completa dos últimos 12 meses.',
+        responsavel_sugerido: 'Empresa / operador documental',
+        acao: 'Apresentar faturamento atualizado dos últimos 12 meses.',
+        condicao_resolucao: 'Período mensal completo de 12 meses localizado e validado.',
+        documentos: [documento.nome],
+      });
+    }
     if (estado === 'incompativel') pendencias.push({ codigo: `documento_incompativel_${documento.arquivo_id || documento.tipo_documento}`, categoria: 'documento incompatível comprovado', prioridade: 'alta', impacto: 'O arquivo não satisfaz o campo documental esperado.', responsavel_sugerido: 'Empresa / operador documental', acao: `Substituir pelo documento esperado para ${documento.tipo_documento || documento.nome}.`, condicao_resolucao: 'Novo arquivo do tipo correto, compatível e lido sem incompatibilidade.', documentos: [documento.nome] });
     if (estado === 'divergente') pendencias.push({ codigo: `divergencia_${documento.arquivo_id || documento.tipo_documento}`, categoria: 'divergência entre documentos', prioridade: 'alta', impacto: 'Os valores conflitantes impedem uma conclusão automática segura.', responsavel_sugerido: 'Analista documental', acao: 'Conferir o documento original e registrar qual fonte prevalece.', condicao_resolucao: 'Divergência resolvida por fonte oficial ou revisão humana.', documentos: [documento.nome], evidencias: lista(resultado.divergencias).map((item) => item?.mensagem || item) });
     if (estado === 'revisao_humana' || estado === 'ressalva') pendencias.push({ codigo: `revisao_${documento.arquivo_id || documento.tipo_documento}`, categoria: estado === 'ressalva' ? 'dados insuficientes ou ressalva' : 'revisão humana necessária', prioridade: estado === 'revisao_humana' ? 'alta' : 'média', impacto: resultado.diagnostico || 'A conclusão depende de conferência adicional.', responsavel_sugerido: 'Analista documental', acao: 'Revisar o laudo, as evidências e as páginas indicadas.', condicao_resolucao: 'Analista confirma a evidência ou solicita novo arquivo.', documentos: [documento.nome] });
@@ -473,13 +654,15 @@ function statusAptidao(resumo: Record<string, any>, pendencias: any[]): string {
 
 export function aplicarRelatorioInicial(base: Record<string, any>, params: RelatorioInicialParams): Record<string, any> {
   const inventario = construirInventario(params);
+  const documentosExecutivos = params.documentos.filter((documento) => !documentoForaDoChecklistExecutivo(documento));
   const dadosCadastrais = consolidarDadosCadastrais(params.dossie, params.documentos);
   const cruzamentos = construirCruzamentos(params.dossie, params.documentos, inventario);
   const historicoSocietario = construirHistoricoSocietario(params.dossie);
-  const financeiroCredito = construirFinanceiroECredito(params.documentos);
-  const pendenciasDetalhadas = construirPendencias(params.dossie, params.documentos, inventario, cruzamentos);
+  const financeiroCredito = construirFinanceiroECredito(documentosExecutivos);
+  const pendenciasDetalhadas = construirPendencias(params.dossie, documentosExecutivos, inventario, cruzamentos);
+  const checklistExecutivo = construirChecklistExecutivo(inventario, cruzamentos, historicoSocietario);
   const idsInformativos = new Set(inventario.filter((item: any) => item.coberto_por_outro).map((item: any) => String(item.arquivo_id || item.arquivo)));
-  const estados = params.documentos.filter((documento) => !idsInformativos.has(String(documento.arquivo_id || documento.nome))).map(estadoDocumento);
+  const estados = documentosExecutivos.filter((documento) => !idsInformativos.has(String(documento.arquivo_id || documento.nome))).map(estadoDocumento);
   const resumoAtual = objeto(base.resumo);
   const resumo = {
     ...resumoAtual,
@@ -490,20 +673,20 @@ export function aplicarRelatorioInicial(base: Record<string, any>, params: Relat
     documentos_divergentes: estados.filter((estado) => estado === 'divergente').length,
     documentos_incompativeis: estados.filter((estado) => estado === 'incompativel').length,
     documentos_revisao_humana: estados.filter((estado) => estado === 'revisao_humana').length,
-    documentos_nao_identificados: params.documentos.filter((doc) => tipoConfirmado(doc).confirmado === null).length,
+    documentos_nao_identificados: documentosExecutivos.filter((doc) => tipoConfirmado(doc).confirmado === null).length,
     documentos_faltantes: inventario.filter((item) => item.esperado && item.recebido === false).length,
-    arquivos_anexados: params.documentos.length,
+    arquivos_anexados: documentosExecutivos.length,
   };
   const evidenciasInventario = inventario.map((item: any) => item.evidencia || {});
   const evidenciaResumo = {
-    arquivos_anexados: params.documentos.length,
+    arquivos_anexados: documentosExecutivos.length,
     arquivos_localizados: evidenciasInventario.filter((item) => item.arquivo_localizado).length,
     arquivos_abertos: evidenciasInventario.filter((item) => item.arquivo_aberto).length,
     paginas_processadas: evidenciasInventario.reduce((total, item) => total + (Number(item.paginas_processadas) > 0 ? Number(item.paginas_processadas) : 0), 0),
     arquivos_sem_contagem_de_paginas: evidenciasInventario.filter((item) => !item.paginas_processadas).length,
   };
   const limitacoes = Array.from(new Set([
-    ...inventario.filter((item: any) => item.recebido && !item.evidencia?.paginas_processadas).map((item: any) => `${item.nome || item.documento}: número de páginas processadas não localizado no laudo.`),
+    ...inventario.filter((item: any) => !documentoForaDoChecklistExecutivo(item) && item.recebido && !item.evidencia?.paginas_processadas).map((item: any) => `${item.nome || item.documento}: número de páginas processadas não localizado no laudo.`),
     ...financeiroCredito.credito.limitacoes,
     ...financeiroCredito.faturamento.limitacoes,
   ]));
@@ -528,6 +711,7 @@ export function aplicarRelatorioInicial(base: Record<string, any>, params: Relat
     },
     resumo,
     inventario_documental: inventario,
+    checklist_executivo: checklistExecutivo,
     dados_cadastrais_confirmados: dadosCadastrais,
     cruzamentos_documentais: cruzamentos,
     historico_societario: historicoSocietario,

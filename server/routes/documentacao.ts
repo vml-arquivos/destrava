@@ -1017,7 +1017,41 @@ function gerarHtmlResumoSocietarioPdf(relatorio: any): string {
   </body></html>`;
 }
 
-function gerarHtmlRelatorioDocumental(relatorio: any): string {
+function gerarHtmlChecklistExecutivo(relatorio: any): string {
+  const empresa = relatorio.empresa || {};
+  const checklist = Array.isArray(relatorio.checklist_executivo?.itens) ? relatorio.checklist_executivo.itens : [];
+  const confirmacoes = Array.isArray(relatorio.checklist_executivo?.confirmacoes) ? relatorio.checklist_executivo.confirmacoes : [];
+  const pendencias = Array.isArray(relatorio.checklist_executivo?.pendencias) ? relatorio.checklist_executivo.pendencias : [];
+  const faltantes = Array.isArray(relatorio.documentos_faltantes) ? relatorio.documentos_faltantes : [];
+  const pendenciasUnicas = Array.from(new Map([
+    ...pendencias,
+    ...faltantes.map((item: any) => ({ documento: item.nome || item.codigo || 'Documento', acao: `Pendência: anexar ${item.nome || item.codigo || 'documento'}.` })),
+  ].map((item: any) => [`${item.documento}|${item.acao}`, item])).values());
+  const status = String(relatorio.status_aptidao_documental || relatorio.status_geral || 'pendente de complementação');
+  const situacao = empresa.situacao_cadastral || 'não localizada';
+  const nomeEmpresa = empresa.razao_social || empresa.nome_fantasia || 'Empresa não identificada';
+  const classeStatus = /apta$|documentalmente apta/i.test(status) ? 'ok' : /diverg|incomp/i.test(status) ? 'bad' : 'warn';
+  const esc = (value: unknown) => escapeHtmlRelatorio(value || 'não localizado');
+  const etiquetaStatus = (value: string) => value === 'Confirmado' ? 'Confirmado' : value === 'Aprovado com ressalva' ? 'Aprovado com ressalva' : value;
+  const itensHtml = checklist.length
+    ? checklist.map((item: any) => `<article class="item ${item.status === 'Confirmado' ? 'ok' : item.status === 'Incompatível' ? 'bad' : 'warn'}"><div class="item-head"><strong>${esc(item.nome)}</strong><span class="tag">${esc(etiquetaStatus(item.status))}</span></div><p>${esc(item.resultado)}${item.data ? ` Data relevante: ${esc(dataRelatorio(item.data))}.` : ''}${item.pendencia ? ` ${esc(item.pendencia)}` : ' Sem pendência.'}</p></article>`).join('')
+    : '<p class="muted">Nenhum documento do checklist foi localizado.</p>';
+  const confirmacoesHtml = confirmacoes.length
+    ? `<ul>${confirmacoes.map((item: any) => `<li><b>${esc(item.dimensao)}:</b> ${esc(item.texto)}</li>`).join('')}</ul>`
+    : '<p class="muted">Nenhuma confirmação cruzada foi localizada.</p>';
+  const pendenciasHtml = pendenciasUnicas.length
+    ? `<ul>${pendenciasUnicas.map((item: any) => `<li><b>${esc(item.documento)}:</b> ${esc(item.acao)}</li>`).join('')}</ul>`
+    : '<p class="success">Nenhuma pendência identificada para a continuidade.</p>';
+  const conclusao = pendenciasUnicas.length
+    ? `Documentação ${status}. A continuidade depende das ações listadas em “Pendências para continuidade”.`
+    : `Documentação ${status}. Os documentos do checklist estão confirmados para a etapa atual.`;
+
+  return `<!doctype html><html lang="pt-BR"><head><meta charset="utf-8"/><title>Checklist documental — ${esc(nomeEmpresa)}</title><style>
+  @page { size: A4; margin: 28mm 20mm 22mm; } * { box-sizing: border-box; } body { margin: 0; font-family: Arial, sans-serif; color: #172033; font-size: 9.5pt; line-height: 1.42; } h1 { color: #123b78; font-size: 19pt; margin: 0 0 4px; } h2 { color: #123b78; font-size: 12pt; margin: 18px 0 8px; border-bottom: 1px solid #d9e2ef; padding-bottom: 4px; } p { margin: 5px 0; } .subtitle { color: #64748b; margin-bottom: 13px; } .identity, .conclusion, .cross, .pending { border: 1px solid #d9e2ef; border-radius: 8px; padding: 10px; margin: 8px 0; page-break-inside: avoid; } .identity { background: #f1f7ff; border-left: 4px solid #1b3a8c; } .identity strong { display: block; font-size: 12pt; } .meta { display: grid; grid-template-columns: 1.5fr 1fr 1fr; gap: 10px; margin-top: 8px; } .label { display: block; color: #64748b; font-size: 7.5pt; text-transform: uppercase; letter-spacing: .04em; } .value { display: block; margin-top: 2px; font-weight: 700; } .summary { display: grid; grid-template-columns: repeat(3, 1fr); gap: 7px; margin: 10px 0; } .summary div { border: 1px solid #d9e2ef; border-radius: 7px; padding: 8px; } .summary strong { display: block; margin-top: 3px; color: #123b78; } .status { border-radius: 999px; padding: 3px 8px; font-weight: 700; font-size: 8pt; } .status.ok { background: #d1fae5; color: #047857; } .status.warn { background: #fef3c7; color: #92400e; } .status.bad { background: #fee2e2; color: #991b1b; } .item { border: 1px solid #d9e2ef; border-left: 4px solid #f59e0b; border-radius: 7px; padding: 8px 10px; margin: 6px 0; page-break-inside: avoid; } .item.ok { border-left-color: #10b981; } .item.bad { border-left-color: #dc2626; } .item-head { display: flex; justify-content: space-between; gap: 10px; align-items: flex-start; } .item-head strong { color: #123b78; } .tag { white-space: nowrap; border-radius: 999px; background: #f1f5f9; padding: 3px 7px; font-size: 7.5pt; font-weight: 700; } .item p { margin-bottom: 0; } .cross { background: #f8fafc; } .pending { background: #fff7ed; border-color: #fed7aa; } ul { margin: 5px 0 2px; padding-left: 18px; } li { margin: 4px 0; } .conclusion { background: #eff6ff; border-color: #bfdbfe; } .success { background: #ecfdf5; color: #047857; border: 1px solid #a7f3d0; border-radius: 7px; padding: 8px; } .muted { color: #64748b; } .footer { margin-top: 16px; padding-top: 7px; border-top: 1px solid #e5eaf1; color: #64748b; font-size: 7.5pt; }
+  </style></head><body><h1>Checklist documental da empresa</h1><p class="subtitle">Resumo executivo para continuidade da assessoria, baseado nos documentos e resultados disponíveis na geração.</p><div class="identity"><strong>${esc(nomeEmpresa)}</strong><div class="meta"><div><span class="label">CNPJ</span><span class="value">${esc(empresa.cnpj)}</span></div><div><span class="label">Situação cadastral</span><span class="value">${esc(situacao)}</span></div><div><span class="label">Regime tributário</span><span class="value">${esc(relatorio.regime?.descricao)}</span></div></div></div><div class="summary"><div><span class="label">Situação do checklist</span><strong><span class="status ${classeStatus}">${esc(status)}</span></strong></div><div><span class="label">Documentos no checklist</span><strong>${checklist.length}</strong></div><div><span class="label">Pendências para continuidade</span><strong>${pendenciasUnicas.length}</strong></div></div><h2>Checklist documental</h2>${itensHtml}<h2>Confirmações cruzadas</h2><div class="cross">${confirmacoesHtml}</div><h2>Pendências para continuidade</h2><div class="pending">${pendenciasHtml}</div><h2>Conclusão objetiva</h2><div class="conclusion"><p><b>${esc(conclusao)}</b></p></div><p class="footer">Este documento mostra somente os resultados úteis para decisão e continuidade. A leitura detalhada e as evidências completas permanecem registradas internamente no sistema.</p></body></html>`;
+}
+
+function gerarHtmlRelatorioDocumentalTecnico(relatorio: any): string {
   const empresa = relatorio.empresa || {};
   const cards = [
     ['Status geral', relatorio.status_geral],
@@ -3527,7 +3561,7 @@ router.get('/empresa/:empresaId/relatorio/pdf', auth, async (req: Request, res: 
     const dossie = await montarDossieCreditoEmpresa(req.params.empresaId);
     if (!dossie) { res.status(404).json({ error: 'Empresa não encontrada' }); return; }
     const relatorio = await montarRelatorioDocumental(dossie);
-    const pdf = await generateBrandedPdfBuffer(gerarHtmlRelatorioDocumental(relatorio), { brand: 'destrava', topMargin: '38mm' });
+    const pdf = await generateBrandedPdfBuffer(gerarHtmlChecklistExecutivo(relatorio), { brand: 'destrava', topMargin: '30mm' });
     const nomeEmpresa = String(relatorio.empresa?.razao_social || relatorio.empresa?.nome_fantasia || 'empresa')
       .normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^a-zA-Z0-9]+/g, '-').replace(/^-|-$/g, '').toLowerCase() || 'empresa';
     res.setHeader('Content-Type', 'application/pdf');
