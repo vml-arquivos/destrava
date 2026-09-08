@@ -62,6 +62,15 @@ function resultadoCadastralApresentacao(value: unknown, empresa: AnyRecord): str
   return texto;
 }
 
+function consolidarResultadoFuncional(value: unknown): string {
+  const texto = String(value ?? '').trim();
+  const ocorrencias = Array.from(texto.matchAll(/enquadramento\s+tribut[aá]rio/gi));
+  if (ocorrencias.length > 1 && ocorrencias[1].index !== undefined) {
+    return texto.slice(0, ocorrencias[1].index).replace(/[\s—-]+$/, '').trim();
+  }
+  return texto;
+}
+
 function renderFields(fields: any[], empresa: AnyRecord): string {
   if (!fields.length) return '';
   return `<div class="fields">${fields.map((field) => {
@@ -97,7 +106,7 @@ function pendenciaSemPrefixo(value: unknown): string {
 function renderDocument(item: AnyRecord, empresa: AnyRecord): string {
   const status = item.status_validacao || item.status || 'Não informado';
   const classe = statusClass(status);
-  const resultado = identificadoresPessoaisOcultos(resultadoCadastralApresentacao(item.resultado || item.resumo_leitura || 'Resultado não localizado.', empresa), item.modulo);
+  const resultado = identificadoresPessoaisOcultos(consolidarResultadoFuncional(resultadoCadastralApresentacao(item.resultado || item.resumo_leitura || 'Resultado não localizado.', empresa)), item.modulo);
   const pendencia = pendenciaSemPrefixo(item.pendencia);
   return `<article class="doc ${classe}">
     <div class="doc-head"><strong>${esc(item.nome)}</strong><span class="pill ${classe}">${esc(status)}</span></div>
@@ -164,11 +173,11 @@ export function gerarHtmlRelatorioModular(relatorio: AnyRecord): string {
   .toc{border:1px solid #d9e2ef;border-radius:8px;padding:8px;margin:7px 0 10px;break-inside:avoid}
   .toc ol{margin:4px 0 0;padding-left:20px}.toc li{margin:2px 0}
   a{color:#123b78;text-decoration:none}
-  .module{break-inside:auto}
+  .module{break-inside:auto;page-break-inside:auto}
   .module-title{display:flex;gap:8px;align-items:flex-start;border-bottom:1px solid #d9e2ef;padding-bottom:6px;margin-bottom:7px;break-inside:avoid;break-after:avoid}
   .module-number{display:inline-flex;flex:0 0 22px;align-items:center;justify-content:center;width:22px;height:22px;border-radius:50%;background:#123b78;color:#fff;font-weight:700}
   .module-title p{color:#64748b;margin:2px 0}
-  .fields{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:5px;margin:6px 0;break-inside:avoid}
+  .fields{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:5px;margin:6px 0;break-inside:auto}
   .doc{border:1px solid #d9e2ef;border-left:4px solid #f59e0b;border-radius:7px;padding:7px 8px;margin:5px 0;break-inside:avoid}
   .doc.ok{border-left-color:#10b981}.doc.bad{border-left-color:#dc2626}
   .doc-head{display:flex;gap:8px;justify-content:space-between;align-items:flex-start}.doc-head strong{color:#123b78;line-height:1.2}
@@ -178,6 +187,7 @@ export function gerarHtmlRelatorioModular(relatorio: AnyRecord): string {
   .doc-meta span{display:block;min-width:0;overflow-wrap:break-word}.doc-meta b{display:block;color:#64748b;font-size:6.6pt;line-height:1.05;text-transform:uppercase;margin-bottom:1px}
   .alert{color:#9a3412;background:#fff7ed;border-radius:5px;padding:4px 6px;margin-top:4px}.pending{background:#fff7ed;border-color:#fed7aa;break-inside:avoid}.success{background:#ecfdf5;color:#047857;border:1px solid #a7f3d0;border-radius:7px;padding:7px;break-inside:avoid}.internal-note{background:#f8fafc;color:#475569;border-style:dashed;break-inside:avoid}.empty{color:#64748b;font-style:italic}
   .history{margin-top:7px}.history h3{margin-top:0}table{width:100%;border-collapse:collapse;margin:4px 0 7px;table-layout:fixed}thead{display:table-header-group}th{background:#123b78;color:#fff;text-align:left;padding:4px;font-size:6.8pt;line-height:1.1}td{border-bottom:1px solid #e5eaf1;vertical-align:top;padding:4px;font-size:7.1pt;line-height:1.18;overflow-wrap:break-word;word-break:normal}tr{break-inside:avoid;page-break-inside:avoid}th:nth-child(1),td:nth-child(1){width:11%}th:nth-child(2),td:nth-child(2){width:25%}th:nth-child(3),td:nth-child(3){width:42%}th:nth-child(4),td:nth-child(4){width:22%}.socios-table th:nth-child(1),.socios-table td:nth-child(1){width:55%}.socios-table th:nth-child(2),.socios-table td:nth-child(2){width:25%}.socios-table th:nth-child(3),.socios-table td:nth-child(3){width:20%}
+  #modulo-pendencias{padding-top:6px;padding-bottom:6px;margin-top:4px;break-before:avoid;page-break-before:auto}#modulo-pendencias .module-title{margin-bottom:4px;padding-bottom:4px}#modulo-pendencias .pending{break-inside:auto;padding:4px 6px}#modulo-pendencias h3{margin:4px 0 2px}
   ul{margin:3px 0;padding-left:16px}li{margin:2px 0}.status{display:inline-block;border-radius:999px;padding:3px 7px;font-weight:700}.status.ok{background:#d1fae5;color:#047857}.status.warn{background:#fef3c7;color:#92400e}.status.bad{background:#fee2e2;color:#991b1b}
   </style></head><body><h1>Checklist e Análise Documental</h1><p class="subtitle">Relatório institucional consolidado. Cada documento funcional aparece uma única vez; o arquivo original e as datas são referências complementares.</p><div class="cover"><strong>${esc(nomeEmpresa)}</strong><div class="meta"><div><span>CNPJ</span><strong>${esc(empresa.cnpj)}</strong></div><div><span>Tipo societário</span><strong>${esc(empresa.tipo_societario || empresa.natureza_juridica)}</strong></div><div><span>Situação cadastral</span><strong>${esc(empresa.situacao_cadastral)}</strong></div><div><span>Status documental</span><strong><span class="status ${statusClass(status)}">${esc(status)}</span></strong></div></div><p>Gerado em: ${formatDate(relatorio.gerado_em)}</p></div><nav class="toc"><b>Checklist geral</b><ol>${index}</ol></nav>${modules.map((module) => renderModule(module, empresa)).join('')}</body></html>`;
 }
