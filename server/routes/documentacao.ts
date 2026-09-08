@@ -463,10 +463,13 @@ export function montarResultadoDetalhadoRelatorio(documento: any, analiseEspecia
   // `construirSecoesAnaliseDocumento`, shared/documentalPresentation.ts, que
   // usa exatamente esta mesma condição de incompatibilidade).
   const identidadeIncompativel = dados?.documento_compativel === false || dados?.identidade_status === 'INCOMPATIVEL';
+  const documentoPessoaFisicaNoSlotEmpresarial = /pessoa f[ií]sica por CPF/i.test(String(dados?.classificacao_motivo || ''));
   const resultado = documento?.analisado === false || !temEvidenciaDeAnalise
     ? 'Aguardando leitura documental.'
     : identidadeIncompativel
-      ? `Documento inválido para este campo. Anexe o documento correto: ${documentLabel(documento?.tipo_documento)}.`
+      ? documentoPessoaFisicaNoSlotEmpresarial
+        ? 'Documento inválido para este campo: o arquivo identifica pessoa física por CPF, não o CNPJ da empresa. Anexe o relatório empresarial emitido para o CNPJ.'
+        : `Documento inválido para este campo. Anexe o documento correto: ${documentLabel(documento?.tipo_documento)}.`
       : documento?.consistente === true
         ? 'Leitura concluída; documento considerado consistente.'
         : 'Leitura concluída com observações ou necessidade de revisão.';
@@ -595,7 +598,19 @@ export async function enriquecerDocumentosAcervoComAnalise(blocos: any[]): Promi
       // "Reanálise necessária" pelo selo visual, em vez de cair em outro
       // estado por acidente de nome de campo.
       (resultadoAnalise as any).analysis_status = lifecycleStatus || 'REANALISE_NECESSARIA';
-      resultadoAnalise.conclusao = 'Laudo antigo ou superseded; reanálise necessária antes de considerar o documento válido.';
+      const identidadeIncompativelNoLaudo = resultadoAnalise?.dados_extraidos?.documento_compativel === false
+        || resultadoAnalise?.dados_extraidos?.identidade_status === 'INCOMPATIVEL';
+      // Laudo antigo e incompatibilidade objetiva podem coexistir. A releitura
+      // continua obrigatória, mas não pode apagar a causa documental (por
+      // exemplo, SCR de CPF no slot empresarial) e substituí-la por mensagem
+      // genérica de versão.
+      if (identidadeIncompativelNoLaudo && /pessoa f[ií]sica por CPF/i.test(String(resultadoAnalise?.dados_extraidos?.classificacao_motivo || ''))) {
+        resultadoAnalise.conclusao = 'Documento inválido para este campo: o arquivo identifica pessoa física por CPF, não o CNPJ da empresa. Anexe o relatório empresarial emitido para o CNPJ.';
+      } else if (!identidadeIncompativelNoLaudo) {
+        resultadoAnalise.conclusao = 'Laudo antigo ou superseded; reanálise necessária antes de considerar o documento válido.';
+      } else {
+        resultadoAnalise.conclusao = `Documento inválido para este campo. Anexe o documento correto: ${documentLabel(documento?.tipo_documento)}.`;
+      }
       resultadoAnalise.diagnostico = analiseEspecializada?.mensagem_status || 'A versão do motor mudou ou a assinatura do arquivo não confere. O laudo histórico foi preservado e não satisfaz o requisito atual.';
     } else if (!analisado) {
       // CORREÇÃO (31/08/2026, pedido explícito do usuário -- "quero saber o

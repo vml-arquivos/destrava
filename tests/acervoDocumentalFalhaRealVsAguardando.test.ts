@@ -142,6 +142,49 @@ describe('enriquecerDocumentosAcervoComAnalise -- atualização do motor não de
     expect(item.resultado_analise.analysis_status).toBe('REANALISE_NECESSARIA');
     expect(estadoVisualDocumento(item.resultado_analise, item)).toBe('reanalisar');
   });
+
+  it('laudo stale que já prova CPF no slot CNPJ preserva a causa objetiva', async () => {
+    const { enriquecerDocumentosAcervoComAnalise } = await import('../server/routes/documentacao');
+    mocks.poolQuery.mockImplementation(async (text: string) => {
+      const sql = String(text);
+      if (sql.includes('FROM information_schema.tables')) return { rows: [{ exists: 1 }] };
+      if (sql.includes('FROM information_schema.columns')) return { rows: [{ column_name: 'analysis_signature' }] };
+      if (sql.includes('SELECT e.resultado')) {
+        return { rows: [{
+          id: 'extracao-scr-stale-incompativel',
+          resultado: {
+            tipo_analise: 'documento_generico',
+            dados_extraidos: {
+              documento_compativel: false,
+              identidade_status: 'INCOMPATIVEL',
+              classificacao_motivo: 'O arquivo identifica uma pessoa física por CPF, não o CNPJ da empresa analisada.',
+              cpf: '00970968140',
+            },
+            status: 'revisao_humana',
+          },
+          status: 'revisao_humana',
+          prompt_versao: '0.0.0-antiga',
+          analysis_signature: 'assinatura-antiga',
+          classifier_version: 'antiga',
+          extractor_version: 'antiga',
+          rule_version: 'antiga',
+          schema_version: 'antiga',
+          analysis_status: 'STALE',
+          stale_at: new Date().toISOString(),
+          satisfaz_requisito: false,
+          hash_arquivo: 'hash-3',
+        }] };
+      }
+      return { rows: [] };
+    });
+
+    const documento = { id: 'scr-stale-1', tipo_documento: 'scr_cnpj', nome: 'SCR PJ.pdf', status: 'validado', validado: true, criado_em: new Date().toISOString() };
+    const resultado = await enriquecerDocumentosAcervoComAnalise(bloco(documento));
+    const item = resultado[0].documentos[0];
+
+    expect(item.resultado_analise.conclusao).toMatch(/pessoa f[ií]sica por CPF/i);
+    expect(item.resultado_analise.conclusao).not.toMatch(/Laudo antigo|superseded/i);
+  });
 });
 
 describe('enriquecerDocumentosAcervoComAnalise -- distingue "falhou de verdade" de "ainda não processado"', () => {

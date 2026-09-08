@@ -622,6 +622,29 @@ describe('AnaliseDocumentalService com dependências isoladas', () => {
     expect(promptCapturado).toMatch(/nunca uma prova do que o arquivo realmente/i);
     expect(promptCapturado).toMatch(/nunca presuma/i);
   });
+
+  it('reprova SCR de CPF no slot empresarial mesmo quando o tipo SCR é reconhecido', async () => {
+    const empresa = { id: 'empresa-1', cnpj: '18.706.347/0001-10' };
+    const db = criarDbMock(empresa, [], { tipo_documento: 'scr_cnpj' });
+    const service = new AnaliseDocumentalService(db, async () => ({
+      documento_compativel: true,
+      tipo_detectado: 'SCR',
+      cpf: '009.709.681-40',
+      nome: 'Pessoa Física',
+      data_consulta: '2026-08-18',
+      instituicoes: ['Banco teste'],
+      fonte_extracao: 'local_deterministica_especializada',
+      confianca: 0.98,
+    }));
+
+    const resultado = await service.analisarDocumentoCatalogado('empresa-1', 'doc-1', 'scr_cnpj');
+
+    expect(resultado.dados_extraidos.documento_compativel).toBe(false);
+    expect(resultado.dados_extraidos.identidade_status).toBe('INCOMPATIVEL');
+    expect(resultado.dados_extraidos.classificacao_motivo).toMatch(/pessoa f[ií]sica por CPF/i);
+    expect(resultado.alertas.some((alerta) => /pessoa f[ií]sica por CPF.*CNPJ da empresa/i.test(alerta.mensagem))).toBe(true);
+    expect(resultado.alertas.some((alerta) => /Anexe o relat[oó]rio empresarial emitido para o CNPJ/i.test(alerta.mensagem))).toBe(true);
+  });
 });
 
 // Bug relatado pelo usuário (zip 10): um extrato bancário real (SICOOB) anexado

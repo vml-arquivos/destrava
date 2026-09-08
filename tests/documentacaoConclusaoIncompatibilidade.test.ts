@@ -238,4 +238,31 @@ describe('montarResultadoDetalhadoRelatorio -- conclusão e selo visual de docum
     expect(secaoCampos).toBeTruthy();
     expect(secaoCampos!.campos?.some((c: any) => c.label === 'Regime' && c.valor === 'Lucro Presumido')).toBe(true);
   });
+
+  it('explica que um SCR de CPF não atende o campo empresarial de CNPJ', async () => {
+    const { montarResultadoDetalhadoRelatorio } = await import('../server/routes/documentacao');
+    const resultado = montarResultadoDetalhadoRelatorio({
+      id: 'scr-doc-1',
+      tipo_documento: 'scr_cnpj',
+      analisado: true,
+      consistente: false,
+    }, {
+      resultado_analise: {
+        status: 'revisao_humana',
+        consistente: false,
+        dados_extraidos: {
+          documento_compativel: false,
+          identidade_status: 'INCOMPATIVEL',
+          classificacao_motivo: 'O arquivo identifica uma pessoa física por CPF, não o CNPJ da empresa analisada.',
+          cpf: '00970968140',
+        },
+        alertas: [],
+      },
+    });
+
+    expect(resultado.conclusao).toMatch(/pessoa f[ií]sica por CPF/i);
+    expect(resultado.conclusao).toMatch(/CNPJ da empresa/i);
+    expect(resultado.conclusao).toMatch(/relat[oó]rio empresarial emitido para o CNPJ/i);
+    expect(resultado.conclusao).not.toContain('00970968140');
+  });
 });

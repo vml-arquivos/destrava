@@ -1724,11 +1724,17 @@ function normalizarDocumentoCatalogado(extraidos: any, tipoDocumento: string, em
   const cnpjEsperado = onlyDigits(empresa?.cnpj);
   const cnpjLido = onlyDigits(bruto.cnpj ?? comprovados.cnpj);
   const tipoCanonicoDocumento = canonicalizeDocumentType(tipoDocumento);
+  const cpfLido = onlyDigits(bruto.cpf ?? comprovados.cpf);
+  // Nos slots empresariais, a presença exclusiva de CPF é evidência objetiva
+  // de que o relatório pertence a pessoa física. Reconhecer o tipo SCR/CCS
+  // não basta: o identificador do titular também deve ter escopo empresarial.
+  const esperaIdentidadeCnpj = tipoCanonicoDocumento.endsWith('_cnpj');
+  const documentoPessoaFisicaNoSlotEmpresarial = esperaIdentidadeCnpj && !cnpjLido && Boolean(cpfLido);
   const identidadeCnpjConfere = cnpjEsperado && cnpjLido
     ? (tipoCanonicoDocumento === 'rating_bacen_cnpj' && cnpjLido.length === 8
       ? cnpjEsperado.startsWith(cnpjLido)
       : cnpjLido === cnpjEsperado)
-    : true;
+    : !documentoPessoaFisicaNoSlotEmpresarial;
   if (cnpjEsperado && cnpjLido && !identidadeCnpjConfere && !identidadeFlexivel) {
     classificacaoBase = {
       ...classificacaoBase,
@@ -1736,6 +1742,15 @@ function normalizarDocumentoCatalogado(extraidos: any, tipoDocumento: string, em
       satisfaz_requisito: false,
       cobertura_status: 'NAO_SATISFAZ',
       motivo: `CNPJ do documento (${bruto.cnpj ?? comprovados.cnpj}) não corresponde à empresa analisada.`,
+    };
+  }
+  if (documentoPessoaFisicaNoSlotEmpresarial && !identidadeFlexivel) {
+    classificacaoBase = {
+      ...classificacaoBase,
+      identidade_status: 'INCOMPATIVEL',
+      satisfaz_requisito: false,
+      cobertura_status: 'NAO_SATISFAZ',
+      motivo: 'O arquivo identifica uma pessoa física por CPF, não o CNPJ da empresa analisada.',
     };
   }
   const haEvidenciaEstruturada = evidencias.length > 0 || haDadosExtraidos || Object.values(comprovados).some((valor) => valor !== null && valor !== undefined && String(valor).trim() !== '');
@@ -1787,7 +1802,9 @@ function normalizarDocumentoCatalogado(extraidos: any, tipoDocumento: string, em
       const tipoDetectadoLabel = descreverTipoDetectadoResumido(classificacao.tipo_detectado)
         || descreverTipoDetectadoResumido(bruto.tipo_detectado)
         || null;
-      const mensagem = `Documento incorreto para "${documentLabel(tipoDocumento)}"${tipoDetectadoLabel ? ` -- conteúdo identificado: ${tipoDetectadoLabel}` : ''}. Não validado.${enquadramentoLido ? ` Enquadramento indicado no arquivo: ${enquadramentoLido}.` : ''}`;
+      const mensagem = documentoPessoaFisicaNoSlotEmpresarial
+        ? `Documento incorreto para "${documentLabel(tipoDocumento)}" -- o arquivo identifica pessoa física por CPF, não o CNPJ da empresa. Não validado. Anexe o relatório empresarial emitido para o CNPJ.`
+        : `Documento incorreto para "${documentLabel(tipoDocumento)}"${tipoDetectadoLabel ? ` -- conteúdo identificado: ${tipoDetectadoLabel}` : ''}. Não validado.${enquadramentoLido ? ` Enquadramento indicado no arquivo: ${enquadramentoLido}.` : ''}`;
       alertas.push({
         codigo: 'documento_catalogado_tipo_incompativel',
         mensagem,

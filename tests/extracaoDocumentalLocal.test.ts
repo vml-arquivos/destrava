@@ -771,6 +771,27 @@ describe('extração documental local determinística', () => {
     expect(resultado.dados.data_consulta).toBe('2026-07-23');
   });
 
+  it('lê o CCS empresarial com relações ativas cuja data de fim fica em branco', () => {
+    const resultado = analisarTextoDocumentoLocal('consulta_ccs', `
+      Relatório de Contas e Relacionamentos (CCS)
+      Nome: VIK CONSTRUCOES E REFORMAS LTDA
+      CPF/CNPJ: 18.706.347/0001-10
+      Banco ou Instituição                         Data de início                 Data de fim
+      00.416.968 - BANCO INTER                    23/08/2023
+      31.872.495 - BCO C6 S.A.                    26/01/2024
+      18.236.120 - NU PAGAMENTOS - IP             09/05/2024
+      30.680.829 - NU FINANCEIRA S.A. CFI         09/05/2024
+      90.400.888 - BCO SANTANDER (BRASIL) S.A.    23/04/2025
+      Relatório emitido por: 00970968140 em 26/01/2026 10:30
+    `, 'ccs_cnpj');
+
+    expect(resultado.dados.documento_compativel).toBe(true);
+    expect(resultado.dados.instituicoes).toHaveLength(5);
+    expect(resultado.dados.relacionamentos).toHaveLength(5);
+    expect(resultado.dados.relacionamentos.every((item: any) => item.fim === null)).toBe(true);
+    expect(resultado.dados.data_consulta).toBe('2026-01-26');
+  });
+
   it('extrai o ato societário completo do instrumento chancelado pela Junta', () => {
     const resultado = analisarTextoDocumentoLocal('contrato_social_alteracao', `
       ALTERAÇÃO CONTRATUAL CONSOLIDADA
