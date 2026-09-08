@@ -348,6 +348,9 @@ describe('relatório inicial documental', () => {
     expect(junta?.resultado).toMatch(/2025-06-06/);
     expect(contrato?.resultado).toMatch(/2025-06-06/);
     expect(contrato?.resultado).not.toMatch(/Revisar/);
+    const documentosPrincipais = relatorio.modulos_relatorio.find((module: any) => module.id === 'documentos_principais')?.itens || [];
+    expect(documentosPrincipais.find((item: any) => item.nome === 'Contrato Social e Alterações')?.datas).toContain('2025-06-06');
+    expect(documentosPrincipais.find((item: any) => /Junta/i.test(item.nome))?.datas).toContain('2025-06-06');
     expect(faturamento?.status).toBe('Confirmado');
     expect(faturamento?.resultado).toMatch(/2025\/08 a 2026\/07/);
     expect(faturamento?.resultado).toMatch(/12 meses/);
@@ -414,6 +417,25 @@ describe('relatório inicial documental', () => {
     expect(itens.filter((item: any) => item.nome === 'Cartão do CNPJ').length).toBe(1);
     expect(itens.find((item: any) => item.nome === 'Cartão do CNPJ')?.arquivos_originais).toEqual(expect.arrayContaining(['cnpj-atual.pdf', 'cnpj-anterior.pdf']));
     expect(relatorio.modulos_relatorio.some((module: any) => module.id === 'analise_inicial')).toBe(false);
+  });
+
+
+  it('classifica FGTS e certidões empresariais em consultas da empresa', () => {
+    const relatorio = aplicarRelatorioInicial({
+      gerado_em: '2026-09-08T00:00:00.000Z', status_geral: 'Pendente', empresa: dossie.empresa,
+      resumo: {}, documentos_analisados: [], documentos_pendentes_analise: [], documentos_faltantes: [], pendencias: [],
+    }, {
+      dossie: { ...dossie, mapa_documental_credito: { etapas: [] } },
+      documentos: [
+        { arquivo_id: 'doc-fgts', tipo_documento: 'fgts', nome: 'FGTS', analisado: false, status: 'Não enviado' },
+        { arquivo_id: 'doc-cnd', tipo_documento: 'cnd_federal', nome: 'CND federal', analisado: true, consistente: true, resultado_analise: { satisfaz_requisito: true } },
+      ],
+      evidencias: new Map(),
+    });
+    const consultasEmpresa = relatorio.modulos_relatorio.find((module: any) => module.id === 'consultas_empresa')?.itens || [];
+    const consultasSocios = relatorio.modulos_relatorio.find((module: any) => module.id === 'consultas_socios')?.itens || [];
+    expect(consultasEmpresa.map((item: any) => item.nome)).toEqual(expect.arrayContaining([expect.stringMatching(/FGTS/i), 'CND federal']));
+    expect(consultasSocios.map((item: any) => item.nome)).not.toEqual(expect.arrayContaining([expect.stringMatching(/FGTS/i), 'CND federal']));
   });
 
   it('não marca como divergência diferenças de formatação, identificador parcial ou campo espúrio', () => {
