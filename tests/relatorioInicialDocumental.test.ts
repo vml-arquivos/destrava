@@ -352,6 +352,8 @@ describe('relatório inicial documental', () => {
     expect(faturamento?.resultado).toMatch(/2025\/08 a 2026\/07/);
     expect(faturamento?.resultado).toMatch(/12 meses/);
     expect(cndt?.status).toBe('Informativo');
+    expect(relatorio.documentacao_societaria.continuidade_12_meses_comprovada).toBe(true);
+    expect(relatorio.documentacao_societaria.meses_comprovados).toBe(12);
   });
 
   it('não transforma ressalva de documento opcional em pendência da assessoria', () => {
@@ -395,5 +397,57 @@ describe('relatório inicial documental', () => {
     const ficha = relatorio.modulos_relatorio.find((module: any) => module.id === 'ficha_empresa');
     expect(ficha.incluida).toBe(false);
     expect(ficha.itens).toHaveLength(0);
+  });
+
+  it('não marca como divergência diferenças de formatação, identificador parcial ou campo espúrio', () => {
+    const relatorio = aplicarRelatorioInicial({
+      gerado_em: '2026-09-08T00:00:00.000Z', status_geral: 'Pendente', empresa: {
+        ...dossie.empresa,
+        cnpj: '52.008.360/0001-33',
+        razao_social: 'PALUMA BURGER LTDA',
+        nome_fantasia: 'Paluma Burger',
+        natureza_juridica: 'Sociedade Empresária Limitada',
+        endereco: 'Rua Lattes 349 QUADRA 10 L',
+        cnae_principal: '5611203',
+        capital_social: '65000',
+      },
+      resumo: {}, documentos_analisados: [], documentos_pendentes_analise: [], documentos_faltantes: [], pendencias: [],
+    }, {
+      dossie: { ...dossie, empresa: {
+        ...dossie.empresa,
+        cnpj: '52.008.360/0001-33',
+        razao_social: 'PALUMA BURGER LTDA',
+        nome_fantasia: 'Paluma Burger',
+        natureza_juridica: 'Sociedade Empresária Limitada',
+        endereco: 'Rua Lattes 349 QUADRA 10 L',
+        cnae_principal: '5611203',
+        capital_social: '65000',
+      }, mapa_documental_credito: { etapas: [] } },
+      documentos: [{
+        arquivo_id: 'doc-cnpj-real', tipo_documento: 'cartao_cnpj', nome: 'cnpj.pdf', analisado: true, consistente: true,
+        resultado_analise: { satisfaz_requisito: true, dados_extraidos: {
+          cnpj: '52.008.360/0001-33', razao_social: 'PALUM A BURGER LTDA', nome_fantasia: 'PALUM A BURGER ME',
+          situacao_cadastral: 'ATIVA', natureza_juridica: '206-2 - Socie dade Em pre s ária Limitada',
+          endereco: 'NÚMERO COMPLEMENTO', cnae_principal: '56.11-2-03 - Lanchone te s , cas as de chá',
+        } },
+      }, {
+        arquivo_id: 'doc-bureau-parcial', tipo_documento: 'consulta_serasa_cnpj', nome: 'bureau.pdf', analisado: true, consistente: true,
+        resultado_analise: { satisfaz_requisito: true, dados_extraidos: { cnpj: '52.008.360', situacao_cadastral: 'R$ 83.401,00', capital_social: '2100' } },
+      }, {
+        arquivo_id: 'doc-qsa', tipo_documento: 'qsa', nome: 'qsa.pdf', analisado: true, consistente: true,
+        resultado_analise: { satisfaz_requisito: true, dados_extraidos: { capital_social: '65.000,00' } },
+      }],
+      evidencias: new Map(),
+    });
+
+    const campos = new Map(relatorio.dados_cadastrais_confirmados.map((item: any) => [item.campo, item]));
+    expect(campos.get('CNPJ')?.status).not.toBe('divergente');
+    expect(campos.get('Razão social')?.status).not.toBe('divergente');
+    expect(campos.get('Nome fantasia')?.status).not.toBe('divergente');
+    expect(campos.get('Situação cadastral')?.status).not.toBe('divergente');
+    expect(campos.get('Natureza jurídica')?.status).not.toBe('divergente');
+    expect(campos.get('Endereço')?.status).not.toBe('divergente');
+    expect(campos.get('Atividade principal')?.status).not.toBe('divergente');
+    expect(campos.get('Capital social')?.status).not.toBe('divergente');
   });
 });
