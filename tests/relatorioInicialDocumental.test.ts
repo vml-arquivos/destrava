@@ -438,6 +438,28 @@ describe('relatório inicial documental', () => {
     expect(consultasSocios.map((item: any) => item.nome)).not.toEqual(expect.arrayContaining([expect.stringMatching(/FGTS/i), 'CND federal']));
   });
 
+
+  it('consolida aliases de DEFIS e não repete a mesma conclusão do QSA', () => {
+    const relatorio = aplicarRelatorioInicial({
+      gerado_em: '2026-09-08T00:00:00.000Z', status_geral: 'Pendente', empresa: dossie.empresa,
+      resumo: {}, documentos_analisados: [], documentos_pendentes_analise: [], documentos_faltantes: [], pendencias: [],
+    }, {
+      dossie: { ...dossie, mapa_documental_credito: { etapas: [] } },
+      documentos: [
+        { arquivo_id: 'doc-qsa-1', tipo_documento: 'qsa', nome: 'qsa-1.pdf', analisado: true, consistente: true, resultado_analise: { satisfaz_requisito: true, dados_extraidos: { socios_lidos: [{ nome: 'Sócio teste' }] } } },
+        { arquivo_id: 'doc-qsa-2', tipo_documento: 'qsa', nome: 'qsa-2.pdf', analisado: true, consistente: true, resultado_analise: { satisfaz_requisito: true } },
+        { arquivo_id: 'doc-defis-declaracao', tipo_documento: 'defis', nome: 'declaracao-defis.pdf', analisado: true, consistente: true, resultado_analise: { satisfaz_requisito: true } },
+        { arquivo_id: 'doc-defis-recibo', tipo_documento: 'recibo_defis', nome: 'recibo-defis.pdf', analisado: true, consistente: true, resultado_analise: { satisfaz_requisito: true } },
+      ],
+      evidencias: new Map(),
+    });
+    const itens = relatorio.modulos_relatorio.flatMap((module: any) => module.itens || []);
+    const qsa = itens.find((item: any) => item.nome === 'QSA');
+    expect((qsa?.resultado.match(/Quadro societário confirmado com o CNPJ/gi) || []).length).toBe(1);
+    expect(itens.filter((item: any) => item.nome === 'DEFIS / DASN-SIMEI')).toHaveLength(1);
+    expect(itens.find((item: any) => item.nome === 'DEFIS / DASN-SIMEI')?.arquivos_originais).toEqual(expect.arrayContaining(['declaracao-defis.pdf', 'recibo-defis.pdf']));
+  });
+
   it('não marca como divergência diferenças de formatação, identificador parcial ou campo espúrio', () => {
     const relatorio = aplicarRelatorioInicial({
       gerado_em: '2026-09-08T00:00:00.000Z', status_geral: 'Pendente', empresa: {
