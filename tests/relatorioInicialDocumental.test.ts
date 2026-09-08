@@ -165,8 +165,9 @@ describe('relatório inicial documental', () => {
         tipo_documento: 'atos_junta_comercial',
         nome: 'atos-legado.pdf',
         lido: true,
+        consistente: false,
         observacao: 'validado',
-        resultado_analise: { status: 'Pendente' },
+        resultado_analise: { status: 'Pendente', alertas: [{ codigo: 'junta_historico_arquivamentos', mensagem: 'Histórico da Junta Comercial registrado.' }] },
       }],
       evidencias: new Map(),
     });
