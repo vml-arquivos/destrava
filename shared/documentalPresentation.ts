@@ -847,6 +847,22 @@ function cartaoCnpjLegadoTemSomenteRevisaoInformativa(resultado: any, documento:
   return Boolean(cnpj) && situacao === "ativa" && ["concluido", "concluida", "revisao_humana"].includes(status);
 }
 
+function documentoLegadoExplicitamenteValidado(resultado: any, documento: any): boolean {
+  if (documentoMarcadoIncompativel(resultado, documento)) return false;
+  const dados = resultado?.dados_extraidos && typeof resultado.dados_extraidos === "object" ? resultado.dados_extraidos : {};
+  const status = statusVisualNormalizado(resultado?.status || dados?.status || documento?.status);
+  const observacao = statusVisualNormalizado(documento?.observacao || resultado?.observacao);
+  const motivosRevisao = Array.isArray(resultado?.motivos_revisao) ? resultado.motivos_revisao : [];
+  const possuiRevisaoExplicita = resultado?.revisao_humana_necessaria === true
+    || dados?.revisao_humana_necessaria === true
+    || documento?.exige_revisao_humana === true
+    || motivosRevisao.length > 0
+    || ["revisao_humana", "pendente_validacao", "aguardando_analise", "falhou", "recusado"].includes(status);
+  if (possuiRevisaoExplicita) return false;
+  return ["validado", "aprovado", "satisfeito", "dado_comprovado", "documento_compativel"].includes(status)
+    || observacao === "validado";
+}
+
 export function estadoVisualDocumento(resultado: any = {}, documento: any = {}): DocumentoEstadoVisual {
   const lifecycle = statusVisualNormalizado(resultado?.analysis_status || documento?.analysis_status);
   if (["stale", "superseded", "reanalise_necessaria", "reanalise", "reanalisar_necessario", "reanalisar_necessaria"].includes(lifecycle)) {
@@ -869,6 +885,14 @@ export function estadoVisualDocumento(resultado: any = {}, documento: any = {}):
 
   if (resultado?.satisfaz_requisito === false || dadosExtraidos?.satisfaz_requisito === false || classificacao?.satisfaz_requisito === false || resultado?.cobertura_status === "NAO_SATISFAZ" || dadosExtraidos?.cobertura_status === "NAO_SATISFAZ" || classificacao?.cobertura_status === "NAO_SATISFAZ") {
     return "revisao";
+  }
+
+  // Registros antigos podem ter `status=Validado`/`observacao=validado` e
+  // `consistente=false` técnico. Quando não há flag de revisão, motivo de
+  // revisão ou incompatibilidade explícita, o estado persistido validado é a
+  // evidência administrativa mais específica e deve vencer o legado técnico.
+  if (documentoLegadoExplicitamenteValidado(resultado, documento)) {
+    return "aprovado";
   }
 
   const status = statusVisualNormalizado(resultado?.status || dadosExtraidos?.status || documento?.status);
@@ -971,7 +995,7 @@ function statusLinhaDocumento(estado: DocumentoEstadoVisual, statusOverride?: un
 }
 
 function textoResultadoGenerico(value: unknown): boolean {
-  return /^(leitura conclu[ií]da(?:\s+(?:com|;)|[.;])|documento lido(?:\s|[.;])|an[aá]lise conclu[ií]da(?:\s|[.;])|sem pend[eê]ncia registrada|documento validado)[\s\S]*$/i.test(texto(value));
+  return /^(leitura conclu[ií]da(?:\s+(?:com|;)|[.;])|documento lido(?:\s|[.;])|an[aá]lise conclu[ií]da(?:\s|[.;])|sem pend[eê]ncia registrada|validado|documento validado)[\s\S]*$/i.test(texto(value));
 }
 
 /**
