@@ -1665,6 +1665,112 @@ function quantidadeRotulada(linhas: string[], aliases: string[]): number | null 
   return numero !== null && numero >= 0 ? numero : null;
 }
 
+type MotorCreditoExtraido = {
+  decisao?: string;
+  valor_sugerido?: number | string;
+  parcela_sugerida?: number | string;
+  taxa_juros?: string;
+  rating_bacen?: string;
+  parcelas?: number | string;
+  score?: number;
+  negociar_com_cliente?: string;
+};
+
+function normalizarRotulosMotorCredito(value: string): string {
+  return textoNormalizado(value)
+    // Alguns PDFs do mesmo fornecedor quebram palavras no meio dos rótulos.
+    // A normalização fica restrita aos rótulos do quadro operacional para não
+    // alterar o texto documental usado pelos demais leitores.
+    .replace(/de\s+cisao/g, 'decisao')
+    .replace(/d\s*e\s*c\s*i\s*s\s*[aãa]\s*o/g, 'decisao')
+    .replace(/va\s*lor\s+suge\s*rido/g, 'valor sugerido')
+    .replace(/v\s*a\s*l\s*o\s*r\s*s\s*u\s*g\s*e\s*r\s*i\s*d\s*o/g, 'valor sugerido')
+    .replace(/pa\s*rce\s*la\s+suge\s*rida/g, 'parcela sugerida')
+    .replace(/p\s*a\s*r\s*c\s*e\s*l\s*a\s+s\s*u\s*g\s*e\s*r\s*i\s*d\s*a/g, 'parcela sugerida')
+    .replace(/p\s*a\s*r\s*c\s*e\s*l\s*a\s*s\b/g, 'parcelas')
+    .replace(/ta\s*xa\s+juros/g, 'taxa juros')
+    .replace(/t\s*a\s*x\s*a\s+j\s*u\s*r\s*o\s*s/g, 'taxa juros')
+    .replace(/ra\s*ting\s+ba\s*ce\s*n/g, 'rating bacen')
+    .replace(/r\s*a\s*t\s*i\s*n\s*g\s+b\s*a\s*c\s*e\s*n/g, 'rating bacen')
+    .replace(/ne\s*gocia\s*r\s+com\s+clie\s*nte/g, 'negociar com cliente');
+}
+
+function trechoEntreRotulos(texto: string, inicio: string, fim: string): string {
+  const inicioIndex = texto.indexOf(inicio);
+  if (inicioIndex < 0) return '';
+  const conteudoInicio = inicioIndex + inicio.length;
+  const fimIndex = texto.indexOf(fim, conteudoInicio);
+  return texto.slice(conteudoInicio, fimIndex >= 0 ? fimIndex : texto.length).trim();
+}
+
+function primeiroValorMonetario(texto: string): number | null {
+  const valor = texto.match(/r\$\s*-?[\d.]+(?:,\d{1,2})?/i)?.[0] || null;
+  return numeroMonetario(valor);
+}
+
+function extrairMotorCredito(texto: string): MotorCreditoExtraido | null {
+  const normalizado = normalizarRotulosMotorCredito(texto);
+  const inicio = normalizado.indexOf('motor de credito');
+  if (inicio < 0) return null;
+
+  const ocorrencias: number[] = [];
+  let cursor = 0;
+  while (true) {
+    const indice = normalizado.indexOf('motor de credito', cursor);
+    if (indice < 0) break;
+    ocorrencias.push(indice);
+    cursor = indice + 1;
+  }
+  // Relatórios consolidados costumam repetir "Motor de crédito" no resumo
+  // inicial e depois no quadro operacional. Escolha o quadro que realmente
+  // contém os rótulos/valores do motor, nunca a menção resumida.
+  const inicioOperacional = ocorrencias
+    .map((indice) => ({
+      indice,
+      pontuacao: ['decisao', 'valor sugerido', 'taxa juros', 'rating bacen', 'negociar com cliente']
+        .filter((rotulo) => normalizado.indexOf(rotulo, indice + 'motor de credito'.length) >= 0).length,
+    }))
+    .sort((a, b) => b.pontuacao - a.pontuacao || b.indice - a.indice)[0]?.indice ?? inicio;
+  const restante = normalizado.slice(inicioOperacional);
+  const proximasSecoes = ['indicador comportamental', 'quadro societario', 'score pj', 'telefones', 'emails'];
+  const fim = proximasSecoes
+    .map((secao) => restante.indexOf(secao, 'motor de credito'.length))
+    .filter((indice) => indice >= 0)
+    .sort((a, b) => a - b)[0];
+  const bloco = restante.slice(0, fim ?? restante.length);
+  const motor: MotorCreditoExtraido = {};
+
+  const primeiraLinhaMotor = trechoEntreRotulos(bloco, 'valor sugerido', 'parcela sugerida');
+  const decisao = trechoEntreRotulos(bloco, 'decisao', 'parcela sugerida').match(/\b(aprovado|recusado)\b/i)?.[1];
+  if (decisao) motor.decisao = decisao[0].toUpperCase() + decisao.slice(1).toLowerCase();
+
+  const valorSugerido = primeiroValorMonetario(primeiraLinhaMotor);
+  if (valorSugerido !== null) motor.valor_sugerido = valorSugerido;
+
+  // No layout em colunas, "PARCELA SUGERIDA | TAXA JUROS" é seguido por
+  // "R$ parcela | percentual"; os dois rótulos ficam consecutivos e não há
+  // texto entre eles.
+  const parcelaSugerida = primeiroValorMonetario(trechoEntreRotulos(bloco, 'taxa juros', 'rating bacen'));
+  if (parcelaSugerida !== null) motor.parcela_sugerida = parcelaSugerida;
+
+  const taxa = trechoEntreRotulos(bloco, 'taxa juros', 'rating bacen').match(/\d+(?:[,.]\d+)?%\s*(?:a\s*\d+(?:[,.]\d+)?%\s*ao\s*mes)?/i)?.[0];
+  if (taxa) motor.taxa_juros = taxa.replace(/\s+/g, ' ').trim();
+
+  const rating = trechoEntreRotulos(bloco, 'rating bacen', 'score').match(/\b(?:aaa|aa|a|bbb|bb|b|c-?|d|e|g)\b/i)?.[0];
+  if (rating) motor.rating_bacen = rating.toUpperCase();
+
+  const parcelas = trechoEntreRotulos(bloco, 'parcelas', 'score').match(/\b\d+(?:\s+a\s+\d+)?\b/)?.[0];
+  if (parcelas) motor.parcelas = parcelas.includes(' a ') ? parcelas : Number(parcelas);
+
+  const score = bloco.slice(bloco.indexOf('score') + 'score'.length).match(/\b\d{1,4}\b/)?.[0];
+  if (score) motor.score = Number(score);
+
+  const negociar = bloco.slice(bloco.indexOf('negociar com cliente') + 'negociar com cliente'.length).match(/\b(sim|nao)\b/i)?.[1];
+  if (negociar) motor.negociar_com_cliente = negociar.toLowerCase() === 'sim' ? 'Sim' : 'Não';
+
+  return Object.keys(motor).length ? motor : null;
+}
+
 function parseConsultaDocumentalEspecializada(
   tipo: TipoConsultaDocumentalEspecializada,
   texto: string,
@@ -1685,6 +1791,7 @@ function parseConsultaDocumentalEspecializada(
 
   const relatorioCreditoConsolidado = /analise empresarial.{0,100}(?:financeira|scr)|scr\s*\+\s*laudo financeiro|score empresarial|rating bacen|motor de credito/i.test(norm)
     && /(?:score|rating|analise empresarial|laudo financeiro)/i.test(norm);
+  const motorCredito = extrairMotorCredito(texto);
   const marcadores: Record<TipoConsultaDocumentalEspecializada, RegExp> = {
     certidao_regularidade: /certidao.{0,100}(?:debitos|regularidade)|certificado de regularidade do fgts|\bcndt\b|banco nacional de devedores trabalhistas/i,
     situacao_fiscal: /relatorio de situacao fiscal|consulta pendencias.{0,50}situacao fiscal|diagnostico fiscal/i,
@@ -1701,6 +1808,7 @@ function parseConsultaDocumentalEspecializada(
 
   let compativel = marcadores[tipo].test(norm);
   if (tipo === 'consulta_bureau' && relatorioCreditoConsolidado) compativel = true;
+  if ((tipo === 'consulta_bureau' || tipo === 'consulta_scr') && motorCredito) compativel = true;
   // Guarda adicional PGFN: "certidão ... dívida ativa" continua sendo CND/CPEND.
   if (tipo === 'consulta_pgfn' && /certidao.{0,160}(?:tributos federais|divida ativa da uniao)/i.test(norm) && !/regularize|consulta.{0,80}inscricoes/i.test(norm)) {
     compativel = false;
@@ -1807,12 +1915,22 @@ function parseConsultaDocumentalEspecializada(
     );
     const situacaoCredito = texto.match(/\b(APROVADO(?:_[A-Z]+)?|ALTO_RISCO|BAIXO_RISCO|MEDIO_RISCO|M[ÉE]DIO_RISCO|RECUSADO)\b/i)?.[1]
       || null;
-    adicionais.score = score;
-    adicionais.rating = ratingComposto;
+    adicionais.score = motorCredito?.score ?? score;
+    adicionais.rating = motorCredito?.rating_bacen ?? (motorCredito ? null : ratingComposto);
+    adicionais.rating_bacen = motorCredito?.rating_bacen ?? (motorCredito ? null : ratingComposto);
+    if (motorCredito) adicionais.motor_credito = motorCredito;
     adicionais.data_consulta = base.dados.data_consulta || dataConsultaRelatorio;
     adicionais.resultado_consulta = relatorioCreditoConsolidado
-      ? `Relatório empresarial consolidado${ratingComposto ? ` — rating ${ratingComposto}` : ''}${situacaoCredito ? ` — ${situacaoCredito}` : ''}`
+      ? `Relatório empresarial consolidado${motorCredito?.rating_bacen || ratingComposto ? ` — rating ${motorCredito?.rating_bacen || ratingComposto}` : ''}${motorCredito?.decisao || situacaoCredito ? ` — ${motorCredito?.decisao || situacaoCredito}` : ''}`
       : base.dados.resultado_consulta || (/sem restricoes|nada consta/i.test(norm) ? 'Sem restrições identificadas' : null);
+  }
+
+  if (motorCredito && tipo === 'consulta_scr') {
+    adicionais.motor_credito = motorCredito;
+    adicionais.score = motorCredito.score ?? null;
+    adicionais.rating = motorCredito.rating_bacen ?? null;
+    adicionais.rating_bacen = motorCredito.rating_bacen ?? null;
+    adicionais.resultado_consulta = `Motor de Crédito${motorCredito.rating_bacen ? ` — rating ${motorCredito.rating_bacen}` : ''}${motorCredito.decisao ? ` — ${motorCredito.decisao}` : ''}`;
   }
 
   const adicionaisValidos = Object.fromEntries(
@@ -1833,6 +1951,13 @@ function parseConsultaDocumentalEspecializada(
     if (!Object.prototype.hasOwnProperty.call(adicionaisValidos, 'limites')) {
       delete dadosBase.limites;
       delete camposComprovados.limites;
+    }
+    if (motorCredito) {
+      // O parser genérico encontra "Faturamento" no mesmo relatório e pode
+      // promovê-lo indevidamente a situação. O Motor de Crédito é o quadro
+      // autoritativo para o resultado operacional desta consulta.
+      delete dadosBase.situacao;
+      delete camposComprovados.situacao;
     }
   }
   // Relatórios consolidados podem conter outras decisões (falência, rating,

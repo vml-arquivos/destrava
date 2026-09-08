@@ -79,6 +79,22 @@ describe('relatório documental modular', () => {
     expect(html).not.toContain('Rating/Score: DE');
   });
 
+  it('exibe o Rating BACEN real do Motor de Crédito no PDF institucional', () => {
+    const relatorio = relatorioFixture();
+    relatorio.modulos_relatorio[2].itens = [{
+      arquivo_id: 'motor-rating-file',
+      nome: 'SCR/Rating BACEN do CNPJ',
+      status_validacao: 'Confirmado',
+      arquivo_original: 'R-G-52008360000133.pdf',
+      data: '2026-08-25',
+      resultado: 'SCR/Rating BACEN do CNPJ — Rating BACEN: G — Score: 242 — Decisão: Recusado — Valor sugerido: R$ 0,00',
+    }];
+    const html = gerarHtmlRelatorioModular(relatorio);
+    expect(html).toContain('Rating BACEN: G');
+    expect(html).toContain('Decisão: Recusado');
+    expect(html).not.toContain('Rating BACEN: C');
+  });
+
   it('consolida conclusão repetida de enquadramento tributário no resultado do PDF', () => {
     const relatorio = relatorioFixture();
     relatorio.modulos_relatorio[1].itens = [{

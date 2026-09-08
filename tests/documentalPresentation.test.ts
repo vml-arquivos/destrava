@@ -39,6 +39,33 @@ describe("construirSecoesAnaliseDocumento — validação objetiva", () => {
     expect(linha).not.toContain("Rating/Score: DE");
   });
 
+  it("apresenta o rating operacional do Motor de Crédito, sem usar o rating do Score PJ", () => {
+    const secoes = construirSecoesAnaliseDocumento({
+      tipo_documento: "rating_bacen_cnpj",
+      status: "concluido",
+      satisfaz_requisito: true,
+      dados_extraidos: {
+        cnpj: "00.000.000/0001-00",
+        rating: "G",
+        rating_bacen: "G",
+        score: 242,
+        resultado_consulta: "Relatório empresarial consolidado — rating G — Recusado",
+        motor_credito: {
+          rating_bacen: "G",
+          score: 242,
+          decisao: "Recusado",
+          valor_sugerido: 0,
+        },
+      },
+    }, { tipo_documento: "rating_bacen_cnpj", analisado: true, consistente: true });
+
+    const serializado = JSON.stringify(secoes);
+    expect(serializado).toContain("Rating BACEN");
+    expect(serializado).toContain("G");
+    expect(serializado).toContain("Recusado");
+    expect(serializado).not.toContain("Rating/Score");
+  });
+
   it("Cartão CNPJ mostra só confirmação cadastral essencial, sem reproduzir o cartão", () => {
     const secoes = construirSecoesAnaliseDocumento({
       conclusao: "Leitura concluída; documento considerado consistente.",
