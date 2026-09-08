@@ -2,7 +2,7 @@ import { CLASSIFIER_VERSION, EXTRACTOR_VERSION, RULE_VERSION, SCHEMA_VERSION } f
 import type { DocumentProcessingEvidence } from './documentProcessingEvidence';
 import { linhaObjetivaDocumento, nomeFuncionalDocumento, resumoObjetivoDocumento } from '../../shared/documentalPresentation';
 
-export const RELATORIO_INICIAL_VERSION = '1.4.0';
+export const RELATORIO_INICIAL_VERSION = '1.4.1';
 
 type DocumentoRelatorio = Record<string, any>;
 export type ModoRelatorioDocumental = 'institucional' | 'interno';
@@ -673,13 +673,61 @@ function construirInventario(params: RelatorioInicialParams) {
   return [...inventarioEsperado, ...extras];
 }
 
-function candidatosDeDocumentos(documentos: DocumentoRelatorio[], aliases: string[]): Array<{ valor: string; fonte: string }> {
-  const encontrados: Array<{ valor: string; fonte: string }> = [];
+function tipoDocumentoCadastral(documento: DocumentoRelatorio): string {
+  return normalizar(documento.tipo_documento || documento.codigo || documento.nome);
+}
+
+function removerSufixoSocietario(value: string): string {
+  return value
+    .replace(/\b(sociedade empresaria limitada|sociedade empresaria|sociedade limitada|empresa individual|eireli|ltda|me|epp|sa|s\.a\.)\b/gi, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+function chaveCadastral(campo: string, valor: string): string {
+  const normalizado = normalizar(valor);
+  if (campo === 'CNPJ') return somenteDigitos(valor);
+  if (campo === 'Razão social' || campo === 'Nome fantasia') return removerSufixoSocietario(normalizado).replace(/\s+/g, '');
+  if (campo === 'Situação cadastral') return /\bativa\b|\bactive\b/i.test(normalizado) ? 'ativa' : normalizado;
+  if (campo === 'Natureza jurídica') {
+    if (/206\s*[-/]?\s*2|sociedade empresaria limitada|sociedade limitada/.test(normalizado)) return '206-2';
+    return normalizado.replace(/[^a-z0-9]/g, '');
+  }
+  if (campo === 'Endereço') {
+    if (/numero complemento|n[uú]mero complemento|logradouro/.test(normalizado)) return '';
+    return normalizado.replace(/[^a-z0-9]/g, '');
+  }
+  if (campo === 'Atividade principal') {
+    const digitos = somenteDigitos(valor);
+    return digitos.length >= 5 ? digitos : normalizado.replace(/[^a-z0-9]/g, '');
+  }
+  if (campo === 'Capital social') {
+    const numero = normalizado.replace(/r\$|\./g, '').replace(',', '.').replace(/[^0-9.]/g, '');
+    const valorNumerico = Number(numero);
+    return Number.isFinite(valorNumerico) ? String(valorNumerico) : numero;
+  }
+  return normalizado;
+}
+
+function candidatoCadastralAceitavel(campo: string, valor: string, documento?: DocumentoRelatorio): boolean {
+  const chave = chaveCadastral(campo, valor);
+  if (!chave) return false;
+  if (campo === 'CNPJ' && chave.length !== 14) return false;
+  if ((campo === 'Razão social' || campo === 'Nome fantasia') && /^(cnpj da matriz|cnae|numero complemento)$/.test(normalizar(valor))) return false;
+  if (campo === 'Situação cadastral' && !/ativa|inativa|baixada|suspensa|nula|ativa/.test(normalizar(valor))) return false;
+  if (campo === 'Natureza jurídica' && /^(cnae|natureza juridica)$/.test(normalizar(valor))) return false;
+  if (campo === 'Endereço' && /numero complemento|logradouro/.test(normalizar(valor))) return false;
+  if (campo === 'Capital social' && documento && !/qsa|cartao[ _]cnpj|cnpj[ _]cartao/.test(tipoDocumentoCadastral(documento))) return false;
+  return true;
+}
+
+function candidatosDeDocumentos(documentos: DocumentoRelatorio[], aliases: string[], campo = ''): Array<{ valor: string; fonte: string; documento?: DocumentoRelatorio }> {
+  const encontrados: Array<{ valor: string; fonte: string; documento?: DocumentoRelatorio }> = [];
   for (const documento of documentos) {
     const dados = dadosDocumento(documento);
     for (const alias of aliases) {
       const valor = valorLegivel(dados[alias]);
-      if (valor) encontrados.push({ valor, fonte: texto(documento.nome || documento.tipo_documento || 'Documento') });
+      if (valor && (!campo || candidatoCadastralAceitavel(campo, valor, documento))) encontrados.push({ valor, fonte: texto(documento.nome || documento.tipo_documento || 'Documento'), documento });
     }
   }
   return encontrados;
@@ -707,19 +755,25 @@ function consolidarDadosCadastrais(dossie: Record<string, any>, documentos: Docu
   ];
   return campos.map((campo) => {
     const valor = valorLegivel(campo.valor);
-    const candidatos = valor ? [{ valor, fonte: campo.fonte }] : [];
-    candidatos.push(...candidatosDeDocumentos(documentos, campo.aliases));
-    const distintos = Array.from(new Map(candidatos.map((item) => [normalizar(item.valor), item])).values());
-    const valores = Array.from(new Set(candidatos.map((item) => normalizar(item.valor))));
-    if (!distintos.length) return { campo: campo.campo, valor: null, status: 'não localizado', fontes: [], confianca: 'não confirmado', confirmado_por_multiplas_fontes: false };
+    const candidatos: Array<{ valor: string; fonte: string; documento?: DocumentoRelatorio }> = valor ? [{ valor, fonte: campo.fonte }] : [];
+    candidatos.push(...candidatosDeDocumentos(documentos, campo.aliases, campo.campo));
+    const candidatosAceitos = candidatos.filter((item) => candidatoCadastralAceitavel(campo.campo, item.valor, item.documento));
+    const distintos = Array.from(new Map(candidatosAceitos.map((item) => [chaveCadastral(campo.campo, item.valor), item])).values());
+    const valores = Array.from(new Set(candidatosAceitos.map((item) => chaveCadastral(campo.campo, item.valor))));
+    const cnpjCompleto = campo.campo === 'CNPJ' && valores.some((valor) => valor.length === 14);
+    const valoresFinais = campo.campo === 'CNPJ' && cnpjCompleto ? valores.filter((valor) => valor.length === 14) : valores;
+    const distintosFinais = campo.campo === 'CNPJ' && cnpjCompleto
+      ? distintos.filter((item) => chaveCadastral(campo.campo, item.valor).length === 14)
+      : distintos;
+    if (!distintosFinais.length) return { campo: campo.campo, valor: null, status: 'não localizado', fontes: [], confianca: 'não confirmado', confirmado_por_multiplas_fontes: false };
     return {
       campo: campo.campo,
-      valor: distintos[0].valor,
-      valores_encontrados: distintos.map((item) => item.valor),
-      status: valores.length > 1 ? 'divergente' : valores.length === 1 && candidatos.length > 1 ? 'corroborado' : 'confirmado',
-      fontes: distintos.map((item) => item.fonte),
-      confianca: valores.length > 1 ? 'baixa' : candidatos.length > 1 ? 'alta' : 'média',
-      confirmado_por_multiplas_fontes: candidatos.length > 1 && valores.length === 1,
+      valor: distintosFinais[0].valor,
+      valores_encontrados: distintosFinais.map((item) => item.valor),
+      status: valoresFinais.length > 1 ? 'divergente' : valoresFinais.length === 1 && candidatosAceitos.length > 1 ? 'corroborado' : 'confirmado',
+      fontes: distintosFinais.map((item) => item.fonte),
+      confianca: valoresFinais.length > 1 ? 'baixa' : candidatosAceitos.length > 1 ? 'alta' : 'média',
+      confirmado_por_multiplas_fontes: candidatosAceitos.length > 1 && valoresFinais.length === 1,
     };
   });
 }
@@ -954,6 +1008,11 @@ export function aplicarRelatorioInicial(base: Record<string, any>, params: Relat
     checklist_executivo: checklistExecutivo,
     modo_relatorio: modo,
     modulos_relatorio: modulosRelatorio,
+    documentacao_societaria: {
+      ...objeto(base.documentacao_societaria),
+      continuidade_12_meses_comprovada: historicoSocietario.continuidade_12_meses,
+      meses_comprovados: historicoSocietario.meses_comprovados,
+    },
     dados_cadastrais_confirmados: dadosCadastrais,
     cruzamentos_documentais: cruzamentos,
     historico_societario: historicoSocietario,
