@@ -371,7 +371,7 @@ describe('relatório inicial documental', () => {
     expect(relatorio.pendencias_detalhadas.some((pending: any) => pending.documentos?.includes('residencia.pdf'))).toBe(false);
   });
 
-  it('organiza os sete módulos e mantém assessoria fora do institucional', () => {
+  it('organiza os seis grupos e mantém assessoria fora do institucional', () => {
     const relatorio = aplicarRelatorioInicial({
       gerado_em: '2026-09-08T00:00:00.000Z', status_geral: 'Pendente', empresa: dossie.empresa,
       resumo: {}, documentos_analisados: [], documentos_pendentes_analise: [], documentos_faltantes: [], pendencias: [],
@@ -390,13 +390,30 @@ describe('relatório inicial documental', () => {
     });
 
     expect(relatorio.modulos_relatorio.map((module: any) => module.id)).toEqual([
-      'identificacao', 'analise_inicial', 'societarios', 'consultas', 'socios', 'ficha_empresa', 'resumo',
+      'identidade_empresa', 'documentos_principais', 'consultas_empresa', 'documentacao_socios', 'consultas_socios', 'pendencias',
     ]);
-    expect(relatorio.modulos_relatorio.find((module: any) => module.id === 'consultas')?.submodulos.map((module: any) => module.id)).toEqual(['credito', 'fiscal_cadastral']);
-    expect(relatorio.modulos_relatorio.find((module: any) => module.id === 'socios')?.socios).toHaveLength(1);
-    const ficha = relatorio.modulos_relatorio.find((module: any) => module.id === 'ficha_empresa');
-    expect(ficha.incluida).toBe(false);
-    expect(ficha.itens).toHaveLength(0);
+    expect(relatorio.modulos_relatorio.find((module: any) => module.id === 'consultas_empresa')?.itens).toHaveLength(1);
+    expect(relatorio.modulos_relatorio.find((module: any) => module.id === 'documentacao_socios')?.socios).toHaveLength(1);
+    expect(relatorio.modulos_relatorio.find((module: any) => module.id === 'pendencias')?.itens).toHaveLength(0);
+    expect(relatorio.modulos_relatorio.some((module: any) => module.id === 'analise_inicial')).toBe(false);
+  });
+
+  it('consolida múltiplas versões do mesmo documento funcional em um único item principal', () => {
+    const relatorio = aplicarRelatorioInicial({
+      gerado_em: '2026-09-08T00:00:00.000Z', status_geral: 'Pendente', empresa: dossie.empresa,
+      resumo: {}, documentos_analisados: [], documentos_pendentes_analise: [], documentos_faltantes: [], pendencias: [],
+    }, {
+      dossie: { ...dossie, mapa_documental_credito: { etapas: [] } },
+      documentos: [
+        { arquivo_id: 'doc-cnpj-atual', tipo_documento: 'cartao_cnpj', nome: 'cnpj-atual.pdf', analisado: true, consistente: true, resultado_analise: { satisfaz_requisito: true, dados_extraidos: { cnpj: dossie.empresa.cnpj, data_emissao: '2026-08-01' } } },
+        { arquivo_id: 'doc-cnpj-anterior', tipo_documento: 'cartao_cnpj', nome: 'cnpj-anterior.pdf', analisado: true, consistente: true, resultado_analise: { satisfaz_requisito: true, dados_extraidos: { cnpj: dossie.empresa.cnpj, data_emissao: '2025-08-01' } } },
+      ],
+      evidencias: new Map(),
+    });
+    const itens = relatorio.modulos_relatorio.flatMap((module: any) => module.itens || []);
+    expect(itens.filter((item: any) => item.nome === 'Cartão do CNPJ').length).toBe(1);
+    expect(itens.find((item: any) => item.nome === 'Cartão do CNPJ')?.arquivos_originais).toEqual(expect.arrayContaining(['cnpj-atual.pdf', 'cnpj-anterior.pdf']));
+    expect(relatorio.modulos_relatorio.some((module: any) => module.id === 'analise_inicial')).toBe(false);
   });
 
   it('não marca como divergência diferenças de formatação, identificador parcial ou campo espúrio', () => {
