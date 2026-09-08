@@ -1,3 +1,5 @@
+import { documentLabel } from "./documentTypes";
+
 export type DocumentoAnaliseCampo = {
   label: string;
   valor: string;
@@ -903,6 +905,115 @@ export function rotuloEstadoDocumento(estado: DocumentoEstadoVisual): string {
     case "aguardando": return "Aguardando análise";
     case "revisao": return "Revisão necessária";
   }
+}
+
+function nomeArquivoTecnico(value: unknown): boolean {
+  return /\.(pdf|png|jpe?g|webp|docx?|xlsx?|csv|zip)$/i.test(texto(value));
+}
+
+function normalizarTipoFuncional(value: unknown): string {
+  return normalizar(value).replace(/[ -]+/g, "_");
+}
+
+/**
+ * Retorna o nome que deve aparecer como título do documento no relatório.
+ * O nome esperado do mapa tem precedência; quando ele não existe, usa o
+ * catálogo oficial e só recorre ao nome do arquivo se não houver tipo
+ * conhecido. Assim, o relatório não fica preso ao nome do upload.
+ */
+export function nomeFuncionalDocumento(documento: any = {}, nomeEsperado?: unknown): string {
+  const esperado = texto(nomeEsperado || documento?.nome_funcional || documento?.documento_esperado);
+  if (esperado && !nomeArquivoTecnico(esperado)) return esperado;
+
+  const tipo = texto(documento?.tipo_documento || documento?.tipo_identificado || documento?.resultado_analise?.tipo_documento);
+  const tipoNormalizado = normalizarTipoFuncional(tipo);
+  const aliases: Record<string, string> = {
+    relatorio_credito_consolidado: "Consulta de rating em bureau privado",
+    consulta_rating: "Consulta de rating em bureau privado",
+    rating: "Consulta de rating",
+    atos_junta: "Atos da Junta Comercial",
+    cnpj: "Cartão CNPJ",
+    contrato_geral: "Contrato geral",
+  };
+  if (aliases[tipoNormalizado]) return aliases[tipoNormalizado];
+
+  const rotulo = documentLabel(tipo);
+  if (rotulo && rotulo !== tipo) return rotulo;
+  const nome = texto(documento?.nome || documento?.nome_original);
+  if (nome && !nomeArquivoTecnico(nome)) return nome;
+  return rotulo || tipo || "Documento";
+}
+
+function statusLinhaDocumento(estado: DocumentoEstadoVisual, statusOverride?: unknown): string {
+  const status = normalizar(statusOverride);
+  if (status.includes("incompat")) return "Documento incompatível";
+  if (status.includes("revis")) return "Revisão necessária";
+  if (status.includes("ressalva")) return "Validado com ressalva";
+  if (status.includes("aprov") || status.includes("valid") || status.includes("satisfeito")) return "Validado";
+  if (status.includes("nao enviado") || status.includes("não enviado")) return "Não anexado";
+  if (status.includes("aguard") || status.includes("nao lido") || status.includes("não lido")) return "Não analisado";
+  if (status.includes("informativo")) return "Informativo";
+  if (estado === "aprovado") return "Validado";
+  if (estado === "incompativel") return "Documento incompatível";
+  if (estado === "reanalisar") return "Reanálise necessária";
+  if (estado === "aguardando") return "Não analisado";
+  return "Revisão necessária";
+}
+
+function textoResultadoGenerico(value: unknown): boolean {
+  return /^(leitura conclu[ií]da|documento lido|an[aá]lise conclu[ií]da|sem pend[eê]ncia registrada|documento validado)$/i.test(texto(value));
+}
+
+/**
+ * Monta a parte informativa da linha documental sem repetir o título. A
+ * função usa as mesmas seções objetivas exibidas no acervo, portanto não
+ * cria uma segunda interpretação dos laudos nem promove ausência a sucesso.
+ */
+export function resumoObjetivoDocumento(resultado: any = {}, documento: any = {}, statusOverride?: unknown): string {
+  const estado = estadoVisualDocumento(resultado, documento);
+  const secoes = construirSecoesAnaliseDocumento(resultado, documento);
+  const campos = secoes.flatMap((secao) => secao.campos || [])
+    .filter((campo) => !/^(valida[cç][aã]o|status)$/i.test(texto(campo.label)) && !textoResultadoGenerico(campo.valor));
+  const partes = campos.map((campo) => `${campo.label}: ${campo.valor}`);
+
+  const detalhes = secoes
+    .filter((secao) => /alterad|resultado|diagn[oó]stico/i.test(secao.id || ""))
+    .map((secao) => texto(secao.texto))
+    .filter((valor) => valor && !textoResultadoGenerico(valor) && !partes.includes(valor));
+  partes.push(...detalhes.slice(0, 2));
+
+  const dados = dadosValidacao(resultado);
+  const tipo = normalizarTipoFuncional(resultado?.tipo_documento || dados?.tipo_documento || documento?.tipo_documento);
+  const labelsPresentes = new Set(campos.map((campo) => normalizar(campo.label)));
+  const datas: Array<[string, string[]]> = tipo.includes("scr") || tipo.includes("rating") || tipo.includes("serasa") || tipo.includes("ccf") || tipo.includes("ccs") || tipo.includes("cenprot")
+    ? [["Data da consulta", ["data_consulta", "data_emissao"]]]
+    : tipo.includes("contrato") || tipo.includes("alteracao") || tipo.includes("junta")
+      ? [["Data do ato", ["data_registro", "data_ato"]]]
+      : [];
+  for (const [label, chaves] of datas) {
+    if (labelsPresentes.has(normalizar(label))) continue;
+    const valor = primeiroValor(resultado, chaves, []);
+    partes.push(`${label}: ${valor ? valorCampoGenerico(valor) : "não localizada"}`);
+  }
+
+  const tipoEsperado = resultado?.tipo_esperado || dados?.tipo_esperado || documento?.tipo_esperado;
+  const tipoIdentificado = resultado?.tipo_detectado || dados?.tipo_detectado || documento?.tipo_identificado;
+  const incompatibilidade = estado === "incompativel" || resultado?.documento_compativel === false || dados?.documento_compativel === false;
+  if (incompatibilidade && tipoEsperado && tipoIdentificado && normalizarTipoFuncional(tipoEsperado) !== normalizarTipoFuncional(tipoIdentificado)) {
+    partes.unshift(`Documento esperado: ${nomeFuncionalDocumento({ tipo_documento: tipoEsperado })}`, `Documento identificado: ${nomeFuncionalDocumento({ tipo_documento: tipoIdentificado })}`);
+  }
+
+  const resultadoPrincipal = primeiroValor(resultado, ["resultado_consulta", "rating", "score", "situacao", "situacao_certidao", "cobertura_status"], []);
+  if (!partes.length && resultadoPrincipal && !textoResultadoGenerico(resultadoPrincipal)) partes.push(`${resultadoPrincipal}`);
+  if (!partes.length) partes.push(incompatibilidade ? "Documento incompatível com o campo esperado" : "Resultado principal não localizado no laudo");
+
+  const status = statusLinhaDocumento(estado, statusOverride);
+  return `${partes.join(" — ")} — Status: ${status}.`;
+}
+
+export function linhaObjetivaDocumento(resultado: any = {}, documento: any = {}, nomeEsperado?: unknown, statusOverride?: unknown): string {
+  const nome = nomeFuncionalDocumento(documento, nomeEsperado);
+  return `${nome} — ${resumoObjetivoDocumento(resultado, documento, statusOverride)}`;
 }
 
 export type BucketRegimeFiscal = "simples" | "ecf";

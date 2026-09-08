@@ -1,7 +1,24 @@
 import { describe, expect, it } from "vitest";
-import { construirSecoesAnaliseDocumento, documentoSocietarioDispensadoPorMei, estadoVisualDocumento } from "@shared/documentalPresentation";
+import { construirSecoesAnaliseDocumento, documentoSocietarioDispensadoPorMei, estadoVisualDocumento, linhaObjetivaDocumento, nomeFuncionalDocumento } from "@shared/documentalPresentation";
 
 describe("construirSecoesAnaliseDocumento — validação objetiva", () => {
+  it("usa nome funcional e mantém o arquivo original apenas como referência", () => {
+    expect(nomeFuncionalDocumento({ tipo_documento: "consulta_serasa_cnpj", nome: "R-G-52008360000133.pdf" })).toBe("Consulta Serasa do CNPJ");
+    expect(linhaObjetivaDocumento({
+      tipo_documento: "consulta_serasa_cnpj",
+      status: "concluido",
+      satisfaz_requisito: true,
+      dados_extraidos: {
+        cnpj: "12.345.678/0001-90",
+        resultado_consulta: "Sem restrições identificadas na fonte consultada",
+        rating: "A",
+        score: 985,
+        data_consulta: "2026-08-20",
+      },
+    }, { tipo_documento: "consulta_serasa_cnpj", analisado: true, consistente: true }, "Consulta de Rating")).toContain("Consulta de Rating — CNPJ: 12.345.678/0001-90");
+    expect(linhaObjetivaDocumento({ tipo_documento: "consulta_serasa_cnpj", dados_extraidos: { data_consulta: "2026-08-20", rating: "A" }, status: "revisao_humana" }, { tipo_documento: "consulta_serasa_cnpj", analisado: true }, "Consulta de Rating", "Revisão necessária")).toContain("Data da consulta: 2026-08-20");
+  });
+
   it("Cartão CNPJ mostra só confirmação cadastral essencial, sem reproduzir o cartão", () => {
     const secoes = construirSecoesAnaliseDocumento({
       conclusao: "Leitura concluída; documento considerado consistente.",
