@@ -2,14 +2,16 @@ import { CLASSIFIER_VERSION, EXTRACTOR_VERSION, RULE_VERSION, SCHEMA_VERSION } f
 import type { DocumentProcessingEvidence } from './documentProcessingEvidence';
 import { linhaObjetivaDocumento, nomeFuncionalDocumento, resumoObjetivoDocumento } from '../../shared/documentalPresentation';
 
-export const RELATORIO_INICIAL_VERSION = '1.3.0';
+export const RELATORIO_INICIAL_VERSION = '1.4.0';
 
 type DocumentoRelatorio = Record<string, any>;
+export type ModoRelatorioDocumental = 'institucional' | 'interno';
 
 type RelatorioInicialParams = {
   dossie: Record<string, any>;
   documentos: DocumentoRelatorio[];
   evidencias: Map<string, DocumentProcessingEvidence>;
+  modo?: ModoRelatorioDocumental;
 };
 
 function texto(value: unknown): string {
@@ -57,6 +59,44 @@ function tipoDocumentoNormalizado(documento: DocumentoRelatorio): string {
   return normalizar(documento.tipo_documento || documento.codigo || documento.documento || documento.nome);
 }
 
+function textoCampos(documento: DocumentoRelatorio): string {
+  return normalizar([
+    documento.tipo_documento,
+    documento.codigo,
+    documento.documento,
+    documento.nome,
+    documento.bloco,
+    documento.bloco_nome,
+    documento.etapa,
+  ].filter(Boolean).join(' '));
+}
+
+export function documentoEhInternoAssessoria(documento: DocumentoRelatorio): boolean {
+  return /contrato[ _](assessoria|geral|prestacao)|contratos[ _]gerados|acompanhamento[ _]bancario|simulacao|relatorio[ _]interno|documento[ _]interno|assessoria/.test(textoCampos(documento));
+}
+
+function documentoEhSocio(documento: DocumentoRelatorio): boolean {
+  return Boolean(documento.socio_id)
+    || /socio|administrador|cpf|rg|identificacao[ _](pessoal|socio)|comprovante[ _]residencia/.test(textoCampos(documento));
+}
+
+function documentoEhInicial(documento: DocumentoRelatorio): boolean {
+  const tipo = tipoDocumentoNormalizado(documento);
+  return /cartao[ _]cnpj|cnpj[ _]cartao|(^|\s)qsa(\s|$)|quadro societario|enquadramento[ _]tributario|simples nacional|ccmei|situacao[ _]cadastral/.test(tipo);
+}
+
+function documentoEhSocietario(documento: DocumentoRelatorio): boolean {
+  return /atos?[ _](da[ _])?junta|junta[ _]comercial|contrato[ _](social|consolid)|alteracao[ _]contratual|requerimento[ _]empresario|estatuto|ata|procuracao|representacao/.test(textoCampos(documento));
+}
+
+function documentoEhConsultaCredito(documento: DocumentoRelatorio): boolean {
+  return /scr|registrato|ccs|ccf|cenprot|serasa|rating|bureau|protesto|inadimpl|restric|score|credito/.test(textoCampos(documento));
+}
+
+function documentoEhConsultaFiscal(documento: DocumentoRelatorio): boolean {
+  return /cnd|cpend|divida ativa|divida_ativa|fgts|cndt|certidao|pgdas|defis|darf|dctf|ecf|simples|enquadramento|cadin|ecac|situacao cadastral|cnpj/.test(textoCampos(documento));
+}
+
 function periodoFaturamento(dados: Record<string, any>): { inicio: string | null; fim: string | null; competencias: number | null; texto: string | null } {
   const periodo = dados.periodo_analisado;
   const valores = Array.isArray(periodo)
@@ -89,7 +129,8 @@ function periodoFaturamento(dados: Record<string, any>): { inicio: string | null
 
 function documentoForaDoChecklistExecutivo(item: any): boolean {
   const tipo = tipoDocumentoNormalizado(item);
-  return /contrato[ _]assessoria|contrato[ _]geral|contrato[ _]prestacao|contratos[ _]gerados|foto[ _]fachada|foto[ _]empresa|foto[ _]interna|\boutros?\b/.test(tipo);
+  return documentoEhInternoAssessoria(item)
+    || /foto[ _]fachada|foto[ _]empresa|foto[ _]interna|\boutros?\b/.test(tipo);
 }
 
 function nomeChecklistExecutivo(item: any): string {
@@ -220,6 +261,192 @@ function construirChecklistExecutivo(inventario: any[], cruzamentos: any[], hist
       .map((item) => ({ documento: item.dimensao, acao: `Pendência: ${item.descricao}` })),
   ];
   return { itens, confirmacoes, pendencias, eventos };
+}
+
+function valorCampoDocumento(dados: Record<string, any>, resultado: Record<string, any>, aliases: string[]): string | null {
+  for (const alias of aliases) {
+    const valor = primeiro(dados[alias], resultado[alias]);
+    const legivel = valorLegivel(valor);
+    if (legivel) return legivel;
+  }
+  return null;
+}
+
+function itemModuloRelatorio(item: any, modulo: string): Record<string, any> {
+  const resultado = resultadoDocumento(item);
+  const dados = dadosDocumento(item);
+  const evidencia = objeto(item.evidencia);
+  return {
+    arquivo_id: item.arquivo_id || null,
+    nome: item.documento || item.nome || 'Documento não identificado',
+    tipo_documental: item.codigo || item.tipo_documento || null,
+    modulo,
+    submodulo: modulo === 'consultas'
+      ? documentoEhConsultaCredito(item) ? 'Consultas de crédito' : 'Consultas fiscais e cadastrais'
+      : null,
+    etapa: item.etapa || item.bloco || 'Não informada',
+    status_leitura: item.lido ? 'Concluída' : item.recebido ? 'Não concluída' : 'Não anexado',
+    status_validacao: item.status || 'Não informado',
+    categoria: primeiro(dados.categoria, dados.categoria_documental, item.categoria) || null,
+    subtipo: primeiro(dados.subtipo, dados.subtipo_documental, item.subtipo) || null,
+    titulo: primeiro(dados.titulo, dados.titulo_documental, item.titulo, item.documento) || null,
+    numero_protocolo: primeiro(dados.numero_protocolo, dados.numero_arquivamento, dados.protocolo, item.numero_protocolo) || null,
+    orgao_emissor: primeiro(dados.orgao_emissor, dados.orgao, item.orgao_emissor) || null,
+    data_documento: primeiro(item.data, dados.data_documento, dados.data_ato, dados.data_registro, dados.competencia) || null,
+    data_criacao: primeiro(dados.data_criacao, dados.criado_em, item.criado_em) || null,
+    data_assinatura: primeiro(dados.data_assinatura, dados.assinado_em) || null,
+    data_registro: primeiro(dados.data_registro, dados.registrado_em) || null,
+    data_emissao: primeiro(dados.data_emissao, resultado.data_emissao) || null,
+    data_expedicao: primeiro(dados.data_expedicao, resultado.data_expedicao) || null,
+    data_anexacao: primeiro(item.criado_em, item.anexado_em) || null,
+    data_leitura: primeiro(resultado.data_analise, resultado.analisado_em, item.analisado_em) || null,
+    data_verificacao: primeiro(resultado.data_verificacao, item.verificado_em) || null,
+    validade: primeiro(dados.data_validade, dados.validade, resultado.data_validade) || null,
+    vigencia_inicio: primeiro(dados.vigencia_inicio, dados.valid_from, dados.inicio_vigencia) || null,
+    vigencia_fim: primeiro(dados.vigencia_fim, dados.expires_at, dados.fim_vigencia) || null,
+    usuario_consulta: primeiro(dados.usuario_consulta, dados.consultado_por, item.usuario_consulta) || null,
+    proxima_atualizacao: primeiro(dados.proxima_atualizacao, dados.proxima_consulta, dados.proxima_revisao) || null,
+    origem: primeiro(item.origem, evidencia.fonte_leitura, resultado.fonte_extracao) || 'Acervo documental',
+    arquivo_original: item.arquivo || item.nome_original || item.nome || null,
+    paginas: evidencia.paginas_documento || evidencia.paginas_processadas || null,
+    resumo_leitura: item.linha_objetiva || item.resultado_objetivo || item.resultado || resultado.conclusao || null,
+    dados_extraidos: Object.fromEntries(Object.entries({ ...dados, ...resultado.campos_extraidos }).filter(([chave, valor]) => !chave.startsWith('__') && valor !== null && valor !== undefined && valor !== '')),
+    inconsistencias: [...lista(dados.divergencias), ...lista(resultado.divergencias), ...lista(resultado.alertas)].map((valor) => texto(valor?.mensagem || valor?.descricao || valor)).filter(Boolean),
+    pendencias: item.pendencia || null,
+    confianca: primeiro(resultado.nivel_confianca, resultado.confianca, dados.confianca, item.confianca) || null,
+    revisao_humana: resultado.revisao_humana_necessaria === true || item.exige_revisao_humana === true,
+    versao: primeiro(resultado.versao_laudo, resultado.prompt_versao, item.versao, item.versao_documento) || null,
+    vigente: item.coberto_por_outro !== true,
+  };
+}
+
+function statusInicialParaModulo(item: any): string {
+  const status = normalizar(item.status);
+  if (status.includes('nao_anex') || status.includes('não anex')) return 'Não anexado';
+  if (status.includes('falha') || status.includes('diverg')) return 'Revisão necessária';
+  if (status.includes('reanalise')) return 'Reanálise necessária';
+  if (item.consistente === true || status === 'ok' || status === 'validado' || status === 'confirmado') return 'Confirmado';
+  if (item.analisado === true) return 'Analisado com ressalva';
+  return 'Não analisado';
+}
+
+function construirModulosRelatorio(
+  dossie: Record<string, any>,
+  inventario: any[],
+  dadosCadastrais: any[],
+  historicoSocietario: any,
+  checklistExecutivo: any,
+  modo: ModoRelatorioDocumental = 'institucional',
+) {
+  const empresa = objeto(dossie.empresa);
+  const identidade = objeto(dossie.identidade_cnpj);
+  const documentosIniciais = Object.values(objeto(identidade.documentos_iniciais)) as any[];
+  const porCodigo = new Map(inventario.map((item) => [normalizar(item.codigo || item.tipo_documento || item.documento), item]));
+  const iniciais = documentosIniciais.map((item) => {
+    const inventariado = porCodigo.get(normalizar(item.codigo || item.tipo_documento || item.nome));
+    if (inventariado) return itemModuloRelatorio(inventariado, 'analise_inicial');
+    return {
+      arquivo_id: null,
+      nome: item.nome || item.codigo || 'Documento inicial',
+      tipo_documental: item.codigo || item.tipo_documento || null,
+      modulo: 'analise_inicial',
+      etapa: 'Identidade da empresa',
+      status_leitura: item.analisado ? 'Concluída' : item.anexado ? 'Não concluída' : 'Não anexado',
+      status_validacao: statusInicialParaModulo(item),
+      data_documento: null, data_emissao: null, data_expedicao: null, data_anexacao: null,
+      data_leitura: null, data_verificacao: null, validade: null,
+      origem: item.fonte || 'Dossiê da Etapa 1', arquivo_original: null, paginas: null,
+      resumo_leitura: item.diagnostico || null, dados_extraidos: item.campos_principais || {},
+      inconsistencias: [], pendencias: item.consistente ? null : item.diagnostico || null,
+      confianca: item.confianca || null, revisao_humana: item.status === 'reanalise_necessaria', versao: null, vigente: true,
+    };
+  });
+  const usadosIniciais = new Set(iniciais.map((item) => String(item.arquivo_id || item.tipo_documental || item.nome)));
+  for (const item of inventario.filter(documentoEhInicial)) {
+    const chave = String(item.arquivo_id || item.codigo || item.documento);
+    if (!usadosIniciais.has(chave)) iniciais.push(itemModuloRelatorio(item, 'analise_inicial'));
+  }
+
+  const societarios = inventario.filter((item) => documentoEhSocietario(item) && !documentoEhSocio(item)).map((item) => itemModuloRelatorio(item, 'societarios'));
+  const credito = inventario.filter(documentoEhConsultaCredito).map((item) => itemModuloRelatorio(item, 'consultas'));
+  const fiscal = inventario.filter((item) => !documentoEhConsultaCredito(item) && documentoEhConsultaFiscal(item)).map((item) => itemModuloRelatorio(item, 'consultas'));
+  const socios = inventario.filter(documentoEhSocio).map((item) => itemModuloRelatorio(item, 'socios'));
+  const internos = inventario.filter(documentoEhInternoAssessoria).map((item) => itemModuloRelatorio(item, 'ficha_empresa'));
+  const cadastrais = dadosCadastrais.map((item) => ({
+    campo: item.campo,
+    valor: item.valor,
+    status: item.status,
+    fontes: item.fontes || [],
+    confianca: item.confianca || null,
+  }));
+  const completude = cadastrais.length ? Math.round((cadastrais.filter((item) => item.valor && item.status !== 'não localizado').length / cadastrais.length) * 100) : 0;
+  const ficha = {
+    id: 'ficha_empresa', titulo: 'Ficha da empresa e relacionamento', ordem: 6,
+    visibilidade: 'interna', incluida: modo === 'interno',
+    descricao: modo === 'interno' ? 'Informações comerciais, operacionais e documentos produzidos pela assessoria.' : 'Conteúdo interno omitido do relatório institucional; disponível apenas no relatório interno autorizado.',
+    itens: modo === 'interno' ? internos : [],
+    quantidade_oculta: modo === 'institucional' ? internos.length : 0,
+    campos: modo === 'interno' ? [] : [],
+  };
+  return [
+    {
+      id: 'identificacao', titulo: 'Identificação da empresa', ordem: 1, visibilidade: 'institucional', incluida: true,
+      descricao: 'Dados cadastrais da empresa e completude das fontes disponíveis.',
+      campos: [
+        ...cadastrais,
+        { campo: 'Data de criação do cadastro', valor: primeiro(empresa.created_at, empresa.criado_em), status: empresa.created_at || empresa.criado_em ? 'confirmado' : 'não localizado', fontes: ['Cadastro da empresa'], confianca: 'média' },
+        { campo: 'Data da última atualização do cadastro', valor: primeiro(empresa.updated_at, empresa.atualizado_em), status: empresa.updated_at || empresa.atualizado_em ? 'confirmado' : 'não localizado', fontes: ['Cadastro da empresa'], confianca: 'média' },
+        { campo: 'Origem dos dados', valor: 'Cadastro da empresa e documentos anexados', status: 'informativo', fontes: ['Dossiê documental'], confianca: null },
+        { campo: 'Completude cadastral', valor: `${completude}%`, status: completude === 100 ? 'confirmado' : 'parcial', fontes: ['Campos cadastrais disponíveis'], confianca: 'calculada' },
+      ], itens: [],
+    },
+    {
+      id: 'analise_inicial', titulo: 'Análise dos quatro documentos da primeira etapa', ordem: 2, visibilidade: 'institucional', incluida: true,
+      descricao: 'Leitura e validação da identidade inicial; o quarto item só é materializado quando estiver configurado/aplicável ao regime.',
+      quantidade_referencial: 4, itens: iniciais, campos: [],
+    },
+    {
+      id: 'societarios', titulo: 'Documentos societários e atos oficiais', ordem: 3, visibilidade: 'institucional', incluida: true,
+      descricao: 'Atos oficiais, contrato social, alterações e documentos relacionados em ordem jurídica e cronológica.',
+      itens: societarios, campos: [
+        { campo: 'NIRE', valor: historicoSocietario.nire, status: historicoSocietario.nire ? 'confirmado' : 'não localizado', fontes: historicoSocietario.fontes || [], confianca: historicoSocietario.nire ? 'alta' : 'não confirmada' },
+        { campo: 'Continuidade societária', valor: historicoSocietario.continuidade_12_meses ? `${historicoSocietario.meses_comprovados || 12} meses comprovados` : 'Não comprovada integralmente', status: historicoSocietario.continuidade_12_meses ? 'confirmado' : 'pendente', fontes: historicoSocietario.fontes || [], confianca: historicoSocietario.continuidade_12_meses ? 'alta' : 'não confirmada' },
+      ],
+      eventos: historicoSocietario.eventos_cronologicos || [],
+    },
+    {
+      id: 'consultas', titulo: 'Consultas e verificações', ordem: 4, visibilidade: 'institucional', incluida: true,
+      descricao: 'Consultas de crédito separadas de consultas fiscais e cadastrais; cada resultado preserva sua data e validade.',
+      submodulos: [
+        { id: 'credito', titulo: 'Consultas de crédito', itens: credito },
+        { id: 'fiscal_cadastral', titulo: 'Consultas fiscais e cadastrais', itens: fiscal },
+      ],
+      itens: [...credito, ...fiscal], campos: [],
+    },
+    {
+      id: 'socios', titulo: 'Dados e documentos dos sócios', ordem: 5, visibilidade: 'institucional', incluida: true,
+      descricao: 'Dados e arquivos de pessoas vinculadas à sociedade, sem misturá-los com o acervo institucional da empresa.',
+      itens: socios,
+      socios: lista(dossie.socios).length
+        ? dossie.socios
+        : Array.isArray(identidade.validation?.socios)
+          ? identidade.validation.socios
+          : Array.isArray(identidade.documentos_iniciais?.qsa?.socios_lidos)
+            ? identidade.documentos_iniciais.qsa.socios_lidos
+            : [],
+      campos: [],
+    },
+    ficha,
+    {
+      id: 'resumo', titulo: 'Resumo de atualizações, pendências e validade documental', ordem: 7, visibilidade: 'institucional', incluida: true,
+      descricao: 'Pendências acionáveis, confirmações, datas de validade e próxima atualização.',
+      itens: checklistExecutivo.itens,
+      confirmacoes: checklistExecutivo.confirmacoes,
+      pendencias: checklistExecutivo.pendencias,
+      atualizacoes: inventario.map((item) => ({ documento: item.documento, data_anexacao: item.arquivo ? item.data : null, status: item.status, validade: item.evidencia?.validade || null })).filter((item) => item.documento),
+      campos: [],
+    },
+  ];
 }
 
 function dadosDocumento(documento: DocumentoRelatorio): Record<string, any> {
@@ -471,7 +698,11 @@ function consolidarDadosCadastrais(dossie: Record<string, any>, documentos: Docu
     { campo: 'Estado', aliases: ['estado', 'uf'], valor: primeiro(empresa.estado, empresa.uf), fonte: 'Cadastro da empresa' },
     { campo: 'Município', aliases: ['cidade', 'municipio'], valor: primeiro(empresa.cidade, empresa.municipio), fonte: 'Cadastro da empresa' },
     { campo: 'Endereço', aliases: ['endereco', 'logradouro'], valor: primeiro(empresa.endereco, empresa.logradouro), fonte: 'Cadastro da empresa' },
-    { campo: 'CNAE principal', aliases: ['cnae_principal', 'atividade_economica_principal'], valor: primeiro(empresa.cnae_principal), fonte: 'Cadastro da empresa' },
+    { campo: 'Atividade principal', aliases: ['cnae_principal', 'atividade_economica_principal', 'atividade_principal'], valor: primeiro(empresa.cnae_principal, empresa.atividade_economica_principal, empresa.atividade_principal), fonte: 'Cadastro da empresa' },
+    { campo: 'Atividades secundárias', aliases: ['atividades_secundarias', 'cnaes_secundarios'], valor: primeiro(empresa.atividades_secundarias, empresa.cnaes_secundarios), fonte: 'Cadastro da empresa' },
+    { campo: 'Telefone', aliases: ['telefone', 'telefone_principal'], valor: primeiro(empresa.telefone, empresa.telefone_principal), fonte: 'Cadastro da empresa' },
+    { campo: 'E-mail', aliases: ['email', 'e_mail'], valor: primeiro(empresa.email, empresa.e_mail), fonte: 'Cadastro da empresa' },
+    { campo: 'Responsável pelo cadastro', aliases: ['responsavel_cadastro', 'responsavel_nome', 'responsavel_id'], valor: primeiro(empresa.responsavel_cadastro, empresa.responsavel_nome, empresa.responsavel_id), fonte: 'Cadastro da empresa' },
     { campo: 'Capital social', aliases: ['capital_social'], valor: primeiro(empresa.capital_social), fonte: 'Cadastro da empresa' },
   ];
   return campos.map((campo) => {
@@ -660,6 +891,7 @@ function statusAptidao(resumo: Record<string, any>, pendencias: any[]): string {
 }
 
 export function aplicarRelatorioInicial(base: Record<string, any>, params: RelatorioInicialParams): Record<string, any> {
+  const modo = params.modo || 'institucional';
   const inventario = construirInventario(params);
   const documentosExecutivos = params.documentos.filter((documento) => !documentoForaDoChecklistExecutivo(documento));
   const dadosCadastrais = consolidarDadosCadastrais(params.dossie, params.documentos);
@@ -668,6 +900,7 @@ export function aplicarRelatorioInicial(base: Record<string, any>, params: Relat
   const financeiroCredito = construirFinanceiroECredito(documentosExecutivos);
   const pendenciasDetalhadas = construirPendencias(params.dossie, documentosExecutivos, inventario, cruzamentos);
   const checklistExecutivo = construirChecklistExecutivo(inventario, cruzamentos, historicoSocietario, params.documentos);
+  const modulosRelatorio = construirModulosRelatorio(params.dossie, inventario, dadosCadastrais, historicoSocietario, checklistExecutivo, modo);
   const idsInformativos = new Set(inventario.filter((item: any) => item.coberto_por_outro).map((item: any) => String(item.arquivo_id || item.arquivo)));
   const estados = documentosExecutivos.filter((documento) => !idsInformativos.has(String(documento.arquivo_id || documento.nome))).map(estadoDocumento);
   const resumoAtual = objeto(base.resumo);
@@ -719,6 +952,8 @@ export function aplicarRelatorioInicial(base: Record<string, any>, params: Relat
     resumo,
     inventario_documental: inventario,
     checklist_executivo: checklistExecutivo,
+    modo_relatorio: modo,
+    modulos_relatorio: modulosRelatorio,
     dados_cadastrais_confirmados: dadosCadastrais,
     cruzamentos_documentais: cruzamentos,
     historico_societario: historicoSocietario,

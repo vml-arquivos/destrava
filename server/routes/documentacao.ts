@@ -38,8 +38,9 @@ import { obterLinhaDoTempoRegime, obterRegimeVigenteEm } from '../services/regim
 import { obterFaturamentoRolling12Meses, type CompetenciaMensal } from '../services/faturamentoRolling12MesesService';
 import { obterCoberturaPorEmpresa } from '../services/coberturaEvidenciaBureauService';
 import { auditarArquivosDocumentais } from '../services/documentProcessingEvidence';
-import { aplicarRelatorioInicial, documentoAtivoParaRelatorio, RELATORIO_INICIAL_VERSION } from '../services/relatorioInicialDocumentalService';
+import { aplicarRelatorioInicial, documentoAtivoParaRelatorio, documentoEhInternoAssessoria, RELATORIO_INICIAL_VERSION } from '../services/relatorioInicialDocumentalService';
 import { anexarDocumentosNaoVinculados } from '../services/documentInventory';
+import { gerarHtmlRelatorioModular } from '../services/relatorioModularHtml';
 
 const { Pool } = pkg;
 const pool = new Pool({
@@ -51,6 +52,41 @@ const pool = new Pool({
 });
 
 const router = Router();
+
+function usuarioPodeVerTodasEmpresas(req: Request): boolean {
+  const user = (req as any).colaborador || (req as any).user || {};
+  const cargo = String(user.cargo || user.role || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
+  const perfil = String(user.perfil || '').toLowerCase();
+  return user.pode_ver_todos_leads === true
+    || ['admin', 'gestor'].includes(perfil)
+    || ['administrador', 'admin', 'diretor', 'gerente comercial', 'gerente', 'gestor'].includes(cargo);
+}
+
+function usuarioPodeRelatorioInterno(req: Request): boolean {
+  return usuarioPodeVerTodasEmpresas(req);
+}
+
+async function exigirAcessoEmpresaRelatorio(req: Request, res: Response, empresaId: string, modo: 'institucional' | 'interno' = 'institucional'): Promise<boolean> {
+  const user = (req as any).colaborador || (req as any).user || {};
+  if (!user.id) { res.status(401).json({ error: 'Sessão não identificada' }); return false; }
+  if (modo === 'interno' && !usuarioPodeRelatorioInterno(req)) {
+    res.status(403).json({ error: 'Relatório interno exige permissão de gestão' });
+    return false;
+  }
+  const { rows } = await pool.query(
+    `SELECT 1
+       FROM public.empresas
+      WHERE id = $1
+        AND ($2::boolean OR responsavel_id::text = $3 OR analista_id::text = $3 OR captador_id::text = $3)
+      LIMIT 1`,
+    [empresaId, usuarioPodeVerTodasEmpresas(req), String(user.id)],
+  );
+  if (!rows.length) {
+    res.status(403).json({ error: 'Acesso negado à empresa' });
+    return false;
+  }
+  return true;
+}
 
 // A leitura dos três documentos iniciais pode ultrapassar o timeout do proxy. O trabalho
 // pesado roda fora da requisição HTTP e a interface consulta o mesmo dossiê
@@ -617,7 +653,7 @@ export async function enriquecerDocumentosAcervoComAnalise(blocos: any[]): Promi
   }));
 }
 
-export async function montarRelatorioDocumental(dossie: any) {
+export async function montarRelatorioDocumental(dossie: any, modo: 'institucional' | 'interno' = 'institucional') {
   const blocos = Array.isArray(dossie?.blocos) ? dossie.blocos : [];
   const mapa = dossie?.mapa_documental_credito || {};
   const etapas = Array.isArray(mapa.etapas) ? mapa.etapas : [];
@@ -653,6 +689,9 @@ export async function montarRelatorioDocumental(dossie: any) {
       bloco_nome: bloco.nome_amigavel,
       bloco_status: bloco.status,
     })));
+  const documentosVisiveis = modo === 'institucional'
+    ? documentosAnexados.filter((documento: any) => !documentoEhInternoAssessoria(documento))
+    : documentosAnexados;
 
   // Bug real observado: um QSA (ou outro documento com análise especializada
   // própria) podia aparecer no relatório como "Validado"/"Leitura concluída;
@@ -665,7 +704,7 @@ export async function montarRelatorioDocumental(dossie: any) {
   // decidir a Etapa 1 -- aqui ele só precisa ser buscado por arquivo (o Acervo
   // Documental permite múltiplos arquivos do mesmo tipo, ex.: mais de um QSA).
   const idsParaAnaliseEspecializada = new Map<string, string>();
-  for (const documento of documentosAnexados) {
+  for (const documento of documentosVisiveis) {
     const id = String(documento?.id || '');
     if (!id || analisesSocietariasPorArquivo.has(id)) continue;
     const configuracao = ANALISE_ESPECIALIZADA_POR_TIPO[String(documento?.tipo_documento || '')];
@@ -689,7 +728,7 @@ export async function montarRelatorioDocumental(dossie: any) {
     ...documentosIniciais
       .filter((documento) => documentoTemAnalise(documento, true))
       .map((documento: any) => ({ documento, inicial: true })),
-    ...documentosAnexados.map((documento: any) => ({ documento, inicial: false })),
+    ...documentosVisiveis.map((documento: any) => ({ documento, inicial: false })),
   ].map(({ documento, inicial }) => {
     const laudo = documento?.resultado_validacao?.analise_regra_documental;
     const laudoErro = documento?.resultado_validacao?.analise_regra_documental_erro;
@@ -811,7 +850,7 @@ export async function montarRelatorioDocumental(dossie: any) {
       },
     }));
   const documentosBrutosInventario = Array.from(new Map(
-    [...documentosAnexados, ...documentosIniciaisAnexados].map((documento: any, index: number) => [
+    [...documentosVisiveis, ...documentosIniciaisAnexados].map((documento: any, index: number) => [
       String(documento.id || documento.arquivo_id || `${documento.tipo_documento || 'documento'}:${index}`),
       documento,
     ]),
@@ -919,6 +958,7 @@ export async function montarRelatorioDocumental(dossie: any) {
     dossie,
     documentos: documentosInventario,
     evidencias: evidenciasProcessamento,
+    modo,
   });
 }
 
@@ -1017,7 +1057,7 @@ function gerarHtmlResumoSocietarioPdf(relatorio: any): string {
   </body></html>`;
 }
 
-function gerarHtmlChecklistExecutivo(relatorio: any): string {
+function gerarHtmlChecklistExecutivoLegado(relatorio: any): string {
   const empresa = relatorio.empresa || {};
   const checklist = Array.isArray(relatorio.checklist_executivo?.itens) ? relatorio.checklist_executivo.itens : [];
   const confirmacoes = Array.isArray(relatorio.checklist_executivo?.confirmacoes) ? relatorio.checklist_executivo.confirmacoes : [];
@@ -3346,9 +3386,40 @@ export async function montarDossieCreditoEmpresa(empresaId: string, options: { p
       razao_social: empresa.razao_social,
       nome_fantasia: empresa.nome_fantasia,
       cnpj: empresa.cnpj,
+      tipo_societario: empresa.tipo_societario || empresa.tipo_empresa || empresa.natureza_juridica || null,
+      natureza_juridica: empresa.natureza_juridica || null,
       situacao_cadastral: empresa.situacao_cadastral,
+      data_abertura: empresa.data_abertura || empresa.abertura_em || null,
+      porte: empresa.porte || null,
+      endereco: empresa.endereco || empresa.logradouro || null,
+      numero: empresa.numero || null,
+      complemento: empresa.complemento || null,
+      bairro: empresa.bairro || null,
+      cidade: empresa.cidade || empresa.municipio || null,
+      uf: empresa.uf || empresa.estado || null,
+      cep: empresa.cep || null,
+      atividade_principal: empresa.atividade_principal || empresa.cnae_principal || null,
+      atividades_secundarias: empresa.atividades_secundarias || empresa.cnaes_secundarios || [],
+      telefone: empresa.telefone || null,
+      email: empresa.email || null,
+      responsavel_cadastro: empresa.responsavel_nome || empresa.responsavel_id || null,
+      criado_em: empresa.created_at || empresa.criado_em || null,
+      atualizado_em: empresa.updated_at || empresa.atualizado_em || null,
       ultima_sincronizacao_receita: empresa.ultima_sincronizacao_receita || empresa.atualizado_receita_em || null,
     },
+    socios: socios.map((socio: any) => ({
+      id: socio.id,
+      nome: socio.nome || socio.nome_completo || null,
+      cpf: socio.cpf || socio.documento || null,
+      participacao: socio.participacao || socio.percentual_participacao || null,
+      cargo: socio.cargo || socio.qualificacao || null,
+      administrador: socio.administrador === true,
+      data_entrada: socio.data_entrada || socio.entrada_em || null,
+      data_saida: socio.data_saida || socio.saida_em || null,
+      status: socio.status || 'ativo',
+      criado_em: socio.created_at || socio.criado_em || null,
+      atualizado_em: socio.updated_at || socio.atualizado_em || null,
+    })),
     identidade_cnpj: identidadeCnpj,
     documentacao_societaria: documentacaoSocietaria,
     mapa_documental_credito: mapaDocumentalCredito,
@@ -3477,6 +3548,7 @@ router.delete('/empresa/:empresaId/analise-cnpj', auth, async (req: Request, res
 
 router.get('/empresa/:empresaId/dossie', auth, async (req: Request, res: Response) => {
   try {
+    if (!(await exigirAcessoEmpresaRelatorio(req, res, req.params.empresaId))) return;
     const dossie = await montarDossieCreditoEmpresa(req.params.empresaId);
     if (!dossie) { res.status(404).json({ error: 'Empresa não encontrada' }); return; }
     res.json(dossie);
@@ -3488,9 +3560,11 @@ router.get('/empresa/:empresaId/dossie', auth, async (req: Request, res: Respons
 
 router.post('/empresa/:empresaId/relatorio/inicial', auth, async (req: Request, res: Response) => {
   try {
+    const modo = req.body?.modo === 'interno' ? 'interno' : 'institucional';
+    if (!(await exigirAcessoEmpresaRelatorio(req, res, req.params.empresaId, modo))) return;
     const dossie = await montarDossieCreditoEmpresa(req.params.empresaId);
     if (!dossie) { res.status(404).json({ error: 'Empresa não encontrada' }); return; }
-    const relatorio = await montarRelatorioDocumental(dossie);
+    const relatorio = await montarRelatorioDocumental(dossie, modo);
     const user = (req as any).colaborador || (req as any).user;
     const { rows } = await pool.query(
       `INSERT INTO public.documentacao_analises_ia
@@ -3528,6 +3602,7 @@ router.post('/empresa/:empresaId/relatorio/inicial', auth, async (req: Request, 
 
 router.get('/empresa/:empresaId/relatorio/inicial/historico', auth, async (req: Request, res: Response) => {
   try {
+    if (!(await exigirAcessoEmpresaRelatorio(req, res, req.params.empresaId))) return;
     const { rows } = await pool.query(
       `SELECT id, tipo_analise, status, prompt_versao, versao_modelo, resultado,
               risco_documental, pendencias, criado_em, atualizado_em
@@ -3547,9 +3622,11 @@ router.get('/empresa/:empresaId/relatorio/inicial/historico', auth, async (req: 
 
 router.get('/empresa/:empresaId/relatorio', auth, async (req: Request, res: Response) => {
   try {
+    const modo = req.query.modo === 'interno' ? 'interno' : 'institucional';
+    if (!(await exigirAcessoEmpresaRelatorio(req, res, req.params.empresaId, modo))) return;
     const dossie = await montarDossieCreditoEmpresa(req.params.empresaId);
     if (!dossie) { res.status(404).json({ error: 'Empresa não encontrada' }); return; }
-    res.json(await montarRelatorioDocumental(dossie));
+    res.json(await montarRelatorioDocumental(dossie, modo));
   } catch (err: any) {
     console.error('[GET /api/documentacao/empresa/:empresaId/relatorio]', err);
     res.status(500).json({ error: 'Erro ao montar relatório documental' });
@@ -3558,14 +3635,16 @@ router.get('/empresa/:empresaId/relatorio', auth, async (req: Request, res: Resp
 
 router.get('/empresa/:empresaId/relatorio/pdf', auth, async (req: Request, res: Response) => {
   try {
+    const modo = req.query.modo === 'interno' ? 'interno' : 'institucional';
+    if (!(await exigirAcessoEmpresaRelatorio(req, res, req.params.empresaId, modo))) return;
     const dossie = await montarDossieCreditoEmpresa(req.params.empresaId);
     if (!dossie) { res.status(404).json({ error: 'Empresa não encontrada' }); return; }
-    const relatorio = await montarRelatorioDocumental(dossie);
-    const pdf = await generateBrandedPdfBuffer(gerarHtmlChecklistExecutivo(relatorio), { brand: 'destrava', topMargin: '30mm' });
+    const relatorio = await montarRelatorioDocumental(dossie, modo);
+    const pdf = await generateBrandedPdfBuffer(gerarHtmlRelatorioModular(relatorio), { brand: 'destrava', topMargin: '30mm' });
     const nomeEmpresa = String(relatorio.empresa?.razao_social || relatorio.empresa?.nome_fantasia || 'empresa')
       .normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^a-zA-Z0-9]+/g, '-').replace(/^-|-$/g, '').toLowerCase() || 'empresa';
     res.setHeader('Content-Type', 'application/pdf');
-    res.setHeader('Content-Disposition', `attachment; filename="relatorio-documental-${nomeEmpresa}.pdf"`);
+    res.setHeader('Content-Disposition', `attachment; filename="relatorio-documental-${modo}-${nomeEmpresa}.pdf"`);
     res.send(pdf);
   } catch (err: any) {
     console.error('[GET /api/documentacao/empresa/:empresaId/relatorio/pdf]', err);
@@ -3575,6 +3654,7 @@ router.get('/empresa/:empresaId/relatorio/pdf', auth, async (req: Request, res: 
 
 router.get('/empresa/:empresaId/mapa-documental', auth, async (req: Request, res: Response) => {
   try {
+    if (!(await exigirAcessoEmpresaRelatorio(req, res, req.params.empresaId))) return;
     const dossie = await montarDossieCreditoEmpresa(req.params.empresaId);
     if (!dossie) { res.status(404).json({ error: 'Empresa não encontrada' }); return; }
     res.json(dossie.mapa_documental_credito);
