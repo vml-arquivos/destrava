@@ -126,9 +126,22 @@ function renderModule(module: AnyRecord, empresa: AnyRecord): string {
   return `<section class="module" id="modulo-${esc(module.id)}"><div class="module-title"><span class="module-number">${esc(module.ordem)}</span><div><h2>${esc(module.titulo)}</h2><p>${esc(module.descricao)}</p></div></div>${renderFields(list(module.campos), empresa)}${socios}${showItems}${events}${pending}${internalNote}</section>`;
 }
 
+function moduleHasContent(module: AnyRecord): boolean {
+  return list(module.itens).length > 0
+    || list(module.campos).length > 0
+    || list(module.eventos).length > 0
+    || list(module.socios).length > 0
+    || list(module.pendencias).length > 0
+    || module.id === 'pendencias';
+}
+
 export function gerarHtmlRelatorioModular(relatorio: AnyRecord): string {
   const empresa = relatorio.empresa || {};
-  const modules = list(relatorio.modulos_relatorio).filter((module) => module.incluida !== false || relatorio.modo_relatorio === 'interno').sort((a, b) => Number(a.ordem || 0) - Number(b.ordem || 0));
+  const modules = list(relatorio.modulos_relatorio)
+    .filter((module) => module.incluida !== false || relatorio.modo_relatorio === 'interno')
+    .filter(moduleHasContent)
+    .sort((a, b) => Number(a.ordem || 0) - Number(b.ordem || 0))
+    .map((module, index) => ({ ...module, ordem: index + 1 }));
   const nomeEmpresa = empresa.razao_social || empresa.nome_fantasia || 'Empresa não identificada';
   const status = relatorio.status_aptidao_documental || relatorio.status_geral || 'Pendente';
   const index = modules.map((module) => `<li><a href="#modulo-${esc(module.id)}">${esc(module.titulo)}</a></li>`).join('');

@@ -374,6 +374,26 @@ describe('relatório inicial documental', () => {
     expect(relatorio.pendencias_detalhadas.some((pending: any) => pending.documentos?.includes('residencia.pdf'))).toBe(false);
   });
 
+  it('não cria pendência para faturamento informativo quando o regime não o exige no mapa atual', () => {
+    const relatorio = aplicarRelatorioInicial({
+      gerado_em: '2026-09-08T00:00:00.000Z', status_geral: 'Pendente', empresa: dossie.empresa,
+      resumo: {}, documentos_analisados: [], documentos_pendentes_analise: [], documentos_faltantes: [], pendencias: [],
+    }, {
+      dossie: { ...dossie, mapa_documental_credito: { etapas: [{ numero: 2, titulo: 'Financeiro', documentos: [
+        { codigo: 'faturamento_12_meses', nome: 'Faturamento', tipos_arquivo: ['faturamento_12_meses'], obrigatorio: false },
+      ] }] } },
+      documentos: [],
+      evidencias: new Map(),
+    });
+
+    const item = relatorio.checklist_executivo.itens.find((candidate: any) => candidate.nome === 'Faturamento');
+    expect(item?.status).toBe('Informativo');
+    expect(item?.pendencia).toBeNull();
+    expect(relatorio.checklist_executivo.pendencias).not.toEqual(expect.arrayContaining([
+      expect.objectContaining({ documento: 'Faturamento' }),
+    ]));
+  });
+
   it('organiza os seis grupos e mantém assessoria fora do institucional', () => {
     const relatorio = aplicarRelatorioInicial({
       gerado_em: '2026-09-08T00:00:00.000Z', status_geral: 'Pendente', empresa: dossie.empresa,
