@@ -79,6 +79,20 @@ describe('relatório documental modular', () => {
     expect(html).not.toContain('Rating/Score: DE');
   });
 
+  it('consolida conclusão repetida de enquadramento tributário no resultado do PDF', () => {
+    const relatorio = relatorioFixture();
+    relatorio.modulos_relatorio[1].itens = [{
+      arquivo_id: 'enquadramento-file',
+      nome: 'Enquadramento tributário',
+      status_validacao: 'Confirmado',
+      arquivo_original: 'ConsultaOptantes.pdf',
+      resultado: 'Enquadramento tributário — CNPJ: 18.706.347/0001-10 — Regime: Simples Nacional — Situação no Simples: Optante — MEI/SIMEI: Não Enquadramento Tributário — CNPJ: 18.706.347/0001-10 — Regime: Simples Nacional — Situação no Simples: Optante',
+    }];
+    const html = gerarHtmlRelatorioModular(relatorio);
+    expect((html.match(/Enquadramento tributário/gi) || []).length).toBe(2);
+    expect(html).not.toContain('Não Enquadramento Tributário');
+  });
+
   it('prioriza o cadastro autoritativo para campos cadastrais corrompidos na apresentação', () => {
     const relatorio = relatorioFixture();
     relatorio.empresa = {
