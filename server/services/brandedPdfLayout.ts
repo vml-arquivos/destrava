@@ -8,6 +8,9 @@ export type PdfBrand = "destrava" | "permupay" | "aragao";
 export type BrandedPdfOptions = {
   brand?: PdfBrand | string | null;
   topMargin?: string;
+  bottomMargin?: string;
+  leftMargin?: string;
+  rightMargin?: string;
 };
 
 const EMPTY_HEADER = '<style>* { margin: 0; padding: 0; }</style><div></div>';
@@ -293,9 +296,9 @@ export async function generateBrandedPdfBuffer(
       displayHeaderFooter: true,
       margin: {
         top: options.topMargin || "28mm",
-        bottom: "28mm",
-        left: "22mm",
-        right: "22mm",
+        bottom: options.bottomMargin || "28mm",
+        left: options.leftMargin || "22mm",
+        right: options.rightMargin || "22mm",
       },
     };
 

@@ -3640,7 +3640,13 @@ router.get('/empresa/:empresaId/relatorio/pdf', auth, async (req: Request, res: 
     const dossie = await montarDossieCreditoEmpresa(req.params.empresaId);
     if (!dossie) { res.status(404).json({ error: 'Empresa não encontrada' }); return; }
     const relatorio = await montarRelatorioDocumental(dossie, modo);
-    const pdf = await generateBrandedPdfBuffer(gerarHtmlRelatorioModular(relatorio), { brand: 'destrava', topMargin: '30mm' });
+    const pdf = await generateBrandedPdfBuffer(gerarHtmlRelatorioModular(relatorio), {
+      brand: 'destrava',
+      topMargin: '22mm',
+      bottomMargin: '18mm',
+      leftMargin: '17mm',
+      rightMargin: '17mm',
+    });
     const nomeEmpresa = String(relatorio.empresa?.razao_social || relatorio.empresa?.nome_fantasia || 'empresa')
       .normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^a-zA-Z0-9]+/g, '-').replace(/^-|-$/g, '').toLowerCase() || 'empresa';
     res.setHeader('Content-Type', 'application/pdf');
