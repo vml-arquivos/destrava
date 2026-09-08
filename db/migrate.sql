@@ -1095,6 +1095,52 @@ ON CONFLICT (codigo, versao) DO UPDATE SET
   ativo = TRUE,
   atualizacao_em = NOW();
 
+-- ─── Recadastro após exclusão/arquivamento (migration 105) ────────────────
+-- A unicidade de negócio não pode considerar registros removidos logicamente.
+DO $$
+DECLARE
+  constraint_name TEXT;
+BEGIN
+  IF to_regclass('public.clientes_pf') IS NOT NULL THEN
+    FOR constraint_name IN
+      SELECT con.conname
+        FROM pg_constraint con
+        JOIN pg_class rel ON rel.oid = con.conrelid
+        JOIN pg_namespace ns ON ns.oid = rel.relnamespace
+       WHERE ns.nspname = 'public'
+         AND rel.relname = 'clientes_pf'
+         AND con.contype = 'u'
+         AND (
+           SELECT array_to_string(array_agg(att.attname::TEXT ORDER BY ordinality), ',')
+             FROM unnest(con.conkey) WITH ORDINALITY AS keys(attnum, ordinality)
+             JOIN pg_attribute att ON att.attrelid = con.conrelid AND att.attnum = keys.attnum
+         ) = 'cpf'
+    LOOP
+      EXECUTE format('ALTER TABLE public.clientes_pf DROP CONSTRAINT IF EXISTS %I', constraint_name);
+    END LOOP;
+  END IF;
+END $$;
+
+DO $$
+BEGIN
+  IF to_regclass('public.clientes_pf') IS NOT NULL THEN
+    DROP INDEX IF EXISTS public.ux_clientes_pf_cpf_unico_ativo;
+    CREATE UNIQUE INDEX IF NOT EXISTS ux_clientes_pf_cpf_unico_ativo
+      ON public.clientes_pf ((regexp_replace(COALESCE(cpf,''), '[^0-9]', '', 'g')))
+     WHERE length(regexp_replace(COALESCE(cpf,''), '[^0-9]', '', 'g')) = 11
+       AND COALESCE(ativo, true) = true
+       AND COALESCE(arquivado_por_duplicidade, false) = false
+       AND COALESCE(cadastro_status, '') <> 'removido';
+  END IF;
+END $$;
+
+DROP INDEX IF EXISTS public.ux_empresas_cnpj_unico_ativo;
+CREATE UNIQUE INDEX IF NOT EXISTS ux_empresas_cnpj_unico_ativo
+  ON public.empresas ((regexp_replace(COALESCE(cnpj,''), '[^0-9]', '', 'g')))
+ WHERE length(regexp_replace(COALESCE(cnpj,''), '[^0-9]', '', 'g')) = 14
+   AND COALESCE(arquivado_por_duplicidade, false) = false
+   AND COALESCE(cadastro_status, '') <> 'removido';
+
 ALTER TABLE IF EXISTS public.documentos_extracoes_ia ADD COLUMN IF NOT EXISTS arquivo_hash TEXT NULL;
 ALTER TABLE IF EXISTS public.documentos_extracoes_ia ADD COLUMN IF NOT EXISTS regra_versao TEXT NULL;
 ALTER TABLE IF EXISTS public.documentos_extracoes_ia ADD COLUMN IF NOT EXISTS evidencias JSONB NOT NULL DEFAULT '[]'::jsonb;
