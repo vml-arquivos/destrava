@@ -132,4 +132,13 @@ describe('relatório documental modular', () => {
     relatorio.modulos_relatorio[2].itens = [{ arquivo_id: 'same-file', nome: 'Cartão do CNPJ', status_validacao: 'Confirmado' }];
     expect(validateModularReport(relatorio)).toEqual(expect.objectContaining({ ok: false, failures: expect.arrayContaining(['documento duplicado entre módulos']) }));
   });
+
+  it('não renderiza módulo institucional vazio nem altera o contrato dos grupos', () => {
+    const relatorio = relatorioFixture();
+    relatorio.modulos_relatorio[4].itens = [];
+    const html = gerarHtmlRelatorioModular(relatorio);
+    expect(html).not.toContain('id="modulo-consultas_socios"');
+    expect(html).toContain('id="modulo-pendencias"');
+    expect(moduleIds(relatorio)).toEqual([...MODULOS_RELATORIO_EMPRESA]);
+  });
 });

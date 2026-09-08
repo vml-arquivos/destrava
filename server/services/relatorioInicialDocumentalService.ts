@@ -173,6 +173,7 @@ function limparStatusDaLinha(value: unknown): string {
 
 function pendenciaExecutiva(item: any, status: string, dados: Record<string, any>): string | null {
   const tipo = tipoDocumentoNormalizado(item);
+  if (status === 'Informativo') return null;
   if (status === 'Não anexado') return `Pendência: anexar ${nomeChecklistExecutivo(item)}.`;
   if (status === 'Incompatível') return `Pendência: substituir pelo documento correto para ${nomeChecklistExecutivo(item)}.`;
   if (/faturamento/.test(tipo) && periodoFaturamento(dados).competencias !== 12) return 'Pendência: apresentar faturamento atualizado dos últimos 12 meses.';
@@ -234,7 +235,15 @@ function resultadoExecutivo(item: any, status: string): string {
       : `Período: ${periodo.texto}. Documento não cobre os últimos 12 meses.`;
   }
   const linha = limparStatusDaLinha(item.linha_objetiva || item.resultado_objetivo);
-  if (linha) return linha;
+  if (linha) {
+    if (/enquadramento|simples/.test(tipo)) {
+      const ocorrencias = Array.from(linha.matchAll(/enquadramento\s+tribut[aá]rio/gi));
+      if (ocorrencias.length > 1 && ocorrencias[1].index !== undefined) {
+        return linha.slice(0, ocorrencias[1].index).replace(/[\s—-]+$/, '').trim();
+      }
+    }
+    return linha;
+  }
   if (!item.recebido) return 'Documento ainda não anexado.';
   if (status === 'Confirmado') return 'Resultado confirmado.';
   return item.observacao || 'Resultado não confirmado.';
