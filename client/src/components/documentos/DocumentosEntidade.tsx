@@ -1747,6 +1747,9 @@ export default function DocumentosEntidade({
   const inventarioRelatorio = Array.isArray(relatorioDocumental?.inventario_documental)
     ? relatorioDocumental.inventario_documental.filter((item: any) => !termoFiltroRelatorio || `${item.documento || ""} ${item.arquivo || ""} ${item.status || ""} ${item.etapa || ""}`.toLowerCase().includes(termoFiltroRelatorio))
     : [];
+  const checklistExecutivoRelatorio = Array.isArray(relatorioDocumental?.checklist_executivo?.itens) ? relatorioDocumental.checklist_executivo.itens : [];
+  const confirmacoesExecutivoRelatorio = Array.isArray(relatorioDocumental?.checklist_executivo?.confirmacoes) ? relatorioDocumental.checklist_executivo.confirmacoes : [];
+  const pendenciasExecutivoRelatorio = Array.isArray(relatorioDocumental?.checklist_executivo?.pendencias) ? relatorioDocumental.checklist_executivo.pendencias : [];
   const cruzamentosRelatorio = Array.isArray(relatorioDocumental?.cruzamentos_documentais) ? relatorioDocumental.cruzamentos_documentais : [];
   const pendenciasDetalhadasRelatorio = Array.isArray(relatorioDocumental?.pendencias_detalhadas) ? relatorioDocumental.pendencias_detalhadas : [];
 
@@ -1804,11 +1807,11 @@ export default function DocumentosEntidade({
 
             <div className="flex-1 overflow-y-auto bg-primary/10/40 p-4 space-y-4">
           <div className="grid grid-cols-2 gap-2 md:grid-cols-5">
-            <div className="rounded-xl border border-border bg-card p-2.5"><p className="text-[9px] font-black uppercase text-muted-foreground">Status geral</p><p className="mt-1 text-[11px] font-black text-foreground">{relatorioDocumental.status_geral}</p></div>
-            <div className="rounded-xl border border-border bg-card p-2.5"><p className="text-[9px] font-black uppercase text-muted-foreground">Anexados e analisados</p><p className="mt-1 text-lg font-black text-success">{relatorioDocumental.resumo?.documentos_analisados ?? 0}</p></div>
-            <div className="rounded-xl border border-border bg-card p-2.5"><p className="text-[9px] font-black uppercase text-muted-foreground">Anexados aguardando análise</p><p className="mt-1 text-lg font-black text-warning">{relatorioDocumental.resumo?.documentos_pendentes_analise ?? 0}</p></div>
-            <div className="rounded-xl border border-border bg-card p-2.5"><p className="text-[9px] font-black uppercase text-muted-foreground">Ainda faltam anexar</p><p className="mt-1 text-lg font-black text-warning">{relatorioDocumental.resumo?.documentos_faltantes ?? 0}</p></div>
-            <div className="rounded-xl border border-border bg-card p-2.5"><p className="text-[9px] font-black uppercase text-muted-foreground">Blocos com registro</p><p className="mt-1 text-lg font-black text-foreground">{relatorioDocumental.resumo?.blocos_analisados ?? 0}</p></div>
+            <div className="rounded-xl border border-border bg-card p-2.5"><p className="text-[9px] font-black uppercase text-muted-foreground">Situação</p><p className="mt-1 text-[11px] font-black text-foreground">{relatorioDocumental.status_aptidao_documental || relatorioDocumental.status_geral}</p></div>
+            <div className="rounded-xl border border-border bg-card p-2.5"><p className="text-[9px] font-black uppercase text-muted-foreground">Documentos do checklist</p><p className="mt-1 text-lg font-black text-primary">{checklistExecutivoRelatorio.length}</p></div>
+            <div className="rounded-xl border border-border bg-card p-2.5"><p className="text-[9px] font-black uppercase text-muted-foreground">Confirmados</p><p className="mt-1 text-lg font-black text-success">{checklistExecutivoRelatorio.filter((item: any) => item.status === "Confirmado").length}</p></div>
+            <div className="rounded-xl border border-border bg-card p-2.5"><p className="text-[9px] font-black uppercase text-muted-foreground">Pendências</p><p className="mt-1 text-lg font-black text-warning">{pendenciasExecutivoRelatorio.length}</p></div>
+            <div className="rounded-xl border border-border bg-card p-2.5"><p className="text-[9px] font-black uppercase text-muted-foreground">Ações necessárias</p><p className="mt-1 text-lg font-black text-warning">{checklistExecutivoRelatorio.filter((item: any) => item.status === "Não anexado" || item.status === "Pendente" || item.status === "Incompatível").length}</p></div>
           </div>
 
           <div className="rounded-xl border border-primary/25 bg-primary/10 p-3">
@@ -1819,15 +1822,32 @@ export default function DocumentosEntidade({
               </div>
               <span className="w-fit rounded-full bg-primary/15 px-2.5 py-1 text-[10px] font-black text-primary">{relatorioDocumental.status_aptidao_documental || "não concluído"}</span>
             </div>
-            <div className="mt-3 grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
-              <div className="rounded-lg border border-border bg-card p-2"><p className="text-[9px] uppercase text-muted-foreground">Lidos</p><p className="text-sm font-black text-foreground">{relatorioDocumental.resumo?.documentos_lidos ?? 0}</p></div>
-              <div className="rounded-lg border border-border bg-card p-2"><p className="text-[9px] uppercase text-muted-foreground">Aprovados</p><p className="text-sm font-black text-success">{relatorioDocumental.resumo?.documentos_aprovados ?? 0}</p></div>
-              <div className="rounded-lg border border-border bg-card p-2"><p className="text-[9px] uppercase text-muted-foreground">Divergentes/incompatíveis</p><p className="text-sm font-black text-destructive">{(relatorioDocumental.resumo?.documentos_divergentes ?? 0) + (relatorioDocumental.resumo?.documentos_incompativeis ?? 0)}</p></div>
-              <div className="rounded-lg border border-border bg-card p-2"><p className="text-[9px] uppercase text-muted-foreground">Revisão humana</p><p className="text-sm font-black text-warning">{relatorioDocumental.resumo?.documentos_revisao_humana ?? 0}</p></div>
-            </div>
+            <div className="mt-3 rounded-lg border border-border bg-card p-2"><p className="text-[9px] uppercase text-muted-foreground">Conclusão</p><p className="text-[10px] font-black text-foreground">{pendenciasExecutivoRelatorio.length ? "A continuidade depende das ações listadas no checklist." : "Checklist confirmado para a etapa atual."}</p></div>
             <p className="mt-3 text-[10px] text-muted-foreground">Versão {relatorioDocumental.versao_relatorio || "—"} {relatorioDocumental.snapshot_id ? `• snapshot ${relatorioDocumental.snapshot_id}` : "• não persistido"}.</p>
           </div>
 
+          <div className="rounded-xl border border-primary/25 bg-primary/5 p-3">
+            <p className="text-xs font-black text-primary">Checklist documental executivo</p>
+            <p className="mt-1 text-[10px] text-muted-foreground">Resultado encontrado, situação e ação necessária. Os detalhes técnicos permanecem disponíveis abaixo, sem poluir o checklist.</p>
+            <div className="mt-3 space-y-2">
+              {checklistExecutivoRelatorio.map((item: any, index: number) => {
+                const status = String(item.status || "Pendente");
+                const confirmado = status === "Confirmado";
+                const incompatível = status === "Incompatível";
+                return <div key={`${item.nome}-${index}`} className={`rounded-lg border bg-card p-2 ${confirmado ? "border-success/25" : incompatível ? "border-destructive/25" : "border-warning/25"}`}><div className="flex items-start justify-between gap-2"><p className="text-[10px] font-black text-foreground">{item.nome}</p><span className={`rounded-full px-2 py-0.5 text-[9px] font-black ${confirmado ? "bg-success/15 text-success" : incompatível ? "bg-destructive/10 text-destructive" : "bg-warning/15 text-warning"}`}>{status}</span></div><p className="mt-1 text-[10px] text-foreground">{item.resultado || "Resultado não localizado."}{item.data ? ` Data relevante: ${new Date(item.data).toLocaleDateString("pt-BR")}.` : ""}</p>{item.pendencia ? <p className="mt-1 text-[10px] font-semibold text-warning">{item.pendencia}</p> : <p className="mt-1 text-[10px] text-success">Sem pendência.</p>}</div>;
+              })}
+              {!checklistExecutivoRelatorio.length && <p className="text-[10px] text-muted-foreground">Nenhum documento do checklist foi localizado.</p>}
+            </div>
+            <div className="mt-3 grid gap-3 md:grid-cols-2">
+              <div className="rounded-lg border border-border bg-card p-2"><p className="text-[10px] font-black text-foreground">Confirmações cruzadas</p>{confirmacoesExecutivoRelatorio.length ? <ul className="mt-1 space-y-1 text-[10px] text-muted-foreground">{confirmacoesExecutivoRelatorio.map((item: any, index: number) => <li key={`${item.dimensao}-${index}`}><strong>{item.dimensao}:</strong> {item.texto}</li>)}</ul> : <p className="mt-1 text-[10px] text-muted-foreground">Nenhuma confirmação cruzada localizada.</p>}</div>
+              <div className="rounded-lg border border-warning/25 bg-warning/5 p-2"><p className="text-[10px] font-black text-warning">Pendências para continuidade</p>{pendenciasExecutivoRelatorio.length ? <ul className="mt-1 space-y-1 text-[10px] text-warning">{pendenciasExecutivoRelatorio.map((item: any, index: number) => <li key={`${item.documento}-${index}`}><strong>{item.documento}:</strong> {item.acao}</li>)}</ul> : <p className="mt-1 text-[10px] text-success">Nenhuma pendência identificada.</p>}</div>
+            </div>
+            <div className="mt-3 rounded-lg border border-primary/20 bg-card p-2"><p className="text-[10px] font-black text-primary">Conclusão objetiva</p><p className="mt-1 text-[10px] text-foreground">Documentação {relatorioDocumental.status_aptidao_documental || relatorioDocumental.status_geral || "pendente de complementação"}. {pendenciasExecutivoRelatorio.length ? "A continuidade depende das ações listadas acima." : "Os documentos do checklist estão confirmados para a etapa atual."}</p></div>
+          </div>
+
+          <details className="rounded-xl border border-border bg-card p-3">
+            <summary className="cursor-pointer text-xs font-black text-foreground">Detalhes técnicos e histórico do processamento</summary>
+            <div className="mt-3 space-y-4">
           <div className="rounded-xl border border-border bg-card p-3">
             <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
               <div><p className="text-xs font-black text-foreground">Inventário e evidência de processamento</p><p className="mt-1 text-[10px] text-muted-foreground">Cada linha identifica o esperado, o recebido, a leitura, o tipo, o status e a evidência operacional.</p></div>
@@ -1957,7 +1977,9 @@ export default function DocumentosEntidade({
             {!!relatorioDocumental.pendencias?.length && <div className="mt-2 space-y-1">{relatorioDocumental.pendencias.map((pendencia: any, index: number) => <p key={`${pendencia.codigo}-${index}`} className="text-[10px] text-destructive">• <strong>{String(pendencia.severidade || "atenção").toUpperCase()}:</strong> {pendencia.mensagem || pendencia.recomendacao || pendencia.codigo}</p>)}</div>}
           </div>
             </div>
+          </details>
           </div>
+        </div>
         </div>
       )}
 

@@ -222,4 +222,70 @@ describe('relatório inicial documental', () => {
     expect(relatorio.inventario_documental.find((item: any) => item.arquivo_id === 'doc-faturamento')?.status).toBe('Aprovado');
     expect(relatorio.inventario_documental.find((item: any) => item.arquivo_id === 'doc-legado')?.status).toBe('Aprovado');
   });
+
+  it('não trata identificador parcial de bureau como CNPJ conflitante', () => {
+    const relatorio = aplicarRelatorioInicial({
+      gerado_em: '2026-09-08T00:00:00.000Z',
+      status_geral: 'Pendente',
+      empresa: dossie.empresa,
+      resumo: {},
+      documentos_analisados: [],
+      documentos_pendentes_analise: [],
+      documentos_faltantes: [],
+      pendencias: [],
+    }, {
+      dossie,
+      documentos: [{
+        arquivo_id: 'doc-bureau',
+        tipo_documento: 'consulta_serasa_cnpj',
+        nome: 'bureau.pdf',
+        analisado: true,
+        consistente: true,
+        resultado_analise: { satisfaz_requisito: true, dados_extraidos: { documento_compativel: true, cnpj: '12.345.678' } },
+      }],
+      evidencias: new Map(),
+    });
+
+    const identidade = relatorio.cruzamentos_documentais.find((item: any) => item.codigo === 'identidade_empresarial');
+    expect(identidade.status).toBe('consistente');
+    expect(identidade.descricao).not.toMatch(/conflitantes/i);
+  });
+
+  it('marca faturamento incompleto como pendência e exclui contrato operacional do checklist executivo', () => {
+    const relatorio = aplicarRelatorioInicial({
+      gerado_em: '2026-09-08T00:00:00.000Z',
+      status_geral: 'Pendente',
+      empresa: dossie.empresa,
+      resumo: {},
+      documentos_analisados: [],
+      documentos_pendentes_analise: [],
+      documentos_faltantes: [],
+      pendencias: [],
+    }, {
+      dossie: { ...dossie, mapa_documental_credito: { etapas: [] } },
+      documentos: [{
+        arquivo_id: 'doc-faturamento-curto',
+        tipo_documento: 'faturamento_12_meses',
+        nome: 'faturamento.pdf',
+        analisado: true,
+        consistente: true,
+        resultado_analise: { satisfaz_requisito: true, dados_extraidos: { documento_compativel: true, periodo_analisado: ['2025/08', '2026/07'], meses_referencia: ['2025-08', '2026-07'] } },
+      }, {
+        arquivo_id: 'doc-contrato-operacional',
+        tipo_documento: 'contrato_assessoria',
+        nome: 'contrato-geral.pdf',
+        analisado: true,
+        consistente: false,
+        resultado_analise: { documento_compativel: false, dados_extraidos: { documento_compativel: false } },
+      }],
+      evidencias: new Map(),
+    });
+
+    const checklist = relatorio.checklist_executivo.itens;
+    const faturamento = checklist.find((item: any) => item.nome === 'Faturamento');
+    expect(faturamento.status).toBe('Pendente');
+    expect(faturamento.pendencia).toMatch(/12 meses/i);
+    expect(checklist.some((item: any) => /assessoria|contrato operacional/i.test(item.nome))).toBe(false);
+    expect(relatorio.pendencias_detalhadas.some((item: any) => item.categoria === 'faturamento desatualizado')).toBe(true);
+  });
 });
