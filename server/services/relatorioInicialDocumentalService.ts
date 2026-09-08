@@ -104,11 +104,20 @@ function estadoDocumento(documento: DocumentoRelatorio): 'aprovado' | 'ressalva'
   if (incompatível) return 'incompativel';
   const divergente = lista(resultado.divergencias).length > 0 || lista(resultado.alertas).some((item) => /diverg|conflit|não confere|nao confere/i.test(texto(item?.codigo || item?.mensagem || item)));
   if (divergente) return 'divergente';
-  const revisao = documento.exige_revisao_humana === true || resultado.revisao_humana_necessaria === true || resultado.analysis_status === 'REANALISE_NECESSARIA';
+  const motivosRevisao = lista(resultado.motivos_revisao).length > 0;
+  const laudoSocietarioConcluido = ['atual', 'historico'].includes(normalizar(resultado.status_societario)) && !motivosRevisao;
+  const statusConcluido = /^(validado|concluido|conclu[ií]do|ok|ativo)$/i.test(texto(documento.status || resultado.status));
+  const conclusivoPorEvidencia = documento.consistente === true
+    || resultado.satisfaz_requisito === true
+    || dados.satisfaz_requisito === true
+    || (dados.documento_compativel === true && statusConcluido)
+    || laudoSocietarioConcluido;
+  const revisao = (documento.exige_revisao_humana === true || resultado.revisao_humana_necessaria === true || resultado.analysis_status === 'REANALISE_NECESSARIA')
+    && !conclusivoPorEvidencia;
   if (revisao && documento.analisado === true) return 'revisao_humana';
   if (documento.analisado !== true) return 'nao_lido';
-  if (documento.consistente === true && (lista(resultado.alertas).length > 0 || texto(resultado.diagnostico).length > 0)) return 'ressalva';
-  if (documento.consistente === true || resultado.satisfaz_requisito === true) return 'aprovado';
+  if (conclusivoPorEvidencia && (lista(resultado.alertas).length > 0 || texto(resultado.diagnostico).length > 0)) return 'ressalva';
+  if (conclusivoPorEvidencia) return 'aprovado';
   return 'pendente';
 }
 
@@ -129,7 +138,7 @@ function tipoConfirmado(documento: DocumentoRelatorio): { confirmado: boolean | 
   const dados = dadosDocumento(documento);
   const identificado = primeiro(dados.tipo_detectado, dados.tipo_documental_identificado, dados.tipo_documento_identificado);
   const compatibilidade = compatibilidadeDocumento(documento);
-  return { confirmado: compatibilidade ?? (identificado ? true : null), identificado: valorLegivel(identificado) };
+  return { confirmado: compatibilidade ?? (identificado ? true : null), identificado: valorLegivel(identificado || documento.tipo_documento) };
 }
 
 function gerarEvidencia(documento: DocumentoRelatorio, evidencia: DocumentProcessingEvidence | undefined) {
