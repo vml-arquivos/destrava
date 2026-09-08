@@ -75,6 +75,41 @@ describe('relatório inicial documental', () => {
     expect(relatorio.status_aptidao_documental).toBe('pendente de complementação');
   });
 
+  it('trata duplicata não analisada de requisito já coberto como informativa', () => {
+    const relatorio = aplicarRelatorioInicial({
+      gerado_em: '2026-09-07T00:00:00.000Z',
+      status_geral: 'Pendente',
+      empresa: dossie.empresa,
+      resumo: {},
+      documentos_analisados: [],
+      documentos_pendentes_analise: [],
+      documentos_faltantes: [],
+      pendencias: [],
+    }, {
+      dossie,
+      documentos: [{
+        arquivo_id: 'doc-cnpj-validado',
+        tipo_documento: 'cartao_cnpj',
+        nome: 'cartao-validado.pdf',
+        analisado: true,
+        consistente: true,
+        resultado_analise: { satisfaz_requisito: true, dados_extraidos: { documento_compativel: true } },
+      }, {
+        arquivo_id: 'doc-cnpj-duplicado',
+        tipo_documento: 'cartao_cnpj',
+        nome: 'cartao-duplicado.pdf',
+        analisado: false,
+        resultado_analise: { dados_extraidos: { tipo_detectado: 'CARTAO_CNPJ' } },
+      }],
+      evidencias: new Map(),
+    });
+
+    const duplicata = relatorio.inventario_documental.find((item: any) => item.arquivo_id === 'doc-cnpj-duplicado') as any;
+    expect(duplicata.status).toBe('Informativo — requisito já coberto');
+    expect(duplicata.pendencia).toBeNull();
+    expect(relatorio.resumo.documentos_pendentes).toBe(0);
+  });
+
   it('não transforma incompatibilidade explícita em revisão genérica nem inventa ausência de restrições', () => {
     const relatorio = aplicarRelatorioInicial({
       gerado_em: '2026-09-07T00:00:00.000Z',
