@@ -353,4 +353,19 @@ describe('relatório inicial documental', () => {
     expect(faturamento?.resultado).toMatch(/12 meses/);
     expect(cndt?.status).toBe('Informativo');
   });
+
+  it('não transforma ressalva de documento opcional em pendência da assessoria', () => {
+    const relatorio = aplicarRelatorioInicial({
+      gerado_em: '2026-09-08T00:00:00.000Z', status_geral: 'Pendente', empresa: dossie.empresa,
+      resumo: {}, documentos_analisados: [], documentos_pendentes_analise: [], documentos_faltantes: [], pendencias: [],
+    }, {
+      dossie: { ...dossie, mapa_documental_credito: { etapas: [{ numero: 1, titulo: 'Identidade', documentos: [{ codigo: 'comprovante_residencia', nome: 'Comprovante de residência', tipos_arquivo: ['comprovante_residencia'], obrigatorio: false }] }] } },
+      documentos: [{ arquivo_id: 'doc-residencia', tipo_documento: 'comprovante_residencia', nome: 'residencia.pdf', analisado: true, consistente: false, resultado_analise: { documento_compativel: true, revisao_humana_necessaria: true, satisfaz_requisito: false, dados_extraidos: { documento_compativel: true } } }],
+      evidencias: new Map(),
+    });
+
+    const item = relatorio.checklist_executivo.itens.find((candidate: any) => candidate.nome === 'Comprovante de residência');
+    expect(item?.status).toBe('Informativo');
+    expect(relatorio.pendencias_detalhadas.some((pending: any) => pending.documentos?.includes('residencia.pdf'))).toBe(false);
+  });
 });
