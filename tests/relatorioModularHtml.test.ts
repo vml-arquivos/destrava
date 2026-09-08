@@ -59,6 +59,21 @@ describe('relatório documental modular', () => {
     expect(interno.modulos_relatorio.find((module) => module.id === 'ficha_empresa')?.incluida).toBe(true);
   });
 
+
+  it('oculta identificadores pessoais no institucional e não adiciona rodapé que force página vazia', () => {
+    const relatorio = relatorioFixture();
+    relatorio.modulos_relatorio[3].itens = [{
+      arquivo_id: 'socio-file', nome: 'Documento de identificação do sócio', modulo: 'documentacao_socios',
+      status_validacao: 'Informativo', resultado: 'Documento — CPF: 26886925992 — RG: 1234567', arquivo_original: 'CNH-26886925992.pdf',
+    }];
+    const html = gerarHtmlRelatorioModular(relatorio);
+    expect(html).toContain('CPF não exibido');
+    expect(html).toContain('Identificador pessoal não exibido');
+    expect(html).not.toContain('26886925992');
+    expect(html).not.toContain('1234567');
+    expect(html).not.toContain('Datas ausentes aparecem');
+  });
+
   it('rejeita o mesmo arquivo funcional em mais de um módulo', () => {
     const relatorio = relatorioFixture();
     relatorio.modulos_relatorio[1].itens = [{ arquivo_id: 'same-file', nome: 'Cartão do CNPJ', status_validacao: 'Confirmado' }];

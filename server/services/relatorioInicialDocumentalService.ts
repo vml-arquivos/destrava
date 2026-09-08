@@ -141,6 +141,7 @@ function nomeChecklistExecutivo(item: any): string {
   if (/contrato[ _]social|alteracao[ _]contratual|contrato[ _]consolid/.test(tipo)) return 'Contrato Social e Alterações';
   if (/rating|serasa|bureau|relatorio[ _]credito/.test(tipo)) return 'Consulta de Rating';
   if (/faturamento/.test(tipo)) return 'Faturamento';
+  if (/defis|dasn[ _-]?simei/.test(tipo)) return 'DEFIS / DASN-SIMEI';
   if (/scr|registrato/.test(tipo)) return 'SCR/Registrato';
   if (/cnd|cpend|certidao/.test(tipo)) return item.documento || 'Certidão de Regularidade';
   return item.documento || item.nome || 'Documento';
@@ -182,11 +183,38 @@ function pendenciaExecutiva(item: any, status: string, dados: Record<string, any
   return null;
 }
 
+function consolidarResultados(valores: unknown[]): string {
+  const candidatos = valores.map((valor) => texto(valor)).filter(Boolean);
+  let resultado = '';
+  for (const candidato of candidatos) {
+    if (!resultado) {
+      resultado = candidato;
+      continue;
+    }
+    const atualNormalizado = normalizar(resultado);
+    const candidatoNormalizado = normalizar(candidato);
+    if (atualNormalizado.includes(candidatoNormalizado)) continue;
+    if (candidatoNormalizado.includes(atualNormalizado)) {
+      resultado = candidato;
+      continue;
+    }
+    const frases = Array.from(new Map(
+      `${resultado} ${candidato}`
+        .split(/(?<=[.!?])\s+(?=[A-ZÀ-Ý0-9])/)
+        .map((frase) => frase.trim())
+        .filter(Boolean)
+        .map((frase) => [normalizar(frase), frase]),
+    ).values());
+    resultado = frases.join(' ');
+  }
+  return resultado;
+}
+
 function resultadoExecutivo(item: any, status: string): string {
   const dados = dadosDocumento(item);
   const tipo = tipoDocumentoNormalizado(item);
   const resultado = resultadoDocumento(item);
-  if (status === 'Informativo' && !item.recebido) return 'Não anexado — sem pendência para a etapa atual.';
+  if (status === 'Informativo' && !item.recebido) return 'Não anexado — informativo para a etapa atual.';
   if (status === 'Confirmado' && /(^|\s)qsa(\s|$)|quadro societario/.test(tipo)) {
     const socios = lista(resultado.socios_lidos || dados.socios_lidos || dados.socios || resultado.socios)
       .map((socio: any) => texto(socio?.nome || socio?.nome_socio || socio?.razao_social || socio))
@@ -258,7 +286,7 @@ function construirChecklistExecutivo(inventario: any[], cruzamentos: any[], hist
       agrupados.set(chave, atual);
       continue;
     }
-    existente.resultado = adicionarUnico([existente.resultado, atual.resultado]).join(' ');
+    existente.resultado = consolidarResultados([existente.resultado, atual.resultado]);
     existente.pendencia = existente.pendencia || atual.pendencia;
     existente.arquivo_id = existente.arquivo_id || atual.arquivo_id;
     existente.arquivo_original = existente.arquivo_original || atual.arquivo_original;
