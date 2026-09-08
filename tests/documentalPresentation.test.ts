@@ -150,7 +150,6 @@ describe("construirSecoesAnaliseDocumento — validação objetiva", () => {
     const linha = linhaObjetivaDocumento({
       conclusao: "Leitura concluída; documento considerado consistente.",
       tipo_documento: "contrato_social",
-      status_societario: "atual",
       motivos_revisao: [],
       dados_extraidos: {
         contrato: { data_registro: "2025-06-06", numero_arquivamento: "20251505987" },
