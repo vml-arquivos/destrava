@@ -450,4 +450,32 @@ describe('relatório inicial documental', () => {
     expect(campos.get('Atividade principal')?.status).not.toBe('divergente');
     expect(campos.get('Capital social')?.status).not.toBe('divergente');
   });
+
+  it('não cria ação genérica para documentos de sócios completos e lidos com ressalva legada', () => {
+    const relatorio = aplicarRelatorioInicial({
+      gerado_em: '2026-09-08T00:00:00.000Z', status_geral: 'Pendente', empresa: dossie.empresa,
+      resumo: {}, documentos_analisados: [], documentos_pendentes_analise: [], documentos_faltantes: [], pendencias: [],
+    }, {
+      dossie: {
+        ...dossie,
+        mapa_documental_credito: { etapas: [{ numero: 5, titulo: 'Sócios', documentos: [
+          { codigo: 'socios_identidade', nome: 'Documentos de identificação dos sócios/administradores', tipos_arquivo: ['socios_identidade'], obrigatorio: true },
+          { codigo: 'socios_endereco', nome: 'Comprovante de residência dos sócios/administradores', tipos_arquivo: ['socios_endereco'], obrigatorio: true },
+        ] }] },
+      },
+      documentos: [
+        { arquivo_id: 'doc-identidade-socio', tipo_documento: 'socios_identidade', nome: 'identidade.pdf', analisado: true, consistente: null, resultado_analise: { satisfaz_requisito: true, diagnostico: 'Revisão de validade somente quando aplicável', dados_extraidos: { documento_compativel: true } } },
+        { arquivo_id: 'doc-endereco-socio', tipo_documento: 'socios_endereco', nome: 'residencia.pdf', analisado: true, consistente: null, resultado_analise: { satisfaz_requisito: true, diagnostico: 'Revisão de validade somente quando aplicável', dados_extraidos: { documento_compativel: true } } },
+      ],
+      evidencias: new Map(),
+    });
+
+    const itens = relatorio.checklist_executivo.itens;
+    expect(itens.find((item: any) => item.nome === 'Documentos de identificação dos sócios/administradores')?.status).toBe('Informativo');
+    expect(itens.find((item: any) => item.nome === 'Comprovante de residência dos sócios/administradores')?.status).toBe('Informativo');
+    expect(relatorio.checklist_executivo.pendencias).not.toEqual(expect.arrayContaining([
+      expect.objectContaining({ documento: 'Documentos de identificação dos sócios/administradores' }),
+      expect.objectContaining({ documento: 'Comprovante de residência dos sócios/administradores' }),
+    ]));
+  });
 });

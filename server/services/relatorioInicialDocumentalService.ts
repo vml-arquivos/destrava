@@ -153,6 +153,13 @@ function statusChecklistExecutivo(item: any): 'Confirmado' | 'Aprovado com ressa
   if (status.includes('informativo')) return 'Informativo';
   if (status.includes('incompat')) return 'Incompatível';
   if (item.esperado === false && (status.includes('ressalva') || status.includes('revis') || status.includes('pend'))) return 'Informativo';
+  if (/socios_(identidade|endereco)|documento_socio|comprovante_residencia/.test(tipoDocumentoNormalizado(item))
+    && status.includes('ressalva')
+    && item.lido === true
+    && item.dados_completos === true
+    && !item.pendencia
+    && !item.observacao
+    && item.consistente !== false) return 'Informativo';
   if (status.includes('revis') || status.includes('pend') || status.includes('nao lido') || status.includes('não lido')) return 'Pendente';
   if (status.includes('ressalva')) return 'Aprovado com ressalva';
   if (status.includes('aprov') || status.includes('valid') || status.includes('requisito satisfeito') || status.includes('confirm')) return 'Confirmado';
