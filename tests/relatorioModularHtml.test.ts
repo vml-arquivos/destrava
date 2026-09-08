@@ -62,6 +62,28 @@ describe('relatório documental modular', () => {
     expect(html).not.toContain('Pendência: Pendência:');
   });
 
+  it('prioriza o cadastro autoritativo para campos cadastrais corrompidos na apresentação', () => {
+    const relatorio = relatorioFixture();
+    relatorio.empresa = {
+      ...relatorio.empresa,
+      razao_social: 'PALUMA BURGER LTDA',
+      nome_fantasia: 'Paluma Burger',
+      natureza_juridica: 'Sociedade Empresária Limitada',
+      atividade_principal: '5611203',
+    };
+    relatorio.modulos_relatorio[0].campos = [
+      { campo: 'Razão social', valor: 'PALUM A BURGER LTDA' },
+      { campo: 'Natureza jurídica', valor: '206-2 - Socie dade Em pre s ária Limitada' },
+      { campo: 'Atividade principal', valor: '56.11-2-03 - Lanchone te s' },
+    ];
+    const html = gerarHtmlRelatorioModular(relatorio);
+    expect(html).toContain('PALUMA BURGER LTDA');
+    expect(html).toContain('206-2 - Sociedade Empresária Limitada');
+    expect(html).toContain('56.11-2-03 - Lanchonetes, casas de chá, de sucos e similares');
+    expect(html).not.toContain('PALUM A BURGER LTDA');
+    expect(html).not.toContain('Lanchone te s');
+  });
+
   it('omite assessoria no institucional e permite incluí-la no modo interno', () => {
     const institucional = relatorioFixture('institucional');
     const interno = relatorioFixture('interno');
