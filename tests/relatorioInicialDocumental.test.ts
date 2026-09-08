@@ -368,4 +368,32 @@ describe('relatório inicial documental', () => {
     expect(item?.status).toBe('Informativo');
     expect(relatorio.pendencias_detalhadas.some((pending: any) => pending.documentos?.includes('residencia.pdf'))).toBe(false);
   });
+
+  it('organiza os sete módulos e mantém assessoria fora do institucional', () => {
+    const relatorio = aplicarRelatorioInicial({
+      gerado_em: '2026-09-08T00:00:00.000Z', status_geral: 'Pendente', empresa: dossie.empresa,
+      resumo: {}, documentos_analisados: [], documentos_pendentes_analise: [], documentos_faltantes: [], pendencias: [],
+    }, {
+      dossie: {
+        ...dossie,
+        socios: [{ id: 'socio-1', nome: 'Sócio de teste', cpf: '00000000000', cargo: 'Administrador', status: 'ativo' }],
+        mapa_documental_credito: { etapas: [] },
+      },
+      documentos: [
+        { arquivo_id: 'doc-scr', tipo_documento: 'consulta_serasa_cnpj', nome: 'consulta.pdf', analisado: true, consistente: true, resultado_analise: { satisfaz_requisito: true, dados_extraidos: { data_consulta: '2026-08-01' } } },
+        { arquivo_id: 'doc-socio', tipo_documento: 'cpf_socio', nome: 'socio.pdf', socio_id: 'socio-1', analisado: true, consistente: true, resultado_analise: { satisfaz_requisito: true } },
+        { arquivo_id: 'doc-assessoria', tipo_documento: 'contrato_assessoria', nome: 'assessoria.pdf', analisado: true, consistente: true, resultado_analise: { satisfaz_requisito: true } },
+      ],
+      evidencias: new Map(),
+    });
+
+    expect(relatorio.modulos_relatorio.map((module: any) => module.id)).toEqual([
+      'identificacao', 'analise_inicial', 'societarios', 'consultas', 'socios', 'ficha_empresa', 'resumo',
+    ]);
+    expect(relatorio.modulos_relatorio.find((module: any) => module.id === 'consultas')?.submodulos.map((module: any) => module.id)).toEqual(['credito', 'fiscal_cadastral']);
+    expect(relatorio.modulos_relatorio.find((module: any) => module.id === 'socios')?.socios).toHaveLength(1);
+    const ficha = relatorio.modulos_relatorio.find((module: any) => module.id === 'ficha_empresa');
+    expect(ficha.incluida).toBe(false);
+    expect(ficha.itens).toHaveLength(0);
+  });
 });
