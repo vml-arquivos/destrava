@@ -146,6 +146,26 @@ describe("construirSecoesAnaliseDocumento — validação objetiva", () => {
     expect(serializado).not.toContain("Evidências documentais");
   });
 
+  it("não exibe Revisar para contrato consistente com status societário confirmado", () => {
+    const linha = linhaObjetivaDocumento({
+      conclusao: "Leitura concluída; documento considerado consistente.",
+      tipo_documento: "contrato_social",
+      status_societario: "atual",
+      motivos_revisao: [],
+      dados_extraidos: {
+        contrato: { data_registro: "2025-06-06", numero_arquivamento: "20251505987" },
+      },
+    }, {
+      tipo_documento: "contrato_social",
+      analisado: true,
+      consistente: true,
+      status: "ativo",
+    }, "Contrato social", "Validado");
+
+    expect(linha).toContain("Conferência com a Junta: Correspondência confirmada");
+    expect(linha).not.toContain("Conferência com a Junta: Revisar");
+  });
+
   it("Enquadramento mostra apenas CNPJ, regime, situação e confirmação", () => {
     const secoes = construirSecoesAnaliseDocumento({
       conclusao: "Leitura concluída.",
