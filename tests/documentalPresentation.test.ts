@@ -166,6 +166,20 @@ describe("construirSecoesAnaliseDocumento — validação objetiva", () => {
     expect(linha).not.toContain("Conferência com a Junta: Revisar");
   });
 
+  it("preserva faturamento legado explicitamente validado sem aprovar requisito não satisfeito", () => {
+    const legadoValidado = {
+      tipo_documento: "faturamento_12_meses",
+      dados_extraidos: { cnpj: "52.008.360/0001-33", periodo_analisado: "2025/08 a 2026/07" },
+    };
+    const documento = { tipo_documento: "faturamento_12_meses", status: "Validado", observacao: "validado", consistente: false, analisado: true };
+
+    expect(estadoVisualDocumento(legadoValidado, documento)).toBe("aprovado");
+    expect(estadoVisualDocumento({ ...legadoValidado, satisfaz_requisito: false }, documento)).toBe("revisao");
+    const linha = linhaObjetivaDocumento(legadoValidado, documento, "Faturamento dos últimos 12 meses", "Validado");
+    expect(linha).toContain("Status: Validado");
+    expect(linha).not.toContain("Revisão necessária");
+  });
+
   it("Enquadramento mostra apenas CNPJ, regime, situação e confirmação", () => {
     const secoes = construirSecoesAnaliseDocumento({
       conclusao: "Leitura concluída.",
