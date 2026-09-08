@@ -47,7 +47,19 @@ describe('relatório documental modular', () => {
     expect(html).toContain('Datas disponíveis');
     expect(html).not.toMatch(/quatro documentos|analise_inicial|Resumo de atualizações/i);
     expect(html).not.toMatch(/Tipo:|Categoria:|Subtipo:|Páginas\/unidades|Confiança:|Revisão humana:|Dados extraídos:/i);
+    expect(html).not.toMatch(/>\s*\d+\.\s+\d+\./);
+    expect(html).not.toContain('Pendência: Pendência:');
     expect(validateModularReport(relatorio)).toEqual({ ok: true, failures: [] });
+  });
+
+  it('normaliza datas cadastrais e prefixos repetidos sem alterar o dado de origem', () => {
+    const relatorio = relatorioFixture();
+    relatorio.modulos_relatorio[0].campos = [{ campo: 'Data de criação do cadastro', valor: 'Fri May 22 2026 13:49:38 GMT+0000 (Coordinated Universal Time)' }];
+    relatorio.modulos_relatorio[5].pendencias = [{ documento: 'FGTS', acao: 'Pendência: anexar Certificado de Regularidade do FGTS.' }];
+    const html = gerarHtmlRelatorioModular(relatorio);
+    expect(html).toContain('22/05/2026');
+    expect(html).toContain('FGTS:</b> anexar Certificado de Regularidade do FGTS.');
+    expect(html).not.toContain('Pendência: Pendência:');
   });
 
   it('omite assessoria no institucional e permite incluí-la no modo interno', () => {
