@@ -37,6 +37,7 @@ import { obterFaturamentoRolling12Meses, type CompetenciaMensal } from '../servi
 import { obterCoberturaPorEmpresa } from '../services/coberturaEvidenciaBureauService';
 import { auditarArquivosDocumentais } from '../services/documentProcessingEvidence';
 import { aplicarRelatorioInicial, RELATORIO_INICIAL_VERSION } from '../services/relatorioInicialDocumentalService';
+import { anexarDocumentosNaoVinculados } from '../services/documentInventory';
 
 const { Pool } = pkg;
 const pool = new Pool({
@@ -2374,10 +2375,11 @@ async function vincularDocumentosAutomaticos(empresaId: string) {
     { codigo: 'socios_representantes', tipos: ['documento_socio', 'cpf', 'rg', 'cnh', 'comprovante_residencia', 'procuracao'] },
     { codigo: 'contrato_social_alteracoes', tipos: ['contrato_social', 'alteracao_contratual', 'estatuto', 'procuracao'] },
     { codigo: 'faturamento_historico', tipos: ['faturamento_12_meses', 'comprovante_faturamento', 'declaracao_faturamento', 'dre', 'balanco', 'nota_fiscal'] },
-    { codigo: 'demonstracoes_contabeis_fiscais', tipos: ['dre', 'balanco', 'balancete', 'imposto_renda', 'ecd', 'ecf'] },
+    { codigo: 'demonstracoes_contabeis_fiscais', tipos: ['dre', 'balanco', 'balancete', 'imposto_renda', 'ecd', 'ecf', 'pgdas', 'recibo_pgdas', 'defis', 'recibo_defis'] },
     { codigo: 'extratos_movimentacao_bancaria', tipos: ['extrato_bancario'] },
-    { codigo: 'certidoes_regularidade', tipos: ['certidao', 'serasa', 'spc', 'boa_vista', 'cemprot'] },
-    { codigo: 'scr_endividamento', tipos: ['rating_scr_bacen', 'relatorio_scr'] },
+    { codigo: 'certidoes_regularidade', tipos: ['certidao', 'cnd_rfb_cnpj', 'pgfn_cnpj', 'cadin_cnpj', 'cndt', 'cnd_estadual', 'cnd_municipal', 'serasa', 'spc', 'boa_vista', 'cenprot_cnpj'] },
+    { codigo: 'scr_endividamento', tipos: ['rating_scr_bacen', 'relatorio_scr', 'scr_cnpj', 'rating_bacen_cnpj', 'consulta_serasa_cnpj'] },
+    { codigo: 'acompanhamento_bancario', tipos: ['ccs_cnpj', 'ccf_cnpj', 'compartilhamento_ecac'] },
     { codigo: 'contratos_gerados', tipos: ['contrato_assessoria', 'contrato_gerado', 'contrato_assinado'] },
   ];
   if (!(await tableExists('documentos_arquivos'))) return;
@@ -3151,7 +3153,31 @@ export async function montarDossieCreditoEmpresa(empresaId: string, options: { p
     [empresaId]
   );
 
-  const blocos = await enriquecerDocumentosAcervoComAnalise(blocosBrutos);
+  // Arquivos legados podem existir em documentos_arquivos com empresa_id e
+  // sem uma linha em documentacao_bloco_arquivos. A tela do Acervo os lista,
+  // mas o dossiê/mapa não os via; isso produzia faltantes falsos para CND,
+  // SCR, PGDAS e DEFIS, apesar de cada cartão estar validado. Preservar esses
+  // arquivos em um bloco informativo não lhes atribui requisito nem aprovação;
+  // apenas mantém o relatório completo e deixa o laudo/status já persistido
+  // decidir a conclusão.
+  const { rows: documentosAtivosEmpresa } = await pool.query(
+    `SELECT id, entidade_tipo, entidade_id, empresa_id, socio_id, contrato_id, simulacao_id,
+            tipo_documento, nome_original, nome_arquivo, mime_type, tamanho_bytes, status,
+            validado, exige_revisao_humana, criado_em, atualizado_em, observacoes, metadados,
+            resultado_validacao,
+            '/api/documentos/' || id::text || '/view' AS view_url,
+            '/api/documentos/' || id::text || '/download' AS download_url
+       FROM public.documentos_arquivos
+      WHERE excluido_em IS NULL
+        AND status <> 'excluido'
+        AND COALESCE(metadados->>'coleta_status', '') <> 'staging'
+        AND (empresa_id = $1 OR (entidade_tipo = 'empresa' AND entidade_id = $1))
+      ORDER BY criado_em DESC
+      LIMIT 500`,
+    [empresaId],
+  );
+  const blocosComArquivosLegados = anexarDocumentosNaoVinculados(blocosBrutos, documentosAtivosEmpresa);
+  const blocos = await enriquecerDocumentosAcervoComAnalise(blocosComArquivosLegados);
   const pendencias = blocos.flatMap((b: any) => Array.isArray(b.pendencias) ? b.pendencias.map((p: any) => ({ ...p, bloco_codigo: b.codigo, bloco_nome: b.nome_amigavel })) : []);
   const tiposAnexados = new Set<string>(
     blocos.flatMap((bloco: any) => Array.isArray(bloco.documentos)

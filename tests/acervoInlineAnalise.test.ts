@@ -9,7 +9,7 @@ describe('análise inline no Acervo Documental', () => {
   it('reutiliza o resultado detalhado do relatório no payload dos blocos', () => {
     expect(backend).toContain('enriquecerDocumentosAcervoComAnalise');
     expect(backend).toContain('resultado_analise: resultadoAnalise');
-    expect(backend).toContain('const blocos = await enriquecerDocumentosAcervoComAnalise(blocosBrutos);');
+    expect(backend).toContain('const blocos = await enriquecerDocumentosAcervoComAnalise(blocosComArquivosLegados);');
   });
 
   it('renderiza resultado por arquivo e mantém o estado de upload quando não há laudo', () => {

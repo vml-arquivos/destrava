@@ -160,6 +160,26 @@ describe('mapa documental de crédito', () => {
     expect(projecao?.obrigatorio).toBe(false);
   });
 
+  it('reconhece os tipos físicos atuais de CND, SCR, PGDAS e DEFIS no mapa', () => {
+    const mapa = gerarMapaDocumentalCredito({
+      empresa: { regime_tributario: 'Simples Nacional', opcao_simples: true },
+      etapa1Aprovada: true,
+      etapa2Aprovada: true,
+      tiposAnexados: [
+        'cnd_rfb_cnpj',
+        'rating_bacen_cnpj',
+        'pgdas',
+        'recibo_pgdas',
+        'defis',
+        'recibo_defis',
+      ],
+    });
+    const documentos = mapa.etapas.flatMap((etapa) => etapa.documentos);
+    for (const codigo of ['cnd_federal', 'scr_pj', 'pgdas_12m', 'defis']) {
+      expect(documentos.find((documento) => documento.codigo === codigo)?.anexado, codigo).toBe(true);
+    }
+  });
+
   it('mantém programas bancários como sobreposição configurável', () => {
     const mapa = gerarMapaDocumentalCredito({ empresa: {}, etapa1Aprovada: false, etapa2Aprovada: false });
     expect(mapa.programas_referencia.some((p) => p.codigo === 'pronampe_bb')).toBe(true);
