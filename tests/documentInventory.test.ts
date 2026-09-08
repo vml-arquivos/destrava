@@ -29,4 +29,17 @@ describe('inventário documental completo', () => {
     const blocos = [{ codigo: 'cnpj_receita', documentos: [] }];
     expect(anexarDocumentosNaoVinculados(blocos, [{ tipo_documento: 'cnd_rfb_cnpj' }])).toBe(blocos);
   });
+
+  it('não mistura fotos, documentos CPF de sócio ou contratos operacionais no inventário de crédito', () => {
+    const blocos = [{ codigo: 'cnpj_receita', documentos: [] }];
+    const resultado = anexarDocumentosNaoVinculados(blocos, [
+      { id: 'foto-1', tipo_documento: 'foto_fachada' },
+      { id: 'cpf-1', tipo_documento: 'consulta_serasa_cpf' },
+      { id: 'socio-1', tipo_documento: 'documento_socio', socio_id: 'socio-1' },
+      { id: 'contrato-1', tipo_documento: 'contrato_prestacao_servicos' },
+      { id: 'cnd-1', tipo_documento: 'cnd_rfb_cnpj' },
+    ]);
+    expect(resultado).toHaveLength(2);
+    expect(resultado[1].documentos).toEqual([{ id: 'cnd-1', tipo_documento: 'cnd_rfb_cnpj' }]);
+  });
 });

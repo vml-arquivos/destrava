@@ -14,12 +14,30 @@ function idDocumento(documento: DocumentoInventario): string {
   return String(documento?.id || '').trim();
 }
 
+const TIPOS_FORA_DO_INVENTARIO_CREDITO = new Set([
+  'contrato_prestacao_servicos',
+  'foto_fachada',
+  'foto_empresa',
+  'outros',
+  'outro',
+  'irpf',
+  'recibo_irpf',
+  'enquadramento_tributario_cpf',
+]);
+
+export function ehDocumentoInventarioCredito(documento: DocumentoInventario): boolean {
+  const tipo = String(documento?.tipo_documento || '').trim().toLowerCase();
+  if (documento?.socio_id) return false;
+  if (/_cpf$/.test(tipo)) return false;
+  return !TIPOS_FORA_DO_INVENTARIO_CREDITO.has(tipo);
+}
+
 /**
- * Mantém no dossiê os arquivos ativos que existem na empresa, mas ainda não
- * possuem vínculo em documentacao_bloco_arquivos. Esses arquivos não recebem
- * automaticamente um requisito: entram em um bloco informativo e continuam
- * sujeitos ao mesmo laudo/status do acervo. O vínculo de bloco permanece
- * preferível; o bloco virtual só evita que o relatório perca anexos legados.
+ * Mantém no dossiê os arquivos de crédito ativos que existem na empresa, mas
+ * ainda não possuem vínculo em documentacao_bloco_arquivos. Esses arquivos
+ * não recebem automaticamente um requisito: entram em um bloco informativo e
+ * continuam sujeitos ao mesmo laudo/status do acervo. Fotos, documentos de
+ * sócios e contratos operacionais permanecem nos seus fluxos próprios.
  */
 export function anexarDocumentosNaoVinculados(
   blocos: BlocoInventario[],
@@ -32,6 +50,7 @@ export function anexarDocumentosNaoVinculados(
       .filter(Boolean),
   );
   const avulsos = documentosAtivos.filter((documento) => {
+    if (!ehDocumentoInventarioCredito(documento)) return false;
     const id = idDocumento(documento);
     return Boolean(id) && !idsVinculados.has(id);
   });
