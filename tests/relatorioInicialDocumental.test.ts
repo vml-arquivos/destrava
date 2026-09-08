@@ -1,7 +1,14 @@
 import { describe, expect, it } from 'vitest';
-import { aplicarRelatorioInicial } from '../server/services/relatorioInicialDocumentalService';
+import { aplicarRelatorioInicial, documentoAtivoParaRelatorio } from '../server/services/relatorioInicialDocumentalService';
 
 describe('relatório inicial documental', () => {
+  it('não considera versão excluída como documento ativo do PDF', () => {
+    expect(documentoAtivoParaRelatorio({ status: 'excluido' })).toBe(false);
+    expect(documentoAtivoParaRelatorio({ status: 'excluída' })).toBe(false);
+    expect(documentoAtivoParaRelatorio({ status: 'ativo' })).toBe(true);
+    expect(documentoAtivoParaRelatorio({ status: 'ativo', excluido_em: '2026-09-01T00:00:00Z' })).toBe(false);
+  });
+
   const dossie = {
     empresa: {
       id: 'empresa-1',

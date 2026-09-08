@@ -38,7 +38,7 @@ import { obterLinhaDoTempoRegime, obterRegimeVigenteEm } from '../services/regim
 import { obterFaturamentoRolling12Meses, type CompetenciaMensal } from '../services/faturamentoRolling12MesesService';
 import { obterCoberturaPorEmpresa } from '../services/coberturaEvidenciaBureauService';
 import { auditarArquivosDocumentais } from '../services/documentProcessingEvidence';
-import { aplicarRelatorioInicial, RELATORIO_INICIAL_VERSION } from '../services/relatorioInicialDocumentalService';
+import { aplicarRelatorioInicial, documentoAtivoParaRelatorio, RELATORIO_INICIAL_VERSION } from '../services/relatorioInicialDocumentalService';
 import { anexarDocumentosNaoVinculados } from '../services/documentInventory';
 
 const { Pool } = pkg;
@@ -642,12 +642,17 @@ export async function montarRelatorioDocumental(dossie: any) {
       ],
     });
   }
-  const documentosAnexados = blocos.flatMap((bloco: any) => (Array.isArray(bloco.documentos) ? bloco.documentos : []).map((documento: any) => ({
-    ...documento,
-    bloco_codigo: bloco.codigo,
-    bloco_nome: bloco.nome_amigavel,
-    bloco_status: bloco.status,
-  })));
+  const documentosAnexados = blocos.flatMap((bloco: any) => (Array.isArray(bloco.documentos) ? bloco.documentos : [])
+    // O dossiê histórico pode manter versões antigas no bloco depois que um
+    // arquivo foi substituído. Elas não são documentos ativos do acervo e não
+    // podem reaparecer no PDF como uma segunda "Revisão necessária".
+    .filter((documento: any) => documentoAtivoParaRelatorio(documento))
+    .map((documento: any) => ({
+      ...documento,
+      bloco_codigo: bloco.codigo,
+      bloco_nome: bloco.nome_amigavel,
+      bloco_status: bloco.status,
+    })));
 
   // Bug real observado: um QSA (ou outro documento com análise especializada
   // própria) podia aparecer no relatório como "Validado"/"Leitura concluída;
