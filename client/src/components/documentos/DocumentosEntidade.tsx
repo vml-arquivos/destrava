@@ -10,6 +10,7 @@ import {
   AlertTriangle,
   ArrowRight,
   CheckCircle,
+  ChevronDown,
   Download,
   Eye,
   FileArchive,
@@ -871,6 +872,19 @@ export default function DocumentosEntidade({
   // todo. Agora só aparecem ao clicar no ícone "i" do card (por tipo de documento),
   // igual ao mecanismo de "Ver detalhes" já usado na Etapa 1/2/3.
   const [descricaoVisivel, setDescricaoVisivel] = useState<Record<string, boolean>>({});
+  // CORREÇÃO (09/09/2026, pedido explícito do usuário: "esconde esses cards
+  // com um oculta e mostra, deixando o I de informações e o resultado, se
+  // está validado ou pendente, vamos ser mais clean"): cada card de tipo de
+  // documento do Acervo Documental (a grade "Documentação da Empresa" etc.)
+  // agora começa RECOLHIDO por padrão -- só o título, o selo de resultado
+  // (Validado/Pendente/Incompatível/Revisão necessária/Não anexado/
+  // Dispensado) e o ícone "i" ficam visíveis; o botão "Anexar", a observação,
+  // o resultado da Etapa 1 (`StatusAnaliseSlot`) e a lista de arquivos só
+  // aparecem ao expandir (clique no card ou na seta). Ausência de chave =
+  // recolhido (não precisa inicializar um valor por tipo). Mesmo princípio
+  // já usado para `descricaoVisivel` acima -- estado só de UI, nada de
+  // negócio muda.
+  const [cardsExpandidos, setCardsExpandidos] = useState<Record<string, boolean>>({});
   const [pipeline, setPipeline] = useState<any>(null);
   // Popover "Detalhes da pendência" do bloco compacto de confirmação de regime
   // tributário -- pedido explícito do usuário para tirar o texto permanente
@@ -2374,6 +2388,56 @@ export default function DocumentosEntidade({
                       const resultadoInlineDoc = doc.resultado_analise || laudoDoc || laudoErroDoc || null;
                       return Boolean(resultadoInlineDoc) && estadoVisualDocumento(resultadoInlineDoc, doc) === "incompativel";
                     });
+                    // CORREÇÃO (09/09/2026, pedido explícito do usuário -- "deixando o I
+                    // de informações e o resultado, se está validado ou pendente"): selo
+                    // único de resultado do campo inteiro, mostrado sempre (mesmo com o
+                    // card recolhido). Espelha, de propósito, a mesma classificação por
+                    // arquivo já usada mais abaixo no map de `docsTipo` (`detalheCor`/
+                    // `detalheTitulo`, linhas ~2545-2546) -- não reaproveita a variável de
+                    // lá porque aquela é calculada arquivo a arquivo, dentro do próprio
+                    // map, e este selo precisa do resultado agregado de TODOS os arquivos
+                    // do campo, calculado antes do map. Mesmo padrão de duplicação
+                    // deliberada já usado neste arquivo para `algumArquivoIncompativelNoSlot`
+                    // (linhas acima) pelo mesmo motivo -- evitar reestruturar o map que já
+                    // funciona corretamente.
+                    const resumoCampo: { texto: string; cor: "success" | "warning" | "destructive" | "muted" } = (() => {
+                      if (dispensadoPorMei && docsTipo.length === 0 && !satisfeitoPorOutro) {
+                        return { texto: "Dispensado (MEI)", cor: "success" };
+                      }
+                      if (satisfeitoPorOutro) {
+                        return { texto: "Coberto por outro documento", cor: "success" };
+                      }
+                      if (docsTipo.length === 0) {
+                        return (documentoSlot.obrigatorio || destaqueConfirmacaoRegime)
+                          ? { texto: "Pendente", cor: "warning" }
+                          : { texto: "Não anexado", cor: "muted" };
+                      }
+                      const estadosCampo = docsTipo.map((doc) => {
+                        const laudoDoc = doc.resultado_validacao?.analise_regra_documental || null;
+                        const laudoErroDoc = doc.resultado_validacao?.analise_regra_documental_erro || null;
+                        const resultadoInlineDoc = doc.resultado_analise || laudoDoc || laudoErroDoc || null;
+                        const temLeituraRealDoc = documentoTemResultadoDeLeitura(doc);
+                        const estadoDoc = resultadoInlineDoc ? estadoVisualDocumento(resultadoInlineDoc, doc) : null;
+                        const incompativelDoc = estadoDoc === "incompativel";
+                        const revisaoDoc = estadoDoc === "revisao" || estadoDoc === "reanalisar";
+                        const tipoAnaliseAutomaticaDoc = TIPOS_COM_ANALISE_AUTOMATICA.has(String(doc.tipo_documento || ""));
+                        const validacaoConcluidaDoc = temLeituraRealDoc && !laudoErroDoc && estadoDoc === "aprovado";
+                        const validadoDoc = (doc.validado === true || validacaoConcluidaDoc) && (!tipoAnaliseAutomaticaDoc || validacaoConcluidaDoc);
+                        return { incompativelDoc, revisaoDoc, validadoDoc };
+                      });
+                      if (estadosCampo.some((e) => e.incompativelDoc)) return { texto: "Incompatível", cor: "destructive" };
+                      if (estadosCampo.some((e) => e.revisaoDoc)) return { texto: "Revisão necessária", cor: "warning" };
+                      if (estadosCampo.every((e) => e.validadoDoc)) return { texto: "Validado", cor: "success" };
+                      return { texto: "Em análise", cor: "muted" };
+                    })();
+                    const CORES_RESUMO_CAMPO: Record<typeof resumoCampo.cor, string> = {
+                      success: "bg-success/15 text-success",
+                      warning: "bg-warning/15 text-warning",
+                      destructive: "bg-destructive/10 text-destructive",
+                      muted: "bg-muted text-muted-foreground",
+                    };
+                    const chaveExpansaoCard = chaveSlot;
+                    const cardExpandido = cardsExpandidos[chaveExpansaoCard] === true;
                     // CORREÇÃO (Rodada 30, 02/09/2026, print real da tela em produção,
                     // pedido explícito do usuário: "na visualização, com todos
                     // encolhidos, fechado, tem que estar tudo mesmo padrão, tudo
@@ -2422,20 +2486,40 @@ export default function DocumentosEntidade({
                                   <Info className="h-2.5 w-2.5" />
                                 </button>
                               )}
+                              {/* CORREÇÃO (09/09/2026, pedido explícito do usuário -- "deixando o
+                                  I de informações e o resultado, se está validado ou pendente"):
+                                  selo único de resultado, sempre visível mesmo com o card
+                                  recolhido -- é o resumo que substitui precisar abrir o card só
+                                  pra saber se está tudo certo com este tipo de documento. */}
+                              <span className={`text-[9px] font-bold px-1.5 py-0.5 rounded-full shrink-0 ${CORES_RESUMO_CAMPO[resumoCampo.cor]}`}>{resumoCampo.texto}</span>
                             </div>
                             <p className="text-[10px] text-muted-foreground mt-0.5">
                               {exigeVinculoSocio ? `${sociosComDocumento}/${socios.length} sócio(s) com documento · ` : ""}{docsTipo.length} arquivo(s) no contexto atual
                             </p>
                           </div>
-                          {/* Já coberto por outro documento (ex: CND cobre CADIN/PGFN) -- não faz
-                              sentido oferecer anexar algo que não é mais necessário. */}
-                          {!satisfeitoPorOutro && (
-                            <label title={motivoBloqueio || undefined} className={`h-8 inline-flex items-center justify-center gap-1 text-[11px] font-semibold px-3 rounded-lg transition-colors shrink-0 ${motivoBloqueio || (exigeVinculoSocio && !socioVinculado) ? "bg-border text-primary-foreground cursor-not-allowed" : "bg-primary text-primary-foreground cursor-pointer hover:bg-primary/90"}`}>
-                              {uploading ? <Loader2 className="w-3 h-3 animate-spin" /> : <Upload className="w-3 h-3" />} Anexar
-                              <input type="file" accept=".pdf,.jpg,.jpeg,.png,.webp,.xlsx,.csv,.docx" className="hidden" disabled={uploading || !!motivoBloqueio || (exigeVinculoSocio && !socioVinculado)} onChange={(e) => { const file = e.target.files?.[0]; if (file) enviar(tipo, file, socioVinculado); e.currentTarget.value = ""; }} />
-                            </label>
-                          )}
+                          <div className="flex items-center gap-1 shrink-0">
+                            {/* Já coberto por outro documento (ex: CND cobre CADIN/PGFN) -- não
+                                faz sentido oferecer anexar algo que não é mais necessário. O
+                                botão "Anexar" só aparece com o card expandido -- recolhido,
+                                mostra só o resultado (selo acima) + o ícone "i". */}
+                            {!satisfeitoPorOutro && cardExpandido && (
+                              <label title={motivoBloqueio || undefined} className={`h-8 inline-flex items-center justify-center gap-1 text-[11px] font-semibold px-3 rounded-lg transition-colors shrink-0 ${motivoBloqueio || (exigeVinculoSocio && !socioVinculado) ? "bg-border text-primary-foreground cursor-not-allowed" : "bg-primary text-primary-foreground cursor-pointer hover:bg-primary/90"}`}>
+                                {uploading ? <Loader2 className="w-3 h-3 animate-spin" /> : <Upload className="w-3 h-3" />} Anexar
+                                <input type="file" accept=".pdf,.jpg,.jpeg,.png,.webp,.xlsx,.csv,.docx" className="hidden" disabled={uploading || !!motivoBloqueio || (exigeVinculoSocio && !socioVinculado)} onChange={(e) => { const file = e.target.files?.[0]; if (file) enviar(tipo, file, socioVinculado); e.currentTarget.value = ""; }} />
+                              </label>
+                            )}
+                            <button
+                              type="button"
+                              onClick={() => setCardsExpandidos((prev) => ({ ...prev, [chaveExpansaoCard]: !cardExpandido }))}
+                              title={cardExpandido ? "Recolher" : "Expandir para anexar/ver detalhes"}
+                              className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border border-input text-muted-foreground hover:border-primary/30 hover:text-primary"
+                            >
+                              <ChevronDown className={`h-4 w-4 transition-transform ${cardExpandido ? "rotate-180" : ""}`} />
+                            </button>
+                          </div>
                         </div>
+                        {cardExpandido && (
+                        <>
                         {motivoBloqueio && <p className="rounded-md border border-warning/20 bg-warning/10 px-2.5 py-1.5 text-[10px] font-semibold text-warning">🔒 {motivoBloqueio}</p>}
                         {/* Pendência de ordem recomendada -- nunca desabilita o campo acima,
                             só avisa. O anexo continua liberado mesmo fora da ordem sugerida. */}
@@ -2617,6 +2701,8 @@ export default function DocumentosEntidade({
                               </button>
                             )}
                           </div>
+                        )}
+                        </>
                         )}
                         </>
                         )}

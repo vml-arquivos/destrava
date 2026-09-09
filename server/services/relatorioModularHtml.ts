@@ -154,8 +154,33 @@ export function gerarHtmlRelatorioModular(relatorio: AnyRecord): string {
   const nomeEmpresa = empresa.razao_social || empresa.nome_fantasia || 'Empresa não identificada';
   const status = relatorio.status_aptidao_documental || relatorio.status_geral || 'Pendente';
   const index = modules.map((module) => `<li><a href="#modulo-${esc(module.id)}">${esc(module.titulo)}</a></li>`).join('');
+  // CORREÇÃO (09/09/2026, PDF real anexado pelo usuário: "veja que está
+  // cortado o texto na parte superior com a logo"): este `@page` chegou a
+  // declarar seu PRÓPRIO `margin` (18mm) e uma numeração de página via
+  // `@bottom-center{content:...}` -- mas quem gera este PDF
+  // (`generateBrandedPdfBuffer`, `server/services/brandedPdfLayout.ts`) já
+  // controla a margem pelo parâmetro `topMargin` do Puppeteer (22mm nesta
+  // chamada -- `server/routes/documentacao.ts`) e desenha a logo dentro
+  // dessa margem via `headerTemplate`. As duas margens (a CSS e a do
+  // Puppeteer) entravam em conflito -- o Chromium usava a margem CSS (mais
+  // estreita) como área útil da página, então o título "Checklist e Análise
+  // Documental" (h1, primeira coisa do body) começava a ser desenhado ainda
+  // dentro do espaço reservado para a logo do cabeçalho, sobrepondo o
+  // título por baixo da borda inferior da logo -- reproduzido e confirmado
+  // com os mesmos dados do PDF real do usuário antes desta correção.
+  // `@bottom-center{content:...}` também nunca funcionou -- o mecanismo de
+  // impressão do Chromium usado aqui (`Page.printToPDF`) não renderiza
+  // conteúdo de margin box do CSS Paged Media; a paginação real deste PDF
+  // já vem só do rodapé institucional (`FOOTER_TEMPLATE`, sem número de
+  // página) -- então essa regra nunca produzia nenhuma numeração visível,
+  // só existia no CSS-fonte. Corrigido removendo o `margin`/`@bottom-center`
+  // deste `@page` -- a margem real da página passa a vir só do
+  // `topMargin`/`bottomMargin`/etc. já controlado por quem chama
+  // `generateBrandedPdfBuffer`, sem nenhuma segunda fonte de verdade
+  // conflitante. Regra geral: nenhum outro relatório usa este arquivo, e a
+  // correção não depende de nenhum dado específico de empresa/documento.
   return `<!doctype html><html lang="pt-BR"><head><meta charset="utf-8"/><title>Checklist e Análise Documental — ${esc(nomeEmpresa)}</title><style>
-  @page{size:A4;margin:18mm 17mm 18mm;@bottom-center{content:"Página " counter(page) " de " counter(pages);color:#64748b;font-size:7pt}}
+  @page{size:A4}
   *{box-sizing:border-box}
   body{margin:0;font-family:Arial,sans-serif;color:#172033;font-size:8.7pt;line-height:1.32}
   h1{color:#123b78;font-size:20pt;line-height:1.15;margin:0 0 4px}
@@ -208,7 +233,13 @@ export function validateModularReport(relatorio: AnyRecord): { ok: boolean; fail
   const ficha = list(relatorio.modulos_relatorio).find((module) => module.id === 'ficha_empresa');
   if (relatorio.modo_relatorio !== 'interno' && ficha) failures.push('assessoria no institucional');
   const html = gerarHtmlRelatorioModular(relatorio);
-  if (!html.includes('Checklist e Análise Documental') || !html.includes('class="toc"') || !html.includes('counter(page)')) failures.push('título, índice ou paginação');
+  if (!html.includes('Checklist e Análise Documental') || !html.includes('class="toc"')) failures.push('título ou índice');
+  // CORREÇÃO (09/09/2026): `@page{margin:...}` neste HTML conflitava com a
+  // margem controlada por quem gera o PDF (Puppeteer, `topMargin` em
+  // `generateBrandedPdfBuffer`), sobrepondo o título por baixo da logo do
+  // cabeçalho -- ver o comentário completo em `gerarHtmlRelatorioModular`.
+  // Este check impede que a mesma classe de bug volte por engano no futuro.
+  if (/@page\s*\{[^}]*margin\s*:/i.test(html)) failures.push('página com margem CSS conflitando com a margem do PDF (sobrepõe o cabeçalho)');
   if (/quatro documentos|analise_inicial|Resumo de atualizações/i.test(html)) failures.push('seção antiga ou duplicada');
   const idsDosItens = modulesDocumentIds(relatorio);
   if (idsDosItens.some((id, index) => idsDosItens.indexOf(id) !== index)) failures.push('documento duplicado entre módulos');

@@ -1,4 +1,38 @@
-=== RODADA 09/09/2026 (esta entrega) — laudo por documento vira ícone de hover no Acervo Documental (cards sempre do mesmo tamanho) ===
+=== RODADA 09/09/2026 PARTE 3 (esta entrega) — Cards do Acervo Documental recolhidos por padrão (título + selo de resultado + ícone i) ===
+
+Acrescenta ao diff da rodada anterior (PDF + roteamento) mais 2 arquivos:
+
+ALTERADO (produção, frontend):
+client/src/components/documentos/DocumentosEntidade.tsx
+
+NOVO (teste):
+tests/acervoCardsRecolhidos.test.ts
+
+Ver CHANGELOG_CORRECOES.md (seção "Rodada 09/09/2026 (parte 3)") para a
+descrição completa.
+
+=== RODADA 09/09/2026 PARTE 2 — PDF institucional com cabeçalho corrigido (logo x título) + roteamento do Dossiê de Crédito corrigido (bug do wouter) ===
+
+Acrescenta ao diff da rodada anterior (ícone de hover) mais 5 arquivos:
+
+ALTERADO (produção, geração do PDF):
+server/services/relatorioModularHtml.ts
+
+ALTERADO (produção, frontend -- leitura de query string via wouter):
+client/src/pages/colaborador/AcervoDocumentalEmpresa.tsx
+client/src/pages/colaborador/Empresas.tsx
+client/src/pages/colaborador/RedefinirSenha.tsx
+
+ALTERADO (teste, atualizado para a correção do PDF):
+tests/relatorioModularHtml.test.ts
+
+NOVO (teste):
+tests/wouterQueryStringLeitura.test.ts
+
+Ver CHANGELOG_CORRECOES.md (seção "Rodada 09/09/2026 (parte 2)") para a
+descrição completa das duas correções.
+
+=== RODADA 09/09/2026 — laudo por documento vira ícone de hover no Acervo Documental (cards sempre do mesmo tamanho) ===
 
 Acrescenta ao diff da rodada anterior (identidade documental por evidência)
 mais 2 arquivos, os únicos tocados por esta correção de UI:

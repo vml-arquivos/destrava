@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { useLocation, useRoute } from "wouter";
+import { useLocation, useRoute, useSearch } from "wouter";
 import { ArrowLeft, Building2, FileText, ShieldCheck } from "lucide-react";
 import Layout from "./Layout";
 import { apiFetch } from "@/lib/api";
@@ -48,6 +48,19 @@ const TIPOS_EMPRESA = [
 export default function AcervoDocumentalEmpresa() {
   const [, params] = useRoute("/colaborador/empresas/:id/acervo");
   const [location, setLocation] = useLocation();
+  // CORREÇÃO (09/09/2026, pedido explícito do usuário: "quando clica em
+  // dossiê de crédito ele não executa nenhuma ação, volta para acervo"):
+  // `useLocation()` do wouter devolve só o CAMINHO da URL (`window.location.pathname`),
+  // nunca a query string -- confirmado lendo o código-fonte instalado da
+  // biblioteca (`usePathname`/`currentPathname` em `wouter/esm/use-browser-location.js`).
+  // O botão "Dossiê / Laudo IA" só troca a query string (`?view=analise`),
+  // então `location.split("?")[1]` (usado antes aqui) SEMPRE dava vazio --
+  // `view` nunca virava "analise", e o clique realmente não mudava nada na
+  // tela (a URL do navegador mudava, mas o componente não recomputava a
+  // aba certa). `useSearch()` é o hook próprio do wouter pra isso -- lê
+  // `window.location.search` de forma reativa, reage certo a uma navegação
+  // que só troca a query.
+  const search = useSearch();
   const empresaId = params?.id || "";
   const [empresa, setEmpresa] = useState<EmpresaResumo | null>(null);
   const [loading, setLoading] = useState(true);
@@ -82,8 +95,8 @@ export default function AcervoDocumentalEmpresa() {
     setLocation(`/colaborador/empresas?empresa=${empresaId}&aba=${aba}`);
   }
 
-  const etapaInicial = typeof window !== "undefined" ? new URLSearchParams(window.location.search).get("etapa") : null;
-  const view = new URLSearchParams(location.split("?")[1] || "").get("view");
+  const etapaInicial = new URLSearchParams(search).get("etapa");
+  const view = new URLSearchParams(search).get("view");
   const secaoInicial = etapaInicial === "documentacao_empresa"
     ? "Documentação da Empresa"
     : etapaInicial === "documentacao_socios"

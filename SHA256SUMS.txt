@@ -1,3 +1,13 @@
+# === Rodada 09/09/2026 parte 3 (esta entrega) — cards do Acervo Documental recolhidos por padrão — arquivos alterados/novos, checksum atual ===
+8b520d2639bb0d0f67044e231277289684e0946d5813ed56a94e252def664329  client/src/components/documentos/DocumentosEntidade.tsx
+0bfa02b8706844fd91bfad0a569617487d10c5d92f14f7cd7d36de0ab55ca5d6  tests/acervoCardsRecolhidos.test.ts
+# === Rodada 09/09/2026 parte 2 (esta entrega) — PDF institucional + roteamento do Dossiê de Crédito — arquivos alterados/novos, checksum atual ===
+2444f2d962f1d5cb7bce91640926394a31d6c7e085f3d899763863b1532a7ab2  server/services/relatorioModularHtml.ts
+59a19e6a4ee391ce36b1ac8a665b177cec165065311e14a521c3df4943fbdf80  client/src/pages/colaborador/AcervoDocumentalEmpresa.tsx
+57e0fc89e07e2f11519129b4e2e6e31803d62f7b85e3eb505e3259421f212145  client/src/pages/colaborador/Empresas.tsx
+a61209acb705e8c8043c0275c12249f9907e44b813a6e8130284d487bccbecb0  client/src/pages/colaborador/RedefinirSenha.tsx
+0b438fa54f27ffb65e779c0b5e47cec6c1b2bcacde4b0d40b62d1bd7850a1789  tests/relatorioModularHtml.test.ts
+5cd4e5dd9d97638cc74d1da92e608c21e993f24fef302e2649460fb44ec5864d  tests/wouterQueryStringLeitura.test.ts
 # === Rodada 09/09/2026 (esta entrega) — laudo por documento vira ícone de hover — arquivos alterados, checksum atual ===
 86309527272805989879e4a83733bf0b1327813b4905ded5746715c742e143be  client/src/components/documentos/DocumentosEntidade.tsx
 898268346d0e17df76e6c50f89a6e9a37c287dc09eb317d6469fd82e9713e455  tests/acervoInlineAnalise.test.ts

@@ -43,8 +43,16 @@ describe('relatório documental modular', () => {
     const html = gerarHtmlRelatorioModular(relatorio);
     expect(moduleIds(relatorio)).toEqual([...MODULOS_RELATORIO_EMPRESA]);
     expect(html).toContain('Checklist geral');
-    expect(html).toContain('counter(page)');
     expect(html).toContain('Datas disponíveis');
+    // CORREÇÃO (09/09/2026, PDF real anexado pelo usuário): `@page{margin:...}`
+    // conflitava com a margem que o Puppeteer reserva pra logo do cabeçalho
+    // (`generateBrandedPdfBuffer`), fazendo o título "Checklist e Análise
+    // Documental" sobrepor a logo. `@page{size:A4}` continua presente
+    // (define o tamanho da página); só o `margin`/`@bottom-center` (que
+    // nunca chegou a renderizar nenhuma numeração visível -- o Chromium não
+    // suporta conteúdo de margin box via `Page.printToPDF`) foi removido.
+    expect(html).toContain('@page{size:A4}');
+    expect(html).not.toMatch(/@page\s*\{[^}]*margin\s*:/i);
     expect(html).not.toMatch(/quatro documentos|analise_inicial|Resumo de atualizações/i);
     expect(html).not.toMatch(/Tipo:|Categoria:|Subtipo:|Páginas\/unidades|Confiança:|Revisão humana:|Dados extraídos:/i);
     expect(html).not.toMatch(/>\s*\d+\.\s+\d+\./);

@@ -1,4 +1,68 @@
-# Relatório de Build — 31/08/2026 (atualizado, Rodada 17 — 02/09/2026: confirmação automática da Etapa 1, sem clicar em "Iniciar análise documental"; Rodada 18 — 02/09/2026: validação local sem IA/orientação de documento correto/menos texto repetido/espaço vazio preenchido; Rodada 19 — 02/09/2026: sincronização automática de CNPJ; Rodada 20 — 02/09/2026: Cartão CNPJ confirma e trava a situação cadastral contra a reversão automática; Rodada 21 — 02/09/2026: leitura automática sem clique, falso positivo de nome para Empresário Individual, telefone/e-mail via Cartão CNPJ; Rodada 22 — 02/09/2026: refinamento com os documentos reais, janela de 5 dias, trava de edição manual; Rodada 23 — 02/09/2026: leitura visível ao anexar Cartão CNPJ/QSA/Enquadramento; Rodada 24 — 02/09/2026: falha já pendente/travada passa a se resolver sozinha na tela, sem F5; Rodada 25 — 02/09/2026: todos os campos do checklist sempre visíveis, para qualquer empresa/regime; Rodada 26 — 02/09/2026: Cartão CNPJ também corrige o nome empresarial/razão social desatualizado na API gratuita; Rodada 27 — 02/09/2026: botão "Reler" manual em cada card da Etapa 1; Rodada 28 — 02/09/2026: grade de campos ilegível corrigida no Acervo Documental, botão "Reler" do Contrato Social confronta contra o Ato da Junta; Rodada 29 — 02/09/2026: auditoria própria de consistência entre tipos de empresa, três inconsistências corrigidas; Rodada 30 — 02/09/2026: cards do Acervo Documental nivelados quando fechados; Rodada 08/09/2026: identidade documental por evidência em Atos da Junta/Contrato Social, atualizada em 09/09/2026 com o terceiro documento real; Rodada 09/09/2026: laudo por documento vira ícone de hover)
+# Relatório de Build — 31/08/2026 (atualizado, Rodada 17 — 02/09/2026: confirmação automática da Etapa 1, sem clicar em "Iniciar análise documental"; Rodada 18 — 02/09/2026: validação local sem IA/orientação de documento correto/menos texto repetido/espaço vazio preenchido; Rodada 19 — 02/09/2026: sincronização automática de CNPJ; Rodada 20 — 02/09/2026: Cartão CNPJ confirma e trava a situação cadastral contra a reversão automática; Rodada 21 — 02/09/2026: leitura automática sem clique, falso positivo de nome para Empresário Individual, telefone/e-mail via Cartão CNPJ; Rodada 22 — 02/09/2026: refinamento com os documentos reais, janela de 5 dias, trava de edição manual; Rodada 23 — 02/09/2026: leitura visível ao anexar Cartão CNPJ/QSA/Enquadramento; Rodada 24 — 02/09/2026: falha já pendente/travada passa a se resolver sozinha na tela, sem F5; Rodada 25 — 02/09/2026: todos os campos do checklist sempre visíveis, para qualquer empresa/regime; Rodada 26 — 02/09/2026: Cartão CNPJ também corrige o nome empresarial/razão social desatualizado na API gratuita; Rodada 27 — 02/09/2026: botão "Reler" manual em cada card da Etapa 1; Rodada 28 — 02/09/2026: grade de campos ilegível corrigida no Acervo Documental, botão "Reler" do Contrato Social confronta contra o Ato da Junta; Rodada 29 — 02/09/2026: auditoria própria de consistência entre tipos de empresa, três inconsistências corrigidas; Rodada 30 — 02/09/2026: cards do Acervo Documental nivelados quando fechados; Rodada 08/09/2026: identidade documental por evidência em Atos da Junta/Contrato Social, atualizada em 09/09/2026 com o terceiro documento real; Rodada 09/09/2026: laudo por documento vira ícone de hover; Rodada 09/09/2026 parte 2: PDF institucional e roteamento do Dossiê de Crédito; Rodada 09/09/2026 parte 3: cards do Acervo Documental recolhidos por padrão)
+
+## Rodada 09/09/2026 parte 3 — cards do Acervo Documental recolhidos por padrão
+
+Base: mesma árvore da rodada anterior (PDF + roteamento), `node_modules` já instalado nesta verificação (sem alteração de dependências).
+
+### 1. Typecheck
+`npx tsc --noEmit` -- concluído sem nenhum erro.
+
+### 2. Suíte de testes
+`npx vitest run` -- **116 arquivos / 1096 testes, todos passando** (1092 + 4, todos os 4 novos em `tests/acervoCardsRecolhidos.test.ts`).
+
+### 3. Build de produção
+`pnpm run build` -- concluído com sucesso.
+- JavaScript inicial: 98.7 kB gzip (limite 130 kB) -- OK
+- CSS inicial: 31.4 kB gzip (limite 45 kB) -- OK
+- Landing A1: 8.5 kB gzip (limite 20 kB) -- OK
+- `dist/index.js`: 2.5 MB (aviso de tamanho do esbuild, pré-existente, não é falha) -- `node --check dist/index.js` OK.
+- `dist/backfill-laudos.js`: 447.5 kB -- `node --check dist/backfill-laudos.js` OK.
+- Chunk `DocumentosEntidade`: 192.62 kB → 194.36 kB gzip 45.76 kB → 46.14 kB -- crescimento pequeno e esperado (novo estado de expansão + selo de resultado + ícone `ChevronDown`).
+- Pré-renderização estática validada (meta tags OG, Twitter, canonical URL, React root, script bundle).
+
+### 4. Diff mínimo (verificado por `diff -rq` contra o zip anterior, excluindo `node_modules`/`dist`/`.vite`)
+2 arquivos a mais diferem em relação à entrega anterior (09/09/2026 parte 2, PDF + roteamento):
+- `client/src/components/documentos/DocumentosEntidade.tsx` (correção de produção, frontend)
+- `tests/acervoCardsRecolhidos.test.ts` (teste novo)
+
+Nenhuma migration, rota de backend, variável de ambiente ou dependência foi tocada nesta rodada.
+
+---
+
+## Rodada 09/09/2026 parte 2 — PDF institucional (cabeçalho x título) e roteamento do Dossiê de Crédito (bug do wouter)
+
+Base: mesma árvore da rodada anterior (ícone de hover), `node_modules` já instalado nesta verificação (sem alteração de dependências).
+
+### 1. Typecheck
+`npx tsc --noEmit` -- concluído sem nenhum erro.
+
+### 2. Suíte de testes
+`npx vitest run` -- **115 arquivos / 1092 testes, todos passando** (1088 + 4 -- os 4 testes novos são todos de `tests/wouterQueryStringLeitura.test.ts`; `tests/relatorioModularHtml.test.ts`, pré-existente, foi atualizado sem mudar sua contagem, 10/10).
+
+### 3. Build de produção
+`pnpm run build` -- concluído com sucesso.
+- JavaScript inicial: 98.8 kB gzip (limite 130 kB) -- OK
+- CSS inicial: 31.4 kB gzip (limite 45 kB) -- OK
+- Landing A1: 8.5 kB gzip (limite 20 kB) -- OK
+- `dist/index.js`: 2.5 MB (aviso de tamanho do esbuild, pré-existente, não é falha) -- `node --check dist/index.js` OK.
+- `dist/backfill-laudos.js`: 447.5 kB -- `node --check dist/backfill-laudos.js` OK.
+- Pré-renderização estática validada (meta tags OG, Twitter, canonical URL, React root, script bundle).
+
+### 4. Diff mínimo (verificado por `diff -rq` contra o zip anterior, excluindo `node_modules`/`dist`/`.vite`)
+6 arquivos a mais diferem em relação à entrega anterior (09/09/2026, ícone de hover):
+- `server/services/relatorioModularHtml.ts` (correção de produção -- geração de PDF)
+- `client/src/pages/colaborador/AcervoDocumentalEmpresa.tsx` (correção de produção -- roteamento)
+- `client/src/pages/colaborador/Empresas.tsx` (correção de produção -- roteamento)
+- `client/src/pages/colaborador/RedefinirSenha.tsx` (correção de produção -- roteamento, bug adicional encontrado)
+- `tests/relatorioModularHtml.test.ts` (teste pré-existente, atualizado)
+- `tests/wouterQueryStringLeitura.test.ts` (teste novo)
+
+Nenhuma migration, rota de backend nova, variável de ambiente ou dependência foi tocada nesta rodada.
+
+### 5. Verificação empírica adicional (fora da suíte automatizada)
+A correção do PDF foi validada gerando um PDF real via Chromium a partir do código de produção (`gerarHtmlRelatorioModular` + `generateBrandedPdfBuffer`), antes e depois da mudança -- confirmado visualmente (leitura do PDF gerado) que a sobreposição título/logo desaparece e que nenhuma numeração de página é perdida (ela já não aparecia antes da correção).
+
+---
 
 ## Rodada 09/09/2026 — laudo por documento vira ícone de hover no Acervo Documental (cards sempre do mesmo tamanho)
 

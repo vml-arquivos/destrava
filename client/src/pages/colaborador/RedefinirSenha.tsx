@@ -1,5 +1,5 @@
 import { FormEvent, useMemo, useState } from "react";
-import { Link, useLocation } from "wouter";
+import { Link, useLocation, useSearch } from "wouter";
 import { apiFetch } from "@/lib/api";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -8,8 +8,16 @@ import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Lock, Shield } from "lucide-react";
 
 export default function RedefinirSenha() {
-  const [location, setLocation] = useLocation();
-  const tokenInicial = useMemo(() => new URLSearchParams(location.split("?")[1] || "").get("token") || "", [location]);
+  const [, setLocation] = useLocation();
+  // CORREÇÃO (09/09/2026, achado investigando o mesmo bug do "Dossiê de
+  // Crédito"): `useLocation()` do wouter devolve só o CAMINHO da URL, nunca
+  // a query string -- então `?token=...` do link de redefinição de senha
+  // NUNCA era lido daqui, e `tokenInicial` ficava sempre vazio. Bug real e
+  // sério, mesmo sem estar relacionado ao pedido original: qualquer link de
+  // "redefinir senha" chegava nesta tela sem o token pré-preenchido.
+  // Corrigido com `useSearch()`, o hook certo do wouter pra ler a query.
+  const search = useSearch();
+  const tokenInicial = useMemo(() => new URLSearchParams(search).get("token") || "", [search]);
   const [token, setToken] = useState(tokenInicial);
   const [novaSenha, setNovaSenha] = useState("");
   const [confirmar, setConfirmar] = useState("");

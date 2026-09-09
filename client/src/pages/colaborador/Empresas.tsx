@@ -2,7 +2,7 @@ import { useState, useEffect, useCallback, useRef, useMemo } from "react";
 import Layout from "./Layout";
 import { apiFetch, apiFetchBlob } from "@/lib/api";
 import { toast } from "sonner";
-import { useLocation } from "wouter";
+import { useLocation, useSearch } from "wouter";
 import { useAuth } from "@/contexts/AuthContext";
 import { useFeatureAccess } from "@/hooks/useFeatureAccess";
 import { maskCurrencyInput, unmaskCurrencyInput, formatBRLCurrency } from "@/lib/currency";
@@ -993,6 +993,16 @@ function mapCnpjDataParaEmpresa(data: any, prev: Record<string, any> = {}): Reco
 
 export default function Empresas() {
   const [location, setLocation] = useLocation();
+  // CORREÇÃO (09/09/2026, achado investigando "Dossiê de Crédito não
+  // executa nenhuma ação"): `location` (de `useLocation()`) é só o CAMINHO
+  // da URL -- nunca a query string (`?empresa=...&aba=...`). Os três
+  // pontos abaixo que faziam `location.split("?")[1]` para ler a query
+  // SEMPRE liam vazio; o mecanismo de reabrir a empresa certa por URL só
+  // funcionava, de fato, pela rede de segurança via `sessionStorage`
+  // (ver comentário mais abaixo) -- um link direto com `?empresa=X&aba=Y`
+  // nunca reabria sozinho. `useSearch()` é o hook do wouter que lê a query
+  // de forma correta e reativa.
+  const search = useSearch();
   const { colaborador } = useAuth();
   const { isFeatureEnabled } = useFeatureAccess();
   const [empresas, setEmpresas] = useState<Empresa[]>([]);
@@ -1444,10 +1454,18 @@ export default function Empresas() {
   }, [carregarEmpresas]);
 
   // ── Reabrir detalhe da empresa via URL/retorno do acervo ─────────────────────
-  // Garante que o botão "Voltar para a empresa" do acervo reabra a empresa correta,
-  // mesmo se o roteador perder a query string durante a navegação. Não altera dados.
+  // Garante que o botão "Voltar para a empresa" do acervo reabra a empresa correta.
+  // CORREÇÃO (09/09/2026): antes lia a query pelo `location` de `useLocation()`
+  // (só o caminho, nunca a query -- ver comentário no topo do componente) --
+  // por isso o comentário original dizia "mesmo se o roteador perder a query
+  // string": o roteador não "perdia" a query às vezes, ele NUNCA a devolvia
+  // aqui, e este efeito só funcionava de fato pela rede de segurança do
+  // `sessionStorage` logo abaixo. Agora lê de `useSearch()`, que devolve a
+  // query de verdade -- a rede de segurança do sessionStorage continua
+  // existindo (não faz mal nenhum mantê-la), só deixa de ser a ÚNICA forma
+  // funcional de reabrir a empresa certa.
   useEffect(() => {
-    const queryString = location.split("?")[1] || "";
+    const queryString = search || "";
     const params = new URLSearchParams(queryString);
     let empresaIdParam = params.get("empresa") || params.get("empresa_id") || params.get("id");
     let abaParam = params.get("aba");
@@ -1497,7 +1515,7 @@ export default function Empresas() {
       });
 
     return () => { cancelado = true; };
-  }, [location, empresas, selecionada?.id]);
+  }, [location, search, empresas, selecionada?.id]);
 
   // ── Acervo Documental sempre abre direto na página exclusiva ────────────────
   // Rede de segurança: qualquer caminho que ainda ative abaAtiva === "documentos"
@@ -1526,7 +1544,7 @@ export default function Empresas() {
   // ── Carregar detalhe ───────────────────────────────────────────────────────
   useEffect(() => {
     if (!selecionada) return;
-    const queryString = location.split("?")[1] || "";
+    const queryString = search || "";
     const abaParam = new URLSearchParams(queryString).get("aba");
     setAbaAtiva(isAbaEmpresa(abaParam) ? abaParam : "visao_geral");
     setFollowups([]); setHistorico([]); setDocumentos([]); setContratosSociais([]); setSociosEmpresa([]);
@@ -1551,7 +1569,7 @@ export default function Empresas() {
       setContratosEmpresa(Array.isArray(cont) ? cont : []);
       setOrcamentosEmpresa(Array.isArray(orc) ? orc : []);
     }).finally(() => setLoadingDetalhe(false));
-  }, [selecionada?.id, location]);
+  }, [selecionada?.id, location, search]);
 
   // ── Selecionar empresa ──────────────────────────────────────────────────────
   function selecionar(emp: Empresa) {
@@ -1654,9 +1672,13 @@ export default function Empresas() {
   // Abre o modal de nova empresa automaticamente quando a página é acessada com
   // ?novo=1 -- usado pelo link "cadastre a empresa primeiro" da Calculadora de
   // Crédito e de outros pontos do sistema que agora exigem empresa já cadastrada.
+  // CORREÇÃO (09/09/2026): lia a query de `location` (`useLocation()`, só o
+  // caminho -- ver comentário no topo do componente), então `?novo=1` nunca
+  // era detectado e este recurso nunca abria o modal sozinho. Trocado por
+  // `search` (`useSearch()`), que lê a query de verdade -- continua rodando
+  // só uma vez, ao montar (mesmo comportamento pretendido de antes).
   useEffect(() => {
-    const queryString = location.split("?")[1] || "";
-    if (new URLSearchParams(queryString).get("novo") === "1") {
+    if (new URLSearchParams(search).get("novo") === "1") {
       abrirNova();
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
