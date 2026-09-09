@@ -1,9 +1,10 @@
-import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { Fragment, useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { apiFetch, apiFetchBlob } from "@/lib/api";
 import { DOCUMENT_TYPE_CATALOG, documentAnalysisConfig, documentLabel } from "@shared/documentTypes";
 import { bucketDoRegimeTributarioHistorico, documentoSocietarioDispensadoPorMei, estadoVisualDocumento, slotCompativelComRegimeTributario, transicaoDeRegimeRecente, type BucketRegimeFiscal } from "@shared/documentalPresentation";
 import { ResultadoAnaliseDocumento } from "./ResultadoAnaliseDocumento";
 import { ProntidaoIdentidadeCard, type IdentidadeCnpj } from "../documentacao/DossieCreditoEmpresa";
+import { HoverCard, HoverCardContent, HoverCardTrigger } from "@/components/ui/hover-card";
 import { toast } from "sonner";
 import {
   AlertTriangle,
@@ -389,6 +390,51 @@ export function formatDate(value?: string | null) {
 // campos lidos ficam atrás de um clique, porque quem está conferindo não
 // precisa deles pra seguir. Quando há problema, o que aparece é o problema e o
 // que resolve.
+// CORREÇÃO (09/09/2026, pedido explícito do usuário, verbatim: "eu quero
+// tudo do mesmo tamanho todos os modais... quando tiver informações que
+// forem um pouco maiores, coloque aquele iconezinho de informações, onde
+// vamos passar o mouse e as informações vão aparecer, tirando o mouse ela
+// fecha novamente"): substitui o padrão anterior de "clique para expandir
+// INLINE" (que fazia o card crescer de verdade -- e, numa grade CSS Grid,
+// esticar a linha inteira junto com ele, deixando os cards vizinhos mais
+// altos também -- comportamento intencional da Rodada 30, mas que o
+// usuário agora pede para evitar sempre que possível) por um ícone de
+// informação com um painel flutuante (HoverCard do Radix, biblioteca já
+// usada neste projeto para outros tooltips -- `client/src/components/ui/hover-card.tsx`).
+// O painel abre ao passar o mouse (ou focar via teclado, suporte de
+// acessibilidade já embutido no HoverCard do Radix) e fecha ao tirar o
+// mouse, e é renderizado num portal -- fora do fluxo normal da página --
+// então NUNCA altera a altura do card que contém o ícone, nem a da linha
+// da grade, nem a dos cards vizinhos, mesmo com um painel de conteúdo
+// grande dentro dele. Componente único, reaproveitado em todo card desta
+// tela que precise mostrar mais dado do que cabe no espaço padrão -- não é
+// um caso especial de nenhum tipo de documento/seção.
+function DetalheHoverIcon({ cor, titulo, children }: { cor: "success" | "warning" | "destructive" | "primary"; titulo: string; children: ReactNode }) {
+  const corClasses: Record<string, string> = {
+    success: "border-success/40 bg-success/10 text-success hover:bg-success/20",
+    warning: "border-warning/40 bg-warning/10 text-warning hover:bg-warning/20",
+    destructive: "border-destructive/40 bg-destructive/10 text-destructive hover:bg-destructive/20",
+    primary: "border-primary/40 bg-primary/10 text-primary hover:bg-primary/20",
+  };
+  return (
+    <HoverCard openDelay={100} closeDelay={100}>
+      <HoverCardTrigger asChild>
+        <button
+          type="button"
+          title={titulo}
+          className={`inline-flex h-4 w-4 shrink-0 items-center justify-center rounded-full border ${corClasses[cor]}`}
+        >
+          <Info className="h-2.5 w-2.5" />
+        </button>
+      </HoverCardTrigger>
+      <HoverCardContent className="w-96 max-h-[75vh] overflow-y-auto p-3 text-left" align="start">
+        <p className="mb-1.5 text-[10px] font-black uppercase tracking-wide text-muted-foreground">{titulo}</p>
+        {children}
+      </HoverCardContent>
+    </HoverCard>
+  );
+}
+
 // CORREÇÃO (Rodada 27, 02/09/2026, pedido explícito do usuário -- depois de
 // confirmar que a correção automática do nome empresarial funcionou: "quero
 // que coloque... um botão pra reler... reanalisar os dados. Caso não
@@ -401,7 +447,6 @@ export function formatDate(value?: string | null) {
 // não depende do tipo de empresa/regime -- só de o card ter um documento
 // anexado, então aparece igual para qualquer empresa.
 function StatusAnaliseSlot({ item, tipo, onReler, relendo }: { item?: { nome: string; anexado: boolean; analisado: boolean; consistente: boolean; status: string; diagnostico?: string | null; campos_principais?: Record<string, unknown>; regime_a_confirmar?: boolean }; tipo?: string; onReler?: () => void; relendo?: boolean }) {
-  const [aberto, setAberto] = useState(false);
   if (!item || !item.anexado) return null;
 
   const botaoReler = onReler ? (
@@ -473,27 +518,20 @@ function StatusAnaliseSlot({ item, tipo, onReler, relendo }: { item?: { nome: st
           </span>
           <div className="flex shrink-0 items-center gap-1">
             {campos.length > 0 && (
-                <button
-                type="button"
-                onClick={() => setAberto((v) => !v)}
-                className="shrink-0 text-[9px] font-bold text-success underline decoration-dotted"
-              >
-                {aberto ? "ocultar" : "Dados da análise"}
-              </button>
+              <DetalheHoverIcon cor="success" titulo="Dados da análise">
+                <dl className="space-y-0.5">
+                  {campos.map(({ chave, valor }) => (
+                    <div key={chave} className="flex items-start justify-between gap-2 text-[9px]">
+                      <dt className="shrink-0 font-semibold text-muted-foreground">{CAMPO_ANALISE_LABEL[chave] || chave.replace(/_/g, " ")}</dt>
+                      <dd className="min-w-0 break-words text-right font-bold text-foreground">{valor}</dd>
+                    </div>
+                  ))}
+                </dl>
+              </DetalheHoverIcon>
             )}
             {botaoReler}
           </div>
         </div>
-        {aberto && campos.length > 0 && (
-          <dl className="mt-1.5 space-y-0.5 border-t border-success/20 pt-1.5">
-            {campos.map(({ chave, valor }) => (
-              <div key={chave} className="flex items-start justify-between gap-2 text-[9px]">
-                <dt className="shrink-0 font-semibold text-muted-foreground">{CAMPO_ANALISE_LABEL[chave] || chave.replace(/_/g, " ")}</dt>
-                <dd className="min-w-0 truncate text-right font-bold text-muted-foreground" title={valor}>{valor}</dd>
-              </div>
-            ))}
-          </dl>
-        )}
       </div>
     );
   }
@@ -542,18 +580,14 @@ function StatusAnaliseSlot({ item, tipo, onReler, relendo }: { item?: { nome: st
         </span>
         <div className="flex shrink-0 items-center gap-1">
           {item.diagnostico && diagnosticoLongo && (
-            <button
-              type="button"
-              onClick={() => setAberto((v) => !v)}
-              className={`shrink-0 text-[9px] font-bold underline decoration-dotted ${falhou ? "text-destructive" : "text-warning"}`}
-            >
-              {aberto ? "ocultar" : "ver detalhes"}
-            </button>
+            <DetalheHoverIcon cor={falhou ? "destructive" : "warning"} titulo="Ver detalhes">
+              <p className="text-[10px] leading-relaxed text-foreground">{item.diagnostico}</p>
+            </DetalheHoverIcon>
           )}
           {botaoReler}
         </div>
       </div>
-      {item.diagnostico && (!diagnosticoLongo || aberto) && (
+      {item.diagnostico && !diagnosticoLongo && (
         <p className={`mt-1 text-[9px] leading-relaxed ${falhou ? "text-destructive" : "text-warning"}`}>{item.diagnostico}</p>
       )}
     </div>
@@ -825,8 +859,12 @@ export default function DocumentosEntidade({
   // upload (agendarAnaliseRegraDocumental, server/routes/documentos.ts) e o
   // resultado (doc.resultado_validacao.analise_regra_documental) já chegava no
   // frontend, mas nunca era mostrado por completo -- só um resuminho de uma linha.
-  // Isso controla qual laudo está expandido, por documento.
-  const [laudosExpandidos, setLaudosExpandidos] = useState<Record<string, boolean>>({});
+  // CORREÇÃO (09/09/2026): o laudo completo por documento não usa mais um estado
+  // de "expandido/ocultar" clicável (que abria o laudo INLINE, esticando o card) --
+  // virou um ícone com painel flutuante ao passar o mouse (`DetalheHoverIcon`),
+  // que não precisa de estado nenhum no React (o próprio Radix HoverCard controla
+  // aberto/fechado por hover internamente). O estado `laudosExpandidos` que existia
+  // aqui foi removido junto -- não tem mais nenhum lugar que o leia.
   // Descrição de cada campo (o que é o documento, pra que serve) e a dica extra do
   // Cartão CNPJ antes ficavam sempre visíveis, um parágrafo cheio em cada um dos
   // ~19 cards do checklist -- muita informação repetida ocupando a tela o tempo
@@ -2223,10 +2261,11 @@ export default function DocumentosEntidade({
               agora ficam sempre visíveis, para qualquer empresa/regime/porte -- a
               filtragem por obrigatório/complementar (`slotsVisiveis`, condicionada ao
               marco de Atos da Junta aprovados/dispensados por MEI) e o botão "Ver
-              documentos complementares" foram removidos. O que continua colapsável é
-              só o bloco de resultado da leitura DENTRO de cada card ("Dados da
-              análise" por arquivo, ver `laudosExpandidos`/`temResultadoInline` mais
-              abaixo) -- nunca o card de anexo em si. */}
+              documentos complementares" foram removidos. O que continua atrás de um
+              ícone (hover, não clique -- ver `DetalheHoverIcon`) é só o bloco de
+              resultado da leitura DENTRO de cada card ("Dados da análise" por
+              arquivo, ver `temResultadoInline` mais abaixo) -- nunca o card de anexo
+              em si. */}
           {secoesDoGrupoAtivo.map((secaoAtivaObj) => {
             const regimeAConfirmar = mapaCredito?.regime_identificado === "nao_optante_regime_a_confirmar";
             const tiposConfirmacaoRegime = new Set(["ecf", "dctf", "darf", "livro_caixa"]);
@@ -2503,6 +2542,8 @@ export default function DocumentosEntidade({
                                   && estadoDocumento === "aprovado";
                                 const validadoComEvidencia = (doc.validado === true || validacaoDocumentalConcluida)
                                   && (!tipoTemAnaliseAutomatica || validacaoDocumentalConcluida);
+                                const detalheCor = laudoErro || documentoIncompativel ? "destructive" as const : leituraPrecisaAtencao ? "warning" as const : "success" as const;
+                                const detalheTitulo = documentoIncompativel ? "Ver inconsistência" : leituraPrecisaAtencao ? "Ver pendência" : "Dados da análise";
                                 return (
                                 <div key={doc.id} className="rounded-md bg-card border border-border px-2 py-1">
                                   <div className="flex items-center justify-between gap-2">
@@ -2522,23 +2563,20 @@ export default function DocumentosEntidade({
                                       {doc.validado && !validadoComEvidencia && tipoTemAnaliseAutomatica && <span title="Ainda sem leitura documental conclusiva" className="text-warning shrink-0 text-[9px]">análise pendente</span>}
                                       {documentoIncompativel && <span className="shrink-0 rounded-full bg-destructive/10 px-1.5 py-0.5 text-[8px] font-bold text-destructive">Documento incompatível</span>}
                                       {leituraPrecisaAtencao && <span className="shrink-0 rounded-full bg-warning/10 px-1.5 py-0.5 text-[8px] font-bold text-warning">Revisão necessária</span>}
+                                      {/* CORREÇÃO (09/09/2026): o link de texto "Dados da análise"/"Ver
+                                          inconsistência"/"Ver pendência" que ficava numa linha própria,
+                                          abaixo do nome do arquivo, e que ao clicar abria o laudo completo
+                                          INLINE (esticando o card, e com ele a linha inteira da grade) virou
+                                          este ícone -- o painel completo (ResultadoAnaliseDocumento) aparece
+                                          num HoverCard flutuante ao passar o mouse, nunca altera a altura do
+                                          card. Ver DetalheHoverIcon para a explicação completa. */}
+                                      {temResultadoInline && (
+                                        <DetalheHoverIcon cor={detalheCor} titulo={detalheTitulo}>
+                                          <ResultadoAnaliseDocumento resultado={resultadoInline} documento={doc} compacto />
+                                        </DetalheHoverIcon>
+                                      )}
                                     </div>
                                     <p className="text-[9px] text-muted-foreground truncate">{formatDate(doc.criado_em)}</p>
-                                    {temResultadoInline && (
-                                      <button
-                                        type="button"
-                                        onClick={() => setLaudosExpandidos((prev) => ({ ...prev, [doc.id]: !prev[doc.id] }))}
-                                        className={`mt-0.5 text-[9px] font-bold underline decoration-dotted ${laudoErro || documentoIncompativel ? "text-destructive" : leituraPrecisaAtencao ? "text-warning" : "text-success"}`}
-                                      >
-                                        {laudosExpandidos[doc.id]
-                                          ? "ocultar"
-                                          : documentoIncompativel
-                                            ? "Ver inconsistência"
-                                            : leituraPrecisaAtencao
-                                              ? "Ver pendência"
-                                              : "Dados da análise"}
-                                      </button>
-                                    )}
                                   </div>
                                   <div className="flex items-center gap-0.5 shrink-0">
                                     <button type="button" title="Visualizar" onClick={() => visualizar(doc)} className="p-1 rounded-md hover:bg-primary/10 text-primary"><Eye className="w-3 h-3" /></button>
@@ -2565,7 +2603,6 @@ export default function DocumentosEntidade({
                                     {permitirExcluir && <button type="button" title="Excluir" onClick={() => excluir(doc.id)} className="p-1 rounded-md hover:bg-destructive/10 text-destructive"><Trash2 className="w-3 h-3" /></button>}
                                   </div>
                                   </div>
-                                  {laudosExpandidos[doc.id] && resultadoInline && <ResultadoAnaliseDocumento resultado={resultadoInline} documento={doc} compacto />}
                                 </div>
                                 );
                               })}

@@ -1,4 +1,7 @@
-# === Rodada 08/09/2026 (esta entrega, atualizada em 09/09/2026 após validação com o terceiro documento real) — arquivos alterados/novos, checksum atual ===
+# === Rodada 09/09/2026 (esta entrega) — laudo por documento vira ícone de hover — arquivos alterados, checksum atual ===
+86309527272805989879e4a83733bf0b1327813b4905ded5746715c742e143be  client/src/components/documentos/DocumentosEntidade.tsx
+898268346d0e17df76e6c50f89a6e9a37c287dc09eb317d6469fd82e9713e455  tests/acervoInlineAnalise.test.ts
+# === Rodada 08/09/2026 (atualizada em 09/09/2026 após validação com o terceiro documento real) — arquivos alterados/novos, checksum atual ===
 174347fc09ead64a3ef6240953e5a0c78c20e38d9a89936cb88a03137628a81f  server/services/extracaoDocumentalLocal.ts
 b6f866535b14d2f17a020925d6f48f4baa2cd861325b395398a0bdcca8598625  shared/documentalPresentation.ts
 42668d124e95e0a35cf0715c03cd545ea320551ad0856946b4b3fe990bd36dd3  tests/atosJuntaIdentidadePorEvidencia.test.ts

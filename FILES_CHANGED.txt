@@ -1,4 +1,19 @@
-=== RODADA 08/09/2026, atualizada em 09/09/2026 (esta entrega) — identidade documental por evidência (Atos da Junta / Contrato Social) ===
+=== RODADA 09/09/2026 (esta entrega) — laudo por documento vira ícone de hover no Acervo Documental (cards sempre do mesmo tamanho) ===
+
+Acrescenta ao diff da rodada anterior (identidade documental por evidência)
+mais 2 arquivos, os únicos tocados por esta correção de UI:
+
+ALTERADO (produção, frontend):
+client/src/components/documentos/DocumentosEntidade.tsx
+
+ALTERADO (teste, atualizado para o novo mecanismo -- mesma finalidade, sem
+teste novo nem removido):
+tests/acervoInlineAnalise.test.ts
+
+Ver CHANGELOG_CORRECOES.md (seção "Rodada 09/09/2026") para a descrição
+completa.
+
+=== RODADA 08/09/2026, atualizada em 09/09/2026 — identidade documental por evidência (Atos da Junta / Contrato Social) ===
 
 Base: destravamain_30.zip (upload do usuário). Lista gerada por `diff -rq`
 contra uma cópia pristina extraída do mesmo zip, excluindo node_modules/dist/.vite.

@@ -17,11 +17,16 @@ describe('análise inline no Acervo Documental', () => {
     expect(acervo).toContain('const resultadoInline = doc.resultado_analise || laudo || laudoErro || null;');
     expect(acervo).toContain('<ResultadoAnaliseDocumento resultado={resultadoInline} documento={doc} compacto />');
     expect(acervo).toContain('Dados da análise');
-    expect(acervo).toContain('{aberto ? "ocultar" : "Dados da análise"}');
-    expect(acervo).toContain('? "Ver inconsistência"');
-    expect(acervo).toContain('? "Ver pendência"');
-    expect(acervo).toContain('{laudosExpandidos[doc.id] && resultadoInline && <ResultadoAnaliseDocumento');
-    expect(acervo).not.toContain('{(documentoIncompativel || leituraPrecisaAtencao || laudosExpandidos[doc.id]) && resultadoInline');
+    expect(acervo).toContain('detalheTitulo');
+    expect(acervo).toContain('documentoIncompativel ? "Ver inconsistência"');
+    expect(acervo).toContain('"Ver pendência"');
+    // CORREÇÃO (09/09/2026): o laudo por arquivo deixou de abrir INLINE por
+    // clique (o que esticava o card) -- agora é um ícone com painel
+    // flutuante ao passar o mouse (DetalheHoverIcon/HoverCard), que nunca
+    // altera a altura do card. `laudosExpandidos` não existe mais.
+    expect(acervo).not.toContain('const [laudosExpandidos');
+    expect(acervo).not.toContain('setLaudosExpandidos(');
+    expect(acervo).toContain('<DetalheHoverIcon cor={detalheCor} titulo={detalheTitulo}>');
     const resultadoComponente = readFileSync(resolve(process.cwd(), 'client/src/components/documentos/ResultadoAnaliseDocumento.tsx'), 'utf8');
     expect(resultadoComponente).toContain('const detalhes = compacto ? []');
   });
