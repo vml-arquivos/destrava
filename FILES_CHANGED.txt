@@ -1,4 +1,30 @@
-=== RODADA 09/09/2026 PARTE 6 (esta entrega) — Causa raiz real: isEmpresaIndividual não reconhecia "Empresário (Individual)" com parênteses (texto oficial real da Receita, confirmado com os 3 documentos reais da empresa) ===
+=== RODADA 09/09/2026 PARTE 7 (esta entrega) — MEI usa o CCMEI como equivalente do Contrato Social/Atos da Junta; Etapa 2 só avança com o CCMEI de fato anexado ===
+
+Acrescenta ao diff da rodada anterior (parte 6) mais 2 arquivos:
+
+ALTERADO (produção, backend):
+server/routes/documentacao.ts  (montarValidacaoSocietaria: detecção de MEI
+                                unificada com isEmpresaIndividual; dispensa
+                                de Atos da Junta/Contrato Social passa a
+                                exigir o CCMEI efetivamente anexado, com
+                                conteúdo legível, em vez de dispensa em
+                                branco; novos campos ccmei_anexado e
+                                ccmei_arquivo_id no retorno)
+
+NOVO (teste):
+tests/validacaoSocietariaCcmeiMei.test.ts  (4 testes: MEI sem CCMEI, MEI
+                                            com CCMEI anexado, MEI com CCMEI
+                                            vazio/ilegível, LTDA não afetada)
+
+Nenhuma migration, nenhuma tabela nova, nenhum arquivo de frontend alterado
+nesta rodada -- o badge "Dispensado (MEI)" e o restante da tela já liam o
+mesmo flag `atos_dispensados_por_mei` devolvido por esta função (Rodada 34,
+05/09/2026); só a regra de QUANDO esse flag fica `true` mudou, no backend.
+
+Ver CHANGELOG_CORRECOES.md (seção "Rodada 09/09/2026 (parte 7)") para a
+descrição completa.
+
+=== RODADA 09/09/2026 PARTE 6 — Causa raiz real: isEmpresaIndividual não reconhecia "Empresário (Individual)" com parênteses (texto oficial real da Receita, confirmado com os 3 documentos reais da empresa) ===
 
 Acrescenta ao diff da rodada anterior (parte 5) mais 2 arquivos:
 

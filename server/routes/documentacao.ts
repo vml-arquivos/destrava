@@ -2943,9 +2943,10 @@ export async function montarValidacaoSocietaria(
   processar: boolean,
   contexto: { empresa?: any; enquadramentoDados?: Record<string, any> } = {},
 ) {
-  const [docsContrato, docsAtos] = await Promise.all([
+  const [docsContrato, docsAtos, docsCcmei] = await Promise.all([
     listarDocumentosEmpresaPorTipos(empresaId, ['alteracao_contratual', 'contrato_social']),
     listarDocumentosEmpresaPorTipos(empresaId, ['atos_junta_comercial']),
+    listarDocumentosEmpresaPorTipos(empresaId, ['ccmei']),
   ]);
   const atosAnexado = docsAtos.length > 0;
   const atos = docsAtos.find(arquivoDocumentoTemConteudo) || null;
@@ -2956,15 +2957,42 @@ export async function montarValidacaoSocietaria(
     contexto.empresa?.porte,
     contexto.empresa?.natureza_juridica,
   ].filter(Boolean).join(' ');
-  const empresaMei = contexto.enquadramentoDados?.opcao_mei === true
+  // CORREÇÃO (09/09/2026, Rodada 09/09 parte 7 -- pedido explícito do usuário
+  // sobre a empresa real MEI "55.497.701 NATALYA MARTINS LOBO"): esta detecção
+  // de MEI era LOCAL e mais estreita que `isEmpresaIndividual` (não reconhecia
+  // "Empresário (Individual)" com parênteses, o mesmo bug já corrigido para a
+  // detecção canônica). Sem isso, esta etapa nunca reconhecia a empresa como
+  // MEI e continuava exigindo Atos da Junta/Contrato Social como se fosse
+  // LTDA. Unificado com a detecção canônica (ver `isEmpresaIndividual`).
+  const empresaMei = isEmpresaIndividual(contexto.empresa)
+    || contexto.enquadramentoDados?.opcao_mei === true
     || contexto.empresa?.opcao_mei === true
     || /\bmei\b|microempreendedor individual|simei/i.test(textoEnquadramento);
+  // CORREÇÃO (09/09/2026, Rodada 09/09 parte 7 -- pedido explícito do usuário:
+  // "o mei tambem como se fosse o contrato social que o CCmei, la esta o nome
+  // e dados do socio, então não tem atos da junta mas quando mei em contrato
+  // social coloca o ccmei, e avança"): MEI não tem Atos da Junta/Contrato
+  // Social no mesmo formato de LTDA -- o documento equivalente, que comprova a
+  // constituição e traz os dados do titular, é o CCMEI. Antes desta correção a
+  // etapa societária dispensava Atos da Junta/Contrato Social para QUALQUER
+  // MEI sem exigir nenhuma evidência; agora a dispensa só se confirma quando o
+  // CCMEI foi efetivamente anexado (com conteúdo legível) -- mantendo a
+  // exigência de comprovação documental, só que com o documento correto para
+  // este tipo de empresa, em vez de um documento que o MEI nunca vai ter.
+  const ccmei = docsCcmei.find(arquivoDocumentoTemConteudo) || null;
+  const ccmeiAnexado = !!ccmei;
+  const dispensaAtosPorMei = empresaMei && ccmeiAnexado;
   const promptCodigo = 'contrato_junta_crosscheck';
   const atosLeitura = !atos && empresaMei
-    ? {
-        dados: { anexado: false, analisado: true, dispensado: true, atos_dispensados_por_mei: true, diagnostico: 'Atos da Junta dispensados porque o enquadramento anterior identificou a empresa como MEI.' },
-        pendencias: [] as Pendencia[],
-      }
+    ? (dispensaAtosPorMei
+        ? {
+            dados: { anexado: false, analisado: true, dispensado: true, atos_dispensados_por_mei: true, diagnostico: 'Atos da Junta e Contrato Social dispensados: empresa MEI com CCMEI anexado, documento equivalente que comprova a constituição.' },
+            pendencias: [] as Pendencia[],
+          }
+        : {
+            dados: { anexado: false, analisado: false, dispensado: false, atos_dispensados_por_mei: false, diagnostico: 'Empresa identificada como MEI: Atos da Junta e Contrato Social não se aplicam. Anexe o CCMEI (documento equivalente, com os dados do titular) para comprovar a constituição e avançar esta etapa.' },
+            pendencias: [] as Pendencia[],
+          })
     : await montarAtosJuntaDados(empresaId, processar && !!atos);
   const atosDados = atosLeitura.dados || {};
   const atosBloqueios = (atosLeitura.pendencias || []).filter((item) => item.severidade === 'alta');
@@ -3037,7 +3065,11 @@ export async function montarValidacaoSocietaria(
     Array.isArray(atosDados?.historico_arquivamentos) ? atosDados.historico_arquivamentos : [],
     documentosAnalisados,
     new Date(),
-    { empresaMei },
+    // A dispensa só é passada como confirmada quando o CCMEI foi efetivamente
+    // anexado (`dispensaAtosPorMei`) -- ver comentário acima sobre a correção
+    // de 09/09/2026 parte 7. `calcularCadeiaComprovacaoSocietaria` continua
+    // sem nenhuma alteração de comportamento; apenas o valor recebido mudou.
+    { empresaMei: dispensaAtosPorMei },
   );
   const datasRequeridas = new Set((cadeia.registros_requeridos || []).map((item: any) => item.data));
   const alertasRelevantes = documentosAnalisados
@@ -3064,6 +3096,12 @@ export async function montarValidacaoSocietaria(
   if (!docsContrato.length && !empresaMei) bloqueios.unshift('Contrato Social ou Alteração Contratual ainda não anexado.');
   if (!atosAnexado && !empresaMei) bloqueios.unshift('Nenhum Ato da Junta foi localizado. A empresa pode ter registro em outro órgão; a inclusão de documentos permanece liberada, mas a validação exige revisão humana.');
   if (atosAnexado && !atos && !empresaMei) bloqueios.unshift('Os Atos da Junta anexados estão vazios ou sem conteúdo legível; nenhum foi considerado analisado.');
+  // CORREÇÃO (09/09/2026, Rodada 09/09 parte 7): para MEI, Atos da
+  // Junta/Contrato Social nunca se aplicam -- mas a etapa só avança com uma
+  // evidência documental real e equivalente (o CCMEI), nunca por dispensa em
+  // branco. Sem o CCMEI anexado (ou anexado sem conteúdo legível), a etapa
+  // permanece pendente com esta orientação específica.
+  if (empresaMei && !dispensaAtosPorMei) bloqueios.unshift('Empresa identificada como MEI: anexe o CCMEI para comprovar a constituição e liberar o avanço desta etapa (Atos da Junta e Contrato Social não se aplicam ao MEI).');
   // CORREÇÃO (2026-08-31, pedido explícito do usuário -- print real mostrando
   // dois avisos quase idênticos sobre Atos da Junta ao mesmo tempo, "tire esse
   // monte de texto e informação desnecessária"): `cadeia.possivel_registro_em_
@@ -3130,6 +3168,11 @@ export async function montarValidacaoSocietaria(
     botao_avancar_disponivel: consistente,
     contrato_arquivo_id: documentoPrincipal?.arquivo_id || docsContrato[0]?.id || null,
     atos_arquivo_id: atos?.id || docsAtos[0]?.id || null,
+    // Evidência documental que confirma a dispensa de Atos da Junta/Contrato
+    // Social para MEI (09/09/2026, Rodada 09/09 parte 7) -- ver comentário
+    // acima sobre `dispensaAtosPorMei`.
+    ccmei_anexado: ccmeiAnexado,
+    ccmei_arquivo_id: ccmei?.id || docsCcmei[0]?.id || null,
     nire_contrato: documentoPrincipal?.nire || null,
     nire_junta: atosDados?.nire || null,
     nire_confere: !!documentoPrincipal?.nire && onlyDigits(documentoPrincipal.nire) === onlyDigits(atosDados?.nire),

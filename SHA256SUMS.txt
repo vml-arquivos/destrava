@@ -1,4 +1,7 @@
-# === Rodada 09/09/2026 parte 6 (esta entrega) — causa raiz real: isEmpresaIndividual não reconhecia "Empresário (Individual)" com parênteses — arquivos alterados/novos, checksum atual ===
+# === Rodada 09/09/2026 parte 7 (esta entrega) — MEI usa o CCMEI como equivalente do Contrato Social/Atos da Junta — arquivos alterados/novos, checksum atual ===
+d3176a94aef6c6aba926f79861c220b47d15462934710a31b83c8bc99be7a979  server/routes/documentacao.ts
+1ff202d2a6e21bf113232473e72f07be0dc25713aee3f726c0d5eda831141f8c  tests/validacaoSocietariaCcmeiMei.test.ts
+# === Rodada 09/09/2026 parte 6 — causa raiz real: isEmpresaIndividual não reconhecia "Empresário (Individual)" com parênteses — arquivos alterados/novos, checksum atual ===
 538bc70ce88ce6061707edb582cb5bf99e5c4c63e410e1882ae82946cb4bb3d7  server/routes/documentacao.ts
 81d63ee57c4ea17be00cf268998f005b2a93ba7a5d6786ff1f62205b8ae80bf1  tests/garantirTitularEmpresaIndividual.test.ts
 836540965c6ad8d09b3e2376186407ffa3a7f34442ff7feffced8ccd5bf01f28  tests/isEmpresaIndividualSemNomeDaEmpresa.test.ts
