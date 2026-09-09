@@ -1375,7 +1375,7 @@ async function ensureBlocosCatalogo() {
   `);
 }
 
-async function getEmpresa(empresaId: string) {
+export async function getEmpresa(empresaId: string) {
   const { rows } = await pool.query(`SELECT * FROM public.empresas WHERE id = $1 LIMIT 1`, [empresaId]);
   return rows[0] || null;
 }
@@ -1592,6 +1592,32 @@ export function dadosQsa(empresa: any, socios: any[]) {
 export const TITULAR_EMPRESA_INDIVIDUAL_FONTE = 'titular_empresa_individual_auto';
 export const TITULAR_EMPRESA_INDIVIDUAL_NOME_PLACEHOLDER = 'Titular da empresa (nome a confirmar)';
 
+// CORREÇÃO (Rodada 25, 09/09/2026 -- pedido explícito do usuário: "o mei e
+// vinculado ao cpf e sempre tem o nome do socio administrador no cnpj e
+// qsa, pois empresa fica com o nome da pessoa fisica"): um MEI de verdade
+// tem, no próprio nome empresarial (razão social e/ou nome fantasia), o
+// padrão "<raiz do CNPJ, 8 dígitos> <nome civil do titular>" -- exatamente
+// como no caso real relatado ("55.497.701 NATALYA MARTINS LOBO", CNPJ
+// 55.497.701/0001-70). Isso é um SINAL, não uma prova de identidade: nunca
+// vira CPF (CPF continua vindo só de `empresa.responsavel_cpf`) e só é usado
+// quando o prefixo numérico bate exatamente com a raiz do CNPJ da própria
+// empresa -- nunca aceita qualquer número seguido de texto como nome.
+function extrairNomeTitularDoNomeEmpresarialMei(empresa: any): string | null {
+  if (!isEmpresaIndividual(empresa)) return null;
+  const raizCnpj = onlyDigits(empresa?.cnpj || '').slice(0, 8);
+  if (!raizCnpj || raizCnpj.length !== 8) return null;
+  const candidatos = [empresa?.razao_social, empresa?.nome_fantasia].filter(Boolean);
+  for (const candidato of candidatos) {
+    const texto = String(candidato).trim();
+    const match = texto.match(/^([\d.\-/]{8,14})\s+(.+)$/);
+    if (!match) continue;
+    if (onlyDigits(match[1]) !== raizCnpj) continue;
+    const nome = match[2].trim();
+    if (nome && normalizeText(nome) !== 'nao identificado') return nome;
+  }
+  return null;
+}
+
 export async function garantirTitularEmpresaIndividual(
   empresaId: string,
   empresa: any,
@@ -1605,13 +1631,15 @@ export async function garantirTitularEmpresaIndividual(
     return false;
   }
 
-  // Reaproveita exatamente a mesma cascata de evidências que `dadosQsa` usa
-  // para o card do QSA (cadastro estruturado -> Receita JSON -> nenhum), sem
-  // duplicar a lógica de resolução de nome.
+  // Cascata de evidências (nunca inventa CPF): (1) o mesmo resolvedor que
+  // `dadosQsa` usa para o card do QSA (cadastro estruturado -> Receita
+  // JSON); (2) quando nenhum dos dois resolve, o nome empresarial do MEI
+  // (ver `extrairNomeTitularDoNomeEmpresarialMei` acima) -- só um SINAL de
+  // identidade, nunca uma confirmação; (3) nenhum nome disponível ainda.
   const resolucao = dadosQsa(empresa, []);
   const nomeResolvido = resolucao.titular_individual?.nome
     ? String(resolucao.titular_individual.nome).trim()
-    : null;
+    : extrairNomeTitularDoNomeEmpresarialMei(empresa);
   const cpfResolvido = empresa?.responsavel_cpf ? (String(empresa.responsavel_cpf).trim() || null) : null;
   const qualificacao = empresa?.opcao_mei ? 'Titular (MEI)' : 'Titular (Empresário Individual)';
 

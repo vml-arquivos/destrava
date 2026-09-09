@@ -874,10 +874,37 @@ router.get('/:id/socios', auth, async (req: Request, res: Response) => {
   try {
     if (!(await requireEmpresaAccess(req, res))) return;
     await ensureSociosEmpresaSchema();
-    const { rows } = await pool.query(
+    let { rows } = await pool.query(
       'SELECT * FROM socios_empresa WHERE empresa_id = $1 AND COALESCE(ativo, true) = true ORDER BY nome ASC',
       [req.params.id]
     );
+    // CORREÇÃO (Rodada 25, 09/09/2026 -- pedido explícito do usuário, com
+    // print real mostrando "Documentos dos sócios" ainda travado em 0/14
+    // depois da Rodada 24): a tela de Acervo Documental (`DocumentosEntidade.tsx`)
+    // NÃO lê a lista de sócios do dossiê (`montarDossieCreditoEmpresa`) -- ela
+    // busca direto nesta rota, de forma independente. A reconciliação do
+    // titular de Empresário Individual/MEI (Rodada 24) só tinha sido ligada
+    // dentro do dossiê, então esta rota (a que a tela realmente usa) nunca
+    // chegava a criar/ver o titular. Import dinâmico para não criar um ciclo
+    // estático de import entre este arquivo e `./documentacao` (que já importa
+    // `upsertSocioEmpresa` daqui) -- resolvido em tempo de chamada, depois que
+    // os dois módulos já terminaram de carregar.
+    try {
+      const { getEmpresa, garantirTitularEmpresaIndividual } = await import('./documentacao');
+      const empresa = await getEmpresa(req.params.id);
+      if (empresa) {
+        const titularFoiCriadoOuAtualizado = await garantirTitularEmpresaIndividual(req.params.id, empresa, rows);
+        if (titularFoiCriadoOuAtualizado) {
+          const releitura = await pool.query(
+            'SELECT * FROM socios_empresa WHERE empresa_id = $1 AND COALESCE(ativo, true) = true ORDER BY nome ASC',
+            [req.params.id]
+          );
+          rows = releitura.rows;
+        }
+      }
+    } catch (error: any) {
+      console.warn('[GET /api/empresas/:id/socios] Reconciliação de titular de empresa individual não interrompeu a listagem:', error?.message || error);
+    }
     res.json(rows.map(enrichSocioRow));
   } catch (err) {
     console.error('[GET /api/empresas/:id/socios]', err);

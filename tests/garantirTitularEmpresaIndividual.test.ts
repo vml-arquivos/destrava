@@ -104,6 +104,67 @@ describe('garantirTitularEmpresaIndividual', () => {
     expect(payload).toMatchObject({ nome: 'Natalya Martins Lobo', cpf_cnpj: '111.222.333-44' });
   });
 
+  it('MEI sem cadastro estruturado, mas com o nome empresarial no padrão "raiz do CNPJ + nome civil" (caso real relatado): extrai o nome, nunca inventa CPF', async () => {
+    const { garantirTitularEmpresaIndividual, TITULAR_EMPRESA_INDIVIDUAL_FONTE } = await import('../server/routes/documentacao');
+
+    const criou = await garantirTitularEmpresaIndividual(
+      EMPRESA_ID,
+      empresaMei({ cnpj: '55497701000170', razao_social: '55.497.701 NATALYA MARTINS LOBO' }),
+      [],
+    );
+
+    expect(criou).toBe(true);
+    const [, payload] = mocks.upsertSocioEmpresa.mock.calls[0];
+    expect(payload).toMatchObject({
+      nome: 'NATALYA MARTINS LOBO',
+      cpf_cnpj: null,
+      fonte_dados: TITULAR_EMPRESA_INDIVIDUAL_FONTE,
+    });
+  });
+
+  it('nome empresarial cujo prefixo numérico NÃO bate com a raiz do CNPJ da empresa: heurística não é aplicada, cai no placeholder', async () => {
+    const { garantirTitularEmpresaIndividual, TITULAR_EMPRESA_INDIVIDUAL_NOME_PLACEHOLDER } = await import('../server/routes/documentacao');
+
+    await garantirTitularEmpresaIndividual(
+      EMPRESA_ID,
+      empresaMei({ cnpj: '11222333000181', razao_social: '55.497.701 NATALYA MARTINS LOBO' }),
+      [],
+    );
+
+    const [, payload] = mocks.upsertSocioEmpresa.mock.calls[0];
+    expect(payload).toMatchObject({ nome: TITULAR_EMPRESA_INDIVIDUAL_NOME_PLACEHOLDER, cpf_cnpj: null });
+  });
+
+  it('nome estruturado no cadastro tem prioridade sobre o nome empresarial (heurística só é usada quando não há outra evidência)', async () => {
+    const { garantirTitularEmpresaIndividual } = await import('../server/routes/documentacao');
+
+    await garantirTitularEmpresaIndividual(
+      EMPRESA_ID,
+      empresaMei({
+        cnpj: '55497701000170',
+        razao_social: '55.497.701 NOME ANTIGO DESATUALIZADO',
+        responsavel_nome: 'Natalya Martins Lobo',
+      }),
+      [],
+    );
+
+    const [, payload] = mocks.upsertSocioEmpresa.mock.calls[0];
+    expect(payload).toMatchObject({ nome: 'Natalya Martins Lobo' });
+  });
+
+  it('nome empresarial no nome_fantasia (não na razão social) também é reconhecido', async () => {
+    const { garantirTitularEmpresaIndividual } = await import('../server/routes/documentacao');
+
+    await garantirTitularEmpresaIndividual(
+      EMPRESA_ID,
+      empresaMei({ cnpj: '55497701000170', razao_social: null, nome_fantasia: '55497701 Natalya Martins Lobo' }),
+      [],
+    );
+
+    const [, payload] = mocks.upsertSocioEmpresa.mock.calls[0];
+    expect(payload).toMatchObject({ nome: 'Natalya Martins Lobo' });
+  });
+
   it('Empresário Individual (não-MEI) sem QSA também recebe titular, com qualificação distinta', async () => {
     const { garantirTitularEmpresaIndividual } = await import('../server/routes/documentacao');
 
