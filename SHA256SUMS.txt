@@ -1,4 +1,7 @@
-# === Rodada 09/09/2026 parte 3 (esta entrega) — cards do Acervo Documental recolhidos por padrão — arquivos alterados/novos, checksum atual ===
+# === Rodada 09/09/2026 parte 4 (esta entrega) — titular de Empresário Individual/MEI criado automaticamente — arquivos alterados/novos, checksum atual ===
+3473fdd7315504a4e4bdb2505cc59e940e2d177c913145441407313a95183991  server/routes/documentacao.ts
+208b0b820d4838b462b458e944d5c6cc472c0ad9eae2a2f65682fa0979d77525  tests/garantirTitularEmpresaIndividual.test.ts
+# === Rodada 09/09/2026 parte 3 — cards do Acervo Documental recolhidos por padrão — arquivos alterados/novos, checksum atual ===
 8b520d2639bb0d0f67044e231277289684e0946d5813ed56a94e252def664329  client/src/components/documentos/DocumentosEntidade.tsx
 0bfa02b8706844fd91bfad0a569617487d10c5d92f14f7cd7d36de0ab55ca5d6  tests/acervoCardsRecolhidos.test.ts
 # === Rodada 09/09/2026 parte 2 (esta entrega) — PDF institucional + roteamento do Dossiê de Crédito — arquivos alterados/novos, checksum atual ===

@@ -1556,6 +1556,108 @@ export function dadosQsa(empresa: any, socios: any[]) {
   };
 }
 
+// CORREÇÃO (Rodada 24, 09/09/2026 -- pedido explícito do usuário: empresa
+// Empresário Individual/MEI real ficava com "Documentos dos sócios" travado
+// em 0/14, todo slot mostrando "Sincronize o QSA para identificar o sócio
+// antes de anexar"): uma empresa MEI/EI legitimamente não tem sócio no QSA --
+// tem um TITULAR. Antes desta correção, nada nunca criava uma linha em
+// `socios_empresa` para esse titular (a sincronização do QSA só grava sócios
+// EXTRAÍDOS do QSA, e para EI/MEI o QSA é vazio por natureza), então
+// `socios` ficava sempre `[]` para essas empresas. Isso quebrava em dois
+// pontos: (1) no frontend, `DocumentosEntidade.tsx` seleciona
+// `socios[0]?.id` para vincular documento pessoal a um sócio -- sem nenhuma
+// linha, o vínculo nunca existe e todo card pessoal fica bloqueado; (2) no
+// banco, a constraint `documentos_arquivos_sem_pessoal_na_empresa_chk`
+// (migration 055) proíbe qualquer documento pessoal vinculado a uma empresa
+// sem um `socio_id` válido -- ou seja, mesmo destravando só o frontend, o
+// upload seria rejeitado pelo banco.
+//
+// A correção reaproveita 100% a estrutura já existente (nenhuma tabela,
+// migration ou tipo novo): quando a empresa é EI/MEI (`isEmpresaIndividual`)
+// e ainda não existe nenhuma linha em `socios_empresa`, cria-se uma única
+// linha "Titular" via `upsertSocioEmpresa` (já idempotente por nome/CPF),
+// usando o mesmo resolvedor de nome que `dadosQsa`/`montarTitularEmpresaIndividual`
+// já usam (cadastro estruturado -> Receita JSON -> nenhum, sem NUNCA inventar
+// CPF). Quando nenhum nome pode ser resolvido ainda, cria-se mesmo assim com
+// um nome-placeholder claro ("Titular da empresa (nome a confirmar)") -- a
+// identidade completa (nome e CPF) é confirmada depois pela própria
+// documentação pessoal que esse titular passa a poder anexar (o upload nunca
+// é bloqueado por falta de CPF). Chamadas repetidas não duplicam: se já
+// existe uma linha de titular criada por esta função (marcada por
+// `fonte_dados`), ela só é atualizada (nunca uma segunda linha) quando um
+// nome/CPF melhor fica disponível depois. Sócios já cadastrados por qualquer
+// outra via (QSA, cadastro manual, Receita) nunca são tocados ou
+// substituídos -- a função não faz nada quando `sociosAtuais.length > 0` e
+// nenhum deles é o titular automático desta função.
+export const TITULAR_EMPRESA_INDIVIDUAL_FONTE = 'titular_empresa_individual_auto';
+export const TITULAR_EMPRESA_INDIVIDUAL_NOME_PLACEHOLDER = 'Titular da empresa (nome a confirmar)';
+
+export async function garantirTitularEmpresaIndividual(
+  empresaId: string,
+  empresa: any,
+  sociosAtuais: any[],
+): Promise<boolean> {
+  if (!empresaId || !empresa || !isEmpresaIndividual(empresa)) return false;
+  const lista = Array.isArray(sociosAtuais) ? sociosAtuais : [];
+  const titularAuto = lista.find((s) => s?.fonte_dados === TITULAR_EMPRESA_INDIVIDUAL_FONTE) || null;
+  if (lista.length > 0 && !titularAuto) {
+    // Já existe sócio/titular cadastrado por outra via -- não criar nem sobrepor.
+    return false;
+  }
+
+  // Reaproveita exatamente a mesma cascata de evidências que `dadosQsa` usa
+  // para o card do QSA (cadastro estruturado -> Receita JSON -> nenhum), sem
+  // duplicar a lógica de resolução de nome.
+  const resolucao = dadosQsa(empresa, []);
+  const nomeResolvido = resolucao.titular_individual?.nome
+    ? String(resolucao.titular_individual.nome).trim()
+    : null;
+  const cpfResolvido = empresa?.responsavel_cpf ? (String(empresa.responsavel_cpf).trim() || null) : null;
+  const qualificacao = empresa?.opcao_mei ? 'Titular (MEI)' : 'Titular (Empresário Individual)';
+
+  if (!titularAuto) {
+    try {
+      await upsertSocioEmpresa(empresaId, {
+        nome: nomeResolvido || TITULAR_EMPRESA_INDIVIDUAL_NOME_PLACEHOLDER,
+        cpf_cnpj: cpfResolvido,
+        qualificacao_socio: qualificacao,
+        representante_legal: true,
+        fonte_dados: TITULAR_EMPRESA_INDIVIDUAL_FONTE,
+      } as any);
+    } catch (error: any) {
+      console.warn('[Dossie] Falha ao garantir titular da empresa individual:', empresaId, error?.message || error);
+      return false;
+    }
+    return true;
+  }
+
+  // Titular automático já existe: só atualiza o MESMO registro (nunca cria um
+  // segundo) quando um dado melhor que o placeholder ficou disponível depois.
+  const nomeAindaPlaceholder = String(titularAuto.nome || '') === TITULAR_EMPRESA_INDIVIDUAL_NOME_PLACEHOLDER;
+  const precisaAtualizarNome = !!(nomeResolvido && nomeAindaPlaceholder);
+  const precisaAtualizarCpf = !!(cpfResolvido && !titularAuto.cpf_cnpj);
+  if (!precisaAtualizarNome && !precisaAtualizarCpf) return false;
+  try {
+    await pool.query(
+      `UPDATE public.socios_empresa
+          SET nome = $1,
+              cpf_cnpj = COALESCE(cpf_cnpj, $2),
+              updated_at = NOW()
+        WHERE id = $3 AND empresa_id = $4`,
+      [
+        precisaAtualizarNome ? nomeResolvido : titularAuto.nome,
+        cpfResolvido,
+        titularAuto.id,
+        empresaId,
+      ],
+    );
+  } catch (error: any) {
+    console.warn('[Dossie] Falha ao atualizar titular da empresa individual:', empresaId, error?.message || error);
+    return false;
+  }
+  return true;
+}
+
 // ─────────────────────────────────────────────────────────────────────────
 // Enquadramento Tributário compõe a Etapa 1. Atos da Junta pertencem à Etapa 2
 // e são lidos apenas para a conferência por NIRE e data com o contrato/alteração.
@@ -3063,7 +3165,20 @@ export async function montarDossieCreditoEmpresa(empresaId: string, options: { p
   }
   const empresa = await getEmpresa(empresaId);
   if (!empresa) return null;
-  const socios = await getSociosEmpresa(empresaId);
+  let socios = await getSociosEmpresa(empresaId);
+  // Reconciliação-na-leitura (mesmo padrão já usado por
+  // `reconciliarFollowupMaturidadeEmpresa` na rota de Inteligência 360): uma
+  // empresa MEI/EI sem nenhum sócio cadastrado nunca conseguiria ter
+  // documentação pessoal liberada (ver `garantirTitularEmpresaIndividual`
+  // acima). Isso garante o titular mesmo para empresas já processadas antes
+  // desta correção, sem depender de uma nova sincronização de QSA.
+  const titularFoiCriadoOuAtualizado = await garantirTitularEmpresaIndividual(empresaId, empresa, socios).catch((error: any) => {
+    console.warn('[Dossie] Reconciliação de titular de empresa individual não interrompeu o relatório:', error?.message || error);
+    return false;
+  });
+  if (titularFoiCriadoOuAtualizado) {
+    socios = await getSociosEmpresa(empresaId);
+  }
   const docsCnpj = await listarDocumentosEmpresaPorTipos(empresaId, ['cartao_cnpj', 'cnpj_cartao', 'certidao', 'consulta_receita']);
   const docsCartao = docsCnpj.filter((doc: any) => ['cartao_cnpj', 'cnpj_cartao'].includes(String(doc.tipo_documento || '')));
   if (processarCartaoNestaExecucao && docsCartao[0]?.id) {

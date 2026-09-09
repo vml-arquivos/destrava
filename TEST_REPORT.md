@@ -1,12 +1,31 @@
-# Relatório de Testes — 31/08/2026 (atualizado, Rodada 17 — 02/09/2026: confirmação automática da Etapa 1, sem clicar em "Iniciar análise documental"; Rodada 18 — 02/09/2026: validação local sem IA/orientação de documento correto/menos texto repetido; Rodada 19 — 02/09/2026: sincronização automática de CNPJ; Rodada 20 — 02/09/2026: Cartão CNPJ confirma e trava a situação cadastral contra a reversão automática; Rodada 21 — 02/09/2026: leitura automática sem clique, falso positivo de nome para Empresário Individual, telefone/e-mail via Cartão CNPJ; Rodada 22 — 02/09/2026: refinamento com os documentos reais, janela de 5 dias, trava de edição manual; Rodada 23 — 02/09/2026: leitura visível ao anexar Cartão CNPJ/QSA/Enquadramento; Rodada 24 — 02/09/2026: falha já pendente/travada passa a se resolver sozinha na tela, sem F5; Rodada 25 — 02/09/2026: todos os campos do checklist sempre visíveis, para qualquer empresa/regime; Rodada 26 — 02/09/2026: Cartão CNPJ também corrige o nome empresarial/razão social; Rodada 27 — 02/09/2026: botão "Reler" manual em cada card da Etapa 1; Rodada 28 — 02/09/2026: grade de campos ilegível corrigida, botão "Reler" do Contrato Social confronta contra o Ato da Junta; Rodada 29 — 02/09/2026: auditoria própria de consistência entre tipos de empresa, três inconsistências corrigidas; Rodada 30 — 02/09/2026: cards do Acervo Documental nivelados quando fechados; Rodada 08/09/2026: identidade documental por evidência em Atos da Junta/Contrato Social, atualizada em 09/09/2026 com o terceiro documento real; Rodada 09/09/2026: laudo por documento vira ícone de hover; Rodada 09/09/2026 parte 2: PDF institucional e roteamento do Dossiê de Crédito; Rodada 09/09/2026 parte 3: cards do Acervo Documental recolhidos por padrão)
+# Relatório de Testes — 31/08/2026 (atualizado, Rodada 17 — 02/09/2026: confirmação automática da Etapa 1, sem clicar em "Iniciar análise documental"; Rodada 18 — 02/09/2026: validação local sem IA/orientação de documento correto/menos texto repetido; Rodada 19 — 02/09/2026: sincronização automática de CNPJ; Rodada 20 — 02/09/2026: Cartão CNPJ confirma e trava a situação cadastral contra a reversão automática; Rodada 21 — 02/09/2026: leitura automática sem clique, falso positivo de nome para Empresário Individual, telefone/e-mail via Cartão CNPJ; Rodada 22 — 02/09/2026: refinamento com os documentos reais, janela de 5 dias, trava de edição manual; Rodada 23 — 02/09/2026: leitura visível ao anexar Cartão CNPJ/QSA/Enquadramento; Rodada 24 — 02/09/2026: falha já pendente/travada passa a se resolver sozinha na tela, sem F5; Rodada 25 — 02/09/2026: todos os campos do checklist sempre visíveis, para qualquer empresa/regime; Rodada 26 — 02/09/2026: Cartão CNPJ também corrige o nome empresarial/razão social; Rodada 27 — 02/09/2026: botão "Reler" manual em cada card da Etapa 1; Rodada 28 — 02/09/2026: grade de campos ilegível corrigida, botão "Reler" do Contrato Social confronta contra o Ato da Junta; Rodada 29 — 02/09/2026: auditoria própria de consistência entre tipos de empresa, três inconsistências corrigidas; Rodada 30 — 02/09/2026: cards do Acervo Documental nivelados quando fechados; Rodada 08/09/2026: identidade documental por evidência em Atos da Junta/Contrato Social, atualizada em 09/09/2026 com o terceiro documento real; Rodada 09/09/2026: laudo por documento vira ícone de hover; Rodada 09/09/2026 parte 2: PDF institucional e roteamento do Dossiê de Crédito; Rodada 09/09/2026 parte 3: cards do Acervo Documental recolhidos por padrão; Rodada 09/09/2026 parte 4: titular de Empresário Individual/MEI criado automaticamente)
 
-## Resultado final (Rodada 09/09/2026 parte 3, cards do Acervo Documental recolhidos por padrão)
+## Resultado final (Rodada 09/09/2026 parte 4, titular de Empresário Individual/MEI criado automaticamente)
 
 ```
-Test Files  116 passed (116)
-     Tests  1096 passed (1096)
+Test Files  117 passed (117)
+     Tests  1109 passed (1109)
   Duration  ~53s
 ```
+
+## Rodada 09/09/2026 (parte 4) — titular de Empresário Individual/MEI criado automaticamente em socios_empresa
+
+`tests/garantirTitularEmpresaIndividual.test.ts` (novo, 13 testes), seguindo o mesmo padrão de mock (`vi.mock('pg', ...)` + `vi.mock('../server/routes/socios_documentos', ...)`) já usado em `tests/sincronizarSociosQsa.test.ts`:
+1. MEI sem QSA e sem nome resolvido -- cria titular com nome-placeholder, CPF nunca inventado (`cpf_cnpj: null`).
+2. MEI com nome do titular já no cadastro estruturado -- usa esse nome real.
+3. MEI com nome E CPF cadastrados -- usa ambos (não é invenção, é dado já existente no cadastro).
+4. Empresário Individual não-MEI -- mesmo comportamento, qualificação textual distinta ("Titular (Empresário Individual)" em vez de "Titular (MEI)").
+5. LTDA (não é empresa individual) nunca recebe titular sintético, mesmo com QSA vazio.
+6. LTDA com 1 sócio real não é afetada -- sócio único de LTDA/SLU continua válido, não é confundido com MEI.
+7. MEI que já tem sócio cadastrado por outra via (QSA legado, cadastro manual) -- nunca cria nem sobrepõe.
+8. Titular automático já existe com placeholder e um nome melhor fica disponível -- atualiza o MESMO registro (nunca cria um segundo).
+9. Titular automático já existe com nome real e sem CPF; CPF passa a existir -- atualiza só o CPF, preservando o nome.
+10. Titular automático já existe e nada mudou -- não chama upsert nem UPDATE (idempotente, nunca duplica).
+11. Falha na criação do titular não propaga exceção (best-effort, não interrompe o dossiê).
+12. `empresaId`/`empresa` ausentes -- retorna `false` sem chamar nada.
+13. Teste de fiação (audita o código-fonte de `montarDossieCreditoEmpresa`) -- confirma que a reconciliação é chamada com `empresa`/`socios` já carregados e que `socios` é relido quando algo muda, sem precisar mockar CNPJ/QSA/enquadramento/societário inteiros (convenção já registrada em `mapaDocumentalCredito.test.ts`).
+
+Suíte completa depois desta rodada: 117 arquivos / 1109 testes (1096 + 13, todos os 13 novos em `tests/garantirTitularEmpresaIndividual.test.ts`). `npx tsc --noEmit` limpo, `pnpm run build` limpo, `node --check` OK em `dist/index.js` e `dist/backfill-laudos.js` (ver `BUILD_REPORT.md`).
 
 ## Rodada 09/09/2026 (parte 3) — cards do Acervo Documental recolhidos por padrão
 

@@ -1,4 +1,24 @@
-=== RODADA 09/09/2026 PARTE 3 (esta entrega) — Cards do Acervo Documental recolhidos por padrão (título + selo de resultado + ícone i) ===
+=== RODADA 09/09/2026 PARTE 4 (esta entrega) — Titular de Empresário Individual/MEI criado automaticamente em socios_empresa (destrava documentação pessoal sem QSA) ===
+
+Acrescenta ao diff da rodada anterior (cards recolhidos) mais 2 arquivos:
+
+ALTERADO (produção, backend):
+server/routes/documentacao.ts
+
+NOVO (teste):
+tests/garantirTitularEmpresaIndividual.test.ts
+
+Nenhuma migration, nenhuma tabela nova, nenhum arquivo de frontend alterado
+nesta rodada -- o frontend (`DocumentosEntidade.tsx`) já usava `socios[0]?.id`
+corretamente; o que faltava era `socios_empresa` ter uma linha para o titular
+de empresas MEI/EI, e isso é resolvido inteiramente no backend, dentro de
+`montarDossieCreditoEmpresa` (o montador único usado por todas as rotas do
+Acervo Documental).
+
+Ver CHANGELOG_CORRECOES.md (seção "Rodada 09/09/2026 (parte 4)") para a
+descrição completa.
+
+=== RODADA 09/09/2026 PARTE 3 — Cards do Acervo Documental recolhidos por padrão (título + selo de resultado + ícone i) ===
 
 Acrescenta ao diff da rodada anterior (PDF + roteamento) mais 2 arquivos:
 
