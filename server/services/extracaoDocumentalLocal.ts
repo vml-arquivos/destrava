@@ -693,7 +693,14 @@ function parseContratoSocialAlteracao(texto: string): { dados: Record<string, an
   const nireRegistro = texto.match(/(?:registrad[ao]|arquivad[ao]).{0,120}?(?:sob\s+(?:o\s+)?n[ºo°]?|nire)\s*[:\-]?\s*(\d{10,12})/is)?.[1] || null;
   const nire = nireExplicito || nireRegistro;
 
+  // A certificação registral não segue uma única ordem de palavras entre
+  // Juntas: algumas dizem "CERTIFICO O REGISTRO EM <data> SOB Nº <número>"
+  // (ordem data-depois-número), outras "Certifico registro sob o nº <número>
+  // em <data>" (ordem número-depois-data, ex.: JCDF). As duas variantes
+  // certificam exatamente o mesmo fato -- reconhecer só uma delas fazia o
+  // número de arquivamento de documentos genuínos ficar "não localizado".
   const numeroArquivamento = texto.match(/CERTIFICO\s+O\s+REGISTRO\s+EM\s+\d{2}\/\d{2}\/\d{4}(?:\s+\d{1,2}:\d{2})?\s+SOB\s+N[ºO°]?\s*(\d{5,15})/i)?.[1]
+    || texto.match(/CERTIFICO\s+(?:O\s+)?REGISTRO\s+SOB\s+(?:O\s+)?N[ºO°]?\s*(\d{5,15})\s+EM\s+\d{2}\/\d{2}\/\d{4}/i)?.[1]
     || texto.match(/\bprotocolo\s*[:\-]?\s*(\d{5,15})\b/i)?.[1]
     || null;
   // Rodada 38: a data registral do ATO ATUAL só pode vir da certificação
@@ -745,7 +752,17 @@ function parseContratoSocialAlteracao(texto: string): { dados: Record<string, an
   const socios = linhas
     .filter((linha) => /s[oó]ci[oa]|administrador|titular/i.test(linha))
     .map((linha) => {
-      const depoisRotulo = linha.match(/(?:s[oó]ci[oa](?:\s*-?administrador[ae]?)?|administrador[ae]?|titular)\s*[:\-]\s*([A-ZÀ-Ú][A-ZÀ-Ú\s]{4,100})/i)?.[1];
+      // O rótulo ("sócio"/"administrador"/"titular") é reconhecido sem
+      // diferenciar maiúsculas/minúsculas, mas o NOME capturado depois dele
+      // precisa ser genuinamente maiúsculo -- é assim que o padrão distingue
+      // um nome próprio de uma palavra comum. Aplicar a mesma flag "i" da
+      // busca do rótulo também à captura do nome (como antes) fazia o
+      // próprio texto do rótulo (ex.: "Sócio - administrador", sem nome
+      // nenhum depois) ser capturado como se "administrador" fosse o nome.
+      const rotuloMatch = linha.match(/(?:s[oó]ci[oa](?:\s*-?administrador[ae]?)?|administrador[ae]?|titular)\s*[:\-]\s*/i);
+      const depoisRotulo = rotuloMatch
+        ? linha.slice(rotuloMatch.index! + rotuloMatch[0].length).match(/^([A-ZÀ-Ú][A-ZÀ-Ú\s]{4,100})/)?.[1]
+        : undefined;
       const antesVirgula = linha.match(/^\s*([A-ZÀ-Ú][A-ZÀ-Ú\s]{4,100})\s*,/)?.[1];
       const nome = limparValor(depoisRotulo || antesVirgula || null);
       return nome ? { nome, qualificacao: /administrador|titular/i.test(linha) ? 'Administrador' : 'Sócio', administrador: /administrador|titular/i.test(linha) } : null;

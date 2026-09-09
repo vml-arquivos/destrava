@@ -1,8 +1,12 @@
-=== RODADA 08/09/2026 (esta entrega) — identidade documental por evidência (Atos da Junta / Contrato Social) ===
+=== RODADA 08/09/2026, atualizada em 09/09/2026 (esta entrega) — identidade documental por evidência (Atos da Junta / Contrato Social) ===
 
 Base: destravamain_30.zip (upload do usuário). Lista gerada por `diff -rq`
 contra uma cópia pristina extraída do mesmo zip, excluindo node_modules/dist/.vite.
-Apenas 3 arquivos diferem -- diff mínimo, nenhum outro arquivo tocado:
+Apenas 3 arquivos diferem -- diff mínimo, nenhum outro arquivo tocado, mesmo
+depois da atualização de 09/09/2026 (2 correções adicionais dentro do mesmo
+arquivo de produção, usando o terceiro documento real, mais 3 testes novos
+no mesmo arquivo de teste -- nenhum arquivo novo, nenhum arquivo a mais
+tocado):
 
 ALTERADOS (produção):
 server/services/extracaoDocumentalLocal.ts
@@ -11,8 +15,9 @@ shared/documentalPresentation.ts
 NOVO (teste):
 tests/atosJuntaIdentidadePorEvidencia.test.ts
 
-Ver CHANGELOG_CORRECOES.md (seção "Rodada 08/09/2026") para a descrição
-completa da causa raiz e da correção.
+Ver CHANGELOG_CORRECOES.md (seção "Rodada 08/09/2026" e a subseção "Segunda
+atualização da mesma rodada (09/09/2026)") para a descrição completa da
+causa raiz e da correção.
 
 === HISTÓRICO ANTERIOR (rodadas 1-6 desta sessão, 30-31/08/2026) ===
 

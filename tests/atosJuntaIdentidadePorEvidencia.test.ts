@@ -238,3 +238,107 @@ CONSOLIDACAO DE CONTRATO/ESTATUTO
     expect(alertas.some((a) => a.codigo === 'contrato_junta_nire_divergente')).toBe(false);
   });
 });
+
+/**
+ * Terceiro documento real, anexado numa mensagem seguinte junto com o mesmo
+ * "atos_da_junta_Vik.pdf": a Alteração e Consolidação Contratual de VERDADE
+ * da empresa "VIK CONSTRUCOES E REFORMAS LTDA" (JCDF, registro nº 2004670 em
+ * 26/01/2023) -- o par exato que o usuário reportou como "não validou, mas
+ * está tudo certo nos dois documentos". O texto abaixo reproduz os trechos
+ * relevantes exatamente como extraídos do PDF real (mantendo a certificação
+ * registral no formato de palavras que a JCDF realmente usa: "Certifico
+ * registro sob o nº <número> em <data>", diferente da ordem "CERTIFICO O
+ * REGISTRO EM <data> ... SOB Nº <número>" que já era reconhecida).
+ */
+describe('reprodução com o terceiro documento real (Alteração e Consolidação Contratual -- VIK CONSTRUCOES E REFORMAS LTDA, JCDF)', () => {
+  const ATOS_VIK = `
+Atos disponíveis
+ENQUADRAMENTO DE MICROEMPRESA
+Data de Aprovação:15/08/2013 - Número:20130711675
+Evento(s): ENQUADRAMENTO DE MICROEMPRESA
+ATO CONSTITUTIVO - EIRELI
+Data de Aprovação:15/08/2013 - Número:53600026039
+Evento(s): ATO CONSTITUTIVO
+ALTERACAO
+Data de Aprovação:27/08/2021 - Número:1959107
+Evento(s): ALTERACAO DE NOME EMPRESARIAL
+ALTERACAO DE SOCIO/TITULAR / ADMINISTRADOR
+TRANSFORMACAO AUTOMATICA DE EIRELI EM LTDA (ART. 41 DA LEI 14.195/2021)
+ALTERACAO
+Data de Aprovação:26/01/2023 - Número:2004670
+Evento(s): ALTERACAO DE DADOS (EXCETO NOME EMPRESARIAL)
+CONSOLIDACAO DE CONTRATO/ESTATUTO
+`;
+
+  const CONTRATO_VIK = `
+NIRE (da sede ou filial, quando a sede for em outra UF)
+53600026039
+Nome:
+VIK CONSTRUCOES E REFORMAS LTDA
+Junta Comercial, Industrial e Serviços do Distrito Federal
+Certifico registro sob o nº 2004670 em 26/01/2023 da Empresa VIK CONSTRUCOES E REFORMAS LTDA, CNPJ 18706347000110 e protocolo
+DFE2300018859 - 20/01/2023. Autenticação: C7293E67859CD861428B166CFBD5E08B6D3686D8. Maxmiliam Patriota Carneiro - Secretário-Geral.
+PRIMEIRA ALTERACAO E CONSOLIDACAO CONTRATUAL
+VIK CONSTRUCOES E REFORMAS LTDA
+IVANILDO FERREIRA DS ANJOS, brasileiro, solteiro, empresário, residente e domiciliado na SHI
+QR 433, conjunto 04 casa 18, Samambaia Norte/DF, CEP 72.329.205, nascido em 07/10/1984,
+natural de Brasília-DF, portador da identidade 2.141.231/DF, expedida em 05/03/2010, CPF nº
+009.709.681-40, filho de Neci Ferreira dos Anjos, único sócio da empresa VIK CONSTRUCOES E
+REFORMAS LTDA, com sede na SHI QR 433, conjunto 04 casa 18, Samambaia Norte/DF, CEP
+72.329.205, com contrato social devidamente registrado na JCDF sob o nº 53600026039 por
+deferimento do dia 15/08/2013, inscrita no CNPJ nº. 18.706.347/0001-10, resolve de comum acordo
+e na melhor forma do direito, alterar e consolidar a Sociedade, pela primeira vez, sob as cláusulas a
+seguir enumeradas:
+CLÁUSULA PRIMEIRA – A sociedade EIRELI foi transformada em LTDA por força
+do Art. 41 da Lei 14.195/2021, passando-se a possuir a denominação social de VIK CONSTRUCOES
+E REFORMAS LTDA, e passando a constituir o nome fantasia VIK CONSTRUCOES E REFORMAS.
+CLÁUSULA TERCEIRA - A administração da Empresa caberá ao sócio IVANILDO
+FERREIRA DS ANJOS com os poderes e atribuições de administrador autorizado o uso do nome
+empresarial.
+CLÁUSULA SEGUNDA – O Capital Social da Sociedade é de R$ 100.000,00 (cem
+mil reais), já totalmente integralizadas, em moeda corrente do País, pelo sócio
+Brasília-DF, 26 de janeiro de 2023.
+IVANILDO FERREIRA DS ANJOS
+Sócio - administrador
+`;
+
+  it('o número de arquivamento é extraído mesmo com a certificação em ordem "sob o nº X em DATA" (JCDF), não só "EM DATA ... SOB Nº X"', () => {
+    // Causa raiz: a JCDF certifica na ordem "Certifico registro sob o nº
+    // 2004670 em 26/01/2023", diferente da ordem já reconhecida ("CERTIFICO
+    // O REGISTRO EM <data> ... SOB Nº <número>"). Documento genuíno, mesma
+    // certificação, ordem de palavras diferente -- exatamente o tipo de
+    // variação entre Juntas que a correção desta missão visa generalizar.
+    const resultado = analisarTextoDocumentoLocal('contrato_social_alteracao', CONTRATO_VIK).dados;
+    expect(resultado.numero_arquivamento).toBe('2004670');
+    expect(resultado.registro_atual_comprovado).toBe(true);
+    expect(resultado.data_registro).toBe('2023-01-26');
+    expect(resultado.nire).toBe('53600026039');
+    expect(resultado.documento_compativel).toBe(true);
+  });
+
+  it('não inventa "administrador" como nome de sócio a partir do rótulo de assinatura "Sócio - administrador"', () => {
+    // Causa raiz: a extração de sócios usava a mesma flag de
+    // case-insensitive tanto para reconhecer o rótulo ("sócio"/
+    // "administrador") quanto para validar que o texto capturado como nome
+    // era genuinamente maiúsculo -- isso fazia a própria palavra
+    // "administrador" (minúscula, sem nome nenhum depois dela na linha
+    // "Sócio - administrador") ser capturada como se fosse o nome da
+    // pessoa. Documento real onde isso ocorria de verdade.
+    const resultado = analisarTextoDocumentoLocal('contrato_social_alteracao', CONTRATO_VIK).dados;
+    const nomes = (resultado.socios as any[]).map((s) => s.nome);
+    expect(nomes).not.toContain('administrador');
+    expect(nomes).not.toContain('Administrador');
+  });
+
+  it('o par real (Atos da Junta + Alteração Contratual da VIK CONSTRUCOES E REFORMAS LTDA) valida sem nenhum alerta de incompatibilidade ou divergência', () => {
+    const atos = analisarTextoDocumentoLocal('atos_junta_comercial', ATOS_VIK).dados;
+    const contrato = analisarTextoDocumentoLocal('contrato_social_alteracao', CONTRATO_VIK).dados;
+
+    expect(atos.documento_compativel).toBe(true);
+    expect(contrato.documento_compativel).toBe(true);
+
+    const alertas = validarContratoComAtosJunta(contrato, atos);
+    const criticos = alertas.filter((a) => a.severidade === 'alta' || a.severidade === 'critica');
+    expect(criticos).toEqual([]);
+  });
+});
