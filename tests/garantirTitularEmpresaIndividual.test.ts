@@ -46,6 +46,20 @@ const empresaLtda = (overrides: Record<string, unknown> = {}) => ({
   ...overrides,
 });
 
+// Caso real relatado (Rodada 26, 09/09/2026): empresa "55.497.701 NATALYA
+// MARTINS LOBO" -- natureza jurídica no formato oficial da Receita, com
+// parênteses, e SEM opcao_mei preenchido no cadastro (gap de sincronização
+// real). Antes da correção da regex em `isEmpresaIndividual`, esta empresa
+// nunca era reconhecida como EI/MEI, e por isso a documentação pessoal
+// continuava travada mesmo com garantirTitularEmpresaIndividual já ligada
+// nas duas rotas corretas.
+const empresaMeiRealSemOpcaoMei = () => ({
+  id: EMPRESA_ID,
+  natureza_juridica: '213-5 - Empresário (Individual)',
+  cnpj: '55497701000170',
+  razao_social: '55.497.701 NATALYA MARTINS LOBO',
+});
+
 describe('garantirTitularEmpresaIndividual', () => {
   beforeEach(() => {
     vi.resetModules();
@@ -120,6 +134,16 @@ describe('garantirTitularEmpresaIndividual', () => {
       cpf_cnpj: null,
       fonte_dados: TITULAR_EMPRESA_INDIVIDUAL_FONTE,
     });
+  });
+
+  it('CORREÇÃO (Rodada 26, 09/09/2026): caso real completo -- natureza jurídica "213-5 - Empresário (Individual)" (formato oficial da Receita, com parênteses) e SEM opcao_mei preenchido: ainda assim cria o titular', async () => {
+    const { garantirTitularEmpresaIndividual } = await import('../server/routes/documentacao');
+
+    const criou = await garantirTitularEmpresaIndividual(EMPRESA_ID, empresaMeiRealSemOpcaoMei(), []);
+
+    expect(criou).toBe(true);
+    const [, payload] = mocks.upsertSocioEmpresa.mock.calls[0];
+    expect(payload).toMatchObject({ nome: 'NATALYA MARTINS LOBO', cpf_cnpj: null });
   });
 
   it('nome empresarial cujo prefixo numérico NÃO bate com a raiz do CNPJ da empresa: heurística não é aplicada, cai no placeholder', async () => {

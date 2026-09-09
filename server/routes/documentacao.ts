@@ -1243,6 +1243,25 @@ function firstValue(obj: any, keys: string[]) {
 // Corrigido para usar s\u00f3 campos estruturados vindos da Receita/cadastro
 // (`natureza_juridica`, `porte`, `porte_receita`, `opcao_mei`) e limites de
 // palavra nas frases reconhecidas, nunca o nome da empresa.
+//
+// CORRE\u00c7\u00c3O (Rodada 26, 09/09/2026 -- pedido expl\u00edcito do usu\u00e1rio: a
+// documenta\u00e7\u00e3o pessoal de uma empresa MEI real continuava travada mesmo
+// depois de `garantirTitularEmpresaIndividual` estar ligada nas duas rotas
+// corretas): o texto oficial da Receita Federal para o c\u00f3digo de natureza
+// jur\u00eddica 213-5 \u00e9 **"Empres\u00e1rio (Individual)"**, com par\u00eanteses no meio --
+// n\u00e3o "empres\u00e1rio individual" cont\u00edguo. A regex anterior exigia as duas
+// palavras coladas (`\bempresario individual\b`), entao NUNCA reconhecia essa
+// empresa como EI/MEI quando `opcao_mei` tamb\u00e9m n\u00e3o estava populado --
+// e como toda a correc\u00e3o de titular depende de `isEmpresaIndividual`
+// retornar `true`, o bug persistia silenciosamente. Este mesmo padr\u00e3o
+// parentetizado j\u00e1 tinha sido corrigido em outro lugar do projeto
+// (`analiseDocumentalEspecializada.ts`, linha ~695: `empresario\s*\(?individual\)?`)
+// -- s\u00f3 esta fun\u00e7\u00e3o, que a correc\u00e3o do titular depende, tinha ficado de
+// fora. Agora aceita "empres\u00e1rio individual", "empres\u00e1rio (individual)" e
+// "empres\u00e1rio(individual)", sem abrir m\u00e3o do limite de palavra em
+// "empresario" (continua nunca casando uma raz\u00e3o social/nome fantasia que
+// contenha coincidentemente essa palavra, porque esta fun\u00e7\u00e3o s\u00f3 olha
+// campos estruturados da Receita, nunca o nome da empresa).
 export function isEmpresaIndividual(empresa: any): boolean {
   const texto = [empresa?.natureza_juridica, empresa?.porte, empresa?.porte_receita]
     .filter(Boolean)
@@ -1250,7 +1269,7 @@ export function isEmpresaIndividual(empresa: any): boolean {
     .normalize('NFD')
     .replace(/[\u0300-\u036f]/g, '')
     .toLowerCase();
-  return !!empresa?.opcao_mei || /\bmicroempreendedor individual\b|\bmei\b|\bsimei\b|\bempresario individual\b/.test(texto);
+  return !!empresa?.opcao_mei || /\bmicroempreendedor individual\b|\bmei\b|\bsimei\b|\bempresario\s*\(?individual\)?/.test(texto);
 }
 
 function mapSocioReceita(item: any, index: number) {

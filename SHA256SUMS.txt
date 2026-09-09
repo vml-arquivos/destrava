@@ -1,4 +1,8 @@
-# === Rodada 09/09/2026 parte 5 (esta entrega) — reconciliação do titular ligada na rota real usada pela tela + nome do nome empresarial do MEI — arquivos alterados/novos, checksum atual ===
+# === Rodada 09/09/2026 parte 6 (esta entrega) — causa raiz real: isEmpresaIndividual não reconhecia "Empresário (Individual)" com parênteses — arquivos alterados/novos, checksum atual ===
+538bc70ce88ce6061707edb582cb5bf99e5c4c63e410e1882ae82946cb4bb3d7  server/routes/documentacao.ts
+81d63ee57c4ea17be00cf268998f005b2a93ba7a5d6786ff1f62205b8ae80bf1  tests/garantirTitularEmpresaIndividual.test.ts
+836540965c6ad8d09b3e2376186407ffa3a7f34442ff7feffced8ccd5bf01f28  tests/isEmpresaIndividualSemNomeDaEmpresa.test.ts
+# === Rodada 09/09/2026 parte 5 — reconciliação do titular ligada na rota real usada pela tela + nome do nome empresarial do MEI — arquivos alterados/novos, checksum atual ===
 d9d20967bf9f8f8951f5e0902d34a297dc9ad5f21a090e5d0232a07bc3940fd1  server/routes/documentacao.ts
 0a50c22f7a4dbb612159423a87f37679f0d9b7801c08a38aa5af340da7139fb0  server/routes/socios_documentos.ts
 e16c9395643d6088147e7522a46a51e0d2449a7c42c53b99442aae7a902b6a9d  tests/garantirTitularEmpresaIndividual.test.ts

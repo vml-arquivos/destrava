@@ -47,6 +47,17 @@ describe('isEmpresaIndividual — nunca decide pelo nome da empresa, só por cam
     expect(isEmpresaIndividual({ opcao_mei: true, natureza_juridica: null })).toBe(true);
   });
 
+  it('CORREÇÃO (Rodada 26, 09/09/2026): reconhece "Empresário (Individual)" -- o texto oficial real da Receita para o código 213-5, com parênteses -- mesmo quando opcao_mei não está preenchido', async () => {
+    const { isEmpresaIndividual } = await import('../server/routes/documentacao');
+    // Sem opcao_mei: antes desta correção, a regex exigia "empresario individual"
+    // contíguo e nunca reconhecia esta empresa -- por isso a documentação
+    // pessoal de uma MEI real (cujo cadastro tinha opcao_mei nulo/desatualizado)
+    // continuava travada mesmo com o titular automático já implementado.
+    expect(isEmpresaIndividual({ natureza_juridica: '213-5 - Empresário (Individual)' })).toBe(true);
+    expect(isEmpresaIndividual({ natureza_juridica: 'Empresário(Individual)' })).toBe(true);
+    expect(isEmpresaIndividual({ natureza_juridica: 'EMPRESARIO (INDIVIDUAL)' })).toBe(true);
+  });
+
   it('CORREÇÃO: uma Sociedade Empresária Limitada (LTDA) comum NUNCA é tratada como Empresário Individual, mesmo que o nome fantasia ou a razão social contenha a palavra "individual"', async () => {
     const { isEmpresaIndividual } = await import('../server/routes/documentacao');
     expect(isEmpresaIndividual({

@@ -1,4 +1,25 @@
-=== RODADA 09/09/2026 PARTE 5 (esta entrega) — Reconciliação do titular ligada na rota real usada pela tela (GET /api/empresas/:id/socios) + nome extraído do nome empresarial do MEI ===
+=== RODADA 09/09/2026 PARTE 6 (esta entrega) — Causa raiz real: isEmpresaIndividual não reconhecia "Empresário (Individual)" com parênteses (texto oficial real da Receita, confirmado com os 3 documentos reais da empresa) ===
+
+Acrescenta ao diff da rodada anterior (parte 5) mais 2 arquivos:
+
+ALTERADO (produção, backend):
+server/routes/documentacao.ts  (regex de isEmpresaIndividual tolera parênteses)
+
+ALTERADO (teste):
+tests/isEmpresaIndividualSemNomeDaEmpresa.test.ts  (+1 teste)
+tests/garantirTitularEmpresaIndividual.test.ts     (+1 teste, caso real completo)
+
+Nenhuma migration, nenhuma tabela nova, nenhum arquivo de frontend alterado
+nesta rodada -- a causa raiz era uma única regex que nunca reconhecia o
+texto oficial real da Receita Federal para Empresário Individual/MEI
+("213-5 - Empresário (Individual)", com parênteses), então toda a correção
+das rodadas 4 e 5 (que já estava certa) nunca chegava a ser acionada para
+essa empresa real.
+
+Ver CHANGELOG_CORRECOES.md (seção "Rodada 09/09/2026 (parte 6)") para a
+descrição completa.
+
+=== RODADA 09/09/2026 PARTE 5 — Reconciliação do titular ligada na rota real usada pela tela (GET /api/empresas/:id/socios) + nome extraído do nome empresarial do MEI ===
 
 Acrescenta ao diff da rodada anterior (titular de EI/MEI, parte 4) mais 3 arquivos:
 
