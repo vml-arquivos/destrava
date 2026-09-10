@@ -1,4 +1,11 @@
-# === Rodada 09/09/2026 parte 9 (esta entrega) — corrigido o caminho de leitura do tipo detectado do CCMEI — arquivos alterados/novos, checksum atual ===
+# === Rodada 09/09/2026 parte 10 (esta entrega) — três textos de tela/mensagem que ainda diziam "Atos da Junta Comercial" para MEI, corrigidos com o campo empresa_identificada_mei — arquivos alterados/novos, checksum atual ===
+70586ed22b6ba4254d0e1e0dc2a2561e41b197d3a1d0de944deba8a6c03e0df7  server/routes/documentacao.ts
+7dea34107ff0286b0085fba399aac218f5ec0b0595b07a2665e39e8aeecb2a1a  server/services/analiseDocumentalEspecializada.ts
+9c8180a3bf6e1a18383e55d7ea12ea741f77c6e8127b830366d1cfdbed1610f2  client/src/components/documentos/DocumentosEntidade.tsx
+8549460464cf1a8a8738462caeff1bcb89120a6d8c8f11d5b2083956ad54aa18  tests/normalizarDocumentoCatalogadoCcmeiTipoDetectado.test.ts
+5f1544912a6f28f9d8e69f9348eaaa6acc640b7cce775560bbadcfb69408cd0b  tests/textoMeiSemAtosDaJuntaUiCompleta.test.ts
+65bcc8e4d43f0fb153ad0aaabde10999c38be003f8cb2c84c6bf0852e90e6293  tests/validacaoSocietariaCcmeiMei.test.ts
+# === Rodada 09/09/2026 parte 9 — corrigido o caminho de leitura do tipo detectado do CCMEI — arquivos alterados/novos, checksum atual ===
 c66d6c6bdb77022974d8ea44390316f2c2fd87011d58f7f7281f79cb47391949  server/routes/documentacao.ts
 cfd9eb3bc88fe3de6c8b2a4c411ca72c7cb83402dafa500608ef57f8886b4e5b  tests/validacaoSocietariaCcmeiMei.test.ts
 # === Rodada 09/09/2026 parte 8 — CCMEI anexado no campo "Contrato social" deixa de ser "Documento incompatível" — arquivos alterados/novos, checksum atual ===

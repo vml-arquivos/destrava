@@ -2127,11 +2127,30 @@ export default function DocumentosEntidade({
             const pendenciaRegime = mapaCredito?.regime_a_confirmar === true
               ? mapaCredito.pendencias?.find((item: any) => item.codigo === "nao_optante_regime_a_confirmar")
               : null;
+            // CORREÇÃO (09/09/2026, Rodada 09/09 parte 10 -- pedido explícito
+            // do usuário: "isso já não pode mais acontecer... zero
+            // regressão e zero quebra"): MEI não tem Atos da Junta Comercial
+            // -- o documento equivalente, que comprova a constituição, é o
+            // CCMEI (`empresa_identificada_mei`/`atos_dispensados_por_mei`,
+            // devolvidos por `montarValidacaoSocietaria`). Antes desta
+            // correção, o texto de "próximo documento" (e, mais abaixo, o
+            // título do card e o rótulo do botão) sempre falavam de "Atos da
+            // Junta Comercial" enquanto o CCMEI ainda não tinha sido
+            // reconhecido -- mesmo para uma empresa MEI, para quem esse
+            // documento nunca existe. Passa a ramificar por MEI primeiro,
+            // pedindo o CCMEI em vez de Atos da Junta/Contrato Social.
+            const empresaIdentificadaMei = societaria.empresa_identificada_mei === true;
             // Depois que a Etapa 2/3 já está comprovada (apto), o "próximo documento" deixa
-            // de ser sobre Atos da Junta/Contrato e passa a vir do mapa documental de
-            // crédito (cadastro/regularidade + fiscal do regime, ex: Simples Nacional).
+            // de ser sobre Atos da Junta/Contrato (ou CCMEI, para MEI) e passa a vir do mapa
+            // documental de crédito (cadastro/regularidade + fiscal do regime, ex: Simples Nacional).
             const proximoDocumento = pendenciaRegime
               ? pendenciaRegime.titulo
+              : empresaIdentificadaMei
+                ? (!societaria.atos_dispensados_por_mei
+                  ? "CCMEI (comprova a constituição do MEI; substitui o Contrato Social/Atos da Junta)"
+                  : apto && proximaLevaCredito
+                    ? `${proximaLevaCredito.proximo.nome} (${proximaLevaCredito.proximo.etapaTitulo})`
+                    : "Demais documentos do dossiê conforme o enquadramento tributário")
               : !societaria.atos_junta_anexados
                 ? "Atos da Junta Comercial"
                   : !societaria.atos_junta_aprovados
@@ -2206,7 +2225,11 @@ export default function DocumentosEntidade({
                     <div className="flex flex-wrap items-center gap-2">
                       <FileText className="h-4 w-4 shrink-0 text-warning" />
                       <p className="text-xs font-black text-foreground">
-                        {societaria.atos_junta_aprovados ? "Contrato e histórico de 12 meses" : "Atos da Junta Comercial"}
+                        {societaria.atos_junta_aprovados
+                          ? "Contrato e histórico de 12 meses"
+                          : empresaIdentificadaMei
+                            ? "CCMEI"
+                            : "Atos da Junta Comercial"}
                       </p>
                       <span className="rounded-full border border-warning/20 bg-card px-2 py-0.5 text-[10px] font-black text-warning">
                         {analisandoSocietario ? "Analisando..." : societaria.analisado ? "Documento(s) pendente(s)" : "Aguardando análise"}
@@ -2225,7 +2248,13 @@ export default function DocumentosEntidade({
                     className="inline-flex h-9 shrink-0 items-center justify-center gap-1.5 rounded-xl bg-primary px-3 text-xs font-black text-primary-foreground hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-60"
                   >
                     {analisandoSocietario ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <RefreshCw className="h-3.5 w-3.5" />}
-                    {analisandoSocietario ? "Conferindo..." : societaria.atos_junta_aprovados ? "Validar contratos e 12 meses" : "Analisar Atos da Junta"}
+                    {analisandoSocietario
+                      ? "Conferindo..."
+                      : societaria.atos_junta_aprovados
+                        ? "Validar contratos e 12 meses"
+                        : empresaIdentificadaMei
+                          ? "Verificar CCMEI"
+                          : "Analisar Atos da Junta"}
                   </button>
                 </div>
 
@@ -2352,12 +2381,24 @@ export default function DocumentosEntidade({
                     // quando SCR/CCS ainda não tinham sido anexados -- isso violava a mesma
                     // regra já aplicada ao resto do pipeline (nenhum upload pode ser
                     // tecnicamente bloqueado pela ordem de leitura).
+                    // CORREÇÃO (09/09/2026, Rodada 09/09 parte 10 -- pedido
+                    // explícito do usuário: nenhuma menção a "Atos da Junta"
+                    // pode aparecer para uma empresa MEI, em lugar nenhum):
+                    // para MEI, `pipeline.fase_3.bloqueada` fica `true`
+                    // enquanto o CCMEI ainda não foi reconhecido (mesma
+                    // condição de `atos_dispensados_por_mei`) -- sem esta
+                    // ramificação, o aviso abaixo, no campo "Contrato
+                    // social", dizia para "analisar e aprovar primeiro os
+                    // Atos da Junta Comercial", documento que o MEI nunca
+                    // tem.
                     const avisoOrdemRecomendada = tipo === "atos_junta_comercial" && regimeAConfirmar
                       ? "Ordem recomendada: confirme antes o regime tributário (ECF, DCTF/DCTFWeb, DARF ou Livro Caixa). Você já pode anexar os Atos da Junta se preferir; a pendência de regime continua até ser resolvida."
                       : tipo === "atos_junta_comercial" && pipeline?.fase_2?.bloqueada
                         ? "Ordem recomendada: conclua e aprove a Fase 1 antes dos Atos da Junta. O anexo está liberado, mas o dossiê só fica apto após a Fase 1."
                       : ["contrato_social", "alteracao_contratual"].includes(tipo) && pipeline?.fase_3?.bloqueada
-                        ? "Ordem recomendada: analise e aprove primeiro os Atos da Junta Comercial. O anexo está liberado, mas o dossiê só fica apto depois disso."
+                        ? (societaria?.empresa_identificada_mei === true
+                          ? "Empresa identificada como MEI: anexe o CCMEI para comprovar a constituição. O anexo está liberado, mas o dossiê só fica apto depois disso."
+                          : "Ordem recomendada: analise e aprove primeiro os Atos da Junta Comercial. O anexo está liberado, mas o dossiê só fica apto depois disso.")
                         : null;
                     const motivoBloqueio: string | null = null;
                     const exigeNome = Boolean(documentoSlot.exigeNome);

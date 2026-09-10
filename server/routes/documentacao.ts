@@ -3205,6 +3205,16 @@ export async function montarValidacaoSocietaria(
     // acima sobre `dispensaAtosPorMei`.
     ccmei_anexado: ccmeiAnexado,
     ccmei_arquivo_id: ccmei?.id || docsCcmei[0]?.id || ccmeiViaContratoSocial?.id || null,
+    // CORREÇÃO (09/09/2026, Rodada 09/09 parte 10 -- pedido explícito do
+    // usuário: "isso já não pode mais acontecer... corrigido agora, sem
+    // falhas"): sinal explícito de MEI, independente de o CCMEI já ter sido
+    // anexado ou não -- usado pelo frontend (DocumentosEntidade.tsx) e pela
+    // rota `POST /analise-societaria/iniciar` para nunca mencionar "Atos da
+    // Junta" para uma empresa MEI, nem mesmo enquanto o CCMEI ainda não foi
+    // anexado (título do card, texto de "próximo documento", rótulo do
+    // botão e mensagem de erro passam a falar de CCMEI, não de Atos da
+    // Junta).
+    empresa_identificada_mei: empresaMei,
     nire_contrato: documentoPrincipal?.nire || null,
     nire_junta: atosDados?.nire || null,
     nire_confere: !!documentoPrincipal?.nire && onlyDigits(documentoPrincipal.nire) === onlyDigits(atosDados?.nire),
@@ -4292,7 +4302,14 @@ router.post('/empresa/:empresaId/analise-societaria/iniciar', auth, async (req: 
     }
     const societaria = dossie.documentacao_societaria;
     if (societaria?.atos_dispensados_por_mei !== true && !societaria?.atos_junta_anexados) {
-      res.status(422).json({ error: 'Anexe e valide primeiro os Atos da Junta Comercial.', processando: false, dossie });
+      // CORREÇÃO (09/09/2026, Rodada 09/09 parte 10 -- pedido explícito do
+      // usuário: nenhuma menção a "Atos da Junta" pode aparecer para uma
+      // empresa MEI, em lugar nenhum, nem mesmo nesta mensagem de erro):
+      // MEI não tem Atos da Junta -- o documento equivalente é o CCMEI.
+      const mensagem = societaria?.empresa_identificada_mei === true
+        ? 'Anexe o CCMEI para comprovar a constituição da empresa (MEI) antes de validar esta etapa.'
+        : 'Anexe e valide primeiro os Atos da Junta Comercial.';
+      res.status(422).json({ error: mensagem, processando: false, dossie });
       return;
     }
     const iniciado = iniciarAnaliseSocietariaEmSegundoPlano(req.params.empresaId, user?.id || null);

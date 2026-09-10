@@ -1,4 +1,70 @@
-=== RODADA 09/09/2026 PARTE 9 (esta entrega) — Corrigido o caminho de leitura do tipo detectado do CCMEI (a etapa ainda pedia o CCMEI mesmo depois da parte 8) ===
+=== RODADA 09/09/2026 PARTE 10 (esta entrega) — Três textos de tela/mensagem ainda diziam "Atos da Junta Comercial" para o MEI, mesmo com a parte 9 já corrigida ===
+
+Acrescenta ao diff da rodada anterior (parte 9) mais 3 arquivos:
+
+ALTERADO (produção, backend):
+server/routes/documentacao.ts  (montarValidacaoSocietaria: novo campo
+                                `empresa_identificada_mei` no retorno,
+                                independente de o CCMEI já ter sido
+                                anexado; rota POST /empresa/:empresaId/
+                                analise-societaria/iniciar: mensagem de
+                                erro passa a pedir o CCMEI, não os Atos
+                                da Junta, quando a empresa é MEI)
+server/services/analiseDocumentalEspecializada.ts  (normalizarDocumentoCatalogado
+                                                     passa a ser exportada --
+                                                     só a palavra `export`,
+                                                     zero mudança de
+                                                     comportamento -- para
+                                                     permitir um teste de
+                                                     integração real)
+
+ALTERADO (produção, frontend):
+client/src/components/documentos/DocumentosEntidade.tsx  ("próximo
+                                                           documento a
+                                                           anexar", título
+                                                           do card, rótulo
+                                                           do botão e aviso
+                                                           de "ordem
+                                                           recomendada" no
+                                                           campo Contrato
+                                                           Social passam a
+                                                           pedir o CCMEI,
+                                                           não os Atos da
+                                                           Junta, quando a
+                                                           empresa é MEI)
+
+NOVO (teste):
+tests/normalizarDocumentoCatalogadoCcmeiTipoDetectado.test.ts  (3 testes --
+                                                                 chama a
+                                                                 função real
+                                                                 de
+                                                                 normalização,
+                                                                 sem
+                                                                 presumir o
+                                                                 formato do
+                                                                 laudo)
+tests/textoMeiSemAtosDaJuntaUiCompleta.test.ts  (6 testes -- audita as 3
+                                                  superfícies de texto
+                                                  corrigidas e confirma que
+                                                  o texto padrão continua
+                                                  existindo para não-MEI)
+
+ALTERADO (teste):
+tests/validacaoSocietariaCcmeiMei.test.ts  (+4 assertions: os 4 testes de
+                                            empresa MEI passam a verificar
+                                            também `empresa_identificada_
+                                            mei`; o teste de LTDA confirma
+                                            que o campo é `false`)
+
+Nenhuma migration, nenhuma tabela nova nesta rodada -- só textos de tela/
+mensagem de erro, todos ramificados por um campo novo e aditivo
+(`empresa_identificada_mei`), e a exportação de uma função já existente
+(zero mudança de comportamento).
+
+Ver CHANGELOG_CORRECOES.md (seção "Rodada 09/09/2026 (parte 10)") para a
+descrição completa.
+
+=== RODADA 09/09/2026 PARTE 9 — Corrigido o caminho de leitura do tipo detectado do CCMEI (a etapa ainda pedia o CCMEI mesmo depois da parte 8) ===
 
 Acrescenta ao diff da rodada anterior (parte 8) mais 2 arquivos:
 

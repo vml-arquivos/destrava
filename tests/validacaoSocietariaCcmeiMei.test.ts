@@ -73,6 +73,14 @@ describe('montarValidacaoSocietaria -- MEI usa o CCMEI como equivalente do Contr
     expect(resultado.consistente).toBe(false);
     expect(resultado.apto_para_avancar).toBe(false);
     expect((resultado as any).ccmei_anexado).toBe(false);
+    // CORREÇÃO (09/09/2026, Rodada 09/09 parte 10 -- pedido explícito do
+    // usuário, após reportar que mesmo com o v44 em produção a etapa ainda
+    // mencionava "Atos da Junta" para o MEI): `empresa_identificada_mei` é um
+    // sinal explícito e independente da evidência documental (CCMEI anexado
+    // ou não) -- verdadeiro assim que a empresa é reconhecida como MEI, para
+    // que o frontend e outras rotas nunca precisem mencionar "Atos da Junta"
+    // para MEI, nem mesmo enquanto o CCMEI ainda está pendente.
+    expect((resultado as any).empresa_identificada_mei).toBe(true);
     expect(resultado.bloqueios).toEqual(
       expect.arrayContaining([expect.stringMatching(/anexe o ccmei/i)])
     );
@@ -98,6 +106,7 @@ describe('montarValidacaoSocietaria -- MEI usa o CCMEI como equivalente do Contr
     expect(resultado.botao_avancar_disponivel).toBe(true);
     expect((resultado as any).ccmei_anexado).toBe(true);
     expect((resultado as any).ccmei_arquivo_id).toBe('doc-ccmei-1');
+    expect((resultado as any).empresa_identificada_mei).toBe(true);
     expect(resultado.bloqueios).toEqual([]);
   });
 
@@ -112,6 +121,7 @@ describe('montarValidacaoSocietaria -- MEI usa o CCMEI como equivalente do Contr
     expect((resultado as any).ccmei_anexado).toBe(false);
     expect(resultado.atos_dispensados_por_mei).toBe(false);
     expect(resultado.consistente).toBe(false);
+    expect((resultado as any).empresa_identificada_mei).toBe(true);
     expect(resultado.bloqueios).toEqual(
       expect.arrayContaining([expect.stringMatching(/anexe o ccmei/i)])
     );
@@ -158,6 +168,7 @@ describe('montarValidacaoSocietaria -- MEI usa o CCMEI como equivalente do Contr
     expect(resultado.atos_dispensados_por_mei).toBe(true);
     expect(resultado.consistente).toBe(true);
     expect(resultado.apto_para_avancar).toBe(true);
+    expect((resultado as any).empresa_identificada_mei).toBe(true);
     expect(resultado.bloqueios).toEqual([]);
   });
 
@@ -172,6 +183,9 @@ describe('montarValidacaoSocietaria -- MEI usa o CCMEI como equivalente do Contr
     // Mesmo com um CCMEI anexado por engano, uma LTDA continua exigindo
     // Contrato Social e Atos da Junta normalmente -- a regra é exclusiva de MEI.
     expect(resultado.atos_dispensados_por_mei).toBe(false);
+    // Zero regressão: uma LTDA nunca deve ser marcada como MEI, então nenhuma
+    // tela ou rota pode trocar "Atos da Junta" por "CCMEI" para ela.
+    expect((resultado as any).empresa_identificada_mei).toBe(false);
     expect(resultado.bloqueios).toEqual(
       expect.arrayContaining([
         expect.stringMatching(/Contrato Social ou Alteração Contratual ainda não anexado/),

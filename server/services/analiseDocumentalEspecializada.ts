@@ -1565,7 +1565,13 @@ function descreverTipoDetectadoResumido(tipoDetectado: unknown): string | null {
   return ROTULOS_TIPO_DETECTADO[chave] || null;
 }
 
-function normalizarDocumentoCatalogado(extraidos: any, tipoDocumento: string, empresa?: any): {
+// Exportada (09/09/2026, Rodada 09/09 parte 10) só para permitir um teste de
+// integração real e direto -- sem mockar toda a cadeia de I/O de arquivo e
+// extração por IA (`extrairHibrido`) -- do que realmente é persistido para um
+// CCMEI anexado no campo Contrato Social (ver
+// tests/normalizarDocumentoCatalogadoCcmeiTipoDetectado.test.ts). Exportar
+// não muda o comportamento desta função nem de nenhum chamador existente.
+export function normalizarDocumentoCatalogado(extraidos: any, tipoDocumento: string, empresa?: any): {
   dados: Record<string, any>;
   evidencias: AnaliseDocumentalGenericaResult['evidencias'];
   camposInferidos: Record<string, unknown>;
