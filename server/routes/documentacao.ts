@@ -10,7 +10,7 @@ import { calcularCadeiaComprovacaoSocietaria } from '../services/cadeiaSocietari
 import { InsufficientHistoricalPeriodException, validateTwelveMonthContractHistory } from '../services/documentPipelineService';
 import { buildCadastralValidationDTO, phase1Approved } from '../services/phase1AnalysisService';
 import { ensureDocumentacaoSchema } from '../services/documentacaoSchema';
-import { gerarMapaDocumentalCredito, identificarRegimeCredito, montarHistoricoRegimeTributarioParaMapa, ROTULO_REGIME_CREDITO } from '../services/mapaDocumentalCreditoService';
+import { gerarMapaDocumentalCredito, identificarRegimeCredito, montarHistoricoRegimeTributarioParaMapa, aplicarExigibilidadeTemporalDocumentosAnuais, ROTULO_REGIME_CREDITO } from '../services/mapaDocumentalCreditoService';
 import { DOCUMENT_TYPE_CATALOG, canonicalizeDocumentType, documentAnalysisConfig, documentLabel } from '../../shared/documentTypes';
 import { resolverRegrasDocumentais, type RegraResolvida } from '../services/regrasDocumentaisCredito';
 import { upsertSocioEmpresa } from './socios_documentos';
@@ -3553,7 +3553,11 @@ export async function montarDossieCreditoEmpresa(empresaId: string, options: { p
   const enquadramentoParaMapa = regimeDeclaradoEmDocumento
     ? { ...enquadramento.dados, regime_tributario: regimeDeclaradoEmDocumento, situacao_simples: 'Não Optante', analisado: true, fonte_extracao: 'documento_comprobatorio_regime' }
     : enquadramento.dados;
-  const mapaDocumentalCredito = gerarMapaDocumentalCredito({
+  // CORREÇÃO (10/09/2026): declarado `let` (era `const`) para permitir a
+  // reatribuição abaixo por `aplicarExigibilidadeTemporalDocumentosAnuais`,
+  // que é uma função pura (devolve um mapa novo, não muta o recebido) --
+  // ver o comentário completo junto dessa chamada, logo abaixo.
+  let mapaDocumentalCredito = gerarMapaDocumentalCredito({
     empresa,
     enquadramento: enquadramentoParaMapa,
     tiposAnexados,
@@ -3575,6 +3579,24 @@ export async function montarDossieCreditoEmpresa(empresaId: string, options: { p
   try {
     const linhaDoTempoRegime = await obterLinhaDoTempoRegime(pool, empresaId);
     mapaDocumentalCredito.historico_regime_tributario = montarHistoricoRegimeTributarioParaMapa(linhaDoTempoRegime);
+    // CORREÇÃO (10/09/2026, pedido explícito do usuário: "temos que ter isso
+    // tudo de acordo com as datas... uma empresa que desenquadrou agora, só
+    // vai sair no meio do ano que vem [a DEFIS]... garanta que tudo isso
+    // esteja funcionando, garanta que não tenha regressões"): ECF, ECD,
+    // DEFIS e DASN-SIMEI têm prazo legal anual preciso (já calculado por
+    // `regimeTributarioTemporalService.ts`, Rodada 33) -- enquanto esse
+    // prazo não chega para o regime tributário atual da empresa (a partir
+    // de `regime_vigente_desde`, calculado acima), o documento ainda
+    // faltante deixa de contar como pendência obrigatória, em vez de
+    // aparecer incorretamente como uma obrigação em aberto que a empresa
+    // não tem como cumprir ainda. Best-effort, dentro do mesmo try/catch:
+    // se o histórico de regime não estiver disponível, esta chamada nunca
+    // roda e o mapa documental segue exatamente como antes desta correção
+    // (a função também é um no-op sozinha quando não recebe uma data).
+    mapaDocumentalCredito = aplicarExigibilidadeTemporalDocumentosAnuais(
+      mapaDocumentalCredito,
+      mapaDocumentalCredito.historico_regime_tributario?.regime_vigente_desde,
+    );
   } catch (error: any) {
     console.warn('[Dossiê] Histórico de regime tributário indisponível; mapa documental segue com o regime atual apenas:', error?.message || error);
   }

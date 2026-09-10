@@ -1,4 +1,83 @@
-=== RODADA 10/09/2026 PARTE 12 (esta entrega) — Para MEI, "Atos da Junta Comercial"/"Contrato social" somem da grade (CCMEI vira o primeiro campo); mais contraste no título dos cards ===
+=== RODADA 10/09/2026 PARTE 14 (esta entrega) — Causa raiz real de "o CCMEI nunca aparece na tela": faltava nas listas tiposPermitidos das duas telas de Acervo Documental de empresa ===
+
+ALTERADO (produção, frontend):
+client/src/pages/colaborador/AcervoDocumentalEmpresa.tsx  (TIPOS_EMPRESA:
+                                                            adiciona "ccmei",
+                                                            "das_mei" e
+                                                            "relatorio_receitas_mei"
+                                                            -- os três tinham
+                                                            slot no catálogo
+                                                            mas nunca
+                                                            estiveram nesta
+                                                            lista, então o
+                                                            campo de CCMEI
+                                                            nunca podia ser
+                                                            renderizado para
+                                                            nenhuma empresa)
+client/src/pages/colaborador/EmpresaDocumentos.tsx  (TIPOS_PERMITIDOS_EMPRESA:
+                                                      mesma correção, mantendo
+                                                      as duas listas idênticas
+                                                      entre si, como o próprio
+                                                      código já documentava
+                                                      como intenção)
+
+ALTERADO (teste):
+tests/tiposPermitidosEmpresaIncluiCcmei.test.ts  (novo -- 4 testes: as duas
+                                                  listas incluem "ccmei",
+                                                  "das_mei" e
+                                                  "relatorio_receitas_mei";
+                                                  os tipos pré-existentes
+                                                  continuam presentes (zero
+                                                  regressão); o slot CCMEI
+                                                  existe no catálogo com
+                                                  matchTipos vazio)
+
+Nenhuma migration, nenhuma tabela nova, nenhum arquivo de backend alterado
+nesta parte -- é uma mudança de 2 constantes de frontend (listas de tipos
+permitidos), a causa raiz real de toda a confusão sobre "onde anexo o
+CCMEI" reportada em prints reais pelo usuário -- as correções anteriores
+(partes 11 e 12, reordenação/ocultação condicional) já estavam corretas,
+mas operavam sobre uma lista da qual "ccmei" estava estruturalmente
+excluído desde sempre.
+
+=== RODADA 10/09/2026 PARTE 13 (mesma entrega) — ECF/ECD/DEFIS/DASN-SIMEI respeitam o prazo legal de entrega antes de virarem pendência obrigatória ===
+
+ALTERADO (produção, backend):
+server/services/mapaDocumentalCreditoService.ts  (nova função pura
+                                                   `aplicarExigibilidadeTemporalDocumentosAnuais`,
+                                                   reaproveitando as
+                                                   calculadoras já existentes
+                                                   de
+                                                   regimeTributarioTemporalService.ts;
+                                                   tipo `DocumentoMapa.status`
+                                                   ganha o valor
+                                                   'ainda_nao_exigivel')
+server/routes/documentacao.ts  (const -> let em `mapaDocumentalCredito`;
+                                chamada à nova função logo após
+                                `historico_regime_tributario` ser calculado,
+                                dentro do mesmo try/catch best-effort já
+                                existente)
+
+ALTERADO (teste):
+tests/exigibilidadeTemporalDocumentosAnuais.test.ts  (novo -- 7 testes: ECF
+                                                      suprimido antes do
+                                                      prazo e cobrado depois,
+                                                      DASN-SIMEI suprimido
+                                                      antes do prazo para MEI
+                                                      que desenquadrou,
+                                                      documento já anexado
+                                                      nunca tocado, item
+                                                      nao_aplicavel nunca
+                                                      tocado, item combinado
+                                                      (confirmacao_regime_nao_optante)
+                                                      nunca tocado, e zero
+                                                      regressão sem
+                                                      regimeVigenteDesde)
+
+Nenhuma migration nesta parte -- é lógica de aplicação pura, reaproveitando
+cálculos e campos já existentes (`obrigatorio`, `regime_vigente_desde`).
+
+=== RODADA 10/09/2026 PARTE 12 — Para MEI, "Atos da Junta Comercial"/"Contrato social" somem da grade (CCMEI vira o primeiro campo); mais contraste no título dos cards ===
 
 Acrescenta ao diff da rodada anterior (parte 11) mais 2 arquivos (substitui o
 diff da parte 11 no mesmo arquivo de produção e no mesmo arquivo de teste):

@@ -1,4 +1,20 @@
 import { canonicalizeDocumentType, getDocumentCatalogEntry } from '../../shared/documentTypes';
+// CORREÇÃO (10/09/2026, pedido explícito do usuário: "temos que ter isso
+// tudo de acordo com as datas... uma empresa que desenquadrou agora, só vai
+// sair no meio do ano que vem [a DEFIS]... temos que estar totalmente
+// ligados, totalmente de olho nessas informações"): estas 4 funções já
+// existiam (Rodada 33, 05/09/2026) e já calculam corretamente o prazo legal
+// de ECF/ECD/DEFIS/DASN-SIMEI, mas até esta correção só eram usadas para
+// julgar um documento JÁ ANEXADO (se a competência dele já é "atual" ou
+// não) -- nunca para decidir se um documento AINDA FALTANDO deve aparecer
+// como pendência. Ver `aplicarExigibilidadeTemporalDocumentosAnuais` abaixo.
+import {
+  calcularExigibilidadeEcf, dataLimiteRegularEcf,
+  calcularExigibilidadeEcd, dataLimiteRegularEcd,
+  calcularExigibilidadeDefis, dataLimiteRegularDefis,
+  calcularExigibilidadeDasnSimei, dataLimiteRegularDasnSimei,
+  type ExigibilidadeEcf,
+} from './regimeTributarioTemporalService';
 
 export type RegimeCredito = 'mei' | 'simples_nacional' | 'nao_optante_regime_a_confirmar' | 'nao_optante_simples' | 'lucro_presumido' | 'lucro_real' | 'lucro_arbitrado' | 'imune' | 'isenta' | 'imune_isenta' | 'nao_identificado';
 
@@ -32,7 +48,15 @@ export type DocumentoMapa = {
   observacao?: string;
   anexado?: boolean;
   aplicabilidade?: 'aplicavel' | 'condicional' | 'nao_aplicavel' | 'automatico';
-  status?: 'nao_aplicavel' | 'pendente' | 'anexado' | 'em_analise' | 'validado' | 'validado_com_alerta' | 'reprovado' | 'vencido' | 'substituido' | 'dispensado';
+  // CORREÇÃO (10/09/2026): novo status aditivo -- ver
+  // `aplicarExigibilidadeTemporalDocumentosAnuais`. Nenhum consumidor
+  // existente checava `.status` diretamente para ECF/ECD/DEFIS/DASN-SIMEI
+  // (confirmado por auditoria: só `obrigatorio`/`anexado` decidiam
+  // pendência), então este novo valor é puramente informativo -- a
+  // correção real de comportamento é `obrigatorio` virar `false` enquanto
+  // o prazo não chega, reaproveitando o mesmo campo que toda a lógica de
+  // "faltante"/"apto para avançar" já respeita.
+  status?: 'nao_aplicavel' | 'pendente' | 'anexado' | 'em_analise' | 'validado' | 'validado_com_alerta' | 'reprovado' | 'vencido' | 'substituido' | 'dispensado' | 'ainda_nao_exigivel';
   motivo?: string;
   tipo_exigencia?: string;
   regra_versao?: string;
@@ -147,6 +171,84 @@ export function montarHistoricoRegimeTributarioParaMapa(
     linha_do_tempo: periodos,
     regime_vigente_desde: vigente?.data_inicio ?? null,
   };
+}
+
+// CORREÇÃO (10/09/2026, pedido explícito do usuário: "quando colocaram o
+// enquadramento tributário se for optante do simples, tem uma sequência de
+// documentação... se não for optante do simples, aí tem as outras formas de
+// definir o que é a empresa... temos que ter isso tudo de acordo com as
+// datas, pois tem as datas específicas de depois de um tempo que a empresa
+// está pra poder ter as certidões. Inclusive [a DEFIS] ela só sai todo ano
+// no meio do ano, então [a DEFIS] de uma empresa que desenquadrou agora, só
+// vai sair no meio do ano que vem. Temos que estar totalmente ligados,
+// totalmente de olho nessas informações [...] garanta que tudo isso esteja
+// funcionando, garanta que não tenha regressões, que não tenha quebra.").
+//
+// Função pura (mesmo padrão de `montarHistoricoRegimeTributarioParaMapa`
+// acima -- testável sem montar o dossiê inteiro), aplicada em cima do
+// resultado já pronto de `gerarMapaDocumentalCredito`. Para os 4 documentos
+// anuais com prazo legal preciso já calculado por
+// `regimeTributarioTemporalService.ts` (ECF, ECD, DEFIS, DASN-SIMEI):
+// quando o documento ainda não foi anexado e o prazo legal do primeiro ano
+// em que ele passaria a ser exigido (o ano em que o regime atual da empresa
+// começou, `regimeVigenteDesde`) ainda não chegou, o item deixa de ser
+// contado como pendência obrigatória (`obrigatorio: false`, o mesmo campo
+// que toda a lógica de "documentos faltantes"/"apto para avançar" já
+// respeita em todo o sistema -- nenhum outro arquivo precisa ser alterado
+// para essa contagem ficar certa) e ganha `status: 'ainda_nao_exigivel'` +
+// uma explicação com a data real do prazo, em vez de aparecer como
+// obrigação em aberto que a empresa não tem como cumprir ainda.
+//
+// Nunca se aplica a: documentos já anexados (`anexado === true`); itens
+// marcados `aplicabilidade === 'nao_aplicavel'` (ex.: DEFIS para MEI, que
+// usa DASN-SIMEI); nem aos itens que aceitam QUALQUER um entre vários tipos
+// como evidência de regime (ex.: `confirmacao_regime_nao_optante`, que
+// aceita ECF OU DCTF OU DCTFWeb OU DARF OU Livro Caixa -- só o ECF tem
+// prazo anual fixo entre esses, então essa regra nunca se aplicaria à
+// exigência combinada) -- detectado estruturalmente por
+// `tipos_arquivo.length <= 2` (todo documento anual único do catálogo é
+// `[tipoPrincipal, 'recibo_' + tipoPrincipal]`), não por uma lista de
+// códigos hardcoded, para continuar valendo automaticamente se o catálogo
+// ganhar novas entradas de ECF/ECD/DEFIS/DASN-SIMEI no futuro (ex.: novos
+// regimes).
+const CALCULADORAS_EXIGIBILIDADE_DOCUMENTO_ANUAL: Record<string, {
+  exigibilidade: (anoCalendario: number, hoje?: Date) => ExigibilidadeEcf;
+  prazo: (anoCalendario: number) => Date;
+}> = {
+  ecf: { exigibilidade: calcularExigibilidadeEcf, prazo: dataLimiteRegularEcf },
+  ecd: { exigibilidade: calcularExigibilidadeEcd, prazo: dataLimiteRegularEcd },
+  defis: { exigibilidade: calcularExigibilidadeDefis, prazo: dataLimiteRegularDefis },
+  dasn_simei: { exigibilidade: calcularExigibilidadeDasnSimei, prazo: dataLimiteRegularDasnSimei },
+};
+
+export function aplicarExigibilidadeTemporalDocumentosAnuais(
+  mapa: MapaDocumentalCredito,
+  regimeVigenteDesde: string | null | undefined,
+  hoje: Date = new Date(),
+): MapaDocumentalCredito {
+  if (!regimeVigenteDesde) return mapa;
+  const dataRegime = new Date(regimeVigenteDesde);
+  if (Number.isNaN(dataRegime.getTime())) return mapa;
+  const anoCalendario = dataRegime.getUTCFullYear();
+  const etapas = mapa.etapas.map((etapa) => ({
+    ...etapa,
+    documentos: etapa.documentos.map((documento) => {
+      if (documento.anexado || documento.aplicabilidade === 'nao_aplicavel') return documento;
+      const tipoPrincipal = documento.tipos_arquivo?.[0];
+      const calculadora = tipoPrincipal && documento.tipos_arquivo.length <= 2
+        ? CALCULADORAS_EXIGIBILIDADE_DOCUMENTO_ANUAL[tipoPrincipal]
+        : undefined;
+      if (!calculadora || calculadora.exigibilidade(anoCalendario, hoje) !== 'AINDA_NAO_EXIGIVEL') return documento;
+      const prazo = calculadora.prazo(anoCalendario).toLocaleDateString('pt-BR', { timeZone: 'America/Sao_Paulo' });
+      return {
+        ...documento,
+        obrigatorio: false,
+        status: 'ainda_nao_exigivel' as const,
+        motivo: `Ainda não é exigível -- o prazo legal de entrega deste documento para o período tributário iniciado nesta empresa só vence em ${prazo}.`,
+      };
+    }),
+  }));
+  return { ...mapa, etapas };
 }
 
 function normalizar(value: unknown): string {

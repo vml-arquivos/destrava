@@ -33,13 +33,21 @@ type EmpresaResumo = {
   estado?: string | null;
 };
 
+// CORREÇÃO (10/09/2026, causa raiz real do "CCMEI nunca aparece na tela"): esta
+// lista é o filtro-mãe de `slotsDaTela` dentro de `DocumentosEntidade.tsx` --
+// um slot só é exibido se o tipo dele estiver aqui OU já tiver sido anexado.
+// "ccmei", "das_mei" e "relatorio_receitas_mei" tinham slot cadastrado no
+// catálogo (`SECOES_DOCUMENTAIS`) mas nunca estiveram nesta lista, então o
+// card de anexar o CCMEI nunca podia ser renderizado para nenhuma empresa,
+// independente de regime, MEI ou de qualquer regra de exibição/ocultação --
+// a causa não estava nas regras de MEI, e sim aqui, um passo antes delas.
 const TIPOS_EMPRESA = [
   "contrato_prestacao_servicos", "cartao_cnpj", "qsa", "atos_junta_comercial", "contrato_social", "alteracao_contratual",
   "documento_socio", "rg", "cnh", "cpf", "comprovante_residencia", "irpf", "recibo_irpf", "certidao_casamento",
   "averbacao_divorcio", "certidao_obito", "rating_bacen_cnpj", "rating_bacen_cpf", "cenprot_cnpj", "cenprot_cpf",
   "cnd_rfb_cnpj", "cnd_rfb_cpf", "cadin_cnpj", "cadin_cpf", "pgfn_cnpj", "pgfn_cpf",
   "situacao_fiscal_cnpj", "situacao_fiscal_cpf", "enquadramento_tributario_cnpj", "simples_nacional",
-  "pgdas", "pgmei", "ecf", "recibo_ecf", "recibo_pgdas", "recibo_pgmei", "defis", "dasn_simei", "recibo_defis",
+  "pgdas", "pgmei", "ccmei", "das_mei", "relatorio_receitas_mei", "ecf", "recibo_ecf", "recibo_pgdas", "recibo_pgmei", "defis", "dasn_simei", "recibo_defis",
   "recibo_dasn_simei", "scr_cnpj", "ccs_cnpj", "ccf_cnpj", "scr_cpf", "ccs_cpf", "ccf_cpf", "consulta_serasa_cnpj",
   "consulta_serasa_cpf", "compartilhamento_ecac", "foto_fachada", "foto_interna_1", "foto_interna_2", "foto_interna_3",
   "faturamento_12_meses", "comprovante_faturamento", "declaracao_faturamento", "outros",

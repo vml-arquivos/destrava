@@ -1,4 +1,12 @@
-# === Rodada 10/09/2026 parte 12 (esta entrega) — para MEI, "Atos da Junta Comercial"/"Contrato social" somem da grade (CCMEI vira o primeiro campo); mais contraste no título dos cards — arquivos alterados/novos, checksum atual ===
+# === Rodada 10/09/2026 parte 14 (esta entrega) — causa raiz real de "o CCMEI nunca aparece na tela": faltava nas listas tiposPermitidos das duas telas de Acervo Documental de empresa — arquivos alterados/novos, checksum atual ===
+9d1020495e848a7503e81ba84bd4c4328ba31130dc9a963649adcec435ed2389  client/src/pages/colaborador/AcervoDocumentalEmpresa.tsx
+f0b9ebd166d77f7bae3d88dc8c783956546f3185540fad41e06530bae247dea7  client/src/pages/colaborador/EmpresaDocumentos.tsx
+8116ba653252a43674e76c2cd662de2a9fd42edac325ba5bc961af5797ff49db  tests/tiposPermitidosEmpresaIncluiCcmei.test.ts
+# === Rodada 10/09/2026 parte 13 (mesma entrega) — ECF/ECD/DEFIS/DASN-SIMEI respeitam o prazo legal de entrega antes de virarem pendência obrigatória — arquivos alterados/novos, checksum atual ===
+19d913c26098a07a1385a2fdce94e8e8eb0ba45efa9982d6ae39d579eb28e641  server/services/mapaDocumentalCreditoService.ts
+544c241c7421c9260ca33f277cf519f771e814c388d41348ad55a0b3f93ca188  server/routes/documentacao.ts
+e5cc525ec75ca79328e8b167fb27b5730ba6e7b534daab7efede5c45223d76d6  tests/exigibilidadeTemporalDocumentosAnuais.test.ts
+# === Rodada 10/09/2026 parte 12 — para MEI, "Atos da Junta Comercial"/"Contrato social" somem da grade (CCMEI vira o primeiro campo); mais contraste no título dos cards — arquivos alterados/novos, checksum atual ===
 e2985fa4b2f57664f31dffbbfbb221141647f93abac11ed311a8df2518043348  client/src/components/documentos/DocumentosEntidade.tsx
 a6b7f018b26610c37bb0663cc78b153395b5098e7b2d0061cede386de67f2940  tests/reordenacaoCcmeiParaMei.test.ts
 # === Rodada 10/09/2026 parte 11 — campo "CCMEI" reordenado para logo após "Contrato social" na grade, para MEI — arquivos alterados/novos, checksum atual ===
