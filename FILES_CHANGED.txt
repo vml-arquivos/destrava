@@ -1,4 +1,50 @@
-=== RODADA 10/09/2026 PARTE 11 (esta entrega) — Campo "CCMEI" reordenado para logo após "Contrato social" na grade, para MEI (estava 24 campos abaixo, causando confusão sobre onde anexar) ===
+=== RODADA 10/09/2026 PARTE 12 (esta entrega) — Para MEI, "Atos da Junta Comercial"/"Contrato social" somem da grade (CCMEI vira o primeiro campo); mais contraste no título dos cards ===
+
+Acrescenta ao diff da rodada anterior (parte 11) mais 2 arquivos (substitui o
+diff da parte 11 no mesmo arquivo de produção e no mesmo arquivo de teste):
+
+ALTERADO (produção, frontend):
+client/src/components/documentos/DocumentosEntidade.tsx  (slotsVisiveis:
+                                                           substitui a
+                                                           reordenação da
+                                                           parte 11 por
+                                                           filtragem +
+                                                           reordenação --
+                                                           "atos_junta_comercial"
+                                                           e "contrato_social"
+                                                           somem da grade
+                                                           quando MEI e sem
+                                                           nenhum arquivo já
+                                                           anexado; "ccmei"
+                                                           vira o primeiro
+                                                           campo da seção;
+                                                           título de cada
+                                                           card de documento
+                                                           passa de
+                                                           text-muted-foreground
+                                                           para text-foreground,
+                                                           mesmo font-bold)
+
+ALTERADO (teste):
+tests/reordenacaoCcmeiParaMei.test.ts  (reescrito -- mesmo arquivo da parte
+                                        11, testes substituídos para cobrir
+                                        o comportamento novo: filtragem
+                                        condicional, exceção de segurança
+                                        para campo com arquivo já anexado,
+                                        CCMEI como primeiro campo, natureza
+                                        reversível, e o novo contraste do
+                                        título)
+
+Nenhuma migration, nenhuma tabela nova, nenhum arquivo de backend alterado
+nesta rodada -- é uma mudança puramente de FILTRAGEM/ORDEM de renderização
+de uma lista de campos já existente (nunca remove nada da fonte de dados
+`SECOES_DOCUMENTAIS`), e de cor de texto; só para MEI, com exceção de
+segurança para campo já com arquivo anexado.
+
+Ver CHANGELOG_CORRECOES.md (seção "Rodada 10/09/2026 (parte 12)") para a
+descrição completa.
+
+=== RODADA 10/09/2026 PARTE 11 — Campo "CCMEI" reordenado para logo após "Contrato social" na grade, para MEI (estava 24 campos abaixo, causando confusão sobre onde anexar) ===
 
 Acrescenta ao diff da rodada anterior (parte 10) mais 2 arquivos:
 

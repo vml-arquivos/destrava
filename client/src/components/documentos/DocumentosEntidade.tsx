@@ -2312,34 +2312,56 @@ export default function DocumentosEntidade({
           {secoesDoGrupoAtivo.map((secaoAtivaObj) => {
             const regimeAConfirmar = mapaCredito?.regime_identificado === "nao_optante_regime_a_confirmar";
             const tiposConfirmacaoRegime = new Set(["ecf", "dctf", "darf", "livro_caixa"]);
-            // CORREÇÃO (10/09/2026, pedido explícito do usuário: "onde anexo o
-            // CCMEI, pois estou anexando no mesmo local do contrato social...
-            // vai ter outro local pra mim anexar"): o campo "CCMEI" sempre
-            // existiu nesta mesma seção/aba (não em outra tela), mas 24 campos
-            // abaixo de "Contrato social" na lista -- por isso a confusão sobre
-            // onde anexar. Para uma empresa identificada como MEI, o campo
-            // "CCMEI" passa a aparecer logo depois de "Contrato social e
-            // alterações contratuais", em vez de mais abaixo, na mesma seção
-            // "Documentação da Empresa" -- os dois locais de upload (CCMEI
-            // dedicado ou Contrato social) continuam funcionando, isto só torna
-            // o campo certo visível sem precisar rolar a tela inteira. Não
-            // remove nem esconde nenhum campo -- Atos da Junta e Contrato
-            // Social continuam visíveis, só marcados "Dispensado (MEI)"
-            // quando o CCMEI já é reconhecido. Regra geral por
-            // `empresa_identificada_mei`, não específica de nenhuma empresa.
+            // CORREÇÃO (10/09/2026, pedido explícito do usuário, revendo a
+            // correção anterior do mesmo dia: "quando validar a etapa um, que
+            // su[bstanci]e a empresa é um MEI, já não precisa aparecer atos à
+            // junta nem o contrato social... já coloque o local de
+            // armazenamento de anexo do CCMEI... só quando tiver regras que a
+            // empresa desenquadrar de MEI e passar pra outro enquadramento
+            // que isso for validado no enquadramento tributário, aí sim pode
+            // abrir essas opções... só vai aparecer os campos, os locais de
+            // documentos necessários"). Substitui a correção anterior (que só
+            // reordenava, sem esconder nada): para uma empresa identificada
+            // como MEI, os campos "Atos da Junta Comercial" e "Contrato
+            // social e alterações contratuais" deixam de aparecer na grade --
+            // o CCMEI já é o documento equivalente e nenhum dos dois se
+            // aplica ao MEI. Isso é dinâmico e reversível por natureza: como
+            // `empresa_identificada_mei` é recalculado a cada carregamento a
+            // partir do enquadramento tributário real da empresa (nunca
+            // hardcoded), se a empresa um dia desenquadrar do MEI e passar a
+            // outro regime, os dois campos voltam a aparecer sozinhos, sem
+            // nenhuma ação manual.
+            //
+            // Exceção de segurança (zero regressão): um campo só é escondido
+            // se NÃO tiver nenhum arquivo já anexado nele. Se a empresa já
+            // anexou algo em "Contrato social" (como o CCMEI anexado ali por
+            // engano, antes de existir o campo dedicado nesta posição), o
+            // card continua visível -- para nunca esconder um arquivo que o
+            // usuário já enviou e possa precisar ver, reler ou substituir.
+            // Isso não contradiz a regra da Rodada 25 (02/09/2026, "os campos
+            // do checklist ficam sempre visíveis, para qualquer empresa/
+            // regime") -- aquela regra segue valendo para todo o restante do
+            // checklist; esta é uma exceção nova, estreita e explícita, só
+            // para os dois campos que o próprio MEI nunca usa, pedida agora
+            // pelo usuário.
+            //
+            // O campo "CCMEI" (dedicado) é reordenado para a primeira posição
+            // da seção "Documentação da Empresa" quando MEI -- ele passa a
+            // ocupar o lugar de maior precedência que Atos da Junta/Contrato
+            // Social ocupavam, já que é o documento que efetivamente
+            // comprova a constituição da empresa nesse caso.
             const slotsVisiveis = societaria?.empresa_identificada_mei === true && secaoAtivaObj.titulo === "Documentação da Empresa"
               ? (() => {
-                  const slots = secaoAtivaObj.slots;
-                  const indiceCcmei = slots.findIndex((s) => s.tipoUpload === "ccmei");
-                  const indiceContratoSocial = slots.findIndex((s) => s.tipoUpload === "contrato_social");
-                  if (indiceCcmei === -1 || indiceContratoSocial === -1 || indiceCcmei === indiceContratoSocial + 1) return slots;
-                  const semCcmei = slots.filter((s) => s.tipoUpload !== "ccmei");
-                  const novoIndiceContratoSocial = semCcmei.findIndex((s) => s.tipoUpload === "contrato_social");
-                  return [
-                    ...semCcmei.slice(0, novoIndiceContratoSocial + 1),
-                    slots[indiceCcmei],
-                    ...semCcmei.slice(novoIndiceContratoSocial + 1),
-                  ];
+                  const temDocumentoAnexado = (s: DocumentoSlot) => docs.some((doc) => s.matchTipos.includes(doc.tipo_documento));
+                  const semAtosENemContratoVazios = secaoAtivaObj.slots.filter((s) => {
+                    const eDispensavelParaMei = s.tipoUpload === "atos_junta_comercial" || s.tipoUpload === "contrato_social";
+                    return !(eDispensavelParaMei && !temDocumentoAnexado(s));
+                  });
+                  const indiceCcmei = semAtosENemContratoVazios.findIndex((s) => s.tipoUpload === "ccmei");
+                  if (indiceCcmei <= 0) return semAtosENemContratoVazios;
+                  const ccmeiSlot = semAtosENemContratoVazios[indiceCcmei];
+                  const resto = semAtosENemContratoVazios.filter((s) => s.tipoUpload !== "ccmei");
+                  return [ccmeiSlot, ...resto];
                 })()
               : secaoAtivaObj.slots;
             return (
@@ -2543,7 +2565,14 @@ export default function DocumentosEntidade({
                         <div className="flex items-center justify-between gap-2">
                           <div className="min-w-0">
                             <div className="flex items-center gap-1.5 flex-wrap">
-                              <p className="text-xs font-bold text-muted-foreground leading-tight">{documentoSlot.titulo}</p>
+                              {/* CORREÇÃO (10/09/2026, pedido explícito do usuário: "coloque mais
+                                  um pouquinho de cor nos títulos dos documentos... não precisa
+                                  aumentar peso... só coloque mais um contraste, um pouco mais de
+                                  cor escura"): título trocado de `text-muted-foreground` (cinza
+                                  claro) para `text-foreground` (a cor de texto padrão do tema,
+                                  mais escura/contrastada em claro e em escuro) -- mesmo peso
+                                  `font-bold` de antes, só a cor muda. */}
+                              <p className="text-xs font-bold text-foreground leading-tight">{documentoSlot.titulo}</p>
                               {dispensadoPorMei && docsTipo.length === 0 && !satisfeitoPorOutro && <span className="text-[9px] font-bold px-1.5 py-0.5 rounded-full bg-success/20 text-success shrink-0">DISPENSADO (MEI)</span>}
                               {!dispensadoPorMei && (documentoSlot.obrigatorio || destaqueConfirmacaoRegime) && !satisfeitoPorOutro && <span className="text-[9px] font-bold px-1.5 py-0.5 rounded-full bg-brand-navy text-primary-foreground shrink-0">OBRIGATÓRIO NA ETAPA</span>}
                               {(documentoSlot.descricao || tipo === "cartao_cnpj") && (

@@ -1,4 +1,7 @@
-# === Rodada 10/09/2026 parte 11 (esta entrega) — campo "CCMEI" reordenado para logo após "Contrato social" na grade, para MEI — arquivos alterados/novos, checksum atual ===
+# === Rodada 10/09/2026 parte 12 (esta entrega) — para MEI, "Atos da Junta Comercial"/"Contrato social" somem da grade (CCMEI vira o primeiro campo); mais contraste no título dos cards — arquivos alterados/novos, checksum atual ===
+e2985fa4b2f57664f31dffbbfbb221141647f93abac11ed311a8df2518043348  client/src/components/documentos/DocumentosEntidade.tsx
+a6b7f018b26610c37bb0663cc78b153395b5098e7b2d0061cede386de67f2940  tests/reordenacaoCcmeiParaMei.test.ts
+# === Rodada 10/09/2026 parte 11 — campo "CCMEI" reordenado para logo após "Contrato social" na grade, para MEI — arquivos alterados/novos, checksum atual ===
 a22bb79c3f4ff504fbfbd4fdb37a659d20c2218c97ed54fb57da601de152bd96  client/src/components/documentos/DocumentosEntidade.tsx
 6bf617b2e38e22d33595314bbd67bf69f07c922c1e44fa3f5c4205338643b5be  tests/reordenacaoCcmeiParaMei.test.ts
 # === Rodada 09/09/2026 parte 10 — três textos de tela/mensagem que ainda diziam "Atos da Junta Comercial" para MEI, corrigidos com o campo empresa_identificada_mei — arquivos alterados/novos, checksum atual ===
