@@ -1,4 +1,35 @@
-=== RODADA 09/09/2026 PARTE 10 (esta entrega) — Três textos de tela/mensagem ainda diziam "Atos da Junta Comercial" para o MEI, mesmo com a parte 9 já corrigida ===
+=== RODADA 10/09/2026 PARTE 11 (esta entrega) — Campo "CCMEI" reordenado para logo após "Contrato social" na grade, para MEI (estava 24 campos abaixo, causando confusão sobre onde anexar) ===
+
+Acrescenta ao diff da rodada anterior (parte 10) mais 2 arquivos:
+
+ALTERADO (produção, frontend):
+client/src/components/documentos/DocumentosEntidade.tsx  (slotsVisiveis:
+                                                           reordena o campo
+                                                           "ccmei" para
+                                                           logo após
+                                                           "contrato_social"
+                                                           na seção
+                                                           "Documentação da
+                                                           Empresa", só
+                                                           quando
+                                                           empresa_identificada_mei
+                                                           é true; descrição
+                                                           do campo CCMEI
+                                                           ganha referência
+                                                           cruzada reversa)
+
+NOVO (teste):
+tests/reordenacaoCcmeiParaMei.test.ts  (3 testes)
+
+Nenhuma migration, nenhuma tabela nova, nenhum arquivo de backend alterado
+nesta rodada -- é uma mudança puramente de ORDEM de renderização de uma
+lista de campos já existente, e só para MEI; nenhum campo foi escondido,
+removido ou desabilitado.
+
+Ver CHANGELOG_CORRECOES.md (seção "Rodada 10/09/2026 (parte 11)") para a
+descrição completa.
+
+=== RODADA 09/09/2026 PARTE 10 — Três textos de tela/mensagem ainda diziam "Atos da Junta Comercial" para o MEI, mesmo com a parte 9 já corrigida ===
 
 Acrescenta ao diff da rodada anterior (parte 9) mais 3 arquivos:
 

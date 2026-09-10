@@ -213,7 +213,7 @@ export const SECOES_DOCUMENTAIS: SecaoDocumento[] = [
       slot("Certidão municipal de regularidade fiscal", "cnd_municipal", ["certidao_municipal"], { descricao: "Comprova regularidade fiscal municipal." }),
       slot("Rating (CNPJ)", "consulta_serasa_cnpj"),
       slot("PGDAS / PGMEI", "pgdas", ["pgmei", "pgdas_d"], { descricao: "PGDAS-D apura mensalmente o Simples Nacional; PGMEI gera o DAS do MEI. O faturamento mensal do MEI é comprovado em documento próprio. Não se aplica a não optantes, salvo recibos/documentos históricos." }),
-      slot("CCMEI", "ccmei", [], { descricao: "Comprovação da constituição e da condição de Microempreendedor Individual." }),
+      slot("CCMEI", "ccmei", [], { descricao: "Comprovação da constituição e da condição de Microempreendedor Individual. Para MEI, o CCMEI substitui o Contrato Social e os Atos da Junta Comercial -- não é preciso anexar essas duas opções separadamente." }),
       slot("DAS-MEI", "das_mei", [], { descricao: "Documento de arrecadação do MEI, quando aplicável." }),
       slot("Recibo de entrega do PGDAS / PGMEI", "recibo_pgdas", ["recibo_pgmei"], { descricao: "Recibo correspondente ao PGDAS ou PGMEI anexado." }),
       slot("ECF", "ecf", [], { descricao: "Escrituração Contábil Fiscal para empresas não optantes do Simples Nacional, inclusive Lucro Presumido e Lucro Real." }),
@@ -2312,7 +2312,36 @@ export default function DocumentosEntidade({
           {secoesDoGrupoAtivo.map((secaoAtivaObj) => {
             const regimeAConfirmar = mapaCredito?.regime_identificado === "nao_optante_regime_a_confirmar";
             const tiposConfirmacaoRegime = new Set(["ecf", "dctf", "darf", "livro_caixa"]);
-            const slotsVisiveis = secaoAtivaObj.slots;
+            // CORREÇÃO (10/09/2026, pedido explícito do usuário: "onde anexo o
+            // CCMEI, pois estou anexando no mesmo local do contrato social...
+            // vai ter outro local pra mim anexar"): o campo "CCMEI" sempre
+            // existiu nesta mesma seção/aba (não em outra tela), mas 24 campos
+            // abaixo de "Contrato social" na lista -- por isso a confusão sobre
+            // onde anexar. Para uma empresa identificada como MEI, o campo
+            // "CCMEI" passa a aparecer logo depois de "Contrato social e
+            // alterações contratuais", em vez de mais abaixo, na mesma seção
+            // "Documentação da Empresa" -- os dois locais de upload (CCMEI
+            // dedicado ou Contrato social) continuam funcionando, isto só torna
+            // o campo certo visível sem precisar rolar a tela inteira. Não
+            // remove nem esconde nenhum campo -- Atos da Junta e Contrato
+            // Social continuam visíveis, só marcados "Dispensado (MEI)"
+            // quando o CCMEI já é reconhecido. Regra geral por
+            // `empresa_identificada_mei`, não específica de nenhuma empresa.
+            const slotsVisiveis = societaria?.empresa_identificada_mei === true && secaoAtivaObj.titulo === "Documentação da Empresa"
+              ? (() => {
+                  const slots = secaoAtivaObj.slots;
+                  const indiceCcmei = slots.findIndex((s) => s.tipoUpload === "ccmei");
+                  const indiceContratoSocial = slots.findIndex((s) => s.tipoUpload === "contrato_social");
+                  if (indiceCcmei === -1 || indiceContratoSocial === -1 || indiceCcmei === indiceContratoSocial + 1) return slots;
+                  const semCcmei = slots.filter((s) => s.tipoUpload !== "ccmei");
+                  const novoIndiceContratoSocial = semCcmei.findIndex((s) => s.tipoUpload === "contrato_social");
+                  return [
+                    ...semCcmei.slice(0, novoIndiceContratoSocial + 1),
+                    slots[indiceCcmei],
+                    ...semCcmei.slice(novoIndiceContratoSocial + 1),
+                  ];
+                })()
+              : secaoAtivaObj.slots;
             return (
             <Fragment key={secaoAtivaObj.titulo}>
             <div className="rounded-lg border border-border bg-muted p-3">

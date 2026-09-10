@@ -1,4 +1,7 @@
-# === Rodada 09/09/2026 parte 10 (esta entrega) — três textos de tela/mensagem que ainda diziam "Atos da Junta Comercial" para MEI, corrigidos com o campo empresa_identificada_mei — arquivos alterados/novos, checksum atual ===
+# === Rodada 10/09/2026 parte 11 (esta entrega) — campo "CCMEI" reordenado para logo após "Contrato social" na grade, para MEI — arquivos alterados/novos, checksum atual ===
+a22bb79c3f4ff504fbfbd4fdb37a659d20c2218c97ed54fb57da601de152bd96  client/src/components/documentos/DocumentosEntidade.tsx
+6bf617b2e38e22d33595314bbd67bf69f07c922c1e44fa3f5c4205338643b5be  tests/reordenacaoCcmeiParaMei.test.ts
+# === Rodada 09/09/2026 parte 10 — três textos de tela/mensagem que ainda diziam "Atos da Junta Comercial" para MEI, corrigidos com o campo empresa_identificada_mei — arquivos alterados/novos, checksum atual ===
 70586ed22b6ba4254d0e1e0dc2a2561e41b197d3a1d0de944deba8a6c03e0df7  server/routes/documentacao.ts
 7dea34107ff0286b0085fba399aac218f5ec0b0595b07a2665e39e8aeecb2a1a  server/services/analiseDocumentalEspecializada.ts
 9c8180a3bf6e1a18383e55d7ea12ea741f77c6e8127b830366d1cfdbed1610f2  client/src/components/documentos/DocumentosEntidade.tsx
