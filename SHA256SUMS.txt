@@ -1,4 +1,9 @@
-# === Rodada 09/09/2026 parte 7 (esta entrega) — MEI usa o CCMEI como equivalente do Contrato Social/Atos da Junta — arquivos alterados/novos, checksum atual ===
+# === Rodada 09/09/2026 parte 8 (esta entrega) — CCMEI anexado no campo "Contrato social" deixa de ser "Documento incompatível" — arquivos alterados/novos, checksum atual ===
+3150a2d7cda50df31ea9c84b0943705ccd7c60a24ae655ddc9993a7c0dcc5932  server/routes/documentacao.ts
+a9ef6103d97c2b5feb8b2d37791ab33ae6ac69643e370112bcc9f2ee1b853e10  server/services/classificadorDocumentalCentral.ts
+3798a140e2937591da54a89000a16e23e6b03eb0ac69026cac79100f4059c2f5  tests/classificadorCcmeiComoContratoSocialMei.test.ts
+5dfe9acafcfa6431efdeedd1d1b0abc5b65c7b9e636bdd6628c11d4c0908ce27  tests/validacaoSocietariaCcmeiMei.test.ts
+# === Rodada 09/09/2026 parte 7 — MEI usa o CCMEI como equivalente do Contrato Social/Atos da Junta — arquivos alterados/novos, checksum atual ===
 d3176a94aef6c6aba926f79861c220b47d15462934710a31b83c8bc99be7a979  server/routes/documentacao.ts
 1ff202d2a6e21bf113232473e72f07be0dc25713aee3f726c0d5eda831141f8c  tests/validacaoSocietariaCcmeiMei.test.ts
 # === Rodada 09/09/2026 parte 6 — causa raiz real: isEmpresaIndividual não reconhecia "Empresário (Individual)" com parênteses — arquivos alterados/novos, checksum atual ===

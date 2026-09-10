@@ -117,6 +117,35 @@ describe('montarValidacaoSocietaria -- MEI usa o CCMEI como equivalente do Contr
     );
   });
 
+  // CORREÇÃO (09/09/2026, Rodada 09/09 parte 8 -- pedido explícito do usuário,
+  // com print real): o usuário anexou o CCMEI diretamente no campo "Contrato
+  // social e alterações contratuais" (em vez do campo dedicado de CCMEI) --
+  // exatamente a orientação dada: "quando mei em contrato social coloca o
+  // ccmei, e avança". O upload grava `tipo_documento = 'contrato_social'`
+  // (o campo usado), mas a classificação automática do conteúdo já reconhece
+  // e persiste `tipo_detectado: 'CCMEI'` em `resultado_validacao.analise_regra_
+  // documental` (ver `classificadorCcmeiComoContratoSocialMei.test.ts`).
+  it('MEI com o CCMEI anexado no campo "Contrato social" (não no campo dedicado de CCMEI): reconhecido pelo tipo detectado, etapa avança', async () => {
+    const { montarValidacaoSocietaria } = await import('../server/routes/documentacao');
+    mockPoolQueryComDocumentos({
+      contrato_social: [{
+        id: 'doc-contrato-com-ccmei',
+        tipo_documento: 'contrato_social',
+        tamanho_bytes: 45000,
+        resultado_validacao: { analise_regra_documental: { tipo_esperado: 'CONTRATO_SOCIAL', tipo_detectado: 'CCMEI', satisfaz_requisito: true } },
+      }],
+    });
+
+    const resultado = await montarValidacaoSocietaria('empresa-mei-1', false, { empresa: empresaMeiReal(), enquadramentoDados: {} });
+
+    expect((resultado as any).ccmei_anexado).toBe(true);
+    expect((resultado as any).ccmei_arquivo_id).toBe('doc-contrato-com-ccmei');
+    expect(resultado.atos_dispensados_por_mei).toBe(true);
+    expect(resultado.consistente).toBe(true);
+    expect(resultado.apto_para_avancar).toBe(true);
+    expect(resultado.bloqueios).toEqual([]);
+  });
+
   it('empresa não-MEI (LTDA) não é afetada pela regra do CCMEI', async () => {
     const { montarValidacaoSocietaria } = await import('../server/routes/documentacao');
     mockPoolQueryComDocumentos({

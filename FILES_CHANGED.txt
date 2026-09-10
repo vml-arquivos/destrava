@@ -1,4 +1,35 @@
-=== RODADA 09/09/2026 PARTE 7 (esta entrega) — MEI usa o CCMEI como equivalente do Contrato Social/Atos da Junta; Etapa 2 só avança com o CCMEI de fato anexado ===
+=== RODADA 09/09/2026 PARTE 8 (esta entrega) — CCMEI anexado no campo "Contrato social" deixa de ser "Documento incompatível" e passa a valer como evidência ===
+
+Acrescenta ao diff da rodada anterior (parte 7) mais 3 arquivos:
+
+ALTERADO (produção, backend):
+server/services/classificadorDocumentalCentral.ts  (autorizado(): CCMEI passa
+                                                     a ser aceito como tipo
+                                                     detectado compatível com
+                                                     o tipo esperado
+                                                     CONTRATO_SOCIAL)
+server/routes/documentacao.ts  (montarValidacaoSocietaria: reconhece o CCMEI
+                                mesmo quando anexado no campo "Contrato
+                                social" -- via tipo_detectado persistido pela
+                                classificação, não só por tipo_documento)
+
+NOVO (teste):
+tests/classificadorCcmeiComoContratoSocialMei.test.ts  (4 testes)
+
+ALTERADO (teste):
+tests/validacaoSocietariaCcmeiMei.test.ts  (+1 teste: CCMEI no campo
+                                            Contrato Social)
+
+Nenhuma migration, nenhuma tabela nova, nenhum arquivo de frontend alterado
+nesta rodada -- o card "Documento incompatível" e o banner do topo já liam
+os mesmos campos (`resultado_validacao.analise_regra_documental` e
+`atos_dispensados_por_mei`/bloqueios de `montarValidacaoSocietaria`); só a
+regra de classificação e de evidência, no backend, mudou.
+
+Ver CHANGELOG_CORRECOES.md (seção "Rodada 09/09/2026 (parte 8)") para a
+descrição completa.
+
+=== RODADA 09/09/2026 PARTE 7 — MEI usa o CCMEI como equivalente do Contrato Social/Atos da Junta; Etapa 2 só avança com o CCMEI de fato anexado ===
 
 Acrescenta ao diff da rodada anterior (parte 6) mais 2 arquivos:
 

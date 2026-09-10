@@ -2980,7 +2980,22 @@ export async function montarValidacaoSocietaria(
   // exigência de comprovação documental, só que com o documento correto para
   // este tipo de empresa, em vez de um documento que o MEI nunca vai ter.
   const ccmei = docsCcmei.find(arquivoDocumentoTemConteudo) || null;
-  const ccmeiAnexado = !!ccmei;
+  // CORREÇÃO (09/09/2026, Rodada 09/09 parte 8 -- pedido explícito do usuário,
+  // com print real mostrando exatamente esse caso): o usuário pode anexar o
+  // CCMEI diretamente no campo "Contrato social e alterações contratuais" (em
+  // vez do campo dedicado de CCMEI em Fiscal/Tributário) -- e é isso mesmo que
+  // o usuário pediu: "quando mei em contrato social coloca o ccmei, e avança".
+  // O upload grava `tipo_documento` conforme o CAMPO usado (`contrato_social`),
+  // não o tipo detectado pelo conteúdo -- então esse arquivo nunca aparece na
+  // busca por `tipo_documento = 'ccmei'` acima. A classificação automática do
+  // conteúdo (`classificadorDocumentalCentral`, já corrigida para aceitar CCMEI
+  // como evidência de Contrato Social) grava o tipo realmente detectado em
+  // `resultado_validacao.analise_regra_documental.tipo_detectado` -- é isso que
+  // usamos aqui para reconhecer o CCMEI mesmo quando anexado no campo "errado".
+  const ccmeiViaContratoSocial = docsContrato.find(
+    (doc) => arquivoDocumentoTemConteudo(doc) && doc?.resultado_validacao?.analise_regra_documental?.tipo_detectado === 'CCMEI',
+  ) || null;
+  const ccmeiAnexado = !!(ccmei || ccmeiViaContratoSocial);
   const dispensaAtosPorMei = empresaMei && ccmeiAnexado;
   const promptCodigo = 'contrato_junta_crosscheck';
   const atosLeitura = !atos && empresaMei
@@ -3172,7 +3187,7 @@ export async function montarValidacaoSocietaria(
     // Social para MEI (09/09/2026, Rodada 09/09 parte 7) -- ver comentário
     // acima sobre `dispensaAtosPorMei`.
     ccmei_anexado: ccmeiAnexado,
-    ccmei_arquivo_id: ccmei?.id || docsCcmei[0]?.id || null,
+    ccmei_arquivo_id: ccmei?.id || docsCcmei[0]?.id || ccmeiViaContratoSocial?.id || null,
     nire_contrato: documentoPrincipal?.nire || null,
     nire_junta: atosDados?.nire || null,
     nire_confere: !!documentoPrincipal?.nire && onlyDigits(documentoPrincipal.nire) === onlyDigits(atosDados?.nire),

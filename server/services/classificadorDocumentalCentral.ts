@@ -273,7 +273,16 @@ function autorizado(tipoEsperado: string, tipoDetectado: TipoDetectadoDocumental
   if (tipoEsperado === 'DOCUMENTO_IDENTIDADE') return ['RG', 'CPF', 'CNH'].includes(tipoDetectado);
   if (tipoEsperado === 'CERTIDAO') return ['CND', 'CPEND', 'CNDT', 'CND_ESTADUAL', 'CND_MUNICIPAL'].includes(tipoDetectado);
   if (tipoEsperado === 'CONTRATO_GERAL') return ['CONTRATO_GERAL', 'CONTRATO_PRESTACAO_SERVICOS', 'CONTRATO_ASSESSORIA'].includes(tipoDetectado);
-  if (tipoEsperado === 'CONTRATO_SOCIAL') return ['CONTRATO_SOCIAL', 'ALTERACAO_CONTRATUAL'].includes(tipoDetectado);
+  // CORREÇÃO (09/09/2026, Rodada 09/09 parte 8 -- pedido explícito do usuário:
+  // "quando a empresa e mei não tem atos da junta, e o contrato social e o
+  // ccmei, atos da junta e para as outras empresas"): MEI não tem Contrato
+  // Social no formato de LTDA -- o CCMEI é o documento equivalente, e comprova
+  // a constituição da empresa/o titular. Um CCMEI é emitido EXCLUSIVAMENTE
+  // para Microempreendedor Individual -- nunca existe para LTDA/SLU/SA/
+  // Cooperativa/Associação -- então aceitá-lo aqui não abre nenhuma brecha
+  // para os outros tipos de empresa, que nunca terão esse documento para
+  // anexar de qualquer forma.
+  if (tipoEsperado === 'CONTRATO_SOCIAL') return ['CONTRATO_SOCIAL', 'ALTERACAO_CONTRATUAL', 'CCMEI'].includes(tipoDetectado);
   if (tipoEsperado === 'SERASA') return ['SERASA', 'RELATORIO_CREDITO_CONSOLIDADO'].includes(tipoDetectado);
   if (tipoEsperado === 'SCR') return ['SCR', 'RELATORIO_CREDITO_CONSOLIDADO'].includes(tipoDetectado);
   return false;
