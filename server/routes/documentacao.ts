@@ -2989,12 +2989,29 @@ export async function montarValidacaoSocietaria(
   // não o tipo detectado pelo conteúdo -- então esse arquivo nunca aparece na
   // busca por `tipo_documento = 'ccmei'` acima. A classificação automática do
   // conteúdo (`classificadorDocumentalCentral`, já corrigida para aceitar CCMEI
-  // como evidência de Contrato Social) grava o tipo realmente detectado em
-  // `resultado_validacao.analise_regra_documental.tipo_detectado` -- é isso que
-  // usamos aqui para reconhecer o CCMEI mesmo quando anexado no campo "errado".
-  const ccmeiViaContratoSocial = docsContrato.find(
-    (doc) => arquivoDocumentoTemConteudo(doc) && doc?.resultado_validacao?.analise_regra_documental?.tipo_detectado === 'CCMEI',
-  ) || null;
+  // como evidência de Contrato Social) grava o tipo realmente detectado -- é
+  // isso que usamos aqui para reconhecer o CCMEI mesmo quando anexado no campo
+  // "errado".
+  //
+  // CORREÇÃO (09/09/2026, Rodada 09/09 parte 9 -- print real mostrando que,
+  // mesmo com o v43 já publicado, a etapa continuava pedindo o CCMEI): o
+  // caminho lido aqui (`analise_regra_documental.tipo_detectado`) estava
+  // errado -- o valor de `dados_extraidos.tipo_detectado` é quem realmente é
+  // gravado (`normalizarDocumentoCatalogado`, em
+  // `analiseDocumentalEspecializada.ts`, devolve `tipo_detectado` DENTRO do
+  // objeto `dados`, que se torna `dados_extraidos` no laudo persistido -- não
+  // um campo solto no nível raiz do laudo). Com o caminho errado, esta
+  // checagem nunca encontrava o CCMEI, mesmo depois da correção do
+  // classificador (parte 8) e mesmo depois de uma nova leitura ("Reler").
+  // Corrigido para ler o caminho real, com a mesma cadeia de fallback já
+  // usada pelo frontend para o mesmo dado (`documentoMarcadoIncompativel`,
+  // `shared/documentalPresentation.ts`).
+  const ccmeiViaContratoSocial = docsContrato.find((doc) => {
+    if (!arquivoDocumentoTemConteudo(doc)) return false;
+    const laudo = doc?.resultado_validacao?.analise_regra_documental;
+    const tipoDetectado = laudo?.dados_extraidos?.tipo_detectado || laudo?.classificacao?.tipo_detectado || laudo?.tipo_detectado;
+    return tipoDetectado === 'CCMEI';
+  }) || null;
   const ccmeiAnexado = !!(ccmei || ccmeiViaContratoSocial);
   const dispensaAtosPorMei = empresaMei && ccmeiAnexado;
   const promptCodigo = 'contrato_junta_crosscheck';

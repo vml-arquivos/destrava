@@ -1,4 +1,28 @@
-=== RODADA 09/09/2026 PARTE 8 (esta entrega) — CCMEI anexado no campo "Contrato social" deixa de ser "Documento incompatível" e passa a valer como evidência ===
+=== RODADA 09/09/2026 PARTE 9 (esta entrega) — Corrigido o caminho de leitura do tipo detectado do CCMEI (a etapa ainda pedia o CCMEI mesmo depois da parte 8) ===
+
+Acrescenta ao diff da rodada anterior (parte 8) mais 2 arquivos:
+
+ALTERADO (produção, backend):
+server/routes/documentacao.ts  (montarValidacaoSocietaria: ccmeiViaContratoSocial
+                                agora lê `analise_regra_documental.dados_extraidos.
+                                tipo_detectado`, o caminho real do laudo
+                                persistido, em vez de `analise_regra_documental.
+                                tipo_detectado`, que nunca existe de verdade)
+
+ALTERADO (teste):
+tests/validacaoSocietariaCcmeiMei.test.ts  (mock do teste que cobre este
+                                            cenário corrigido para o formato
+                                            real do laudo persistido)
+
+Nenhuma migration, nenhuma tabela nova, nenhum arquivo de frontend alterado
+nesta rodada -- o card do arquivo e o classificador (parte 8) já estavam
+certos; só a leitura desse dado dentro da validação da Etapa 2 estava no
+caminho errado.
+
+Ver CHANGELOG_CORRECOES.md (seção "Rodada 09/09/2026 (parte 9)") para a
+descrição completa.
+
+=== RODADA 09/09/2026 PARTE 8 — CCMEI anexado no campo "Contrato social" deixa de ser "Documento incompatível" e passa a valer como evidência ===
 
 Acrescenta ao diff da rodada anterior (parte 7) mais 3 arquivos:
 

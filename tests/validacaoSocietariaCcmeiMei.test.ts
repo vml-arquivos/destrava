@@ -123,8 +123,18 @@ describe('montarValidacaoSocietaria -- MEI usa o CCMEI como equivalente do Contr
   // exatamente a orientação dada: "quando mei em contrato social coloca o
   // ccmei, e avança". O upload grava `tipo_documento = 'contrato_social'`
   // (o campo usado), mas a classificação automática do conteúdo já reconhece
-  // e persiste `tipo_detectado: 'CCMEI'` em `resultado_validacao.analise_regra_
-  // documental` (ver `classificadorCcmeiComoContratoSocialMei.test.ts`).
+  // e persiste o tipo detectado (ver `classificadorCcmeiComoContratoSocialMei.
+  // test.ts`).
+  //
+  // O formato exato do laudo persistido abaixo (`dados_extraidos.tipo_
+  // detectado`, NÃO `tipo_detectado` solto no nível raiz) reproduz fielmente
+  // o que `analisarDocumentoCatalogado`/`normalizarDocumentoCatalogado`
+  // (`server/services/analiseDocumentalEspecializada.ts`) realmente grava --
+  // um print real (Rodada 09/09 parte 9) mostrou que a etapa continuava
+  // pedindo o CCMEI mesmo já anexado, porque a versão anterior deste teste
+  // usava um formato simplificado (`tipo_detectado` direto) que não existe de
+  // verdade em produção, e por isso não pegou o caminho errado que o código
+  // usava.
   it('MEI com o CCMEI anexado no campo "Contrato social" (não no campo dedicado de CCMEI): reconhecido pelo tipo detectado, etapa avança', async () => {
     const { montarValidacaoSocietaria } = await import('../server/routes/documentacao');
     mockPoolQueryComDocumentos({
@@ -132,7 +142,12 @@ describe('montarValidacaoSocietaria -- MEI usa o CCMEI como equivalente do Contr
         id: 'doc-contrato-com-ccmei',
         tipo_documento: 'contrato_social',
         tamanho_bytes: 45000,
-        resultado_validacao: { analise_regra_documental: { tipo_esperado: 'CONTRATO_SOCIAL', tipo_detectado: 'CCMEI', satisfaz_requisito: true } },
+        resultado_validacao: {
+          analise_regra_documental: {
+            tipo_analise: 'documento_generico',
+            dados_extraidos: { tipo_esperado: 'CONTRATO_SOCIAL', tipo_detectado: 'CCMEI', satisfaz_requisito: true, status_documental: 'DADO_COMPROVADO' },
+          },
+        },
       }],
     });
 
