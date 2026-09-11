@@ -260,7 +260,7 @@ function normalizar(value: unknown): string {
     .trim();
 }
 
-export function identificarRegimeCredito(empresa: any, enquadramento?: any): RegimeCredito {
+export function identificarRegimeCredito(empresa: any, enquadramento?: any, evidenciaCcmeiAnexado?: boolean): RegimeCredito {
   const texto = normalizar([
     enquadramento?.regime_tributario,
     enquadramento?.situacao_simples,
@@ -276,7 +276,26 @@ export function identificarRegimeCredito(empresa: any, enquadramento?: any): Reg
       : null;
   const negativaSimei = /nao optante(?: pelo)? simei|nao enquadrad[oa](?: no)? simei|nao e mei/.test(texto);
   const indicioMeiNoTexto = /\bmei\b|\bsimei\b|microempreendedor individual/.test(texto);
-  if (opcaoMeiExplicita === true || (opcaoMeiExplicita !== false && indicioMeiNoTexto && !negativaSimei)) return 'mei';
+  // CORREÇÃO (11/09/2026, pedido explícito do usuário: "garanta que quando
+  // identificar o tipo de empresa, o regime, o enquadramento tributário,
+  // garanta que a documentação seja exatamente o que é pra ser" -- caso real
+  // em que o banner da tela mostrava "Simples Nacional — optante" em vez de
+  // "MEI" mesmo com um CCMEI de fato anexado, porque nem `opcao_mei` nem o
+  // texto do enquadramento sincronizado da Receita mencionavam literalmente
+  // "MEI"/"SIMEI"): um CCMEI efetivamente anexado (`evidenciaCcmeiAnexado`,
+  // o mesmo sinal já usado por `montarValidacaoSocietaria` para dispensar
+  // Atos da Junta/Contrato Social -- `ccmeiAnexado`/`ccmei_anexado`) é prova
+  // documental direta e definitiva da condição de MEI. Isto é diferente do
+  // padrão "empresário individual" por natureza jurídica, removido de
+  // propósito da Rodada 29 (nem todo Empresário Individual é MEI) -- o
+  // CCMEI, ao contrário da natureza jurídica, É o próprio documento que
+  // comprova o enquadramento MEI, não uma inferência aproximada. Respeita a
+  // mesma guarda de negação explícita (`opcaoMeiExplicita !== false`) já
+  // usada para o texto -- um `opcao_mei: false` explícito da Receita nunca é
+  // sobrescrito só pela presença de um arquivo. Parâmetro opcional (default
+  // `undefined`): chamadas existentes que não passam este argumento mantêm
+  // exatamente o comportamento anterior.
+  if (opcaoMeiExplicita === true || (opcaoMeiExplicita !== false && (indicioMeiNoTexto || evidenciaCcmeiAnexado === true) && !negativaSimei)) return 'mei';
 
   const opcaoSimplesExplicita = enquadramento?.opcao_simples === true
     || enquadramento?.opcao_pelo_simples === true
@@ -674,8 +693,13 @@ export function gerarMapaDocumentalCredito(params: {
   etapa1Aprovada: boolean;
   etapa2Aprovada: boolean;
 }): MapaDocumentalCredito {
-  const regime = identificarRegimeCredito(params.empresa, params.enquadramento);
   const tipos = new Set(Array.from(params.tiposAnexados || []).map(String));
+  // Ver comentário em `identificarRegimeCredito`: um CCMEI de fato anexado
+  // (já presente em `tipos`, a mesma lista usada para marcar slots como
+  // anexados) é evidência documental direta de MEI -- corrige o regime
+  // exibido e o checklist documental sem depender de o enquadramento
+  // sincronizado da Receita mencionar "MEI" literalmente.
+  const regime = identificarRegimeCredito(params.empresa, params.enquadramento, tipos.has('ccmei'));
   const etapaAtual = !params.etapa1Aprovada ? 1 : !params.etapa2Aprovada ? 2 : 3;
   const etapas: EtapaMapa[] = [
     {

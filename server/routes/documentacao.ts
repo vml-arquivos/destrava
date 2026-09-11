@@ -2678,6 +2678,12 @@ export async function avaliarProntidaoIdentidadeCnpj(params: {
   enquadramentoPendencias: Pendencia[];
   qsaDados: Record<string, any>;
   enquadramentoDados: Record<string, any>;
+  // Ver comentário em `identificarRegimeCredito` (mapaDocumentalCreditoService.ts):
+  // evidência de que um CCMEI foi efetivamente anexado (mesmo sinal de
+  // `montarValidacaoSocietaria`, `ccmei_anexado`) -- opcional, default
+  // `undefined` preserva o comportamento anterior para qualquer chamador
+  // que não passe este campo.
+  ccmeiAnexado?: boolean;
 }) {
   const analiseCnpj = await buscarUltimaAnaliseCnpjEmpresa(params.empresaId).catch(() => null);
   const resultadoCnpj = analiseCnpj?.resultado && typeof analiseCnpj.resultado === 'object' ? analiseCnpj.resultado : {};
@@ -2758,7 +2764,7 @@ export async function avaliarProntidaoIdentidadeCnpj(params: {
   const situacaoSimples = String(params.enquadramentoDados?.situacao_simples || '').trim();
   // Reutilizar o mesmo código do mapa documental evita que a ficha libere a
   // etapa societária com uma classificação diferente da trilha documental.
-  const regimeCodigo = identificarRegimeCredito(params.empresa, params.enquadramentoDados);
+  const regimeCodigo = identificarRegimeCredito(params.empresa, params.enquadramentoDados, params.ccmeiAnexado);
   const regimeRotulo = ROTULO_REGIME_CREDITO[regimeCodigo] || 'Regime ainda não identificado';
   const regimeAConfirmar = regimeCodigo === 'nao_optante_regime_a_confirmar' || regimeCodigo === 'nao_identificado';
   const enquadramentoIdentificado = !!regime || !!situacaoSimples
@@ -3376,6 +3382,7 @@ export async function montarDossieCreditoEmpresa(empresaId: string, options: { p
     enquadramentoPendencias: enquadramento.pendencias,
     qsaDados: qsaDocumental.dados,
     enquadramentoDados: enquadramento.dados,
+    ccmeiAnexado: documentacaoSocietaria?.ccmei_anexado === true,
   });
   const fase1Dto = buildCadastralValidationDTO({
     empresa,

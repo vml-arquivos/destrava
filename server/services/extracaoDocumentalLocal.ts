@@ -36,6 +36,7 @@ export type TipoDocumentoLocal =
   | 'consulta_bureau'
   | 'defis'
   | 'dasn_simei'
+  | 'ccmei'
   | 'compartilhamento_ecac'
   | 'documento_generico';
 
@@ -1672,6 +1673,89 @@ function parseDeclaracaoDasnSimei(texto: string): { dados: Record<string, any>; 
   return { dados, confianca };
 }
 
+// CORREÇÃO (11/09/2026, pedido explícito do usuário com print real de uma
+// empresa MEI real: o CCMEI foi anexado no campo dedicado (já corrigido na
+// rodada anterior) mas ficou preso em "Revisão necessária" com "Campos
+// essenciais não comprovados: titular, condicao_mei" -- mesmo sendo um
+// documento real, legível, genuíno): antes desta correção, o CCMEI não
+// tinha NENHUM parser local dedicado -- `tipoLeitorLocalDocumentoCatalogado`
+// não tinha nenhum `if` para "ccmei" e caía no fallback `documento_generico`
+// (`parseDocumentoGenerico`), cujo teto matemático de confiança é 0,65,
+// abaixo do limiar de 0,72 usado por `extrairHibrido` para confiar na
+// leitura local sem IA -- ou seja, mesmo um CCMEI perfeitamente legível
+// nunca conseguia ser aceito pela leitura local sozinha. Além disso, dois
+// dos campos obrigatórios do perfil de CCMEI (`titular`/`condicao_mei`,
+// `documentAnalysisProfiles.ts`) tinham detecção falha no parser genérico:
+// `titular` só reconhecia os rótulos "nome do empresário"/"empresário"/
+// "titular" -- o CCMEI oficial do gov.br rotula o nome do titular como
+// "Nome Civil", rótulo ausente da lista, então mesmo um CCMEI real e
+// legível nunca comprovava esse campo; e `condicao_mei` era testado contra
+// o texto BRUTO (não normalizado -- sensível a acentuação/quebra de linha
+// da extração de PDF/OCR), em vez do texto normalizado já usado pelos
+// outros parsers especializados deste arquivo.
+//
+// Este parser dedicado, replicando o mesmo padrão de `parseDeclaracaoDasnSimei`/
+// `parseDeclaracaoDefis` (base genérica + campos/aliases próprios do tipo +
+// bônus de confiança quando o documento é reconhecido como o tipo certo),
+// corrige os dois: adiciona "nome civil" (e variações) aos rótulos aceitos
+// para `titular`, e passa a testar `condicao_mei` contra o texto
+// normalizado (sem acento, espaços colapsados) com um padrão tolerante a
+// quebra de linha no meio da frase do cabeçalho oficial. Também extrai
+// `data_inicio` (data de início das atividades) e reaproveita `situacao`/
+// `data_emissao`/`codigo_autenticidade` já cobertos pelo parser genérico
+// (campos adicionais do perfil, não obrigatórios).
+function parseCcmei(texto: string): { dados: Record<string, any>; confianca: number } {
+  const base = parseDocumentoGenerico(texto, 'ccmei');
+  const norm = textoNormalizado(texto);
+  const linhas = linhasTexto(texto);
+  // "Nome Civil" é o rótulo real usado pelo CCMEI oficial (gov.br/empresas-e-negocios)
+  // para o nome do titular -- mantido em primeiro lugar na lista de aliases
+  // (o alias mais específico já vence dentro de `valorAposRotulo`), com os
+  // aliases genéricos anteriores preservados como fallback (zero regressão
+  // para qualquer variação de layout que já funcionava).
+  const titular = limparValor(valorAposRotulo(linhas, [
+    'nome civil', 'nome do mei', 'nome do microempreendedor individual',
+    'nome do empresário', 'nome do empresario', 'empresário', 'empresario', 'titular',
+  ])) || base.dados.titular || null;
+  // Tolerante a quebra de linha/espaçamento no meio do título oficial
+  // ("CERTIFICADO DA CONDIÇÃO DE\nMICROEMPREENDEDOR INDIVIDUAL", comum
+  // quando o PDF quebra o cabeçalho em duas linhas) e a variação de acento
+  // -- `norm` já remove acentuação e colapsa espaços/quebras de linha em um
+  // espaço só (`textoNormalizado`), então o padrão não precisa mais casar a
+  // frase exata do texto bruto.
+  const condicaoMei = /certificado\s+da\s+condicao\s+de\s+microempreendedor\s+individual|\bccmei\b/i.test(norm)
+    ? true
+    : base.dados.condicao_mei ?? null;
+  const dataInicio = dataProximaDe(
+    texto,
+    /data\s+de\s+in[ií]cio\s+d(?:as|e)\s+atividades?\D{0,45}(\d{2}\/\d{2}\/\d{4})/i,
+  );
+  const situacaoCadastral = limparValor(valorAposRotulo(linhas, ['situação cadastral', 'situacao cadastral'])) || base.dados.situacao || null;
+  // Reconhece o próprio documento como um CCMEI de fato (mesmo critério
+  // usado para `condicao_mei`, já que é literalmente a mesma comprovação) --
+  // usado para o bônus de confiança abaixo, no mesmo padrão de
+  // `parseDeclaracaoDasnSimei`/`parseDeclaracaoDefis`.
+  const compativel = condicaoMei === true;
+  const dados = {
+    ...base.dados,
+    documento_compativel: compativel,
+    titular,
+    condicao_mei: condicaoMei,
+    data_inicio: dataInicio || base.dados.data_inicio || null,
+    situacao: situacaoCadastral,
+    campos_comprovados: {
+      ...(base.dados.campos_comprovados || {}),
+      ...(titular ? { titular } : {}),
+      ...(condicaoMei !== null ? { condicao_mei: condicaoMei } : {}),
+      ...(dataInicio ? { data_inicio: dataInicio } : {}),
+      ...(situacaoCadastral ? { situacao: situacaoCadastral } : {}),
+    },
+    fonte_extracao: 'local_deterministica_especializada',
+  };
+  const confianca = clamp(base.confianca + (compativel ? 0.2 : 0) + (titular ? 0.08 : 0) + (condicaoMei ? 0.08 : 0) + (dataInicio ? 0.05 : 0));
+  return { dados, confianca };
+}
+
 function parseCompartilhamentoEcac(texto: string): { dados: Record<string, any>; confianca: number } {
   const norm = textoNormalizado(texto);
   const compativel = /autorizar compartilhamento de dados|autorizacao de compartilhamento de dados|compartilhamento de dados.{0,100}(?:receita federal|rfb|blockchain)/i.test(norm);
@@ -2062,6 +2146,7 @@ export function analisarTextoDocumentoLocal(tipo: TipoDocumentoLocal, texto: str
   if (tipo === 'efd_icms_ipi') return parseEfdIcmsIpi(texto);
   if (tipo === 'defis') return parseDeclaracaoDefis(texto);
   if (tipo === 'dasn_simei') return parseDeclaracaoDasnSimei(texto);
+  if (tipo === 'ccmei') return parseCcmei(texto);
   if (tipo === 'compartilhamento_ecac') return parseCompartilhamentoEcac(texto);
   if (tipo === 'certidao_regularidade' || tipo === 'situacao_fiscal' || tipo === 'consulta_cadin'
     || tipo === 'consulta_pgfn' || tipo === 'consulta_scr' || tipo === 'consulta_ccs'
@@ -2072,6 +2157,7 @@ export function analisarTextoDocumentoLocal(tipo: TipoDocumentoLocal, texto: str
     const esperado = String(tipoDocumentoEsperado || '').toLowerCase();
     if (esperado === 'defis' || esperado === 'recibo_defis') return parseDeclaracaoDefis(texto);
     if (esperado === 'dasn_simei' || esperado === 'recibo_dasn_simei') return parseDeclaracaoDasnSimei(texto);
+    if (esperado === 'ccmei') return parseCcmei(texto);
     if (esperado === 'compartilhamento_ecac') return parseCompartilhamentoEcac(texto);
     return parseDocumentoGenerico(texto, tipoDocumentoEsperado);
   }

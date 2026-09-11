@@ -1,4 +1,12 @@
-# === Rodada 10/09/2026 parte 14 (esta entrega) — causa raiz real de "o CCMEI nunca aparece na tela": faltava nas listas tiposPermitidos das duas telas de Acervo Documental de empresa — arquivos alterados/novos, checksum atual ===
+# === Rodada 11/09/2026 parte 16 (esta entrega) — um CCMEI de fato anexado passa a valer como evidência direta de MEI no banner de regime e no checklist — arquivos alterados/novos, checksum atual ===
+a1c80913b836be6391160f9bd3446f0e568bcb9da280bc74af28fbd3fe9e8f24  server/services/mapaDocumentalCreditoService.ts
+73b46314bd3d4846288fa3fd677ab1ca7b0f4d1c2a08a7ccd2e810f58316d4a6  server/routes/documentacao.ts
+1b58abb402218135f42a3338cfe02c3361d609b04b63cd44c4de4ed53a7f48ed  tests/regimeCcmeiComoEvidencia.test.ts
+# === Rodada 11/09/2026 parte 15 (mesma entrega) — CCMEI anexado ficava preso para sempre em "Revisão necessária": novo leitor local especializado — arquivos alterados/novos, checksum atual ===
+89cd17bd679a5b743bf79a722fcbaec3a285e9dd27b128c42dab4f3aa36b431a  server/services/extracaoDocumentalLocal.ts
+a1a48fc47c155044e69d9336617efeea5de7f84bfaee683cf8945993fbb10fca  server/services/analiseDocumentalEspecializada.ts
+73da27cbe9f9917b6f1689e6f819abc7047e8d4c0bef108a2b15055ced50ec4b  tests/parseCcmei.test.ts
+# === Rodada 10/09/2026 parte 14 — causa raiz real de "o CCMEI nunca aparece na tela": faltava nas listas tiposPermitidos das duas telas de Acervo Documental de empresa — arquivos alterados/novos, checksum atual ===
 9d1020495e848a7503e81ba84bd4c4328ba31130dc9a963649adcec435ed2389  client/src/pages/colaborador/AcervoDocumentalEmpresa.tsx
 f0b9ebd166d77f7bae3d88dc8c783956546f3185540fad41e06530bae247dea7  client/src/pages/colaborador/EmpresaDocumentos.tsx
 8116ba653252a43674e76c2cd662de2a9fd42edac325ba5bc961af5797ff49db  tests/tiposPermitidosEmpresaIncluiCcmei.test.ts

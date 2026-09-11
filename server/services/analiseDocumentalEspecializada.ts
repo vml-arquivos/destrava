@@ -61,6 +61,7 @@ export function tipoLeitorLocalDocumentoCatalogado(tipoDocumento: string): TipoD
   if (tipoCanonico === 'faturamento_12_meses') return 'faturamento_12_meses';
   if (tipoCanonico === 'defis') return 'defis';
   if (tipoCanonico === 'dasn_simei') return 'dasn_simei';
+  if (tipoCanonico === 'ccmei') return 'ccmei';
   if (tipoCanonico === 'compartilhamento_ecac') return 'compartilhamento_ecac';
   if (tipoCanonico === 'extrato_bancario') return 'extrato_bancario';
   if (['ecf', 'recibo_ecf'].includes(tipoDocumento)) return 'ecf';

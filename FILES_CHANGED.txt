@@ -1,4 +1,65 @@
-=== RODADA 10/09/2026 PARTE 14 (esta entrega) — Causa raiz real de "o CCMEI nunca aparece na tela": faltava nas listas tiposPermitidos das duas telas de Acervo Documental de empresa ===
+=== RODADA 11/09/2026 PARTE 16 (esta entrega) — Um CCMEI de fato anexado passa a valer como evidência direta de MEI na identificação de regime ===
+
+ALTERADO (produção, backend):
+server/services/mapaDocumentalCreditoService.ts  (identificarRegimeCredito
+                                                   ganha 3º parâmetro
+                                                   opcional
+                                                   `evidenciaCcmeiAnexado`;
+                                                   gerarMapaDocumentalCredito
+                                                   passa
+                                                   `tiposAnexados.has('ccmei')`)
+server/routes/documentacao.ts  (avaliarProntidaoIdentidadeCnpj ganha campo
+                                opcional `ccmeiAnexado` no params, repassado
+                                a identificarRegimeCredito; chamador passa
+                                `documentacaoSocietaria.ccmei_anexado`)
+
+ALTERADO (teste):
+tests/regimeCcmeiComoEvidencia.test.ts  (novo -- 6 testes: comportamento
+                                         anterior preservado sem o
+                                         parâmetro, CCMEI vira evidência com
+                                         o parâmetro, false/omitido sem
+                                         efeito, opcao_mei:false explícito
+                                         nunca sobrescrito, texto "MEI" já
+                                         existente continua funcionando, e
+                                         gerarMapaDocumentalCredito de ponta
+                                         a ponta)
+
+Nenhuma migration nesta parte -- parâmetro opcional aditivo, as 2 outras
+chamadas de identificarRegimeCredito no código (incluindo
+montarEnquadramentoDados, propositalmente não tocada) mantêm o
+comportamento anterior por não passarem o novo argumento.
+
+=== RODADA 11/09/2026 PARTE 15 (mesma entrega) — CCMEI anexado ficava preso para sempre em "Revisão necessária": faltava parser local dedicado ===
+
+ALTERADO (produção, backend):
+server/services/extracaoDocumentalLocal.ts  (novo `TipoDocumentoLocal`
+                                             'ccmei'; nova função
+                                             `parseCcmei` -- rótulo "Nome
+                                             Civil" para titular, detecção
+                                             de condicao_mei em texto
+                                             normalizado, data_inicio e
+                                             situacao; roteada no
+                                             dispatcher
+                                             `analisarTextoDocumentoLocal`)
+server/services/analiseDocumentalEspecializada.ts  (tipoLeitorLocalDocumentoCatalogado
+                                                    ganha
+                                                    `if (tipoCanonico === 'ccmei') return 'ccmei';`,
+                                                    antes caía no fallback
+                                                    documento_generico)
+
+ALTERADO (teste):
+tests/parseCcmei.test.ts  (novo -- 8 testes: titular via "Nome Civil",
+                           condicao_mei tolerante a cabeçalho quebrado em
+                           duas linhas, cnpj/nome_empresarial herdados,
+                           data_inicio/situacao extraídos, confiança
+                           ultrapassando o limiar de 0,72, aliases antigos
+                           preservados, documento sem evidência de CCMEI
+                           não inventa dado, roteamento implementado)
+
+Nenhuma migration nesta parte -- novo parser local aditivo, nenhum tipo
+documental existente foi alterado.
+
+=== RODADA 10/09/2026 PARTE 14 — Causa raiz real de "o CCMEI nunca aparece na tela": faltava nas listas tiposPermitidos das duas telas de Acervo Documental de empresa ===
 
 ALTERADO (produção, frontend):
 client/src/pages/colaborador/AcervoDocumentalEmpresa.tsx  (TIPOS_EMPRESA:
