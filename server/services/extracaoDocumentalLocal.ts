@@ -2063,7 +2063,7 @@ function parseDocumentoIdentidadeSocio(texto: string): { dados: Record<string, a
   // documento que contenha apenas a palavra "CNH", exigimos também um segundo
   // marcador oficial de campos/órgão da habilitação.
   const marcadorCnh = /carteira\s+nacional\s+de\s+habilitacao|permissao\s+para\s+dirigir|senatran/i.test(norm);
-  const estruturaCnh = /(?:n\s*registro|numero\s+de\s+registro|cat\s+hab|data\s+emissao|validade|cpf|departamento\s+estadual\s+de\s+transito|detran)/i.test(norm);
+  const estruturaCnh = /(?:n\s*registro|numero\s+de\s+registro|cat\s+hab|data\s+emissao|validade|cpf|nome\s+e\s+sobrenome|data\s*,?\s*local\s+e\s+uf\s+de\s+nascimento|driver\s+license|departamento\s+estadual\s+de\s+transito|detran)/i.test(norm);
   const ehCnh = marcadorCnh && estruturaCnh;
   const ehRg = !ehCnh && /registro\s+geral|carteira\s+de\s+identidade|secretaria\s+de\s+seguranca\s+publica/.test(norm);
   const ehCpf = !ehCnh && !ehRg && /cadastro\s+de\s+pessoas\s+fisicas|comprovante\s+de\s+situacao\s+cadastral\s+no\s+cpf/.test(norm);
