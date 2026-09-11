@@ -15,18 +15,21 @@ describe('análise inline no Acervo Documental', () => {
   it('renderiza resultado por arquivo e mantém o estado de upload quando não há laudo', () => {
     expect(acervo).toContain('resultado_analise?: Record<string, any> | null;');
     expect(acervo).toContain('const resultadoInline = doc.resultado_analise || laudo || laudoErro || null;');
-    expect(acervo).toContain('<ResultadoAnaliseDocumento resultado={resultadoInline} documento={doc} compacto />');
+    expect(acervo).toContain('<ResultadoAnaliseDocumento resultado={analiseModal.resultado} documento={analiseModal.documento} />');
     expect(acervo).toContain('Dados da análise');
     expect(acervo).toContain('detalheTitulo');
     expect(acervo).toContain('documentoIncompativel ? "Ver inconsistência"');
     expect(acervo).toContain('"Ver pendência"');
-    // CORREÇÃO (09/09/2026): o laudo por arquivo deixou de abrir INLINE por
-    // clique (o que esticava o card) -- agora é um ícone com painel
-    // flutuante ao passar o mouse (DetalheHoverIcon/HoverCard), que nunca
-    // altera a altura do card. `laudosExpandidos` não existe mais.
+    // O laudo por arquivo não abre mais inline nem em painel dependente de
+    // hover. O ícone abre um modal central, estável para mouse, teclado e touch.
     expect(acervo).not.toContain('const [laudosExpandidos');
     expect(acervo).not.toContain('setLaudosExpandidos(');
-    expect(acervo).toContain('<DetalheHoverIcon cor={detalheCor} titulo={detalheTitulo}>');
+    expect(acervo).not.toContain('DetalheHoverIcon');
+    expect(acervo).toContain('<DetalheAnaliseButton');
+    expect(acervo).toContain('setAnaliseModal({ resultado: resultadoInline, documento: doc');
+    expect(acervo).toContain('role="dialog"');
+    expect(acervo).toContain('aria-modal="true"');
+    expect(acervo).toContain('Pressione Esc ou clique fora para fechar.');
     const resultadoComponente = readFileSync(resolve(process.cwd(), 'client/src/components/documentos/ResultadoAnaliseDocumento.tsx'), 'utf8');
     expect(resultadoComponente).toContain('const detalhes = compacto ? []');
   });

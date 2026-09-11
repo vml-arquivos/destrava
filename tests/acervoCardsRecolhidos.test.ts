@@ -41,7 +41,7 @@ describe('cards do Acervo Documental recolhidos por padrão (título + selo de r
     expect(conteudo).toContain('texto: "Em análise"');
     // O selo fica na mesma linha do título, FORA de qualquer bloco condicionado a
     // `cardExpandido` -- por isso continua visível com o card recolhido.
-    expect(conteudo).toContain('<span className={`text-[9px] font-bold px-1.5 py-0.5 rounded-full shrink-0 ${CORES_RESUMO_CAMPO[resumoCampo.cor]}`}>{resumoCampo.texto}</span>');
+    expect(conteudo).toContain('<span className={`rounded-full px-1.5 py-0.5 text-[9px] font-bold leading-tight shrink-0 ${CORES_RESUMO_CAMPO[resumoCampo.cor]}`}>{resumoCampo.texto}</span>');
   });
 
   it('botão "Anexar", observação, StatusAnaliseSlot e lista de arquivos só aparecem com o card expandido', () => {
