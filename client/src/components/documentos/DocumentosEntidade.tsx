@@ -4,7 +4,6 @@ import { DOCUMENT_TYPE_CATALOG, documentAnalysisConfig, documentLabel } from "@s
 import { bucketDoRegimeTributarioHistorico, documentoSocietarioDispensadoPorMei, estadoVisualDocumento, slotCompativelComRegimeTributario, transicaoDeRegimeRecente, type BucketRegimeFiscal } from "@shared/documentalPresentation";
 import { ResultadoAnaliseDocumento } from "./ResultadoAnaliseDocumento";
 import { ProntidaoIdentidadeCard, type IdentidadeCnpj } from "../documentacao/DossieCreditoEmpresa";
-import { HoverCard, HoverCardContent, HoverCardTrigger } from "@/components/ui/hover-card";
 import { toast } from "sonner";
 import {
   AlertTriangle,
@@ -404,26 +403,11 @@ export function formatDate(value?: string | null) {
 // campos lidos ficam atrás de um clique, porque quem está conferindo não
 // precisa deles pra seguir. Quando há problema, o que aparece é o problema e o
 // que resolve.
-// CORREÇÃO (09/09/2026, pedido explícito do usuário, verbatim: "eu quero
-// tudo do mesmo tamanho todos os modais... quando tiver informações que
-// forem um pouco maiores, coloque aquele iconezinho de informações, onde
-// vamos passar o mouse e as informações vão aparecer, tirando o mouse ela
-// fecha novamente"): substitui o padrão anterior de "clique para expandir
-// INLINE" (que fazia o card crescer de verdade -- e, numa grade CSS Grid,
-// esticar a linha inteira junto com ele, deixando os cards vizinhos mais
-// altos também -- comportamento intencional da Rodada 30, mas que o
-// usuário agora pede para evitar sempre que possível) por um ícone de
-// informação com um painel flutuante (HoverCard do Radix, biblioteca já
-// usada neste projeto para outros tooltips -- `client/src/components/ui/hover-card.tsx`).
-// O painel abre ao passar o mouse (ou focar via teclado, suporte de
-// acessibilidade já embutido no HoverCard do Radix) e fecha ao tirar o
-// mouse, e é renderizado num portal -- fora do fluxo normal da página --
-// então NUNCA altera a altura do card que contém o ícone, nem a da linha
-// da grade, nem a dos cards vizinhos, mesmo com um painel de conteúdo
-// grande dentro dele. Componente único, reaproveitado em todo card desta
-// tela que precise mostrar mais dado do que cabe no espaço padrão -- não é
-// um caso especial de nenhum tipo de documento/seção.
-function DetalheHoverIcon({ cor, titulo, children }: { cor: "success" | "warning" | "destructive" | "primary"; titulo: string; children: ReactNode }) {
+// O resultado completo não fica inline nem depende de hover: o ícone abre um
+// modal central com largura, margem, rolagem e tipografia estáveis. Assim, a
+// grade continua nivelada e o conteúdo permanece legível em mouse, teclado e
+// touch, inclusive quando o diagnóstico é longo.
+function DetalheAnaliseButton({ cor, titulo, onClick }: { cor: "success" | "warning" | "destructive" | "primary"; titulo: string; onClick: () => void }) {
   const corClasses: Record<string, string> = {
     success: "border-success/40 bg-success/10 text-success hover:bg-success/20",
     warning: "border-warning/40 bg-warning/10 text-warning hover:bg-warning/20",
@@ -431,21 +415,40 @@ function DetalheHoverIcon({ cor, titulo, children }: { cor: "success" | "warning
     primary: "border-primary/40 bg-primary/10 text-primary hover:bg-primary/20",
   };
   return (
-    <HoverCard openDelay={100} closeDelay={100}>
-      <HoverCardTrigger asChild>
-        <button
-          type="button"
-          title={titulo}
-          className={`inline-flex h-4 w-4 shrink-0 items-center justify-center rounded-full border ${corClasses[cor]}`}
-        >
-          <Info className="h-2.5 w-2.5" />
-        </button>
-      </HoverCardTrigger>
-      <HoverCardContent className="w-96 max-h-[75vh] overflow-y-auto p-3 text-left" align="start">
-        <p className="mb-1.5 text-[10px] font-black uppercase tracking-wide text-muted-foreground">{titulo}</p>
-        {children}
-      </HoverCardContent>
-    </HoverCard>
+    <button
+      type="button"
+      title={titulo}
+      aria-label={`${titulo}. Abrir detalhes`}
+      onClick={onClick}
+      className={`inline-flex h-5 w-5 shrink-0 items-center justify-center rounded-full border transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 ${corClasses[cor]}`}
+    >
+      <Info className="h-3 w-3" />
+    </button>
+  );
+}
+
+function DetalheInfoToggle({ cor, titulo, children }: { cor: "success" | "warning" | "destructive" | "primary"; titulo: string; children: ReactNode }) {
+  const [aberto, setAberto] = useState(false);
+  const corClasses: Record<string, string> = {
+    success: "border-success/40 bg-success/10 text-success hover:bg-success/20",
+    warning: "border-warning/40 bg-warning/10 text-warning hover:bg-warning/20",
+    destructive: "border-destructive/40 bg-destructive/10 text-destructive hover:bg-destructive/20",
+    primary: "border-primary/40 bg-primary/10 text-primary hover:bg-primary/20",
+  };
+  return (
+    <div className="relative">
+      <button
+        type="button"
+        title={titulo}
+        aria-label={`${titulo}. Mostrar detalhes`}
+        aria-expanded={aberto}
+        onClick={() => setAberto((value) => !value)}
+        className={`inline-flex h-5 w-5 shrink-0 items-center justify-center rounded-full border transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 ${corClasses[cor]}`}
+      >
+        <Info className="h-3 w-3" />
+      </button>
+      {aberto && <div className="absolute right-0 top-7 z-30 w-72 max-w-[calc(100vw-2rem)] rounded-xl border border-border bg-card p-3 text-left shadow-xl">{children}</div>}
+    </div>
   );
 }
 
@@ -532,7 +535,7 @@ function StatusAnaliseSlot({ item, tipo, onReler, relendo }: { item?: { nome: st
           </span>
           <div className="flex shrink-0 items-center gap-1">
             {campos.length > 0 && (
-              <DetalheHoverIcon cor="success" titulo="Dados da análise">
+              <DetalheInfoToggle cor="success" titulo="Dados da análise">
                 <dl className="space-y-0.5">
                   {campos.map(({ chave, valor }) => (
                     <div key={chave} className="flex items-start justify-between gap-2 text-[9px]">
@@ -541,7 +544,7 @@ function StatusAnaliseSlot({ item, tipo, onReler, relendo }: { item?: { nome: st
                     </div>
                   ))}
                 </dl>
-              </DetalheHoverIcon>
+              </DetalheInfoToggle>
             )}
             {botaoReler}
           </div>
@@ -594,9 +597,9 @@ function StatusAnaliseSlot({ item, tipo, onReler, relendo }: { item?: { nome: st
         </span>
         <div className="flex shrink-0 items-center gap-1">
           {item.diagnostico && diagnosticoLongo && (
-            <DetalheHoverIcon cor={falhou ? "destructive" : "warning"} titulo="Ver detalhes">
+            <DetalheInfoToggle cor={falhou ? "destructive" : "warning"} titulo="Ver detalhes">
               <p className="text-[10px] leading-relaxed text-foreground">{item.diagnostico}</p>
-            </DetalheHoverIcon>
+            </DetalheInfoToggle>
           )}
           {botaoReler}
         </div>
@@ -809,6 +812,13 @@ function canPrint(doc: DocumentoArquivo) {
   return Boolean(doc.mime_type?.includes("pdf") || doc.mime_type?.startsWith("image/"));
 }
 
+type AnaliseModalState = {
+  resultado: Record<string, any>;
+  documento: DocumentoArquivo;
+  titulo: string;
+  cor: "success" | "warning" | "destructive" | "primary";
+};
+
 export default function DocumentosEntidade({
   entidadeTipo,
   entidadeId,
@@ -888,12 +898,9 @@ export default function DocumentosEntidade({
   // upload (agendarAnaliseRegraDocumental, server/routes/documentos.ts) e o
   // resultado (doc.resultado_validacao.analise_regra_documental) já chegava no
   // frontend, mas nunca era mostrado por completo -- só um resuminho de uma linha.
-  // CORREÇÃO (09/09/2026): o laudo completo por documento não usa mais um estado
-  // de "expandido/ocultar" clicável (que abria o laudo INLINE, esticando o card) --
-  // virou um ícone com painel flutuante ao passar o mouse (`DetalheHoverIcon`),
-  // que não precisa de estado nenhum no React (o próprio Radix HoverCard controla
-  // aberto/fechado por hover internamente). O estado `laudosExpandidos` que existia
-  // aqui foi removido junto -- não tem mais nenhum lugar que o leia.
+  // O laudo completo por documento não abre inline nem estica a grade: o ícone
+  // abre o modal central de análise, com leitura estável e controles próprios.
+  // O antigo estado `laudosExpandidos` foi removido porque não era necessário.
   // Descrição de cada campo (o que é o documento, pra que serve) e a dica extra do
   // Cartão CNPJ antes ficavam sempre visíveis, um parágrafo cheio em cada um dos
   // ~19 cards do checklist -- muita informação repetida ocupando a tela o tempo
@@ -965,6 +972,7 @@ export default function DocumentosEntidade({
   const [carregandoRelatorio, setCarregandoRelatorio] = useState(false);
   const [baixandoRelatorioPdf, setBaixandoRelatorioPdf] = useState(false);
   const [filtroRelatorio, setFiltroRelatorio] = useState("");
+  const [analiseModal, setAnaliseModal] = useState<AnaliseModalState | null>(null);
   // O relatório consolidado (seções 1 a 6, com o resultado documento a documento)
   // antes ficava sempre visível na própria página assim que carregado, empurrando
   // o checklist de anexação pra muito mais embaixo -- pedido explícito do usuário
@@ -972,6 +980,19 @@ export default function DocumentosEntidade({
   // dado já carregado (relatorioDocumental) fica em cache: fechar e reabrir o
   // modal não refaz a consulta, só alterna esta visibilidade.
   const [relatorioModalAberto, setRelatorioModalAberto] = useState(false);
+  useEffect(() => {
+    if (!analiseModal) return;
+    const fecharComEscape = (event: KeyboardEvent) => {
+      if (event.key === "Escape") setAnaliseModal(null);
+    };
+    const overflowAnterior = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    window.addEventListener("keydown", fecharComEscape);
+    return () => {
+      document.body.style.overflow = overflowAnterior;
+      window.removeEventListener("keydown", fecharComEscape);
+    };
+  }, [analiseModal]);
 
   const query = useMemo(() => {
     if (!entidadeId) return "";
@@ -1880,6 +1901,57 @@ export default function DocumentosEntidade({
         </div>
       </div>
 
+      {analiseModal && (
+        <div
+          className="fixed inset-0 z-[70] flex items-center justify-center bg-overlay/80 p-3 backdrop-blur-sm sm:p-5"
+          role="presentation"
+          onMouseDown={(event) => { if (event.target === event.currentTarget) setAnaliseModal(null); }}
+        >
+          <section
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="acervo-analise-modal-title"
+            className="flex max-h-[88vh] w-full max-w-3xl flex-col overflow-hidden rounded-2xl border border-border bg-card shadow-2xl"
+          >
+            <header className="flex shrink-0 items-start justify-between gap-3 border-b border-border bg-muted/40 px-4 py-3 sm:px-5">
+              <div className="min-w-0">
+                <div className="flex flex-wrap items-center gap-2">
+                  <p id="acervo-analise-modal-title" className="text-sm font-black text-foreground">{analiseModal.titulo}</p>
+                  <span className={`rounded-full px-2 py-0.5 text-[10px] font-black uppercase ${analiseModal.cor === "success" ? "bg-success/15 text-success" : analiseModal.cor === "destructive" ? "bg-destructive/10 text-destructive" : analiseModal.cor === "warning" ? "bg-warning/15 text-warning" : "bg-primary/10 text-primary"}`}>
+                    {analiseModal.cor === "success" ? "Validado" : analiseModal.cor === "destructive" ? "Incompatível" : analiseModal.cor === "warning" ? "Revisão necessária" : "Dados da análise"}
+                  </span>
+                </div>
+                <p className="mt-1 truncate text-[11px] font-semibold text-muted-foreground">{analiseModal.documento.nome_customizado || analiseModal.documento.nome_original}</p>
+                <p className="mt-0.5 text-[10px] text-muted-foreground">{documentLabel(analiseModal.documento.tipo_documento)} · leitura documental detalhada</p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setAnaliseModal(null)}
+                aria-label="Fechar detalhes da análise"
+                className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border border-border text-muted-foreground transition-colors hover:bg-card hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40"
+              >
+                <X className="h-4 w-4" />
+              </button>
+            </header>
+            <div className="min-h-0 flex-1 overflow-y-auto px-4 py-4 sm:px-5 sm:py-5">
+              <div className="mx-auto max-w-2xl">
+                <ResultadoAnaliseDocumento resultado={analiseModal.resultado} documento={analiseModal.documento} />
+              </div>
+            </div>
+            <footer className="flex shrink-0 items-center justify-between gap-3 border-t border-border bg-muted/30 px-4 py-3 sm:px-5">
+              <p className="text-[10px] text-muted-foreground">Pressione Esc ou clique fora para fechar.</p>
+              <button
+                type="button"
+                onClick={() => setAnaliseModal(null)}
+                className="inline-flex h-8 items-center justify-center rounded-lg bg-primary px-3 text-[11px] font-bold text-primary-foreground transition-colors hover:bg-primary/90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40"
+              >
+                Fechar
+              </button>
+            </footer>
+          </section>
+        </div>
+      )}
+
       {/* O relatório consolidado abre num modal próprio, por cima da tela --
           pedido explícito do usuário pra não empurrar o checklist de anexação
           pra baixo. O botão "Relatório da análise" (acima) continua buscando o
@@ -2348,7 +2420,7 @@ export default function DocumentosEntidade({
               filtragem por obrigatório/complementar (`slotsVisiveis`, condicionada ao
               marco de Atos da Junta aprovados/dispensados por MEI) e o botão "Ver
               documentos complementares" foram removidos. O que continua atrás de um
-              ícone (hover, não clique -- ver `DetalheHoverIcon`) é só o bloco de
+              ícone (clique -- abre o modal central de análise) é só o bloco de
               resultado da leitura DENTRO de cada card ("Dados da análise" por
               arquivo, ver `temResultadoInline` mais abaixo) -- nunca o card de anexo
               em si. */}
@@ -2606,7 +2678,7 @@ export default function DocumentosEntidade({
                     // card específico de crescer quando há mais dado para mostrar.
                     return (
                       <div key={tipo} className={`rounded-lg border p-2.5 space-y-2 ${satisfeitoPorOutro ? "border-success/20 bg-success/10/40" : "border-border bg-card shadow-sm shadow-slate-100/30"}`}>
-                        <div className="flex items-center justify-between gap-2">
+                        <div className={`flex gap-2 ${cardExpandido ? "flex-col" : "items-start justify-between"}`}>
                           <div className="min-w-0">
                             <div className="flex items-center gap-1.5 flex-wrap">
                               {/* CORREÇÃO (10/09/2026, pedido explícito do usuário: "coloque mais
@@ -2616,9 +2688,9 @@ export default function DocumentosEntidade({
                                   claro) para `text-foreground` (a cor de texto padrão do tema,
                                   mais escura/contrastada em claro e em escuro) -- mesmo peso
                                   `font-bold` de antes, só a cor muda. */}
-                              <p className="text-xs font-bold text-foreground leading-tight">{documentoSlot.titulo}</p>
-                              {dispensadoPorMei && docsTipo.length === 0 && !satisfeitoPorOutro && <span className="text-[9px] font-bold px-1.5 py-0.5 rounded-full bg-success/20 text-success shrink-0">DISPENSADO (MEI)</span>}
-                              {!dispensadoPorMei && (documentoSlot.obrigatorio || destaqueConfirmacaoRegime) && !satisfeitoPorOutro && <span className="text-[9px] font-bold px-1.5 py-0.5 rounded-full bg-brand-navy text-primary-foreground shrink-0">OBRIGATÓRIO NA ETAPA</span>}
+                              <p className="text-[11px] font-semibold leading-snug text-foreground">{documentoSlot.titulo}</p>
+                              {dispensadoPorMei && docsTipo.length === 0 && !satisfeitoPorOutro && <span className="rounded-full bg-success/20 px-1.5 py-0.5 text-[8px] font-bold leading-tight text-success shrink-0">DISPENSADO (MEI)</span>}
+                              {!dispensadoPorMei && (documentoSlot.obrigatorio || destaqueConfirmacaoRegime) && !satisfeitoPorOutro && <span className="rounded-full bg-brand-navy px-1.5 py-0.5 text-[8px] font-bold leading-tight text-primary-foreground shrink-0">OBRIGATÓRIO NA ETAPA</span>}
                               {(documentoSlot.descricao || tipo === "cartao_cnpj") && (
                                 <button
                                   type="button"
@@ -2634,13 +2706,13 @@ export default function DocumentosEntidade({
                                   selo único de resultado, sempre visível mesmo com o card
                                   recolhido -- é o resumo que substitui precisar abrir o card só
                                   pra saber se está tudo certo com este tipo de documento. */}
-                              <span className={`text-[9px] font-bold px-1.5 py-0.5 rounded-full shrink-0 ${CORES_RESUMO_CAMPO[resumoCampo.cor]}`}>{resumoCampo.texto}</span>
+                              <span className={`rounded-full px-1.5 py-0.5 text-[9px] font-bold leading-tight shrink-0 ${CORES_RESUMO_CAMPO[resumoCampo.cor]}`}>{resumoCampo.texto}</span>
                             </div>
-                            <p className="text-[10px] text-muted-foreground mt-0.5">
+                            <p className="mt-0.5 text-[9px] leading-4 text-muted-foreground">
                               {exigeVinculoSocio ? `${sociosComDocumento}/${socios.length} sócio(s) com documento · ` : ""}{docsTipo.length} arquivo(s) no contexto atual
                             </p>
                           </div>
-                          <div className="flex items-center gap-1 shrink-0">
+                          <div className={`flex min-w-0 max-w-full flex-wrap items-center justify-end gap-1 ${cardExpandido ? "w-full border-t border-border/70 pt-1.5" : "shrink-0"}`}>
                             {/* Já coberto por outro documento (ex: CND cobre CADIN/PGFN) -- não
                                 faz sentido oferecer anexar algo que não é mais necessário. O
                                 botão "Anexar" só aparece com o card expandido -- recolhido,
@@ -2661,12 +2733,12 @@ export default function DocumentosEntidade({
                                   onChange={(e) => setTipoIdentidadeSelecionadoPorSlot((prev) => ({ ...prev, [chaveSlot]: e.target.value }))}
                                   title="Qual documento você vai anexar? Opcional -- ajuda a conferência automática, mas não é obrigatório."
                                   disabled={uploading || !!motivoBloqueio || (exigeVinculoSocio && !socioVinculado)}
-                                  className="h-8 rounded-lg border border-input bg-card px-1.5 text-[10px] font-semibold text-muted-foreground shrink-0 disabled:opacity-50"
+                                  className="h-7 max-w-full rounded-md border border-input bg-card px-1.5 text-[9px] font-semibold text-muted-foreground shrink-0 disabled:opacity-50"
                                 >
                                   {OPCOES_TIPO_IDENTIDADE_SOCIO.map((opcao) => <option key={opcao.value} value={opcao.value}>{opcao.label}</option>)}
                                 </select>
                               )}
-                              <label title={motivoBloqueio || undefined} className={`h-8 inline-flex items-center justify-center gap-1 text-[11px] font-semibold px-3 rounded-lg transition-colors shrink-0 ${motivoBloqueio || (exigeVinculoSocio && !socioVinculado) ? "bg-border text-primary-foreground cursor-not-allowed" : "bg-primary text-primary-foreground cursor-pointer hover:bg-primary/90"}`}>
+                              <label title={motivoBloqueio || undefined} className={`inline-flex h-7 shrink-0 items-center justify-center gap-1 rounded-md px-2 text-[10px] font-semibold transition-colors ${motivoBloqueio || (exigeVinculoSocio && !socioVinculado) ? "cursor-not-allowed bg-border text-primary-foreground" : "cursor-pointer bg-primary text-primary-foreground hover:bg-primary/90"}`}>
                                 {uploading ? <Loader2 className="w-3 h-3 animate-spin" /> : <Upload className="w-3 h-3" />} Anexar
                                 <input type="file" accept=".pdf,.jpg,.jpeg,.png,.webp,.xlsx,.csv,.docx" className="hidden" disabled={uploading || !!motivoBloqueio || (exigeVinculoSocio && !socioVinculado)} onChange={(e) => { const file = e.target.files?.[0]; if (file) enviar(tipo, file, socioVinculado, tipo === "documento_socio" ? (tipoIdentidadeSelecionadoPorSlot[chaveSlot] || undefined) : undefined); e.currentTarget.value = ""; }} />
                               </label>
@@ -2677,7 +2749,7 @@ export default function DocumentosEntidade({
                                 type="button"
                                 onClick={() => setDetalhesAbertos((prev) => ({ ...prev, [chaveSlot]: !detalhesAbertosNoCard }))}
                                 title={detalhesAbertosNoCard ? "Ocultar detalhes secundários" : "Mostrar detalhes secundários"}
-                                className={`inline-flex h-8 items-center justify-center gap-1 rounded-lg border px-2 text-[10px] font-semibold shrink-0 ${detalhesAbertosNoCard ? "border-primary/30 bg-primary/10 text-primary" : "border-input text-muted-foreground hover:border-primary/30 hover:text-primary"}`}
+                                className={`inline-flex h-7 shrink-0 items-center justify-center gap-1 rounded-md border px-1.5 text-[9px] font-semibold ${detalhesAbertosNoCard ? "border-primary/30 bg-primary/10 text-primary" : "border-input text-muted-foreground hover:border-primary/30 hover:text-primary"}`}
                               >
                                 <Info className="h-3 w-3" /> {detalhesAbertosNoCard ? "Ocultar" : "Detalhes"}
                               </button>
@@ -2686,7 +2758,7 @@ export default function DocumentosEntidade({
                               type="button"
                               onClick={() => setCardsExpandidos((prev) => ({ ...prev, [chaveExpansaoCard]: !cardExpandido }))}
                               title={cardExpandido ? "Recolher" : "Expandir para anexar/ver detalhes"}
-                              className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border border-input text-muted-foreground hover:border-primary/30 hover:text-primary"
+                              className="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-md border border-input text-muted-foreground hover:border-primary/30 hover:text-primary"
                             >
                               <ChevronDown className={`h-4 w-4 transition-transform ${cardExpandido ? "rotate-180" : ""}`} />
                             </button>
@@ -2841,17 +2913,15 @@ export default function DocumentosEntidade({
                                       {mostrarStatusLinha && doc.validado && !validadoComEvidencia && tipoTemAnaliseAutomatica && <span title="Ainda sem leitura documental conclusiva" className="text-warning shrink-0 text-[9px]">análise pendente</span>}
                                       {mostrarStatusLinha && documentoIncompativel && <span className="shrink-0 rounded-full bg-destructive/10 px-1.5 py-0.5 text-[8px] font-bold text-destructive">Documento incompatível</span>}
                                       {mostrarStatusLinha && leituraPrecisaAtencao && <span className="shrink-0 rounded-full bg-warning/10 px-1.5 py-0.5 text-[8px] font-bold text-warning">Revisão necessária</span>}
-                                      {/* CORREÇÃO (09/09/2026): o link de texto "Dados da análise"/"Ver
-                                          inconsistência"/"Ver pendência" que ficava numa linha própria,
-                                          abaixo do nome do arquivo, e que ao clicar abria o laudo completo
-                                          INLINE (esticando o card, e com ele a linha inteira da grade) virou
-                                          este ícone -- o painel completo (ResultadoAnaliseDocumento) aparece
-                                          num HoverCard flutuante ao passar o mouse, nunca altera a altura do
-                                          card. Ver DetalheHoverIcon para a explicação completa. */}
+                                      {/* O ícone é mantido pequeno na linha, mas o resultado completo abre
+                                          num modal central. Isso evita painel cortado em cards estreitos e
+                                          mantém a leitura confortável em mouse, teclado e touch. */}
                                       {temResultadoInline && (
-                                        <DetalheHoverIcon cor={detalheCor} titulo={detalheTitulo}>
-                                          <ResultadoAnaliseDocumento resultado={resultadoInline} documento={doc} compacto />
-                                        </DetalheHoverIcon>
+                                        <DetalheAnaliseButton
+                                          cor={detalheCor}
+                                          titulo={detalheTitulo}
+                                          onClick={() => setAnaliseModal({ resultado: resultadoInline, documento: doc, titulo: detalheTitulo, cor: detalheCor })}
+                                        />
                                       )}
                                     </div>
                                     <p className="text-[9px] text-muted-foreground truncate">{formatDate(doc.criado_em)}</p>
