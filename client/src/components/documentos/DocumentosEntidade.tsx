@@ -913,6 +913,10 @@ export default function DocumentosEntidade({
   // já usado para `descricaoVisivel` acima -- estado só de UI, nada de
   // negócio muda.
   const [cardsExpandidos, setCardsExpandidos] = useState<Record<string, boolean>>({});
+  // Controles secundários ficam recolhidos dentro do card aberto. O vínculo do
+  // documento ao sócio e o estado do campo continuam sempre visíveis, pois são
+  // decisões operacionais; esta camada é apenas visual.
+  const [detalhesAbertos, setDetalhesAbertos] = useState<Record<string, boolean>>({});
   const [pipeline, setPipeline] = useState<any>(null);
   // Popover "Detalhes da pendência" do bloco compacto de confirmação de regime
   // tributário -- pedido explícito do usuário para tirar o texto permanente
@@ -2569,6 +2573,7 @@ export default function DocumentosEntidade({
                     };
                     const chaveExpansaoCard = chaveSlot;
                     const cardExpandido = cardsExpandidos[chaveExpansaoCard] === true;
+                    const detalhesAbertosNoCard = detalhesAbertos[chaveSlot] === true;
                     // CORREÇÃO (Rodada 30, 02/09/2026, print real da tela em produção,
                     // pedido explícito do usuário: "na visualização, com todos
                     // encolhidos, fechado, tem que estar tudo mesmo padrão, tudo
@@ -2667,6 +2672,16 @@ export default function DocumentosEntidade({
                               </label>
                               </>
                             )}
+                            {cardExpandido && (
+                              <button
+                                type="button"
+                                onClick={() => setDetalhesAbertos((prev) => ({ ...prev, [chaveSlot]: !detalhesAbertosNoCard }))}
+                                title={detalhesAbertosNoCard ? "Ocultar detalhes secundários" : "Mostrar detalhes secundários"}
+                                className={`inline-flex h-8 items-center justify-center gap-1 rounded-lg border px-2 text-[10px] font-semibold shrink-0 ${detalhesAbertosNoCard ? "border-primary/30 bg-primary/10 text-primary" : "border-input text-muted-foreground hover:border-primary/30 hover:text-primary"}`}
+                              >
+                                <Info className="h-3 w-3" /> {detalhesAbertosNoCard ? "Ocultar" : "Detalhes"}
+                              </button>
+                            )}
                             <button
                               type="button"
                               onClick={() => setCardsExpandidos((prev) => ({ ...prev, [chaveExpansaoCard]: !cardExpandido }))}
@@ -2715,7 +2730,7 @@ export default function DocumentosEntidade({
                             {docsSemSocio.length} arquivo(s) legado(s) ainda sem identificação de sócio. Eles foram preservados e podem ser reenviados no nome correto.
                           </p>
                         )}
-                        <div className={exigeNome ? "grid grid-cols-1 sm:grid-cols-2 gap-2" : ""}>
+                        {detalhesAbertosNoCard && <div className={exigeNome ? "grid grid-cols-1 sm:grid-cols-2 gap-2" : ""}>
                           {exigeNome && (
                             <>
                               <input
@@ -2746,13 +2761,13 @@ export default function DocumentosEntidade({
                               </span>
                             )}
                           </div>
-                        </div>
-                        <StatusAnaliseSlot
+                        </div>}
+                        {detalhesAbertosNoCard && <StatusAnaliseSlot
                           item={analiseDoSlot as any}
                           tipo={tipo}
                           onReler={entidadeTipo === "empresa" && empresaId ? () => void relerDocumentoIdentidade(tipo) : undefined}
                           relendo={relendoTipoIdentidade === tipo}
-                        />
+                        />}
                         {(descricaoVisivel[tipo] || algumArquivoIncompativelNoSlot) && documentoSlot.descricao && <p className="text-[11px] text-muted-foreground bg-muted border border-border rounded-md px-2.5 py-1.5">{documentoSlot.descricao}</p>}
                         {descricaoVisivel[tipo] && tipo === "cartao_cnpj" && <p className="text-[11px] text-primary bg-primary/10 border border-primary/20 rounded-md px-2.5 py-1.5">O usuário só anexa. O sistema/IA deverá identificar emissão, CNPJ, matriz/filial, abertura, CNAE, natureza, porte, endereço e situação cadastral para o relatório.</p>}
                         {docsTipo.length > 0 && (
@@ -2785,6 +2800,7 @@ export default function DocumentosEntidade({
                                   && estadoDocumento === "aprovado";
                                 const validadoComEvidencia = (doc.validado === true || validacaoDocumentalConcluida)
                                   && (!tipoTemAnaliseAutomatica || validacaoDocumentalConcluida);
+                                const mostrarStatusLinha = docsTipo.length > 1;
                                 const detalheCor = laudoErro || documentoIncompativel ? "destructive" as const : leituraPrecisaAtencao ? "warning" as const : "success" as const;
                                 const detalheTitulo = documentoIncompativel ? "Ver inconsistência" : leituraPrecisaAtencao ? "Ver pendência" : "Dados da análise";
                                 return (
@@ -2821,10 +2837,10 @@ export default function DocumentosEntidade({
                                           Gerado pela Destrava
                                         </span>
                                       )}
-                                      {validadoComEvidencia && <span title="Validado após leitura documental" className="inline-flex items-center gap-0.5 text-success shrink-0 text-[8px] font-bold"><CheckCircle className="w-2.5 h-2.5" /> OK — validado</span>}
-                                      {doc.validado && !validadoComEvidencia && tipoTemAnaliseAutomatica && <span title="Ainda sem leitura documental conclusiva" className="text-warning shrink-0 text-[9px]">análise pendente</span>}
-                                      {documentoIncompativel && <span className="shrink-0 rounded-full bg-destructive/10 px-1.5 py-0.5 text-[8px] font-bold text-destructive">Documento incompatível</span>}
-                                      {leituraPrecisaAtencao && <span className="shrink-0 rounded-full bg-warning/10 px-1.5 py-0.5 text-[8px] font-bold text-warning">Revisão necessária</span>}
+                                      {mostrarStatusLinha && validadoComEvidencia && <span title="Validado após leitura documental" className="inline-flex items-center gap-0.5 text-success shrink-0 text-[8px] font-bold"><CheckCircle className="w-2.5 h-2.5" /> OK — validado</span>}
+                                      {mostrarStatusLinha && doc.validado && !validadoComEvidencia && tipoTemAnaliseAutomatica && <span title="Ainda sem leitura documental conclusiva" className="text-warning shrink-0 text-[9px]">análise pendente</span>}
+                                      {mostrarStatusLinha && documentoIncompativel && <span className="shrink-0 rounded-full bg-destructive/10 px-1.5 py-0.5 text-[8px] font-bold text-destructive">Documento incompatível</span>}
+                                      {mostrarStatusLinha && leituraPrecisaAtencao && <span className="shrink-0 rounded-full bg-warning/10 px-1.5 py-0.5 text-[8px] font-bold text-warning">Revisão necessária</span>}
                                       {/* CORREÇÃO (09/09/2026): o link de texto "Dados da análise"/"Ver
                                           inconsistência"/"Ver pendência" que ficava numa linha própria,
                                           abaixo do nome do arquivo, e que ao clicar abria o laudo completo
