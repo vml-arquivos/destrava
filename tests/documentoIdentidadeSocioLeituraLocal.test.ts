@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { classificarDocumentoDeterministico } from '../server/services/classificadorDocumentalCentral';
 import { analisarTextoDocumentoLocal } from '../server/services/extracaoDocumentalLocal';
 import { normalizarDocumentoCatalogado, tipoLeitorLocalDocumentoCatalogado } from '../server/services/analiseDocumentalEspecializada';
+import { documentAnalysisConfig, getDocumentCatalogEntry } from '../shared/documentTypes';
 
 // CORREÇÃO (11/09/2026, pedido explícito do usuário com uma CNH real
 // anexada: "mesmo colocando o cnh [...] ele está pedindo revisão [...] tem
@@ -141,5 +142,74 @@ describe('zero regressão -- um documento claramente não relacionado continua i
     const texto = 'INSTRUMENTO PARTICULAR DE CONTRATO SOCIAL\nContratante e contratado resolvem constituir sociedade empresária limitada.';
     const r = analisarTextoDocumentoLocal('documento_identidade_socio', texto, 'documento_socio');
     expect(r.dados.documento_compativel).toBe(false);
+  });
+});
+
+// CORREÇÃO (11/09/2026, rodada seguinte -- pedido explícito do usuário,
+// reforçando um pedido anterior deixado pendente: "o documento que eu falei
+// que era pra ter o nome na hora de anexar, não não ainda não tem o, como
+// selecionar qual o documento que está sendo anexado"): o leitor local
+// (`parseDocumentoIdentidadeSocio`, acima) já sabia DETECTAR um passaporte
+// pelo próprio texto (`ehPassaporte`), mas o passaporte nunca tinha entrada
+// própria no catálogo (`shared/documentTypes.ts`), nunca era aceito pelo
+// classificador central (`classificadorDocumentalCentral.ts` só reconhecia
+// RG/CPF/CNH como "DOCUMENTO_IDENTIDADE"), e o slot de upload do sócio
+// (`DocumentosEntidade.tsx`) não tinha "passaporte" em `matchTipos` -- então
+// um passaporte real, mesmo lido corretamente pelo motor local, nunca
+// conseguia de fato satisfazer a pendência/ser aceito de ponta a ponta.
+// Este bloco cobre a nova entrada de catálogo e o novo marcador central.
+const PASSAPORTE_TEXTO_SINTETICO = `REPÚBLICA FEDERATIVA DO BRASIL
+MINISTÉRIO DAS RELAÇÕES EXTERIORES
+PASSAPORTE / PASSPORT / PASSEPORT
+Nome Completo
+ANA CAROLINA FERREIRA LIMA
+Número do Passaporte
+FZ123456
+Data de Nascimento
+12/03/1988
+Data de Validade
+01/06/2032`;
+
+describe('parseDocumentoIdentidadeSocio -- Passaporte (documento sintético, mesmo leitor)', () => {
+  it('reconhece um passaporte como compatível, extrai nome e número do documento (sem exigir CPF -- passaporte brasileiro não imprime CPF)', () => {
+    const r = analisarTextoDocumentoLocal('documento_identidade_socio', PASSAPORTE_TEXTO_SINTETICO, 'documento_socio');
+    expect(r.dados.documento_compativel).toBe(true);
+    expect(r.dados.tipo_detectado_local).toBe('PASSAPORTE');
+    expect(r.dados.nome).toBe('ANA CAROLINA FERREIRA LIMA');
+    expect(r.dados.numero_documento).toBe('FZ123456');
+    expect(r.dados.cpf).toBeFalsy();
+  });
+
+  it('status_documental final é DADO_COMPROVADO para o tipo específico "passaporte" (perfil próprio: nome + numero_documento, sem exigir CPF)', () => {
+    const leitura = analisarTextoDocumentoLocal('documento_identidade_socio', PASSAPORTE_TEXTO_SINTETICO, 'passaporte');
+    const extraidos = { ...leitura.dados, confianca: leitura.confianca, __texto_local: PASSAPORTE_TEXTO_SINTETICO };
+    const normalizado = normalizarDocumentoCatalogado(extraidos, 'passaporte');
+    expect(normalizado.dados.status_documental).toBe('DADO_COMPROVADO');
+    expect(normalizado.dados.campos_essenciais_ausentes).toEqual([]);
+  });
+
+  it('classificação central: identidade IDENTIFICADO como PASSAPORTE quando anexado no slot genérico "documento_socio" (não fica mais incompatível)', () => {
+    const classificacao = classificarDocumentoDeterministico({ tipoEsperado: 'documento_socio', texto: PASSAPORTE_TEXTO_SINTETICO });
+    expect(classificacao.identidade_status).toBe('IDENTIFICADO');
+    expect(classificacao.tipo_detectado).toBe('PASSAPORTE');
+  });
+
+  it('classificação central: também IDENTIFICADO quando o usuário já seleciona "Passaporte" especificamente (tipoEsperado="passaporte")', () => {
+    const classificacao = classificarDocumentoDeterministico({ tipoEsperado: 'passaporte', texto: PASSAPORTE_TEXTO_SINTETICO });
+    expect(classificacao.identidade_status).toBe('IDENTIFICADO');
+    expect(classificacao.tipo_detectado).toBe('PASSAPORTE');
+  });
+
+  it('classificação central: pega o caso real de o usuário selecionar "Passaporte" no seletor e anexar, por engano, uma CNH', () => {
+    const classificacao = classificarDocumentoDeterministico({ tipoEsperado: 'passaporte', texto: CNH_TEXTO_REAL });
+    expect(classificacao.identidade_status).toBe('INCOMPATIVEL');
+    expect(classificacao.tipo_detectado).toBe('CNH');
+  });
+
+  it('catálogo documental: "passaporte" tem entrada própria, é anexável e tem configuração de análise automática', () => {
+    const item = getDocumentCatalogEntry('passaporte');
+    expect(item?.uploadavel).toBe(true);
+    expect(item?.escopo).toBe('socio');
+    expect(documentAnalysisConfig('passaporte')).not.toBeNull();
   });
 });

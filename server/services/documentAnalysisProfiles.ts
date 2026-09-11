@@ -261,6 +261,10 @@ registrarPerfis(['ccmei'], ['cnpj', 'nome_empresarial', 'titular', 'condicao_mei
 registrarPerfis(['documento_socio', 'rg'], ['nome', 'numero_documento'], ['cpf', 'data_nascimento', 'data_emissao', 'orgao_emissor', 'uf_emissor', 'filiacao', 'assinatura']);
 registrarPerfis(['cpf'], ['nome', 'cpf', 'situacao_cadastral'], ['data_nascimento', 'data_inscricao', 'data_emissao', 'codigo_autenticidade']);
 registrarPerfis(['cnh'], ['nome', 'cpf', 'numero_documento', 'data_validade'], ['data_nascimento', 'categoria_cnh', 'numero_registro', 'data_emissao', 'orgao_emissor', 'assinatura']);
+// CORREÇÃO (11/09/2026, rodada seguinte): passaporte brasileiro comum não
+// imprime o CPF do titular -- por isso, ao contrário da CNH, CPF fica como
+// campo adicional (não obrigatório), no mesmo espírito do perfil de RG.
+registrarPerfis(['passaporte'], ['nome', 'numero_documento'], ['cpf', 'data_nascimento', 'data_emissao', 'data_validade', 'orgao_emissor', 'assinatura']);
 registrarPerfis(['comprovante_residencia'], ['nome_titular', 'endereco_completo', 'data_emissao'], ['cpf', 'cnpj', 'emissor', 'tipo_comprovante', 'mes_referencia', 'cep']);
 registrarPerfis(['imposto_renda'], ['cpf', 'ano_calendario', 'titular'], ['recibo_ou_protocolo', 'data_transmissao', 'rendimentos', 'bens_direitos', 'dividas', 'imposto', 'retificacao']);
 registrarPerfis(['recibo_irpf'], ['cpf', 'ano_calendario', 'recibo_ou_protocolo'], ['titular', 'data_transmissao', 'retificacao']);

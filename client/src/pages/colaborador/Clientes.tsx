@@ -1120,7 +1120,7 @@ export default function Clientes() {
                   entidadeId={getApiId(clienteSelecionado)}
                   clientePfId={isClientePF(clienteSelecionado) ? getApiId(clienteSelecionado) : undefined}
                   tiposPermitidos={isClientePF(clienteSelecionado)
-                    ? ["cpf", "rg", "cnh", "comprovante_residencia", "imposto_renda", "outros"]
+                    ? ["cpf", "rg", "cnh", "passaporte", "comprovante_residencia", "imposto_renda", "outros"]
                     : ["comprovante_faturamento", "extrato_bancario", "certidao", "procuracao", "outros"]}
                   titulo={isClientePF(clienteSelecionado) ? "Documentos do Cliente PF" : "Documentos do Lead"}
                   permitirUpload

@@ -169,6 +169,13 @@ function detectarTipo(texto: string): { tipo: TipoDetectadoDocumental; evidencia
     ['CNH', /carteira nacional de habilitacao|permissao para dirigir/, 'CNH', 0.97],
     ['RG', /registro geral|carteira de identidade|secretaria de seguranca publica/, 'RG', 0.91],
     ['CPF', /cadastro de pessoas fisicas|comprovante de situacao cadastral no cpf/, 'CPF', 0.94],
+    // CORREÇÃO (11/09/2026, rodada seguinte -- pedido explícito do usuário
+    // sobre o seletor de tipo de documento na hora de anexar): faltava um
+    // marcador para Passaporte -- documentos reais desse tipo caíam sempre
+    // em NAO_IDENTIFICADO neste classificador central, mesmo quando o motor
+    // local (`extracaoDocumentalLocal.ts`) já reconhecia e lia o passaporte
+    // corretamente. Mesmo padrão de marcador textual usado ali.
+    ['PASSAPORTE', /\bpassaporte\b|republica federativa do brasil.{0,160}passport|documento de viagem/, 'Passaporte', 0.90],
     ['CERTIDAO_CASAMENTO', /certidao de casamento|registro civil.{0,100}casamento/, 'Certidão de casamento', 0.96],
     ['CERTIDAO_NASCIMENTO', /certidao de nascimento|registro civil.{0,100}nascimento/, 'Certidão de nascimento', 0.96],
     ['AVERBACAO_DIVORCIO', /averbacao.{0,100}divorcio|divorcio averbado/, 'Averbação de divórcio', 0.94],
@@ -267,7 +274,7 @@ function tipoEsperadoCanonico(tipoEsperado: string): string {
   const familias: Record<string, string> = {
     cartao_cnpj: 'CARTAO_CNPJ', qsa: 'QSA', atos_junta_comercial: 'ATOS_JUNTA_COMERCIAL',
     contrato_social: 'CONTRATO_SOCIAL', alteracao_contratual: 'ALTERACAO_CONTRATUAL', requerimento_empresario: 'REQUERIMENTO_EMPRESARIO', estatuto: 'ESTATUTO', ata: 'ATA', nire: 'ATOS_JUNTA_COMERCIAL',
-    registro_cartorio_pj: 'REGISTRO_CARTORIO_PJ', procuracao: 'PROCURACAO', registro_oab: 'REGISTRO_OAB', documento_socio: 'DOCUMENTO_IDENTIDADE', rg: 'RG', cpf: 'CPF', cnh: 'CNH',
+    registro_cartorio_pj: 'REGISTRO_CARTORIO_PJ', procuracao: 'PROCURACAO', registro_oab: 'REGISTRO_OAB', documento_socio: 'DOCUMENTO_IDENTIDADE', rg: 'RG', cpf: 'CPF', cnh: 'CNH', passaporte: 'PASSAPORTE',
     comprovante_residencia: 'COMPROVANTE_RESIDENCIA', imposto_renda: 'IRPF', recibo_irpf: 'RECIBO_IRPF', certidao_casamento: 'CERTIDAO_CASAMENTO', certidao_nascimento: 'CERTIDAO_NASCIMENTO', averbacao_divorcio: 'AVERBACAO_DIVORCIO', certidao_obito: 'CERTIDAO_OBITO', cnd_rfb_cnpj: 'CND', cnd_rfb_cpf: 'CND',
     crf_fgts: 'CRF_FGTS', cndt: 'CNDT', cnd_estadual: 'CND_ESTADUAL', cnd_municipal: 'CND_MUNICIPAL',
     simples_nacional: 'SIMPLES_NACIONAL', pgmei: 'PGMEI', das_mei: 'DAS_MEI', defis: 'DEFIS', dasn_simei: 'DASN_SIMEI', ccmei: 'CCMEI',
@@ -292,7 +299,18 @@ function autorizado(tipoEsperado: string, tipoDetectado: TipoDetectadoDocumental
   // trazer no título tanto PGFN quanto CND/CPEND.
   if (tipoEsperado === 'CND') return ['CND', 'CPEND'].includes(tipoDetectado);
   if (tipoEsperado === 'PGFN') return tipoDetectado === 'PGFN';
-  if (tipoEsperado === 'DOCUMENTO_IDENTIDADE') return ['RG', 'CPF', 'CNH'].includes(tipoDetectado);
+  // CORREÇÃO (11/09/2026, rodada seguinte): Passaporte é documento de
+  // identidade válido tanto quanto RG/CPF/CNH -- faltava aqui, então um
+  // passaporte genuíno anexado no slot genérico "Documento de identificação
+  // do sócio" era classificado incompatível. Só se aplica ao slot GENÉRICO
+  // (tipo ainda não especificado pelo usuário) -- quando o sócio já
+  // seleciona explicitamente RG/CNH/Passaporte no novo seletor da tela de
+  // upload, tipoEsperado passa a ser esse tipo específico e a comparação
+  // exata no topo desta função (`tipoEsperado === tipoDetectado`) continua
+  // valendo sozinha, exatamente como já acontecia entre RG/CNH/CPF antes
+  // desta rodada -- útil justamente para pegar o caso real de o usuário
+  // selecionar "Passaporte" e anexar, por engano, um RG.
+  if (tipoEsperado === 'DOCUMENTO_IDENTIDADE') return ['RG', 'CPF', 'CNH', 'PASSAPORTE'].includes(tipoDetectado);
   if (tipoEsperado === 'CERTIDAO') return ['CND', 'CPEND', 'CNDT', 'CND_ESTADUAL', 'CND_MUNICIPAL'].includes(tipoDetectado);
   if (tipoEsperado === 'CONTRATO_GERAL') return ['CONTRATO_GERAL', 'CONTRATO_PRESTACAO_SERVICOS', 'CONTRATO_ASSESSORIA'].includes(tipoDetectado);
   // CORREÇÃO (09/09/2026, Rodada 09/09 parte 8 -- pedido explícito do usuário:

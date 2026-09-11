@@ -2320,6 +2320,49 @@ export class AnaliseDocumentalService {
     return { empresa, socios: sociosSincronizados, documento };
   }
 
+  // CORREÇÃO (11/09/2026, rodada seguinte -- pedido explícito do usuário:
+  // "não é usar o contrato social como base, é usar os qualquer os
+  // documentos, os dados que tenha na empresa pra validar os dados do
+  // documento do sócio"): como a sincronização gratuita do QSA
+  // (`socios_empresa`) normalmente não traz o CPF do sócio, o cruzamento de
+  // identidade (`validarIdentidadeSocioExtraida`) precisa de uma fonte de
+  // apoio adicional. Busca o laudo mais recente de CADA outro documento já
+  // enviado e já analisado para o MESMO `socio_id` (nunca de outro sócio, e
+  // nunca o próprio arquivo sendo analisado agora) -- é o mesmo vínculo já
+  // usado pelo Acervo Documental para agrupar os documentos por sócio. Uma
+  // falha aqui nunca pode derrubar a análise do documento principal: se a
+  // consulta falhar, a validação de identidade simplesmente segue sem essa
+  // fonte de apoio (exatamente como se nenhum documento anterior existisse).
+  private async carregarDocumentosAnterioresDoSocio(
+    empresaId: string,
+    socioId: string | null,
+    arquivoIdAtual: string,
+  ): Promise<Array<{ tipo_documento: string | null; dados: any }>> {
+    if (!socioId) return [];
+    try {
+      const { rows } = await this.db.query(
+        `SELECT DISTINCT ON (d.id) d.id AS arquivo_id, d.tipo_documento, e.resultado
+           FROM public.documentos_arquivos d
+           JOIN public.documentos_extracoes_ia e ON e.arquivo_id = d.id
+          WHERE d.socio_id = $1
+            AND d.id <> $2
+            AND (d.empresa_id = $3 OR (d.entidade_tipo = 'empresa' AND d.entidade_id = $3))
+            AND d.excluido_em IS NULL
+            AND COALESCE(d.status, 'ativo') <> 'excluido'
+            AND e.status IN ('concluido', 'revisao_humana')
+          ORDER BY d.id, e.processado_em DESC NULLS LAST, e.atualizado_em DESC, e.criado_em DESC`,
+        [socioId, arquivoIdAtual, empresaId],
+      );
+      return (rows || []).map((row: any) => ({
+        tipo_documento: row.tipo_documento || null,
+        dados: (row.resultado && typeof row.resultado === 'object' ? row.resultado.dados_extraidos : null) || {},
+      }));
+    } catch (error: any) {
+      console.warn('[Identidade sócio] Documentos anteriores do mesmo sócio indisponíveis; validação segue só com o QSA:', error?.message || error);
+      return [];
+    }
+  }
+
   /**
    * Despacho único usado por upload e reprocessamento. Manter a escolha do
    * motor aqui impede que o backfill produza um laudo genérico diferente do
@@ -2456,8 +2499,11 @@ export class AnaliseDocumentalService {
     // aplica aos tipos "de sócio"; para os demais tipos catalogados
     // (empresa), o comportamento permanece idêntico ao de antes.
     const documentoDeSocio = ['documento_socio', 'rg', 'cnh', 'cpf', 'passaporte', 'imposto_renda', 'recibo_irpf'].includes(tipoCanonico);
+    const documentosAnterioresDoSocio = documentoDeSocio
+      ? await this.carregarDocumentosAnterioresDoSocio(empresaId, documento.socio_id || null, arquivoId)
+      : [];
     const validacaoSocio = documentoDeSocio
-      ? validarIdentidadeSocioExtraida(socios, normalizado.dados, documento.socio_id || null, catalogo.nome || tipoDocumento)
+      ? validarIdentidadeSocioExtraida(socios, normalizado.dados, documento.socio_id || null, catalogo.nome || tipoDocumento, documentosAnterioresDoSocio)
       : { dados: {}, alertas: [] };
     const dadosFinais = { ...normalizado.dados, ...validacaoSocio.dados };
     const alertasFinais = [...normalizado.alertas, ...validacaoSocio.alertas];

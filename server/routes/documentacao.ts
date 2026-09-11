@@ -2569,7 +2569,10 @@ async function ensureSocioBlocos(empresaId: string, socios: any[]) {
         { codigo: 'socio_comprovante_residencia', tipo_documento: 'comprovante_residencia', nome_amigavel: 'Comprovante de endereço do sócio' },
       ];
   const equivalentes: Record<string, string[]> = {
-    documento_socio: ['documento_socio', 'cpf', 'rg', 'cnh'],
+    // CORREÇÃO (11/09/2026, rodada seguinte): "passaporte" faltava aqui --
+    // um passaporte genuíno anexado ficava marcado como pendência
+    // "Documento de identificação do sócio não anexado", mesmo já validado.
+    documento_socio: ['documento_socio', 'cpf', 'rg', 'cnh', 'passaporte'],
     imposto_renda: ['imposto_renda', 'irpf'],
     rating_bacen_cpf: ['rating_bacen_cpf', 'scr_cpf'],
     scr_cpf: ['scr_cpf', 'rating_bacen_cpf'],
@@ -2621,7 +2624,7 @@ async function vincularDocumentosAutomaticos(empresaId: string) {
     { codigo: 'qsa_quadro_societario', tipos: ['qsa'] },
     { codigo: 'atos_junta_comercial', tipos: ['atos_junta_comercial'] },
     { codigo: 'enquadramento_tributario', tipos: ['enquadramento_tributario_cnpj', 'simples_nacional'] },
-    { codigo: 'socios_representantes', tipos: ['documento_socio', 'cpf', 'rg', 'cnh', 'comprovante_residencia', 'procuracao'] },
+    { codigo: 'socios_representantes', tipos: ['documento_socio', 'cpf', 'rg', 'cnh', 'passaporte', 'comprovante_residencia', 'procuracao'] },
     { codigo: 'contrato_social_alteracoes', tipos: ['contrato_social', 'alteracao_contratual', 'estatuto', 'procuracao'] },
     { codigo: 'faturamento_historico', tipos: ['faturamento_12_meses', 'comprovante_faturamento', 'declaracao_faturamento', 'dre', 'balanco', 'nota_fiscal'] },
     { codigo: 'demonstracoes_contabeis_fiscais', tipos: ['dre', 'balanco', 'balancete', 'imposto_renda', 'ecd', 'ecf', 'pgdas', 'recibo_pgdas', 'defis', 'recibo_defis'] },

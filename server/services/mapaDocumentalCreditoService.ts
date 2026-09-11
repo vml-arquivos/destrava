@@ -373,7 +373,10 @@ const DOCUMENTOS_UNIVERSAIS_EMPRESA: DocumentoMapa[] = [
   // item correspondente aqui -- protesto é indicador direto de inadimplência,
   // avaliado por bancos e financeiras na análise de risco.
   doc('consulta_protestos', 'Consulta de protestos (CENPROT)', ['cenprot_cnpj'], 4, 'Verificar protestos de títulos em nome da empresa -- indicador direto de inadimplência avaliado na análise de crédito.', { obrigatorio: false }),
-  doc('socios_identidade', 'Documentos de identificação dos sócios/administradores', ['documento_socio', 'rg', 'cnh', 'cpf'], 3, 'Validar representantes e garantidores somente após a etapa societária.'),
+  // CORREÇÃO (11/09/2026, rodada seguinte): "passaporte" faltava nesta lista
+  // -- um passaporte genuíno anexado como documento de identidade do sócio
+  // não contava para este item do checklist, mesmo já validado.
+  doc('socios_identidade', 'Documentos de identificação dos sócios/administradores', ['documento_socio', 'rg', 'cnh', 'cpf', 'passaporte'], 3, 'Validar representantes e garantidores somente após a etapa societária.'),
   doc('socios_endereco', 'Comprovante de residência dos sócios/administradores', ['comprovante_residencia'], 3, 'Completar cadastro bancário dos garantidores.'),
 ];
 

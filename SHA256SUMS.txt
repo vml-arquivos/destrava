@@ -1,4 +1,20 @@
-# === Rodada 11/09/2026 parte 18 (esta entrega) — seis causas raiz adicionais de leitura documental (CNH/comprovante/Declaração REAIS); confronto de identidade contra o QSA; Passaporte — arquivos alterados/novos, checksum atual ===
+# === Rodada 11/09/2026 parte 19 (esta entrega) — identidade do sócio via outros documentos já enviados dele (QSA sem CPF); layout do Acervo Documental (botão por cima de nomes); seletor de tipo de documento no upload; Passaporte de ponta a ponta — arquivos alterados/novos, checksum atual ===
+8be2bf6d1c0765a0005dc2e17e86a2ca30964cc43f87f204c8631da906a02052  server/services/regrasDocumentaisCredito.ts
+a530c394b41c857341e3cb2ae6aaa1a358cc977af3d4cf1d2eef00cc2ead2241  server/services/analiseDocumentalEspecializada.ts
+1bb63de188f04893b3286d1b16606f8edfec84f26ce7739003e9403596727ab8  shared/documentTypes.ts
+07b7731e2e40477cf670c7015ec6501e18bf0ebb9faa4c041d223f669bb4d4cd  server/services/documentAnalysisProfiles.ts
+a374aaad2d111b1ee42c06ca98fa7abfa3a14c6002ffdf0f690deb12285abc2e  server/services/classificadorDocumentalCentral.ts
+8c7cdcacd22a580834723af8cd4b228b984101e3d0c2f4d075ab05fd8f4a760f  server/services/mapaDocumentalCreditoService.ts
+4ac54051cbd174fb9b0692aeb0c45f84e23392f21dd228e43bf41c8b3dd9a9d1  server/routes/documentacao.ts
+795b592404d68d3e84c7f2eb1d94619927a86617d6ff172f9a3cc39994c0962e  client/src/components/documentos/DocumentosEntidade.tsx
+586f3a2cd87bb50578113eb939b212c72fcf8d75054a80c094b3fd0fa1b80f2d  client/src/pages/colaborador/EmpresaDocumentos.tsx
+4eae2183962b55db3632e769b6919e66189c7bc0b9cb55861100eb9497e56c16  client/src/pages/colaborador/AcervoDocumentalEmpresa.tsx
+3b3018801af7722c42cbad6c760075ce8d6437a72b347bce2279115c4d820242  client/src/pages/colaborador/Empresas.tsx
+f14bc65a7ae51d7e4a22e86b1eabd4fe6d736cf704b5f0acda26617548ad0a31  client/src/pages/colaborador/Clientes.tsx
+594095ce948312eca4a7c9999b58c78edde2486fa9d4258d4f11976cd5221d01  tests/leituraDocumentalDinamicaMultiSocio.test.ts
+0ba321f2d14a67a8fc06e41b8a993889a7f9b09204e29baf59e6c0391ad22b21  tests/documentosAnterioresDoSocioQuery.test.ts
+7384db4af5bee07c1efaefde00f1d43dfbc7ee55327c80e5f3db1f0fae0a4b61  tests/documentoIdentidadeSocioLeituraLocal.test.ts
+# === Rodada 11/09/2026 parte 18 (mesma entrega) — seis causas raiz adicionais de leitura documental (CNH/comprovante/Declaração REAIS); confronto de identidade contra o QSA; Passaporte — arquivos alterados/novos, checksum atual ===
 ababade5b587a89773a417ffa5e86781f21371d0b855f45040e64f872d576f5c  server/services/extracaoDocumentalLocal.ts
 38eb1e4e3bc70f113d9b2a6e832a78e190e707a42a3fee499d9827e99f33e9cf  server/services/analiseDocumentalEspecializada.ts
 37d60239a17ccdd2585cc15ede824f8f9aef173ae6b2519e4313b88147b1b92e  server/services/regrasDocumentaisCredito.ts

@@ -1,4 +1,215 @@
-=== RODADA 11/09/2026 PARTE 18 (esta entrega) — Seis causas raiz adicionais de leitura documental (CNH/comprovante/Declaração REAIS); confronto de identidade contra o QSA; Passaporte ===
+=== RODADA 11/09/2026 PARTE 19 (esta entrega) — Identidade do sócio via outros documentos já enviados dele (QSA sem CPF); layout do Acervo Documental (botão por cima de nomes); seletor de tipo de documento no upload; Passaporte de ponta a ponta ===
+
+ALTERADO (produção, backend):
+server/services/regrasDocumentaisCredito.ts  (nova função
+                                              `derivarIdentidadeApoio` --
+                                              deriva CPF/nome de apoio a
+                                              partir de outros documentos
+                                              já enviados e validados do
+                                              mesmo sócio, descartando
+                                              qualquer documento que já
+                                              tenha divergência de
+                                              identidade sinalizada;
+                                              `validarIdentidadeSocioExtraida`
+                                              ganha 5º parâmetro opcional
+                                              `documentosAnterioresDoSocio`
+                                              -- QSA continua tendo
+                                              prioridade quando tem CPF,
+                                              apoio só entra quando o QSA
+                                              não tem; alertas passam a
+                                              indicar a fonte da
+                                              divergência (QSA vs.
+                                              documento já enviado))
+server/services/analiseDocumentalEspecializada.ts  (novo método privado
+                                                    `carregarDocumentosAnterioresDoSocio`
+                                                    -- consulta
+                                                    `documentos_arquivos`
+                                                    + `documentos_extracoes_ia`
+                                                    por `socio_id`,
+                                                    excluindo o arquivo
+                                                    atual, com fallback
+                                                    silencioso (array
+                                                    vazio) se a consulta
+                                                    falhar; chamado e
+                                                    repassado a
+                                                    `validarIdentidadeSocioExtraida`
+                                                    dentro de
+                                                    `analisarDocumentoCatalogado`)
+shared/documentTypes.ts  (nova entrada de catálogo `entry('passaporte',
+                          'Passaporte', 'socio', 'socio', { tipoExigencia:
+                          'obrigacao_legal' })`)
+server/services/documentAnalysisProfiles.ts  (novo `registrarPerfis(['passaporte'],
+                                              ['nome', 'numero_documento'],
+                                              ['cpf', 'data_nascimento',
+                                              'data_emissao',
+                                              'data_validade',
+                                              'orgao_emissor',
+                                              'assinatura'])`)
+server/services/classificadorDocumentalCentral.ts  (nova regra
+                                                    `['PASSAPORTE', ...]`
+                                                    em `regras`; `familias`
+                                                    ganha `passaporte:
+                                                    'PASSAPORTE'`;
+                                                    `autorizado()` --
+                                                    branch
+                                                    `DOCUMENTO_IDENTIDADE`
+                                                    passa a aceitar também
+                                                    `'PASSAPORTE'`)
+server/services/mapaDocumentalCreditoService.ts  (lista `doc('socios_identidade',
+                                                  ...)` ganha 'passaporte')
+server/routes/documentacao.ts  (`equivalentes.documento_socio` e `tipos`
+                                de `socios_representantes` ganham
+                                'passaporte')
+
+ALTERADO (produção, frontend):
+client/src/components/documentos/DocumentosEntidade.tsx  (correção de
+                                                          layout: `min-w-0`
+                                                          acrescentado ao
+                                                          `<p>` do nome do
+                                                          arquivo dentro do
+                                                          card de cada
+                                                          documento --
+                                                          causa raiz real
+                                                          de "botão por
+                                                          cima de nomes"
+                                                          identificada via
+                                                          raciocínio sobre
+                                                          flexbox: um item
+                                                          flex com
+                                                          `truncate` tem
+                                                          `min-width: auto`
+                                                          por padrão, que
+                                                          para texto
+                                                          `nowrap` resolve
+                                                          para a largura
+                                                          total do texto --
+                                                          o `min-w-0` de um
+                                                          ancestral não
+                                                          alcança um item
+                                                          flex aninhado
+                                                          dentro de um
+                                                          container flex
+                                                          intermediário;
+                                                          slot "Documento
+                                                          de identificação
+                                                          do sócio" ganha
+                                                          'passaporte' em
+                                                          `matchTipos`;
+                                                          nova constante
+                                                          `OPCOES_TIPO_IDENTIDADE_SOCIO`
+                                                          (RG/CNH/
+                                                          Passaporte/CPF/
+                                                          "Não sei/outro");
+                                                          novo estado
+                                                          `tipoIdentidadeSelecionadoPorSlot`;
+                                                          novo `<select>`
+                                                          exibido apenas no
+                                                          slot
+                                                          "documento_socio",
+                                                          ao lado do botão
+                                                          "Anexar"; `enviar()`
+                                                          ganha 4º
+                                                          parâmetro
+                                                          opcional
+                                                          `tipoDocumentoReal`
+                                                          -- usado só para
+                                                          o `tipo_documento`
+                                                          real enviado ao
+                                                          backend e para o
+                                                          rótulo do toast,
+                                                          sem afetar as
+                                                          chaves de estado
+                                                          (`uploadingTipo`,
+                                                          observação, nome
+                                                          customizado), que
+                                                          continuam
+                                                          associadas ao
+                                                          slot genérico)
+client/src/pages/colaborador/EmpresaDocumentos.tsx  (`TIPOS_PERMITIDOS_EMPRESA`
+                                                     ganha "passaporte")
+client/src/pages/colaborador/AcervoDocumentalEmpresa.tsx  (`TIPOS_EMPRESA`
+                                                           ganha
+                                                           "passaporte")
+client/src/pages/colaborador/Empresas.tsx  (`tiposPermitidos` do
+                                            `<DocumentosEntidade>` do
+                                            sócio ganha "passaporte")
+client/src/pages/colaborador/Clientes.tsx  (`tiposPermitidos` de
+                                            `isClientePF` ganha
+                                            "passaporte")
+
+ALTERADO (teste):
+tests/leituraDocumentalDinamicaMultiSocio.test.ts  (novo describe block --
+                                                    6 testes -- "apoio em
+                                                    outros documentos já
+                                                    enviados do mesmo
+                                                    sócio (QSA sem CPF)":
+                                                    confirma CPF via
+                                                    documento anterior
+                                                    validado; sinaliza
+                                                    divergência contra
+                                                    esse CPF; ignora
+                                                    documento anterior já
+                                                    divergente como apoio;
+                                                    CPFs conflitantes entre
+                                                    documentos anteriores
+                                                    ficam inconclusivos;
+                                                    funciona mesmo com
+                                                    `socioAlvoId` não
+                                                    encontrado no QSA; QSA
+                                                    sempre tem prioridade
+                                                    sobre apoio quando tem
+                                                    CPF -- arquivo vai de
+                                                    17 para 23 testes)
+tests/documentosAnterioresDoSocioQuery.test.ts  (novo -- 4 testes,
+                                                 cobrindo
+                                                 `carregarDocumentosAnterioresDoSocio`
+                                                 isoladamente: sem chamada
+                                                 ao banco quando `socioId`
+                                                 é null; filtro/parâmetros
+                                                 SQL e mapeamento de linhas
+                                                 corretos; retorno vazio
+                                                 gracioso (com
+                                                 console.warn) quando a
+                                                 consulta falha; linhas com
+                                                 `resultado: null/{}`
+                                                 mapeiam com segurança para
+                                                 `dados: {}`)
+tests/documentoIdentidadeSocioLeituraLocal.test.ts  (novo describe block --
+                                                     6 testes -- "Passaporte
+                                                     (documento sintético,
+                                                     mesmo leitor)":
+                                                     reconhecimento com
+                                                     nome/número extraídos
+                                                     sem exigir CPF; status
+                                                     DADO_COMPROVADO para o
+                                                     tipo específico
+                                                     'passaporte';
+                                                     classificador central
+                                                     IDENTIFICADO tanto para
+                                                     o slot genérico quanto
+                                                     para o tipoEsperado
+                                                     específico; caso real
+                                                     de zero regressão --
+                                                     selecionar "Passaporte"
+                                                     mas anexar uma CNH
+                                                     continua INCOMPATIVEL;
+                                                     sanidade de
+                                                     catálogo/config --
+                                                     arquivo vai de 12 para
+                                                     18 testes)
+
+NÃO ALTERADO NESTA RODADA (verificado, sem necessidade de mudança):
+`server/routes/documentos.ts` (linhas ~1179-1180,
+`obrigatoriosPorEntidade`) usa um mecanismo distinto e pré-existente de
+exigência por tipo (cada tipo listado é obrigatório individualmente, sem
+noção de "equivalentes") -- fora do escopo desta correção de "Passaporte
+como equivalente de identidade", que tratou apenas as listas de
+equivalência já existentes (`equivalentes`, `matchTipos`, `tiposPermitidos`
+etc.); `TIPOS_GATILHO_ANALISE_IDENTIDADE`/`CHAVE_ANALISE_POR_SLOT` (cliente)
+nunca incluíram tipos de identidade do sócio, então a decoupling de
+`enviar()` não altera nenhum gatilho de análise existente.
+
+=== RODADA 11/09/2026 PARTE 18 — Seis causas raiz adicionais de leitura documental (CNH/comprovante/Declaração REAIS); confronto de identidade contra o QSA; Passaporte ===
 
 ALTERADO (produção, backend):
 server/services/extracaoDocumentalLocal.ts  (DPI padrão do OCR local

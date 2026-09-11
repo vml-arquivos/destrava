@@ -221,53 +221,109 @@ function cpfFormatadoOuDigitos(value: unknown): string | null {
   return digitos.length === 11 ? digitos : null;
 }
 
+// CORREÇÃO (11/09/2026, rodada seguinte -- pedido explícito do usuário:
+// "não é usar o contrato social como base, é usar os qualquer os
+// documentos, os dados que tenha na empresa pra validar os dados do
+// documento do sócio"): a sincronização gratuita do QSA (`socios_empresa`)
+// normalmente só traz o NOME do sócio, nunca o CPF -- então o lado do CPF
+// desta validação praticamente nunca rodava, na prática, para a maioria das
+// empresas. `derivarIdentidadeApoio` extrai um CPF/nome de apoio a partir de
+// OUTROS documentos JÁ enviados e JÁ analisados para o MESMO sócio (mesmo
+// `socio_id` -- nunca de outro sócio, nunca de um documento de outro tipo
+// não relacionado a identidade). Só considera como fonte confiável um
+// documento anterior que ele mesmo não esteja com a própria identidade em
+// dúvida (não propaga um erro de um upload para o seguinte); e só usa o
+// valor quando todos os documentos de apoio concordam entre si -- CPFs ou
+// nomes conflitantes entre documentos anteriores não são usados como apoio
+// (fica inconclusivo, exatamente como já acontecia quando o QSA não tinha o
+// dado).
+function derivarIdentidadeApoio(
+  documentosAnteriores: Array<{ tipo_documento?: string | null; dados?: any }> = [],
+): { cpf: string | null; nome: string | null } {
+  const cpfsValidos: string[] = [];
+  const nomesValidos: string[] = [];
+  for (const doc of Array.isArray(documentosAnteriores) ? documentosAnteriores : []) {
+    const dados = doc?.dados || {};
+    if (dados?.identidade_socio_confere === false || dados?.exige_justificativa_identidade === true) continue;
+    const cpf = cpfFormatadoOuDigitos(dados?.cpf || dados?.cpf_titular);
+    if (cpf && !cpfsValidos.includes(cpf)) cpfsValidos.push(cpf);
+    const nome = String(dados?.nome || dados?.titular || dados?.nome_titular || '').trim();
+    if (nome) nomesValidos.push(nome);
+  }
+  const cpfApoio = cpfsValidos.length === 1 ? cpfsValidos[0] : null;
+  let nomeApoio: string | null = null;
+  if (nomesValidos.length) {
+    const base = nomesValidos[0];
+    const todosEquivalentes = nomesValidos.every((nome) => nomeEquivalente(nome, base));
+    nomeApoio = todosEquivalentes ? base : null;
+  }
+  return { cpf: cpfApoio, nome: nomeApoio };
+}
+
 export function validarIdentidadeSocioExtraida(
   socios: any[],
   dados: any,
   socioAlvoId: string | null = null,
   tipoDocumento = 'documento do sócio',
+  documentosAnterioresDoSocio: Array<{ tipo_documento?: string | null; dados?: any }> = [],
 ): { dados: Record<string, any>; alertas: AlertaRegraDocumental[] } {
   const alertas: AlertaRegraDocumental[] = [];
   const sociosAtivos = (Array.isArray(socios) ? socios : []).filter((socio) => socio?.ativo !== false);
   const socioAlvo = sociosAtivos.find((socio) => String(socio?.id) === String(socioAlvoId || '')) || null;
   const cpfDocumento = cpfFormatadoOuDigitos(dados?.cpf || dados?.cpf_titular);
   const nomeDocumento = String(dados?.nome || dados?.titular || dados?.nome_titular || '').trim();
-  const cpfSocio = onlyDigits(socioAlvo?.cpf || socioAlvo?.cpf_socio || socioAlvo?.documento || socioAlvo?.cpf_cnpj);
+  const cpfSocioQsa = onlyDigits(socioAlvo?.cpf || socioAlvo?.cpf_socio || socioAlvo?.documento || socioAlvo?.cpf_cnpj);
+
+  const apoio = derivarIdentidadeApoio(documentosAnterioresDoSocio);
+  const cpfSocio = cpfSocioQsa || apoio.cpf;
+  const fonteCpf: 'qsa' | 'documentos_anteriores' | null = cpfSocioQsa ? 'qsa' : (apoio.cpf ? 'documentos_anteriores' : null);
+  const nomeSocioReferencia = socioAlvo?.nome || apoio.nome;
+  const fonteNome: 'qsa' | 'documentos_anteriores' | null = socioAlvo?.nome ? 'qsa' : (apoio.nome ? 'documentos_anteriores' : null);
+
   const cpfConfere = cpfDocumento && cpfSocio ? cpfDocumento === cpfSocio : null;
-  const nomeConfere = nomeDocumento && socioAlvo?.nome ? nomeEquivalente(nomeDocumento, socioAlvo.nome) : null;
+  const nomeConfere = nomeDocumento && nomeSocioReferencia ? nomeEquivalente(nomeDocumento, nomeSocioReferencia) : null;
   const divergenciaCpf = cpfConfere === false;
   const divergenciaNome = nomeConfere === false;
   if (divergenciaCpf) {
+    const origemTexto = fonteCpf === 'documentos_anteriores'
+      ? 'não corresponde ao CPF já identificado em outro documento já enviado para este mesmo sócio'
+      : 'não corresponde ao sócio ao qual o arquivo está vinculado (QSA)';
     alertas.push({
       codigo: 'identidade_cpf_diferente_socio',
       campo: 'cpf',
-      mensagem: `O CPF extraído do ${tipoDocumento} não corresponde ao sócio ao qual o arquivo está vinculado (QSA). É obrigatória uma justificativa.`,
+      mensagem: `O CPF extraído do ${tipoDocumento} ${origemTexto}. É obrigatória uma justificativa.`,
       severidade: 'media',
       valor_documento: dados?.cpf,
-      valor_receita: socioAlvo?.cpf || socioAlvo?.nome,
+      valor_receita: fonteCpf === 'documentos_anteriores' ? cpfSocio : (socioAlvo?.cpf || socioAlvo?.nome),
       recomendacao: 'Conferir o arquivo e o vínculo do upload; não redirecionar automaticamente o documento para outro sócio.',
     });
   }
   if (divergenciaNome) {
+    const origemTexto = fonteNome === 'documentos_anteriores'
+      ? 'não corresponde ao nome já identificado em outro documento já enviado para este mesmo sócio'
+      : 'não corresponde ao sócio ao qual o arquivo está vinculado (QSA)';
     alertas.push({
       codigo: 'identidade_nome_diferente_socio',
       campo: 'nome',
-      mensagem: `O nome extraído do ${tipoDocumento} não corresponde ao sócio ao qual o arquivo está vinculado (QSA). É obrigatória uma justificativa.`,
+      mensagem: `O nome extraído do ${tipoDocumento} ${origemTexto}. É obrigatória uma justificativa.`,
       severidade: 'media',
       valor_documento: nomeDocumento,
-      valor_receita: socioAlvo?.nome,
+      valor_receita: nomeSocioReferencia,
       recomendacao: 'Conferir a grafia, o documento integral e o sócio selecionado no upload.',
     });
   }
-  const confirma = socioAlvo ? !divergenciaCpf && !divergenciaNome && Boolean(cpfConfere === true || nomeConfere === true) : null;
+  const temReferencia = Boolean(socioAlvo || apoio.cpf || apoio.nome);
+  const confirma = temReferencia ? !divergenciaCpf && !divergenciaNome && Boolean(cpfConfere === true || nomeConfere === true) : null;
   return {
     dados: {
       socio_alvo_id: socioAlvoId,
-      socio_alvo_nome: socioAlvo?.nome || null,
+      socio_alvo_nome: socioAlvo?.nome || apoio.nome || null,
       cpf_confere_com_socio: cpfConfere,
       nome_confere_com_socio: nomeConfere,
       identidade_socio_confere: confirma,
       exige_justificativa_identidade: divergenciaCpf || divergenciaNome,
+      identidade_fonte_cpf: fonteCpf,
+      identidade_fonte_nome: fonteNome,
     },
     alertas,
   };

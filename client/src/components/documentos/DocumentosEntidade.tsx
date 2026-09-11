@@ -266,7 +266,7 @@ export const SECOES_DOCUMENTAIS: SecaoDocumento[] = [
     titulo: "Documentação dos Sócios",
     descricao: "Identificação dos sócios e toda a documentação/consultas de CPF vinculadas a eles. Use um único local para documentos que cumprem a mesma função -- não duplicamos RG, CNH e CPF em campos separados.",
     slots: [
-      slot("Documento de identificação do sócio", "documento_socio", ["rg", "cnh", "cpf"], { obrigatorio: true, porSocio: true, descricao: "Anexe RG, CNH ou documento equivalente com CPF para cada sócio identificado no QSA." }),
+      slot("Documento de identificação do sócio", "documento_socio", ["rg", "cnh", "cpf", "passaporte"], { obrigatorio: true, porSocio: true, descricao: "Anexe RG, CNH, Passaporte ou documento equivalente com CPF para cada sócio identificado no QSA." }),
       slot("Comprovante de endereço do sócio", "comprovante_residencia", [], { obrigatorio: true, porSocio: true, descricao: "Obrigatório por sócio. A IA confere titular e validade máxima de dois meses; titular diferente exige justificativa." }),
       slot("Declaração de Imposto de Renda (IRPF) do sócio", "irpf", ["imposto_renda"], { porSocio: true, descricao: "Declaração completa de imposto de renda da pessoa física, identificada por sócio." }),
       slot("Recibo de entrega da Declaração de Imposto de Renda (IRPF)", "recibo_irpf", [], { porSocio: true, descricao: "Recibo de entrega correspondente à declaração de IRPF do mesmo sócio." }),
@@ -297,6 +297,19 @@ export const SECOES_DOCUMENTAIS: SecaoDocumento[] = [
 const TODOS_SLOTS = SECOES_DOCUMENTAIS.flatMap((secao) => secao.slots);
 const TIPO_PARA_SLOT = new Map<string, DocumentoSlot>();
 TODOS_SLOTS.forEach((documentoSlot) => documentoSlot.matchTipos.forEach((tipo) => TIPO_PARA_SLOT.set(tipo, documentoSlot)));
+
+// CORREÇÃO (11/09/2026, rodada seguinte -- seletor de tipo no anexo do
+// documento de identidade do sócio): opções do seletor opcional -- valor
+// vazio ("") mantém o tipo genérico "documento_socio" (auto, comportamento
+// de antes desta rodada); qualquer outra opção usa o tipo específico
+// (catálogo em shared/documentTypes.ts) na hora de enviar o arquivo.
+const OPCOES_TIPO_IDENTIDADE_SOCIO: Array<{ value: string; label: string }> = [
+  { value: "", label: "Não sei / outro" },
+  { value: "rg", label: "RG" },
+  { value: "cnh", label: "CNH" },
+  { value: "passaporte", label: "Passaporte" },
+  { value: "cpf", label: "CPF" },
+];
 
 // Duas abas de navegação (pedido do usuário, 2026-08): as seções internas
 // (Identidade do CNPJ, Documentação da Empresa, Outros documentos do sistema,
@@ -820,6 +833,21 @@ export default function DocumentosEntidade({
   const [socioSelecionadoPorTipo, setSocioSelecionadoPorTipo] = useState<Record<string, string>>({});
   const timersObservacoes = useRef<Record<string, ReturnType<typeof setTimeout>>>({});
   const [nomeCustomizadoPorTipo, setNomeCustomizadoPorTipo] = useState<Record<string, string>>({});
+  // CORREÇÃO (11/09/2026, rodada seguinte -- pedido explícito do usuário,
+  // reforçando um pedido anterior: "como selecionar qual o documento que
+  // está sendo anexado pra que tenha leitura"): seletor simples e opcional
+  // (não bloqueia o anexo), ao lado do botão "Anexar" do slot genérico
+  // "Documento de identificação do sócio" -- deixar o usuário dizer de
+  // antemão se é RG/CNH/Passaporte/CPF, em vez de sempre subir como o tipo
+  // genérico "documento_socio". A leitura em si já funcionava sem isso
+  // (`parseDocumentoIdentidadeSocio` já detecta o tipo pelo próprio texto),
+  // mas sem essa escolha o classificador central nunca podia confrontar
+  // "o usuário disse que era um X" contra "o conteúdo lido é um Y" -- e a
+  // grade do Acervo Documental sempre mostrava o rótulo genérico, nunca "RG"/
+  // "CNH"/"Passaporte" de fato. Chave por `chaveSlot` (tipo + sócio) para
+  // cada sócio escolher o seu independentemente; vazio = "não sei/auto"
+  // (mantém o comportamento de antes desta rodada, sem escolha nenhuma).
+  const [tipoIdentidadeSelecionadoPorSlot, setTipoIdentidadeSelecionadoPorSlot] = useState<Record<string, string>>({});
   const [selecionados, setSelecionados] = useState<Record<string, boolean>>({});
   const [exportando, setExportando] = useState(false);
   const [modalExportacao, setModalExportacao] = useState(false);
@@ -1439,13 +1467,24 @@ export default function DocumentosEntidade({
     setModalExportacao(true);
   }
 
-  async function enviar(tipoDocumento: string, file: File, socioVinculado: string | null = null) {
+  // CORREÇÃO (11/09/2026, rodada seguinte -- seletor de tipo no anexo do
+  // documento de identidade do sócio): `tipoDocumentoReal`, quando informado,
+  // é o tipo ESPECÍFICO escolhido no seletor (ex.: "cnh"), enviado de fato
+  // como `tipo_documento` ao backend -- mas `tipoDocumento` (o tipo do SLOT,
+  // ex.: "documento_socio") continua sendo a chave usada para o estado de
+  // upload em andamento, a observação e o nome customizado, exatamente como
+  // antes desta rodada. Sem essa separação, escolher "CNH" no seletor faria
+  // o spinner de "enviando" e a observação/nome digitados no card nunca
+  // baterem com a chave real do slot na tela (cada um calculado a partir de
+  // um tipo diferente), quebrando os dois.
+  async function enviar(tipoDocumento: string, file: File, socioVinculado: string | null = null, tipoDocumentoReal?: string) {
     if (!entidadeId) return;
+    const tipoParaEnviar = tipoDocumentoReal || tipoDocumento;
     const fd = new FormData();
     fd.append("file", file);
     fd.append("entidade_tipo", entidadeTipo);
     fd.append("entidade_id", entidadeId);
-    fd.append("tipo_documento", tipoDocumento);
+    fd.append("tipo_documento", tipoParaEnviar);
     if (empresaId) fd.append("empresa_id", empresaId);
     if (clientePfId) fd.append("cliente_pf_id", clientePfId);
     if (socioVinculado || socioId) fd.append("socio_id", socioVinculado || socioId || "");
@@ -1461,7 +1500,7 @@ export default function DocumentosEntidade({
     try {
       const resultado = await apiFetch("/api/documentos/upload", { method: "POST", body: fd });
       if (obs) await salvarObservacao(tipoDocumento, socioVinculado || socioId || null, obs);
-      toast.success(`${labelTipoDocumento(tipoDocumento)} anexado com sucesso.`);
+      toast.success(`${labelTipoDocumento(tipoParaEnviar)} anexado com sucesso.`);
       setNomeCustomizadoPorTipo((prev) => ({ ...prev, [tipoDocumento]: "" }));
 
       // CORREÇÃO (2026-09-01, pedido explícito do usuário -- "ao anexar, a página
@@ -2602,10 +2641,31 @@ export default function DocumentosEntidade({
                                 botão "Anexar" só aparece com o card expandido -- recolhido,
                                 mostra só o resultado (selo acima) + o ícone "i". */}
                             {!satisfeitoPorOutro && cardExpandido && (
+                              <>
+                              {/* CORREÇÃO (11/09/2026, rodada seguinte -- pedido explícito do
+                                  usuário, reforçando um pedido anterior: "como selecionar qual
+                                  o documento que está sendo anexado pra que tenha leitura"):
+                                  seletor opcional, só para o slot genérico "Documento de
+                                  identificação do sócio" -- nunca bloqueia o anexo (a leitura já
+                                  detecta o tipo sozinha pelo próprio conteúdo do arquivo), só
+                                  permite ao usuário dizer de antemão qual documento está
+                                  anexando. Ver OPCOES_TIPO_IDENTIDADE_SOCIO acima. */}
+                              {tipo === "documento_socio" && (
+                                <select
+                                  value={tipoIdentidadeSelecionadoPorSlot[chaveSlot] || ""}
+                                  onChange={(e) => setTipoIdentidadeSelecionadoPorSlot((prev) => ({ ...prev, [chaveSlot]: e.target.value }))}
+                                  title="Qual documento você vai anexar? Opcional -- ajuda a conferência automática, mas não é obrigatório."
+                                  disabled={uploading || !!motivoBloqueio || (exigeVinculoSocio && !socioVinculado)}
+                                  className="h-8 rounded-lg border border-input bg-card px-1.5 text-[10px] font-semibold text-muted-foreground shrink-0 disabled:opacity-50"
+                                >
+                                  {OPCOES_TIPO_IDENTIDADE_SOCIO.map((opcao) => <option key={opcao.value} value={opcao.value}>{opcao.label}</option>)}
+                                </select>
+                              )}
                               <label title={motivoBloqueio || undefined} className={`h-8 inline-flex items-center justify-center gap-1 text-[11px] font-semibold px-3 rounded-lg transition-colors shrink-0 ${motivoBloqueio || (exigeVinculoSocio && !socioVinculado) ? "bg-border text-primary-foreground cursor-not-allowed" : "bg-primary text-primary-foreground cursor-pointer hover:bg-primary/90"}`}>
                                 {uploading ? <Loader2 className="w-3 h-3 animate-spin" /> : <Upload className="w-3 h-3" />} Anexar
-                                <input type="file" accept=".pdf,.jpg,.jpeg,.png,.webp,.xlsx,.csv,.docx" className="hidden" disabled={uploading || !!motivoBloqueio || (exigeVinculoSocio && !socioVinculado)} onChange={(e) => { const file = e.target.files?.[0]; if (file) enviar(tipo, file, socioVinculado); e.currentTarget.value = ""; }} />
+                                <input type="file" accept=".pdf,.jpg,.jpeg,.png,.webp,.xlsx,.csv,.docx" className="hidden" disabled={uploading || !!motivoBloqueio || (exigeVinculoSocio && !socioVinculado)} onChange={(e) => { const file = e.target.files?.[0]; if (file) enviar(tipo, file, socioVinculado, tipo === "documento_socio" ? (tipoIdentidadeSelecionadoPorSlot[chaveSlot] || undefined) : undefined); e.currentTarget.value = ""; }} />
                               </label>
+                              </>
                             )}
                             <button
                               type="button"
@@ -2732,7 +2792,26 @@ export default function DocumentosEntidade({
                                   <div className="flex items-center justify-between gap-2">
                                   <div className="min-w-0">
                                     <div className="flex items-center gap-1 flex-wrap">
-                                      <p className="text-[10px] font-semibold text-muted-foreground truncate">{doc.nome_customizado || doc.nome_original}</p>
+                                      {/* CORREÇÃO (11/09/2026, rodada seguinte -- pedido explícito do
+                                          usuário: "veja a harmonização dessa página de documentos,
+                                          totalmente desformatada, desconfigurada, botão por cima de
+                                          nomes"): este <p> é item de um flex container
+                                          (".flex.items-center.gap-1.flex-wrap"), e a classe utilitária
+                                          "truncate" do Tailwind aplica "white-space: nowrap" -- para um
+                                          texto em nowrap, a largura mínima de conteúdo de um item flex
+                                          (min-width:auto, o padrão do CSS Flexbox) é a largura TOTAL do
+                                          texto, não zero. Sem "min-w-0" NELE MESMO (o min-w-0 do <div>
+                                          pai, duas linhas abaixo, não alcança este item porque ele fica
+                                          num container flex intermediário), o nome do arquivo nunca
+                                          encolhia de verdade -- "truncate" nunca entrava em ação e, em
+                                          nomes de arquivo mais longos (comuns em documentos reais), o
+                                          texto vazava visualmente por baixo da coluna de botões de ação
+                                          (Visualizar/Baixar/Reler/Validar/Excluir) à direita da mesma
+                                          linha. Mesmo problema, mesma causa raiz, em qualquer outro <p
+                                          truncate> que seja item direto de um flex container sem seu
+                                          próprio min-w-0 (ver TEST_REPORT.md para o inventário
+                                          completo). */}
+                                      <p className="min-w-0 text-[10px] font-semibold text-muted-foreground truncate">{doc.nome_customizado || doc.nome_original}</p>
                                       {/* Separação visual pedida pelo usuário: documento gerado dentro da
                                           própria Destrava (contrato, orçamento etc., origem="gerado_sistema")
                                           fica com uma etiqueta própria, distinto do documento que a empresa

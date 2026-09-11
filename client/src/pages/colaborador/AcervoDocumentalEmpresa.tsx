@@ -43,7 +43,7 @@ type EmpresaResumo = {
 // a causa não estava nas regras de MEI, e sim aqui, um passo antes delas.
 const TIPOS_EMPRESA = [
   "contrato_prestacao_servicos", "cartao_cnpj", "qsa", "atos_junta_comercial", "contrato_social", "alteracao_contratual",
-  "documento_socio", "rg", "cnh", "cpf", "comprovante_residencia", "irpf", "recibo_irpf", "certidao_casamento",
+  "documento_socio", "rg", "cnh", "cpf", "passaporte", "comprovante_residencia", "irpf", "recibo_irpf", "certidao_casamento",
   "averbacao_divorcio", "certidao_obito", "rating_bacen_cnpj", "rating_bacen_cpf", "cenprot_cnpj", "cenprot_cpf",
   "cnd_rfb_cnpj", "cnd_rfb_cpf", "cadin_cnpj", "cadin_cpf", "pgfn_cnpj", "pgfn_cpf",
   "situacao_fiscal_cnpj", "situacao_fiscal_cpf", "enquadramento_tributario_cnpj", "simples_nacional",

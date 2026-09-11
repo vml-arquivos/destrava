@@ -74,6 +74,17 @@ export const DOCUMENT_TYPE_CATALOG = [
   entry('rg', 'RG', 'socio', 'socio', { tipoExigencia: 'obrigacao_legal' }),
   entry('cpf', 'CPF', 'socio', 'socio', { tipoExigencia: 'obrigacao_legal' }),
   entry('cnh', 'CNH', 'socio', 'socio', { tipoExigencia: 'obrigacao_legal' }),
+  // CORREÇÃO (11/09/2026, rodada seguinte -- pedido explícito do usuário,
+  // reforçando um pedido anterior deixado pendente: "o documento que eu
+  // falei que era pra ter o nome na hora de anexar, não não ainda não tem
+  // o, como selecionar qual o documento que está sendo anexado"): o
+  // catálogo nunca teve uma entrada própria para Passaporte como documento
+  // de identidade do sócio -- só RG/CPF/CNH. `extracaoDocumentalLocal.ts`
+  // já sabia LER um passaporte (`ehPassaporte`/`numeroPassaporte`), mas sem
+  // esta entrada no catálogo o tipo "passaporte" nunca podia ser de fato
+  // selecionado/enviado (ver também o classificador central e o slot de
+  // upload, corrigidos na mesma rodada).
+  entry('passaporte', 'Passaporte', 'socio', 'socio', { tipoExigencia: 'obrigacao_legal' }),
   entry('rg_socio', 'RG do sócio (legado)', 'socio', 'socio', { tipoCanonico: 'rg' }),
   entry('cpf_socio', 'CPF do sócio (legado)', 'socio', 'socio', { tipoCanonico: 'cpf' }),
   entry('cnh_socio', 'CNH do sócio (legado)', 'socio', 'socio', { tipoCanonico: 'cnh' }),

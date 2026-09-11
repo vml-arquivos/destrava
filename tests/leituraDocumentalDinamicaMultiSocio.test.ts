@@ -240,3 +240,124 @@ describe('validarIdentidadeSocioExtraida -- confronto do documento de identidade
     expect(r.alertas).toEqual([]);
   });
 });
+
+// CORREÇÃO (11/09/2026, rodada seguinte -- pedido explícito do usuário: "não
+// é usar o contrato social como base, é usar os qualquer os documentos, os
+// dados que tenha na empresa pra validar os dados do documento do sócio"):
+// como a sincronização gratuita do QSA (`socios_empresa`) normalmente só traz
+// o NOME do sócio (nunca o CPF), o lado do CPF da validação de identidade
+// praticamente nunca rodava na prática. Este bloco cobre o novo parâmetro
+// `documentosAnterioresDoSocio` de `validarIdentidadeSocioExtraida`: usa o
+// CPF/nome já estabelecido por OUTRO documento já enviado e já confirmado
+// para o MESMO sócio como fonte de apoio quando o QSA não tem o dado.
+describe('validarIdentidadeSocioExtraida -- apoio em outros documentos já enviados do mesmo sócio (QSA sem CPF)', () => {
+  // QSA real (sincronização gratuita): só nome, sem CPF -- o caso comum.
+  const sociosSemCpf = [
+    { id: 's1', nome: 'CARLOS EDUARDO SANTOS', ativo: true },
+  ];
+
+  it('confirma o CPF usando um documento anterior já validado do mesmo sócio quando o QSA não tem CPF', () => {
+    const declaracaoIrpfJaValidada = {
+      tipo_documento: 'recibo_irpf',
+      dados: { cpf: '123.456.789-01', nome: 'CARLOS EDUARDO SANTOS', identidade_socio_confere: true },
+    };
+    const r = validarIdentidadeSocioExtraida(
+      sociosSemCpf,
+      { cpf: '123.456.789-01', nome: 'CARLOS EDUARDO SANTOS' },
+      's1',
+      'CNH',
+      [declaracaoIrpfJaValidada],
+    );
+    expect(r.dados.cpf_confere_com_socio).toBe(true);
+    expect(r.dados.identidade_socio_confere).toBe(true);
+    expect(r.dados.identidade_fonte_cpf).toBe('documentos_anteriores');
+    expect(r.alertas).toEqual([]);
+  });
+
+  it('sinaliza divergência quando o CPF do novo documento não bate com o CPF já estabelecido por outro documento do mesmo sócio', () => {
+    const declaracaoIrpfJaValidada = {
+      tipo_documento: 'recibo_irpf',
+      dados: { cpf: '123.456.789-01', nome: 'CARLOS EDUARDO SANTOS', identidade_socio_confere: true },
+    };
+    const r = validarIdentidadeSocioExtraida(
+      sociosSemCpf,
+      { cpf: '999.999.999-99', nome: 'CARLOS EDUARDO SANTOS' },
+      's1',
+      'CNH',
+      [declaracaoIrpfJaValidada],
+    );
+    expect(r.dados.cpf_confere_com_socio).toBe(false);
+    expect(r.dados.identidade_socio_confere).toBe(false);
+    expect(r.dados.exige_justificativa_identidade).toBe(true);
+    const alertaCpf = r.alertas.find((a) => a.codigo === 'identidade_cpf_diferente_socio');
+    expect(alertaCpf?.mensagem).toContain('outro documento já enviado');
+  });
+
+  it('ignora, como fonte de apoio, um documento anterior que já esteja com a própria identidade divergente sinalizada', () => {
+    const documentoAnteriorDivergente = {
+      tipo_documento: 'rg',
+      dados: { cpf: '000.000.000-00', nome: 'PESSOA DIFERENTE', identidade_socio_confere: false, exige_justificativa_identidade: true },
+    };
+    const r = validarIdentidadeSocioExtraida(
+      sociosSemCpf,
+      { cpf: '123.456.789-01', nome: 'CARLOS EDUARDO SANTOS' },
+      's1',
+      'CNH',
+      [documentoAnteriorDivergente],
+    );
+    // Sem CPF confiável no QSA nem em apoio (o único documento anterior foi
+    // descartado por já estar com identidade em dúvida), o CPF fica
+    // inconclusivo -- mas o nome (vindo do QSA) ainda confirma a identidade.
+    expect(r.dados.cpf_confere_com_socio).toBeNull();
+    expect(r.dados.nome_confere_com_socio).toBe(true);
+    expect(r.dados.identidade_socio_confere).toBe(true);
+  });
+
+  it('não usa apoio quando dois documentos anteriores do mesmo sócio trazem CPFs conflitantes entre si (fica inconclusivo, nunca escolhe um)', () => {
+    const documentoA = { tipo_documento: 'rg', dados: { cpf: '123.456.789-01', nome: 'CARLOS EDUARDO SANTOS' } };
+    const documentoB = { tipo_documento: 'recibo_irpf', dados: { cpf: '111.111.111-11', nome: 'CARLOS EDUARDO SANTOS' } };
+    const r = validarIdentidadeSocioExtraida(
+      sociosSemCpf,
+      { cpf: '123.456.789-01', nome: 'CARLOS EDUARDO SANTOS' },
+      's1',
+      'CNH',
+      [documentoA, documentoB],
+    );
+    expect(r.dados.cpf_confere_com_socio).toBeNull();
+    expect(r.dados.identidade_fonte_cpf).toBeNull();
+    // Nome ainda confirma pelo QSA, então a identidade segue confirmada.
+    expect(r.dados.identidade_socio_confere).toBe(true);
+  });
+
+  it('quando o sócio não está mais no QSA sincronizado (socioAlvoId não encontrado) mas há documentos anteriores confiáveis para aquele socio_id, ainda assim usa o apoio', () => {
+    const declaracaoIrpfJaValidada = {
+      tipo_documento: 'recibo_irpf',
+      dados: { cpf: '123.456.789-01', nome: 'CARLOS EDUARDO SANTOS', identidade_socio_confere: true },
+    };
+    const r = validarIdentidadeSocioExtraida(
+      [], // QSA vazio/sócio não localizado
+      { cpf: '999.999.999-99', nome: 'OUTRA PESSOA' },
+      's1',
+      'CNH',
+      [declaracaoIrpfJaValidada],
+    );
+    expect(r.dados.identidade_fonte_cpf).toBe('documentos_anteriores');
+    expect(r.dados.identidade_socio_confere).toBe(false);
+    expect(r.dados.exige_justificativa_identidade).toBe(true);
+  });
+
+  it('mantém o QSA como fonte prioritária de CPF quando ele já traz o CPF do sócio (não é sobrescrito pelo apoio)', () => {
+    const sociosComCpf = [{ id: 's1', nome: 'CARLOS EDUARDO SANTOS', cpf: '123.456.789-01', ativo: true }];
+    const documentoAnteriorComCpfDiferente = { tipo_documento: 'rg', dados: { cpf: '999.999.999-99', nome: 'CARLOS EDUARDO SANTOS' } };
+    const r = validarIdentidadeSocioExtraida(
+      sociosComCpf,
+      { cpf: '123.456.789-01', nome: 'CARLOS EDUARDO SANTOS' },
+      's1',
+      'CNH',
+      [documentoAnteriorComCpfDiferente],
+    );
+    expect(r.dados.identidade_fonte_cpf).toBe('qsa');
+    expect(r.dados.cpf_confere_com_socio).toBe(true);
+    expect(r.dados.identidade_socio_confere).toBe(true);
+  });
+});
