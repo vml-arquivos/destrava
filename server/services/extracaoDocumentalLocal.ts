@@ -1978,12 +1978,93 @@ function parseCompartilhamentoEcac(texto: string): { dados: Record<string, any>;
 // no layout oficial), não o CPF de fato. Corrigido com um leitor dedicado
 // que reconhece CNH/RG/CPF pelo cabeçalho oficial e usa `CPF` explicitamente
 // rotulado (nunca o primeiro número de 11 dígitos encontrado).
+// Documentos de identidade rasterizados frequentemente preservam o rótulo em
+// uma linha e o valor várias linhas depois, ou juntam campos vizinhos na mesma
+// linha. A leitura por "próxima linha" não é suficiente para esse layout.
+function trechoAposRotulo(texto: string, termos: string[], limite = 500): string {
+  const normalizado = textoNormalizado(texto);
+  const indice = termos
+    .map(textoNormalizado)
+    .sort((a, b) => b.length - a.length)
+    .map((termo) => normalizado.indexOf(termo))
+    .filter((item) => item >= 0)
+    .sort((a, b) => a - b)[0];
+  return indice == null ? '' : normalizado.slice(indice, indice + limite);
+}
+
+function cpfFormatadoNoTexto(texto: string): string | null {
+  return String(texto || '').match(/\b\d{3}\.\d{3}\.\d{3}-\d{2}\b/)?.[0] || null;
+}
+
+function extrairCpfRotulado(texto: string): string | null {
+  // Priorizamos o formato oficial, porque o OCR pode capturar o número de
+  // registro da CNH (também com 11 dígitos) antes do CPF.
+  const cpfFormatado = cpfFormatadoNoTexto(texto);
+  if (cpfFormatado) return cpfFormatado;
+  const trecho = trechoAposRotulo(texto, ['cpf', 'cpf do declarante', 'cpf do contribuinte'], 420);
+  return trecho.match(/\b\d{3}[.\s]?\d{3}[.\s]?\d{3}[-\s]?\d{2}\b/)?.[0]?.replace(/\s+/g, '') || null;
+}
+
+function extrairNumeroCampoIdentidade(texto: string, cpf: string | null): string | null {
+  const cpfDigits = onlyDigits(cpf);
+  const normalizado = textoNormalizado(texto);
+  const rotulos = /(?:n[º°o]?\s*(?:de\s*)?registro|numero\s+de\s+registro|registro\s+n)/g;
+  let melhor: { valor: string; distancia: number } | null = null;
+  for (const rotulo of Array.from(normalizado.matchAll(rotulos))) {
+    const inicio = (rotulo.index ?? 0) + rotulo[0].length;
+    const trecho = normalizado.slice(inicio, inicio + 350);
+    for (const candidatoMatch of Array.from(trecho.matchAll(/\b\d{8,15}\b/g))) {
+      const candidato = candidatoMatch[0];
+      if (candidato === cpfDigits || /^\d{2}\d{2}20\d{2}$/.test(candidato)) continue;
+      const distancia = candidatoMatch.index ?? Number.MAX_SAFE_INTEGER;
+      if (!melhor || distancia < melhor.distancia) melhor = { valor: candidato, distancia };
+    }
+  }
+  return melhor?.valor || null;
+}
+
+function extrairNomeCnh(linhas: string[]): string | null {
+  const indicesCabecalho = linhas.map((linha) => {
+    const normalizada = textoNormalizado(linha);
+    return normalizada.includes('carteira nacional de habilitacao')
+      && (normalizada.includes('driver license') || normalizada.includes('permiso para conducir') || normalizada.includes('permiso de conduccion'));
+  }).flatMap((ehCabecalho, indice) => ehCabecalho ? [indice] : []);
+  if (!indicesCabecalho.length) return null;
+  const bloqueados = /^(?:nome e sobrenome|primeira habilitacao|1 habilitacao|data local e uf de nascimento|data emissao|validade|doc identidade|orgao emissor|cpf|n registro|cat hab|nacionalidade|filiacao|assinatura|carteira nacional|driver license|permiso|republica federativa|ministerio dos transportes|secretaria nacional|documento de identificacao)$/i;
+  for (const indiceCabecalho of indicesCabecalho) {
+    for (const linha of linhas.slice(indiceCabecalho + 1, indiceCabecalho + 24)) {
+      const antesDeData = linha.split(/\b\d{1,2}\/\d{1,2}\/20\d{2}\b/)[0];
+      const candidato = antesDeData
+        .replace(/[()[\]{}|<>_=+*#]/g, ' ')
+        .replace(/[^A-Za-zÀ-ÿ\s'-]/g, ' ')
+        .replace(/\s+/g, ' ')
+        .trim();
+      const normalizado = textoNormalizado(candidato);
+      const palavras = candidato.split(/\s+/).filter((item) => item.length >= 2);
+      if (!candidato || bloqueados.test(normalizado) || palavras.length < 2) continue;
+      if (/(?:carteira|habilitacao|driver|permiso|republica|ministerio|secretaria|documento|nome\s+e\s+sobrenome|data|cpf|registro|nacionalidade|filiacao|assinatura)/i.test(normalizado)) continue;
+      return candidato;
+    }
+  }
+  return null;
+}
+
+function datasAposRotulo(texto: string, termos: string[], limite = 500): string[] {
+  const trecho = trechoAposRotulo(texto, termos, limite);
+  return Array.from(trecho.matchAll(/\b\d{2}\/\d{2}\/20\d{2}\b/g)).map((match) => match[0]);
+}
+
 function parseDocumentoIdentidadeSocio(texto: string): { dados: Record<string, any>; confianca: number } {
   const base = parseDocumentoGenerico(texto, 'documento_socio');
   const linhas = linhasTexto(texto);
   const norm = textoNormalizado(texto);
 
-  const ehCnh = /carteira\s+nacional\s+de\s+habilitacao|permissao\s+para\s+dirigir/.test(norm);
+  // O título completo pode ser perdido pelo OCR. Para não aceitar qualquer
+  // documento que contenha apenas a palavra "CNH", exigimos também um segundo
+  // marcador oficial de campos/órgão da habilitação.
+  const marcadorCnh = /carteira\s+nacional\s+de\s+habilitacao|permissao\s+para\s+dirigir|senatran/i.test(norm);
+  const estruturaCnh = /(?:n\s*registro|numero\s+de\s+registro|cat\s+hab|data\s+emissao|validade|cpf|departamento\s+estadual\s+de\s+transito|detran)/i.test(norm);
+  const ehCnh = marcadorCnh && estruturaCnh;
   const ehRg = !ehCnh && /registro\s+geral|carteira\s+de\s+identidade|secretaria\s+de\s+seguranca\s+publica/.test(norm);
   const ehCpf = !ehCnh && !ehRg && /cadastro\s+de\s+pessoas\s+fisicas|comprovante\s+de\s+situacao\s+cadastral\s+no\s+cpf/.test(norm);
   // CORREÇÃO (11/09/2026, rodada seguinte -- passaporte real ainda não
@@ -1995,28 +2076,23 @@ function parseDocumentoIdentidadeSocio(texto: string): { dados: Record<string, a
   const ehPassaporte = !ehCnh && !ehRg && !ehCpf && /passaporte|republica\s+federativa\s+do\s+brasil.{0,120}passport|documento\s+de\s+viagem/.test(norm);
   const compativel = ehCnh || ehRg || ehCpf || ehPassaporte;
 
-  const nome = primeiroTrechoDeNomeAntesDeRuido(limparValor(
-    linhaAposIndiceContendo(linhas, ['nome e sobrenome', 'nome da pessoa fisica', 'nome civil', 'nome completo', 'nome do titular', 'surname', 'given names'])
-      || valorAposRotulo(linhas, ['nome', 'titular']),
-  )) || base.dados.nome || null;
+  const nome = limparValor(
+    (ehCnh ? extrairNomeCnh(linhas) : null)
+      || primeiroTrechoDeNomeAntesDeRuido(limparValor(
+        linhaAposIndiceContendo(linhas, ['nome e sobrenome', 'nome da pessoa fisica', 'nome civil', 'nome completo', 'nome do titular', 'surname', 'given names'])
+          || valorAposRotulo(linhas, ['nome', 'titular']),
+      ))
+      || base.dados.nome,
+  ) || null;
 
-  // CPF explicitamente rotulado -- nunca o primeiro número de 11 dígitos do
-  // texto (ver comentário acima sobre a CNH). Quando o rótulo não é
-  // encontrado (comum em texto vindo de OCR, cujo reconhecimento de palavras
-  // é bem menos confiável que o de dígitos/pontuação em posição fixa), cai
-  // para qualquer CPF já formatado (com pontos e traço) em qualquer lugar do
-  // texto -- ver `cpfFormatadoEmQualquerLugar`.
-  const cpfRotulado = limparValor(texto.match(/\bcpf\D{0,12}(\d{3}\.?\d{3}\.?\d{3}-?\d{2})/i)?.[1] || null);
-  const cpf = cpfRotulado || cpfFormatadoEmQualquerLugar(texto) || base.dados.cpf || null;
+  // CPF explicitamente rotulado ou em formato oficial -- nunca o primeiro
+  // número de 11 dígitos do texto, que na CNH costuma ser o registro.
+  const cpf = extrairCpfRotulado(texto) || cpfFormatadoEmQualquerLugar(texto) || base.dados.cpf || null;
 
   const numeroRegistroCnh = limparValor(
-    linhaAposIndiceContendo(linhas, ['n. registro', 'nº registro', 'nº de registro', 'numero de registro', 'número de registro', 'registro n'])
+    (ehCnh ? extrairNumeroCampoIdentidade(texto, cpf) : null)
+      || linhaAposIndiceContendo(linhas, ['n. registro', 'nº registro', 'nº de registro', 'numero de registro', 'número de registro', 'registro n'])
       || (texto.match(/n[ºo°]\s*(?:de\s*)?registro\D{0,10}(\d{6,15})/i)?.[1] ?? null)
-      // Respaldo específico para OCR de CNH: no layout oficial, CPF e Nº de
-      // Registro ficam lado a lado na mesma linha visual -- quando o rótulo
-      // "5 Nº REGISTRO" sai corrompido do OCR mas os dígitos sobrevivem,
-      // ainda é possível achar o registro pela proximidade com o CPF já
-      // localizado.
       || (ehCnh ? numeroDeOnzeDigitosProximoDoCpf(texto, cpf) : null),
   );
   const numeroRg = limparValor(
@@ -2038,16 +2114,27 @@ function parseDocumentoIdentidadeSocio(texto: string): { dados: Record<string, a
           : numeroRegistroCnh || numeroRg || numeroPassaporte || null;
 
   const dataNascimento = dataProximaDe(texto, /(?:data,?\s+local\s+e\s+uf\s+de\s+nascimento|data\s+de\s+nascimento|nascimento)\D{0,30}(\d{2}\/\d{2}\/\d{4})/i);
-  const dataEmissao = dataProximaDe(texto, /(?:data\s+(?:de\s+)?emiss[aã]o|emitid[oa]\s+em)\D{0,30}(\d{2}\/\d{2}\/\d{4})/i) || base.dados.data_emissao || null;
-  const dataValidade = dataProximaDe(texto, /(?:validade|v[aá]lid[oa]\s+at[eé])\D{0,30}(\d{2}\/\d{2}\/\d{4})/i) || base.dados.data_validade || null;
+  const dataEmissao = dataProximaDe(texto, /(?:data\s+(?:de\s+)?emiss[aã]o|emitid[oa]\s+em)\D{0,30}(\d{2}\/\d{2}\/\d{4})/i)
+    || (ehCnh ? parseDate(datasAposRotulo(texto, ['data emissao'], 180)[0] || null) : null);
+  const validadeCnh = ehCnh ? datasAposRotulo(texto, ['validade'], 2500) : [];
+  const todasDatasCnh = ehCnh
+    ? Array.from(texto.matchAll(/\b\d{2}\/\d{2}\/20\d{2}\b/g)).map((match) => match[0])
+    : [];
+  const ultimaDataCnh = todasDatasCnh
+    .map((data) => parseDate(data))
+    .filter((data): data is string => Boolean(data))
+    .sort()
+    .at(-1) || null;
+  const dataValidade = ehCnh
+    ? parseDate(ultimaDataCnh || validadeCnh.at(-1) || null)
+    : dataProximaDe(texto, /(?:validade|v[aá]lid[oa]\s+at[eé])\D{0,30}(\d{2}\/\d{2}\/\d{4})/i);
   const orgaoEmissor = limparValor(
     linhaAposIndiceContendo(linhas, ['org emissor', 'órgão emissor', 'orgao emissor', 'órgão expedidor', 'orgao expedidor'])
       || valorAposRotulo(linhas, ['órgão emissor', 'orgao emissor', 'órgão expedidor', 'orgao expedidor']),
-  ) || base.dados.orgao_emissor || null;
+  ) || (ehCnh ? limparValor(linhas.find((linha) => /departamento\s+estadual\s+de\s+transito|detran/i.test(textoNormalizado(linha))) || null) : null);
   const filiacao = limparValor(linhaAposIndiceContendo(linhas, ['filiacao'], 2));
 
   const camposComprovados: Record<string, any> = {
-    ...(base.dados.campos_comprovados || {}),
     ...(nome ? { nome } : {}),
     ...(cpf ? { cpf } : {}),
     ...(numeroDocumento ? { numero_documento: numeroDocumento } : {}),
@@ -2057,20 +2144,32 @@ function parseDocumentoIdentidadeSocio(texto: string): { dados: Record<string, a
     ...(orgaoEmissor ? { orgao_emissor: orgaoEmissor } : {}),
     ...(filiacao ? { filiacao } : {}),
   };
-  // O parser genérico pode ter herdado o CPF errado (ver comentário acima);
-  // nunca deixar esse valor incorreto sobrepor a extração dedicada.
-  delete camposComprovados.cpf;
-  if (cpf) camposComprovados.cpf = cpf;
+  const evidencias = Object.entries(camposComprovados).map(([campo, valor]) => ({
+    campo,
+    valor,
+    pagina: null,
+    trecho: String(valor),
+    confianca: 0.82,
+  }));
 
   const dados = {
-    ...base.dados,
     ...camposComprovados,
+    evidencias,
+    validade: { inicio: dataEmissao, fim: dataValidade },
     documento_compativel: compativel,
     tipo_detectado_local: ehCnh ? 'CNH' : ehRg ? 'RG' : ehCpf ? 'CPF' : ehPassaporte ? 'PASSAPORTE' : null,
     campos_comprovados: camposComprovados,
     fonte_extracao: 'local_deterministica_especializada',
   };
-  const confianca = clamp(base.confianca + (compativel ? 0.2 : 0) + (nome ? 0.15 : 0) + (numeroDocumento ? 0.15 : 0) + (cpf ? 0.05 : 0));
+  const confianca = clamp(
+    (compativel ? 0.25 : 0)
+      + (nome ? 0.2 : 0)
+      + (numeroDocumento ? 0.2 : 0)
+      + (cpf ? 0.2 : 0)
+      + (dataEmissao ? 0.05 : 0)
+      + (dataValidade ? 0.05 : 0)
+      + (orgaoEmissor ? 0.05 : 0),
+  );
   return { dados, confianca };
 }
 
@@ -2098,17 +2197,10 @@ function parseDeclaracaoIrpf(texto: string): { dados: Record<string, any>; confi
   // declaração completa (e vice-versa) como se fossem o mesmo documento.
   const ehDeclaracaoCompleta = /declaracao de ajuste anual/.test(norm) && !/recibo de entrega/.test(norm);
   const nome = limparValor(valorAposRotulo(linhas, ['nome'])) || base.dados.nome || null;
-  // CORREÇÃO (11/09/2026, rodada seguinte -- declaração real de 9 páginas
-  // anexada pelo usuário): o cabeçalho oficial imprime "CPF: 038.211.981-92"
-  // e, na mesma linha visual, bem mais à direita, "IMPOSTO SOBRE A RENDA -
-  // PESSOA FÍSICA" (documento gerado em duas colunas via `pdftotext
-  // -layout`). Como as linhas já chegam aqui com os espaços múltiplos (que
-  // demarcavam a coluna) colapsados em um só, `valorAposRotulo` não tinha
-  // como saber onde a coluna terminava e capturava a linha inteira, incluindo
-  // o texto da coluna vizinha. Um CPF já formatado (pontos e traço em
-  // posição fixa) é um padrão específico o bastante para ser extraído direto
-  // do texto bruto, sem depender de "até onde vai a linha".
-  const cpf = cpfFormatadoEmQualquerLugar(texto) || limparValor(valorAposRotulo(linhas, ['cpf'])) || base.dados.cpf || null;
+  // O CPF formatado é preferido ao valor da linha para não absorver uma
+  // segunda coluna do layout oficial; a extração rotulada também cobre OCR
+  // que quebra o valor em linhas separadas.
+  const cpf = extrairCpfRotulado(texto) || cpfFormatadoEmQualquerLugar(texto) || limparValor(valorAposRotulo(linhas, ['cpf'])) || base.dados.cpf || null;
   // Sempre o ano-calendário, nunca o exercício -- ver comentário acima.
   const anoCalendario = Number(texto.match(/ano[- ]calend[aá]rio\D{0,15}(20\d{2})/i)?.[1] || 0) || null;
   const competencia = anoCalendario
@@ -2153,7 +2245,7 @@ function parseReciboIrpf(texto: string): { dados: Record<string, any>; confianca
   // O recibo imprime "CPF do declarante" seguido, na linha de valores, do
   // CPF formatado e do nome -- lado a lado, sem rótulo próprio para o nome.
   const cpfENomeMatch = texto.match(/\b(\d{3}\.\d{3}\.\d{3}-\d{2})\s+([A-ZÀ-Ü][A-ZÀ-ÜÇÃÕ\s]{4,80}?)(?=\n|\s{2,}|$)/);
-  const cpf = limparValor(cpfENomeMatch?.[1] || null) || base.dados.cpf || null;
+  const cpf = extrairCpfRotulado(texto) || limparValor(cpfENomeMatch?.[1] || null) || base.dados.cpf || null;
   const titular = limparValor(cpfENomeMatch?.[2] || null) || base.dados.titular || null;
   const anoCalendario = Number(texto.match(/ano[- ]calend[aá]rio\D{0,15}(20\d{2})/i)?.[1] || 0) || null;
   const competencia = anoCalendario
@@ -2752,11 +2844,13 @@ async function extrairEvidenciaVisualEmpresarial(
   }
 }
 
-async function executarTesseract(arquivo: string, timeout: number, maxBuffer: number): Promise<string> {
+type OpcoesOcrLocal = { dpi?: string; psms?: string[] };
+
+async function executarTesseract(arquivo: string, timeout: number, maxBuffer: number, psm?: string): Promise<string> {
   const idiomas = process.env.LOCAL_OCR_LANGUAGES || 'por+eng';
   const { stdout } = await execFileAsync(
     process.env.TESSERACT_BINARY || 'tesseract',
-    [arquivo, 'stdout', '-l', idiomas, '--psm', process.env.LOCAL_OCR_PSM || '6'],
+    [arquivo, 'stdout', '-l', idiomas, '--psm', psm || process.env.LOCAL_OCR_PSM || '6'],
     { timeout, maxBuffer, encoding: 'utf8' },
   );
   return String(stdout || '').replace(/\u0000/g, '').trim();
@@ -2781,6 +2875,7 @@ async function extrairTextoComOcrLocal(
   isPdf: boolean,
   timeout: number,
   maxBuffer: number,
+  opcoes: OpcoesOcrLocal = {},
 ): Promise<{ texto: string; disponivel: boolean; motivo?: string }> {
   if (String(process.env.LOCAL_OCR_ENABLED || 'true').toLowerCase() === 'false') {
     return { texto: '', disponivel: false, motivo: 'OCR local desabilitado por LOCAL_OCR_ENABLED=false.' };
@@ -2789,28 +2884,23 @@ async function extrairTextoComOcrLocal(
   const tempDir = await mkdtemp(path.join(os.tmpdir(), 'destrava-ocr-'));
   try {
     if (!isPdf) {
-      const texto = await executarTesseract(arquivoPath, timeout, maxBuffer);
-      return { texto, disponivel: true };
+      const psms = opcoes.psms?.length ? opcoes.psms : [process.env.LOCAL_OCR_PSM || '6'];
+      const textos = [];
+      for (const psm of psms) {
+        const texto = await executarTesseract(arquivoPath, timeout, maxBuffer, psm);
+        if (texto) textos.push(texto);
+      }
+      return { texto: Array.from(new Set(textos)).join('\n\n').trim(), disponivel: true };
     }
 
     const maxPaginas = Math.max(1, Math.min(30, Number(process.env.LOCAL_OCR_MAX_PAGES || 12)));
     const prefixo = path.join(tempDir, 'pagina');
-    // CORREÇÃO (11/09/2026, rodada seguinte -- CNH real anexada pelo usuário
-    // cujo conteúdo só existe como imagem embutida no PDF): a 180 DPI
-    // (padrão anterior), o Tesseract não consegue ler de forma confiável os
-    // campos em caixas com fundo colorido de um documento de identidade
-    // oficial (CPF, Nº de registro, Nome e Sobrenome) -- confirmado
-    // empiricamente nesta investigação, renderizando a mesma página em
-    // várias resoluções (180/300/350/400/450/500 DPI) com um CNH real e
-    // comparando a saída do OCR. A 300 DPI o campo "Nº REGISTRO" já fica
-    // legível, mas o campo "CPF" (caixa ao lado, fonte menor) ainda sai
-    // ilegível na maioria dos testes; a partir de 400 DPI ambos os campos
-    // (CPF e Nome e Sobrenome) saem consistentemente corretos. Por isso o
-    // padrão foi elevado para 400. Custo: mais tempo de processamento por
-    // página (ainda dentro do timeout configurado), pago só quando o OCR
-    // local é de fato necessário (documento sem camada de texto nativa
-    // suficiente) -- não afeta nenhum documento lido via `pdftotext`.
-    const dpi = Math.max(72, Math.min(600, Number(process.env.LOCAL_OCR_DPI || 400)));
+    const psms = opcoes.psms?.length ? opcoes.psms : [process.env.LOCAL_OCR_PSM || '6'];
+    // A main elevou empiricamente o padrão para 400 DPI para documentos de
+    // identidade com campos em caixas coloridas. A CNH usa 240 DPI explícitos
+    // com três modos de segmentação; os demais documentos preservam o padrão
+    // robusto da main e o valor continua configurável por ambiente.
+    const dpi = Math.max(72, Math.min(600, Number(opcoes.dpi || process.env.LOCAL_OCR_DPI || 400)));
     await execFileAsync(
       process.env.PDFTOPPM_BINARY || 'pdftoppm',
       ['-png', '-r', String(dpi), '-f', '1', '-l', String(maxPaginas), arquivoPath, prefixo],
@@ -2823,10 +2913,12 @@ async function extrairTextoComOcrLocal(
 
     const textos: string[] = [];
     for (const pagina of paginas) {
-      const trecho = await executarTesseract(path.join(tempDir, pagina), timeout, maxBuffer);
-      if (trecho) textos.push(trecho);
+      for (const psm of psms) {
+        const trecho = await executarTesseract(path.join(tempDir, pagina), timeout, maxBuffer, psm);
+        if (trecho) textos.push(trecho);
+      }
     }
-    return { texto: textos.join('\n\n').trim(), disponivel: true };
+    return { texto: Array.from(new Set(textos)).join('\n\n').trim(), disponivel: true };
   } catch (error: any) {
     const indisponivel = error?.code === 'ENOENT';
     return {
@@ -2902,17 +2994,38 @@ export async function extrairDocumentoLocal(
       if (texto.length >= 20) {
         let { dados, confianca } = analisarTextoDocumentoLocal(tipo, texto, tipoDocumentoEsperado);
         const minimoConfianca = Number(process.env.LOCAL_EXTRACTION_MIN_CONFIDENCE || 0.55);
-        const precisaOcrSuplementar = tipo === 'faturamento_12_meses'
+        const documentoIdentidade = tipo === 'documento_identidade_socio';
+        const precisaOcrSuplementar = documentoIdentidade
+          || tipo === 'faturamento_12_meses'
           && (!dados.assinatura_socio_administrador?.presente || !dados.assinatura_contador?.presente)
           && String(process.env.LOCAL_OCR_SUPPLEMENT_ENABLED || 'true').toLowerCase() !== 'false';
         if (precisaOcrSuplementar) {
-          const ocrSuplementar = await extrairTextoComOcrLocal(arquivoPath, true, timeoutOcr, bufferMaximo);
+          const ocrSuplementar = await extrairTextoComOcrLocal(
+            arquivoPath,
+            true,
+            timeoutOcr,
+            bufferMaximo,
+            documentoIdentidade ? { dpi: process.env.LOCAL_OCR_IDENTITY_DPI || '240', psms: ['6', '11', '12'] } : {},
+          );
           if (ocrSuplementar.texto.length >= 20) {
             const combinado = `${texto}\n${ocrSuplementar.texto}`;
             const resultadoCombinado = analisarTextoDocumentoLocal(tipo, combinado, tipoDocumentoEsperado);
-            if (resultadoCombinado.confianca >= confianca) {
+            if (resultadoCombinado.confianca >= confianca || documentoIdentidade) {
               dados = resultadoCombinado.dados;
               confianca = resultadoCombinado.confianca;
+              if (documentoIdentidade) {
+                return {
+                  tipo,
+                  disponivel: true,
+                  legivel: confianca >= minimoConfianca,
+                  mecanismo: 'tesseract',
+                  texto: combinado,
+                  dados: { ...dados, fonte_extracao: 'ocr_local_tesseract_identidade' },
+                  confianca,
+                  paginas_processadas: paginasProcessadas,
+                  motivo: confianca < minimoConfianca ? 'OCR de identidade executado, mas a confiança ficou abaixo do mínimo seguro.' : undefined,
+                };
+              }
               if (dados.assinatura_socio_administrador?.presente && dados.assinatura_contador?.presente) {
                 return { tipo, disponivel: true, legivel: confianca >= minimoConfianca, mecanismo: 'tesseract', texto: combinado, dados, confianca, paginas_processadas: paginasProcessadas };
               }
@@ -2936,7 +3049,14 @@ export async function extrairDocumentoLocal(
     }
   }
 
-  const ocr = await extrairTextoComOcrLocal(arquivoPath, isPdf, timeoutOcr, bufferMaximo);
+  const documentoIdentidade = tipo === 'documento_identidade_socio';
+  const ocr = await extrairTextoComOcrLocal(
+    arquivoPath,
+    isPdf,
+    timeoutOcr,
+    bufferMaximo,
+    documentoIdentidade ? { dpi: isPdf ? process.env.LOCAL_OCR_IDENTITY_DPI || '240' : undefined, psms: ['6', '11', '12'] } : {},
+  );
   if (ocr.texto.length >= 20) {
     const { dados, confianca } = analisarTextoDocumentoLocal(tipo, ocr.texto, tipoDocumentoEsperado);
     return {

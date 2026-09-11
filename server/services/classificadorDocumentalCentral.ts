@@ -166,7 +166,7 @@ function detectarTipo(texto: string): { tipo: TipoDetectadoDocumental; evidencia
     ['ESTATUTO', /estatuto social/, 'Estatuto Social', 0.94],
     ['ATA', /ata (?:de assembleia|da assembleia|de reuniao)/, 'Ata societária', 0.92],
     ['PROCURACAO', /instrumento (?:publico|particular) de procuracao|outorgante.{0,120}outorgado/, 'Procuração', 0.92],
-    ['CNH', /carteira nacional de habilitacao|permissao para dirigir/, 'CNH', 0.97],
+    ['CNH', /carteira nacional de habilitacao|permissao para dirigir|senatran.{0,260}(?:cpf|n\s*registro|cat\s*hab|validade)|departamento estadual de transito.{0,180}(?:cpf|n\s*registro|cat\s*hab)/, 'CNH', 0.97],
     ['RG', /registro geral|carteira de identidade|secretaria de seguranca publica/, 'RG', 0.91],
     ['CPF', /cadastro de pessoas fisicas|comprovante de situacao cadastral no cpf/, 'CPF', 0.94],
     // CORREÇÃO (11/09/2026, rodada seguinte -- pedido explícito do usuário
