@@ -4,6 +4,7 @@ import {
   regrasDocumentaisFallback,
   validarComprovanteEnderecoExtraido,
   validarFaturamentoExtraido,
+  validarIdentidadeSocioExtraida,
 } from '../server/services/regrasDocumentaisCredito';
 import { obterPerfilAnaliseDocumental } from '../server/services/documentAnalysisProfiles';
 
@@ -73,6 +74,37 @@ describe('regras documentais de crédito', () => {
     expect(cobertura.total_socios).toBe(2);
     expect(cobertura.socios_completos).toBe(1);
     expect(cobertura.por_socio[1].tipos_faltantes).toEqual(['comprovante_residencia']);
+  });
+
+  it('confirma identidade por sócio e sinaliza divergência sem redirecionar o arquivo', () => {
+    const confirmado = validarIdentidadeSocioExtraida([
+      { id: 's1', nome: 'Maria da Silva', cpf: '123.456.789-00', ativo: true },
+      { id: 's2', nome: 'João Souza', cpf: '987.654.321-00', ativo: true },
+    ], { nome: 'Maria da Silva', cpf: '12345678900' }, 's1', 'CNH');
+    expect(confirmado.dados.identidade_socio_confere).toBe(true);
+    expect(confirmado.alertas).toEqual([]);
+
+    const divergente = validarIdentidadeSocioExtraida([
+      { id: 's1', nome: 'Maria da Silva', cpf: '123.456.789-00', ativo: true },
+      { id: 's2', nome: 'João Souza', cpf: '987.654.321-00', ativo: true },
+    ], { nome: 'João Souza', cpf: '98765432100' }, 's1', 'CNH');
+    expect(divergente.dados.exige_justificativa_identidade).toBe(true);
+    expect(divergente.alertas.map((alerta) => alerta.codigo)).toEqual(expect.arrayContaining([
+      'identidade_cpf_diferente_socio',
+      'identidade_nome_diferente_socio',
+    ]));
+  });
+
+  it('não conta documento com divergência de identidade como cobertura completa', () => {
+    const cobertura = calcularCoberturaDocumentalSocios(socios, [
+      { socio_id: 's1', tipo_documento: 'documento_socio', dados_extraidos: { identidade_socio_confere: false } },
+      { socio_id: 's1', tipo_documento: 'comprovante_residencia', dados_extraidos: { titular_confere_com_socio: true } },
+      { socio_id: 's2', tipo_documento: 'documento_socio', dados_extraidos: { identidade_socio_confere: true } },
+      { socio_id: 's2', tipo_documento: 'comprovante_residencia', dados_extraidos: { titular_confere_com_socio: true } },
+    ], ['documento_socio', 'comprovante_residencia']);
+    expect(cobertura.socios_completos).toBe(1);
+    expect(cobertura.por_socio[0].tipos_faltantes).toEqual(['documento_socio']);
+    expect(cobertura.por_socio[1].tipos_faltantes).toEqual([]);
   });
 
   // CORREÇÃO (Rodada 33, 05/09/2026, diagnóstico cruzado de duas pesquisas

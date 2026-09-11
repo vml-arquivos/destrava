@@ -15,6 +15,7 @@ import { resolveDocumentPath } from './documentStorage';
 import {
   validarComprovanteEnderecoExtraido,
   validarFaturamentoExtraido,
+  validarIdentidadeSocioExtraida,
 } from './regrasDocumentaisCredito';
 import { canonicalizeDocumentType, documentAnalysisConfig, documentLabel, getDocumentCatalogEntry } from '../../shared/documentTypes';
 import { classificarResultadoPersistido, type ClassificacaoDocumentalResult } from './classificadorDocumentalCentral';
@@ -2406,12 +2407,18 @@ export class AnaliseDocumentalService {
     const tipoCanonico = canonicalizeDocumentType(tipoDocumento);
     const promptConfig = documentAnalysisConfig(tipoDocumento);
     const prompt = promptDocumentoCatalogado(tipoDocumento, catalogo.nome, catalogo.categoria, promptConfig?.promptCodigo || `catalogo_${tipoCanonico}`);
-    const { empresa, documento } = await this.carregarContexto(empresaId, arquivoId);
+    const { empresa, socios, documento } = await this.carregarContexto(empresaId, arquivoId);
     const tipoLocal = tipoLeitorLocalDocumentoCatalogado(tipoDocumento);
     const extraidos = await this.extrairHibrido(documento.caminho_arquivo!, prompt, documento.mime_type || 'application/pdf', tipoLocal, true, tipoDocumento);
     const normalizado = normalizarDocumentoCatalogado(extraidos, tipoDocumento, empresa);
-    const resultadoBase = criarResultado('documento_generico', empresaId, arquivoId, normalizado.dados, normalizado.alertas, this.ultimoModeloUsado);
-    await persistirEvidenciasP0(this.db, empresaId, arquivoId, tipoDocumento, normalizado.dados, normalizado.evidencias, normalizado.textoFonte)
+    const documentoDeSocio = ['documento_socio', 'rg', 'cpf', 'cnh', 'imposto_renda', 'recibo_irpf'].includes(canonicalizeDocumentType(tipoDocumento));
+    const validacaoSocio = documentoDeSocio
+      ? validarIdentidadeSocioExtraida(socios, normalizado.dados, documento.socio_id || null, tipoDocumento)
+      : { dados: {}, alertas: [] };
+    const dadosNormalizados = { ...normalizado.dados, ...validacaoSocio.dados };
+    const alertasNormalizados = [...normalizado.alertas, ...validacaoSocio.alertas];
+    const resultadoBase = criarResultado('documento_generico', empresaId, arquivoId, dadosNormalizados, alertasNormalizados, this.ultimoModeloUsado);
+    await persistirEvidenciasP0(this.db, empresaId, arquivoId, tipoDocumento, dadosNormalizados, normalizado.evidencias, normalizado.textoFonte)
       .catch((error: any) => console.warn('[P0] Evidências temporais/rolling/bureau indisponíveis; laudo preservado:', error?.message || error));
     return {
       ...resultadoBase,
