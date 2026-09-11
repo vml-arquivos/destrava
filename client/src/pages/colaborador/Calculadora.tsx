@@ -1,0 +1,1858 @@
+import { toast } from "sonner";
+import { gerarArquivoPdfSimulacao, gerarPdfSimulacao } from "@/lib/gerarPdfSimulacao";
+import { useState, useCallback, useEffect } from "react";
+import Layout from "./Layout";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Badge } from "@/components/ui/badge";
+import {
+  Card,
+  CardContent,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import {
+  Tabs,
+  TabsContent,
+  TabsList,
+  TabsTrigger,
+} from "@/components/ui/tabs";
+import {
+  Calculator,
+  User,
+  Building2,
+  Phone,
+  DollarSign,
+  Percent,
+  Calendar,
+  FileText,
+  Save,
+  Printer,
+  RotateCcw,
+  CheckCircle2,
+  AlertCircle,
+  Info,
+  ArrowLeftRight,
+  TrendingDown,
+  TrendingUp,
+  Minus,
+  Search,
+  ChevronDown,
+} from "lucide-react";
+import { apiFetch } from "@/lib/api";
+import { useSelicMeta } from "@/hooks/useSelicMeta";
+import { useAuth } from "@/contexts/AuthContext";
+
+// ─── Formatadores ─────────────────────────────────────────────────────────────
+
+const fmtBRL = new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" });
+
+function parseBRL(v: string): number {
+  return parseFloat(v.replace(/\./g, "").replace(",", ".")) || 0;
+}
+
+function formatarMoeda(v: string): string {
+  const nums = v.replace(/\D/g, "");
+  if (!nums) return "";
+  const n = parseInt(nums) / 100;
+  return n.toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+}
+
+function formatarTelefone(v: string): string {
+  const n = v.replace(/\D/g, "").slice(0, 11);
+  if (n.length <= 2) return n;
+  if (n.length <= 6) return `(${n.slice(0, 2)}) ${n.slice(2)}`;
+  if (n.length <= 10) return `(${n.slice(0, 2)}) ${n.slice(2, 6)}-${n.slice(6)}`;
+  return `(${n.slice(0, 2)}) ${n.slice(2, 7)}-${n.slice(7)}`;
+}
+
+async function armazenarPdfSimulacao(
+  simulacaoId: string | undefined,
+  dadosPdf: Parameters<typeof gerarArquivoPdfSimulacao>[0]
+): Promise<boolean> {
+  if (!simulacaoId) return false;
+  try {
+    const { base64, nomeArquivo } = await gerarArquivoPdfSimulacao(dadosPdf);
+    if (!base64) return false;
+    const payload = {
+      nome_arquivo: nomeArquivo,
+      pdf_base64: base64,
+      metadata: { modo: dadosPdf.modo, cliente: dadosPdf.cliente?.nome || null },
+    };
+    try {
+      await apiFetch(`/api/simulacoes/${simulacaoId}/pdf`, { method: "POST", body: JSON.stringify(payload) });
+    } catch (primeiraFalha) {
+      // Uma falha de rede pontual não pode custar o PDF -- tenta mais uma vez antes de desistir.
+      console.warn("[PDF_SIMULACAO] Primeira tentativa falhou, tentando novamente...", primeiraFalha);
+      await apiFetch(`/api/simulacoes/${simulacaoId}/pdf`, { method: "POST", body: JSON.stringify(payload) });
+    }
+    return true;
+  } catch (err) {
+    console.warn("[PDF_SIMULACAO] Não foi possível armazenar o PDF", err);
+    toast.warning("Simulação salva, mas o PDF não foi armazenado para reimpressão. Tente reimprimir pela lista de simulações.");
+    return false;
+  }
+}
+
+// ─── Cálculos ─────────────────────────────────────────────────────────────────
+
+export interface ResultadoCalculo {
+  parcelaMensal: number;
+  totalFinanciamento: number;
+  totalJuros: number;
+  impostoValor: number;
+  comissaoValor: number;
+  custoTotalOperacao: number;
+  taxaMensal: number;
+  taxaAnualEquiv: number;
+  cetMensal: number;
+  cetAnual: number;
+  carenciaMeses: number;
+  mesesAmortizacao: number;
+}
+
+function calcularCET(valorCredito: number, prazo: number, parcelaMensal: number): number {
+  let cet = 0.01; // Chute inicial
+  for (let i = 0; i < 20; i++) {
+    let f = 0;
+    let df = 0;
+    for (let t = 1; t <= prazo; t++) {
+      f += parcelaMensal / Math.pow(1 + cet, t);
+      df -= (t * parcelaMensal) / Math.pow(1 + cet, t + 1);
+    }
+    f -= valorCredito;
+    cet = cet - f / df;
+  }
+  return cet; // Retorna taxa decimal mensal
+}
+
+export function calcular(
+  valorCredito: number,
+  prazo: number,
+  taxaMensal: number,
+  valorFiscal: number,
+  pctImposto: number,
+  pctComissao: number,
+  carenciaMeses: number = 0
+): ResultadoCalculo | null {
+  if (!valorCredito || !prazo || !taxaMensal) return null;
+
+  const taxa = taxaMensal / 100;
+  const carencia = Math.max(0, Math.min(carenciaMeses || 0, prazo - 1)); // nunca consome o prazo inteiro
+  const mesesAmortizacao = prazo - carencia;
+
+  // Durante a carência, os juros incidem e capitalizam sobre o principal (prática
+  // padrão bancária) -- o saldo devedor cresce até começar a amortizar. Com
+  // carência=0 isso é sempre igual a valorCredito, preservando o cálculo atual
+  // exatamente como já era antes desta mudança.
+  const principalPosCarencia = valorCredito * Math.pow(1 + taxa, carencia);
+
+  const parcelaMensal =
+    (principalPosCarencia * taxa * Math.pow(1 + taxa, mesesAmortizacao)) /
+    (Math.pow(1 + taxa, mesesAmortizacao) - 1);
+
+  const totalFinanciamento = parcelaMensal * mesesAmortizacao;
+  const totalJuros = totalFinanciamento - valorCredito;
+
+  const impostoValor = valorFiscal > 0 && pctImposto > 0
+    ? (valorFiscal * pctImposto) / 100
+    : 0;
+
+  const comissaoValor = pctComissao > 0
+    ? (valorCredito * pctComissao) / 100
+    : 0;
+
+  // Comissão Destrava é exibida e salva separadamente, mas NÃO compõe o custo/despesa total do cliente.
+  const custoTotalOperacao = totalFinanciamento + impostoValor;
+
+  const taxaAnualEquiv = (Math.pow(1 + taxa, 12) - 1) * 100;
+  
+  // CET considera apenas o valor líquido afetado por imposto/despesas financeiras da operação.
+  // A comissão fica destacada separadamente e não reduz o valor liberado nesta simulação.
+  const valorLiberado = Math.max(valorCredito - impostoValor, 1);
+  const cetMensalDecimal = calcularCET(valorLiberado, mesesAmortizacao, parcelaMensal);
+  const cetMensal = cetMensalDecimal * 100;
+  const cetAnual = (Math.pow(1 + cetMensalDecimal, 12) - 1) * 100;
+
+  return {
+    parcelaMensal,
+    totalFinanciamento,
+    totalJuros,
+    impostoValor,
+    comissaoValor,
+    custoTotalOperacao,
+    taxaMensal,
+    taxaAnualEquiv,
+    cetMensal,
+    cetAnual,
+    carenciaMeses: carencia,
+    mesesAmortizacao,
+  };
+}
+
+// ─── Tipos de formulário ──────────────────────────────────────────────────────
+
+interface FormBase {
+  nome: string;
+  empresa: string;
+  telefone: string;
+  cpfCnpj: string;
+  valorCredito: string;
+  prazo: string;
+  carencia: string;
+  taxaJuros: string;
+  comissao: string;
+  banco: string;
+  linhaCredito: string;
+  observacoes: string;
+  /** Preenchido só quando a empresa foi escolhida via busca (empresa já cadastrada) --
+   *  sem isso, a simulação não tem como ficar vinculada de forma confiável à empresa,
+   *  e o PDF não entra no Acervo Documental dela. */
+  empresaId?: string;
+}
+
+interface FormComImposto extends FormBase {
+  valorFiscal: string;
+  pctImposto: string;
+}
+
+const BANCOS = [
+  "CAIXA Econômica Federal",
+  "Banco do Brasil",
+  "Bradesco",
+  "Itaú",
+  "Santander",
+  "Sicredi",
+  "Sicoob",
+  "BNB",
+  "BNDES",
+  "Outro",
+];
+
+interface LinhaCredito {
+  nome: string;
+  prazoMaxMeses?: number;
+  carenciaMaxMeses?: number;
+  valorMaxReais?: number;
+  observacao: string;
+  /** Referência de composição de taxa (Selic + spread) só como contexto pro colaborador
+   *  -- não define a taxa da simulação, que continua sendo negociada com o banco e
+   *  digitada manualmente. */
+  spreadSobreSelic?: number;
+}
+
+// Regras reais, extraídas das próprias páginas de produto do site (Pronampe.tsx,
+// PeacFgi.tsx, Procred360.tsx) -- nunca inventadas. Onde o produto não divulga um
+// limite fixo (depende da instituição/análise), não colocamos número nenhum.
+const LINHAS_CREDITO: LinhaCredito[] = [
+  { nome: "PRONAMPE", prazoMaxMeses: 96, carenciaMaxMeses: 24, valorMaxReais: 500000, spreadSobreSelic: 6, observacao: "Regras vigentes desde a MP 1.355/2026 (maio/2026): limite de crédito de até 50% do faturamento anual informado à Receita Federal, respeitado o teto de R$ 500 mil por empresa (empresas até R$ 4,8 milhões/ano de faturamento). Prazo de até 96 meses, carência de até 24 meses." },
+  { nome: "PEAC FGI", prazoMaxMeses: 96, carenciaMaxMeses: 36, observacao: "Prazo total entre 12 e 96 meses, carência entre 12 e 36 meses. Condição final negociada com a instituição financeira." },
+  { nome: "ProCred 360", prazoMaxMeses: 96, valorMaxReais: 180000, carenciaMaxMeses: 24, spreadSobreSelic: 5, observacao: "Regras vigentes desde a MP 1.355/2026 (maio/2026): voltado a empresas com faturamento anual de até R$ 360 mil. Limite de crédito de até 50% do faturamento (60% para empresas lideradas por mulheres), respeitado o teto de R$ 180 mil por empresa. Prazo de até 96 meses, carência de até 24 meses." },
+  { nome: "Giro CAIXA Fácil", observacao: "Limite, taxa, CET e prazo definidos conforme análise e condições vigentes da instituição — sem valor fixo divulgado." },
+  { nome: "FCO", observacao: "Prazo e carência dependem da linha e do projeto enquadrado na Programação FCO vigente e da análise do agente financeiro." },
+  { nome: "FAMPE", observacao: "Condições (limite, prazo, carência) definidas conforme análise da instituição financeira parceira." },
+  { nome: "Capital de Giro", observacao: "Linha genérica — condições definidas caso a caso com a instituição financeira." },
+  { nome: "Crédito Rural", observacao: "Condições definidas caso a caso com a instituição financeira." },
+  { nome: "Financiamento de Equipamentos", observacao: "Condições definidas caso a caso com a instituição financeira." },
+  { nome: "Crédito Imobiliário PJ", observacao: "Condições definidas caso a caso com a instituição financeira." },
+  { nome: "Antecipação de Recebíveis", observacao: "Condições definidas caso a caso com a instituição financeira." },
+  { nome: "Crédito Pessoal", observacao: "Condições definidas caso a caso com a instituição financeira." },
+  { nome: "Consignado", observacao: "Condições definidas caso a caso com a instituição financeira." },
+  { nome: "Livre / Outro", observacao: "Sem linha específica — preencha valor, prazo e taxa livremente conforme a proposta em mãos." },
+];
+const LINHAS = LINHAS_CREDITO.map((l) => l.nome);
+
+const PRAZOS = [6, 12, 18, 24, 30, 36, 48, 60, 72, 84, 96, 120];
+
+const formBaseInicial: FormBase = {
+  nome: "",
+  empresa: "",
+  telefone: "",
+  cpfCnpj: "",
+  valorCredito: "",
+  prazo: "24",
+  carencia: "0",
+  taxaJuros: "",
+  comissao: "",
+  banco: "",
+  linhaCredito: "",
+  observacoes: "",
+};
+
+// ─── Busca de lead/cliente existente ────────────────────────────────────────
+
+interface EmpresaOption {
+  id: string;
+  razao_social?: string;
+  nome_fantasia?: string;
+  cnpj?: string;
+  telefone?: string;
+  whatsapp?: string;
+  responsavel_nome?: string;
+}
+
+function SeletorCliente({
+  onSelect,
+}: {
+  onSelect: (empresa: EmpresaOption) => void;
+}) {
+  const [busca, setBusca] = useState("");
+  const [resultados, setResultados] = useState<EmpresaOption[]>([]);
+  const [aberto, setAberto] = useState(false);
+  const [carregando, setCarregando] = useState(false);
+
+  async function carregarEmpresas(query: string) {
+    setCarregando(true);
+    try {
+      // Busca empresa já cadastrada de verdade (não lead avulso) -- é o que permite
+      // linkar empresa_id na simulação, e sem isso o PDF nunca cai no Acervo Documental.
+      // Query vazia também é válida -- o backend devolve as empresas disponíveis pro
+      // colaborador (respeitando permissão), permitindo navegar sem digitar nada.
+      const data = await apiFetch(`/api/empresas/search?q=${encodeURIComponent(query)}&limit=20`);
+      const arr: EmpresaOption[] = Array.isArray(data?.empresas) ? data.empresas : (Array.isArray(data) ? data : []);
+      setResultados(arr.slice(0, 20));
+      setAberto(true);
+    } catch { setResultados([]); }
+    setCarregando(false);
+  }
+
+  useEffect(() => {
+    if (busca.length < 2) return; // campo vazio já é tratado no clique/foco, não aqui
+    const t = setTimeout(() => carregarEmpresas(busca), 300);
+    return () => clearTimeout(t);
+  }, [busca]);
+
+  return (
+    <div className="relative">
+      <div className="flex items-center gap-2 pb-1 border-b mb-3">
+        <Search className="h-4 w-4 text-primary" />
+        <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Buscar empresa cadastrada</p>
+        <span className="text-xs font-bold text-destructive ml-auto">* obrigatório</span>
+      </div>
+      <div className="relative">
+        <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+        <Input
+          value={busca}
+          onChange={e => setBusca(e.target.value)}
+          onFocus={() => { if (resultados.length > 0) setAberto(true); else if (busca.length < 2) carregarEmpresas(""); }}
+          onBlur={() => setTimeout(() => setAberto(false), 200)}
+          placeholder="Digite razão social, CNPJ ou telefone..."
+          className="pl-9"
+        />
+        {carregando && <div className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 border-2 border-primary border-t-transparent rounded-full animate-spin" />}
+      </div>
+      {aberto && resultados.length > 0 && (
+        <div className="absolute z-50 w-full mt-1 bg-card border border-border rounded-xl shadow-lg overflow-hidden">
+          {resultados.map(empresa => (
+            <button
+              key={empresa.id}
+              type="button"
+              className="w-full text-left px-4 py-3 hover:bg-primary/10 border-b last:border-0 transition-colors"
+              onMouseDown={() => { onSelect(empresa); setBusca(""); setAberto(false); }}
+            >
+              <p className="text-sm font-medium text-foreground">{empresa.razao_social || empresa.nome_fantasia || "—"}</p>
+              <p className="text-xs text-muted-foreground">{empresa.responsavel_nome || "—"} · {empresa.cnpj || empresa.telefone || ""}</p>
+            </button>
+          ))}
+        </div>
+      )}
+      {aberto && !carregando && busca.length >= 2 && resultados.length === 0 && (
+        <div className="absolute z-50 w-full mt-1 bg-card border border-border rounded-xl shadow-lg px-4 py-3 text-xs text-muted-foreground">
+          Nenhuma empresa cadastrada encontrada. Cadastre a empresa em Clientes PJ antes de simular, ou continue preenchendo os dados manualmente abaixo.
+        </div>
+      )}
+      {aberto && busca.length >= 2 && resultados.length === 0 && !carregando && (
+        <div className="absolute z-50 w-full mt-1 bg-card border border-border rounded-xl shadow-sm px-4 py-3 text-sm text-muted-foreground">
+          Nenhum cliente encontrado. Preencha os dados manualmente.
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ─── Painel de resultado individual ──────────────────────────────────────────
+
+function PainelResultado({
+  resultado,
+  comImposto,
+  valorFiscalNum,
+  pctImpostoNum,
+  prazo,
+}: {
+  resultado: ResultadoCalculo;
+  comImposto: boolean;
+  valorFiscalNum: number;
+  pctImpostoNum: number;
+  prazo: number;
+}) {
+  return (
+    <div className="space-y-3">
+      <div className="bg-gradient-to-br from-[#001f6b] to-[#003db5] rounded-2xl p-6 text-primary-foreground text-center">
+        <p className="text-primary-foreground/70 text-sm mb-1">Parcela Mensal</p>
+        <p className="text-4xl font-bold">{fmtBRL.format(resultado.parcelaMensal)}</p>
+        <p className="text-primary-foreground/60 text-xs mt-1">{prazo}x mensais</p>
+      </div>
+
+      <div className="rounded-xl border bg-card p-4">
+        <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-3">Financiamento</p>
+        <div className="space-y-0">
+          <div className="flex justify-between items-center py-2 border-b border-border text-sm">
+            <span className="text-muted-foreground">Valor do Crédito</span>
+            <span className="font-medium">{fmtBRL.format(resultado.totalFinanciamento - resultado.totalJuros)}</span>
+          </div>
+          <div className="flex justify-between items-center py-2 border-b border-border text-sm">
+            <span className="text-muted-foreground">Total de Juros</span>
+            <span className="font-medium text-warning">{fmtBRL.format(resultado.totalJuros)}</span>
+          </div>
+          <div className="flex justify-between items-center py-2 text-sm">
+            <span className="font-semibold">Total do Financiamento</span>
+            <span className="font-bold text-primary">{fmtBRL.format(resultado.totalFinanciamento)}</span>
+          </div>
+        </div>
+      </div>
+
+      <div className="rounded-xl border-2 border-destructive/20 bg-destructive/10 p-4">
+        <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-3">Custo Total da Operação <span className="normal-case font-normal">(cálculo bancário — sem honorários Destrava)</span></p>
+        <div className="space-y-0">
+          <div className="flex justify-between items-center py-2 border-b border-destructive/20 text-sm">
+            <span className="text-muted-foreground">Total do Financiamento</span>
+            <span className="font-medium">{fmtBRL.format(resultado.totalFinanciamento)}</span>
+          </div>
+          {comImposto && resultado.impostoValor > 0 && (
+            <div className="flex justify-between items-center py-2 border-b border-destructive/20 text-sm">
+              <span className="text-muted-foreground">
+                Imposto ({pctImpostoNum}% s/ {fmtBRL.format(valorFiscalNum)}) <span className="text-xs">(1x)</span>
+              </span>
+              <span className="font-semibold text-destructive">{fmtBRL.format(resultado.impostoValor)}</span>
+            </div>
+          )}
+          <div className="flex justify-between items-center pt-3 text-sm">
+            <span className="font-bold text-base">Total da Operação <span className="text-xs font-normal">(o que o cliente paga ao banco)</span></span>
+            <span className="font-bold text-xl text-destructive">{fmtBRL.format(resultado.custoTotalOperacao)}</span>
+          </div>
+        </div>
+      </div>
+
+      <div className="rounded-xl border bg-card p-4">
+        <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-3">Taxas e Custos</p>
+        <div className="space-y-0">
+          <div className="flex justify-between items-center py-2 border-b border-border text-sm">
+            <span className="text-muted-foreground">Taxa de Juros</span>
+            <span className="font-medium">{resultado.taxaMensal.toFixed(2).replace('.', ',')}% a.m. / {resultado.taxaAnualEquiv.toFixed(2).replace('.', ',')}% a.a.</span>
+          </div>
+          <div className="flex justify-between items-center py-2 text-sm">
+            <span className="text-muted-foreground">CET (Custo Efetivo Total)</span>
+            <span className="font-medium text-destructive">{resultado.cetMensal.toFixed(2).replace('.', ',')}% a.m. / {resultado.cetAnual.toFixed(2).replace('.', ',')}% a.a.</span>
+          </div>
+        </div>
+      </div>
+
+      {resultado.comissaoValor > 0 && (
+        <div className="rounded-xl border-2 border-warning/20 bg-warning/10 p-4">
+          <p className="text-xs font-semibold text-warning uppercase tracking-wide mb-3">Honorários Destrava <span className="normal-case font-normal text-muted-foreground">(à parte — não é cálculo bancário, não soma no custo da operação)</span></p>
+          <div className="flex justify-between items-center py-1 text-sm">
+            <span className="text-muted-foreground">Comissão Destrava</span>
+            <span className="font-bold text-lg text-warning">{fmtBRL.format(resultado.comissaoValor)}</span>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ─── Campos reutilizáveis ─────────────────────────────────────────────────────
+
+function CamposCliente({
+  form,
+  erros,
+  set,
+  onSelectLead,
+  onLimparEmpresa,
+}: {
+  form: FormBase;
+  erros: Record<string, string>;
+  set: (k: keyof FormBase, v: string) => void;
+  onSelectLead?: (empresa: EmpresaOption) => void;
+  onLimparEmpresa?: () => void;
+}) {
+  const empresaVinculada = Boolean(form.empresaId);
+  return (
+    <div className="space-y-4">
+      {onSelectLead && (
+        <div>
+          <SeletorCliente onSelect={onSelectLead} />
+          <p className="text-xs text-muted-foreground mt-1.5">
+            Empresa não encontrada? {" "}
+            <a href="/colaborador/empresas?novo=1" target="_blank" rel="noreferrer" className="text-primary font-medium underline underline-offset-2">
+              Cadastre a empresa primeiro em Clientes PJ
+            </a>
+            {" "}— simulação de crédito empresarial exige empresa já cadastrada.
+          </p>
+        </div>
+      )}
+      <div className="flex items-center gap-2 pb-1 border-b">
+        <User className="h-4 w-4 text-primary" />
+        <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Dados do Cliente</p>
+        <span className="text-xs text-destructive ml-auto">* obrigatório</span>
+      </div>
+
+      {empresaVinculada && (
+        <div className="flex items-center justify-between gap-3 rounded-lg border border-success/20 bg-success/10 px-3 py-2">
+          <p className="text-xs text-success">
+            <span className="font-bold">✓ Empresa vinculada do cadastro.</span> Razão social e CNPJ vêm do registro, sem digitar de novo.
+          </p>
+          {onLimparEmpresa && (
+            <button type="button" onClick={onLimparEmpresa} className="text-xs font-semibold text-success underline underline-offset-2 whitespace-nowrap">
+              Trocar empresa
+            </button>
+          )}
+        </div>
+      )}
+
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <div className="space-y-1.5">
+          <Label htmlFor="nome">Nome Completo <span className="text-muted-foreground text-xs font-normal">(opcional — puxa do sócio/responsável se a empresa tiver)</span></Label>
+          <div className="relative">
+            <User className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+            <Input
+              id="nome"
+              value={form.nome}
+              onChange={(e) => set("nome", e.target.value)}
+              placeholder="Nome do cliente"
+              className={`pl-9 ${erros.nome ? "border-destructive" : ""}`}
+            />
+          </div>
+          {erros.nome && <p className="text-xs text-destructive">{erros.nome}</p>}
+        </div>
+
+        <div className="space-y-1.5">
+          <Label htmlFor="empresa">Empresa / Razão Social <span className="text-destructive">*</span></Label>
+          <div className="relative">
+            <Building2 className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+            <Input
+              id="empresa"
+              value={form.empresa}
+              readOnly
+              onFocus={(e) => e.target.blur()}
+              placeholder="Busque e selecione a empresa acima"
+              className={`pl-9 cursor-not-allowed bg-muted/50 ${erros.empresa ? "border-destructive" : ""}`}
+              title="Selecione a empresa pela busca acima — não é possível digitar diretamente."
+            />
+          </div>
+          {erros.empresa && <p className="text-xs text-destructive">{erros.empresa}</p>}
+        </div>
+
+        <div className="space-y-1.5">
+          <Label htmlFor="telefone">Telefone / WhatsApp <span className="text-destructive">*</span></Label>
+          <div className="relative">
+            <Phone className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+            <Input
+              id="telefone"
+              value={form.telefone}
+              onChange={(e) => set("telefone", formatarTelefone(e.target.value))}
+              placeholder="(61) 9 9999-9999"
+              className={`pl-9 ${erros.telefone ? "border-destructive" : ""}`}
+              inputMode="tel"
+            />
+          </div>
+          {erros.telefone && <p className="text-xs text-destructive">{erros.telefone}</p>}
+        </div>
+
+        <div className="space-y-1.5">
+          <Label htmlFor="cpfCnpj">CPF / CNPJ <span className="text-muted-foreground text-xs font-normal">(opcional)</span></Label>
+          <Input
+            id="cpfCnpj"
+            value={form.cpfCnpj}
+            readOnly={empresaVinculada}
+            onChange={(e) => set("cpfCnpj", e.target.value)}
+            placeholder="00.000.000/0001-00"
+            className={empresaVinculada ? "cursor-not-allowed bg-muted/50" : ""}
+            title={empresaVinculada ? "CNPJ vem do cadastro da empresa selecionada." : undefined}
+          />
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function CamposEmprestimo({
+  form,
+  erros,
+  set,
+}: {
+  form: FormBase;
+  erros: Record<string, string>;
+  set: (k: keyof FormBase, v: string) => void;
+}) {
+  const linhaAtiva = LINHAS_CREDITO.find((l) => l.nome === form.linhaCredito);
+  const prazosDisponiveis = linhaAtiva?.prazoMaxMeses
+    ? PRAZOS.filter((p) => p <= linhaAtiva.prazoMaxMeses!)
+    : PRAZOS;
+  const prazoAtual = parseInt(form.prazo) || 0;
+  const tetoCarencia = Math.min(linhaAtiva?.carenciaMaxMeses ?? 24, Math.max(prazoAtual - 1, 0));
+  const carenciasDisponiveis = [0, 3, 6, 12, 18, 24, 36].filter((c) => c <= tetoCarencia);
+  const valorExcedeLimite = Boolean(
+    linhaAtiva?.valorMaxReais && parseBRL(form.valorCredito) > linhaAtiva.valorMaxReais
+  );
+  const selic = useSelicMeta();
+
+  return (
+    <div className="space-y-4">
+      <div className="flex items-center gap-2 pb-1 border-b">
+        <DollarSign className="h-4 w-4 text-primary" />
+        <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Dados do Empréstimo</p>
+      </div>
+
+      <div className="space-y-1.5">
+        <Label>Linha de Crédito <span className="text-muted-foreground text-xs font-normal">(escolha primeiro — ajusta o prazo disponível abaixo)</span></Label>
+        <Select value={form.linhaCredito} onValueChange={(v) => set("linhaCredito", v)}>
+          <SelectTrigger><SelectValue placeholder="Selecione..." /></SelectTrigger>
+          <SelectContent>
+            {LINHAS.map((l) => <SelectItem key={l} value={l}>{l}</SelectItem>)}
+          </SelectContent>
+        </Select>
+        {linhaAtiva && (
+          <p className="text-xs text-primary bg-primary/10 border border-primary/20 rounded-lg px-3 py-2 mt-1">
+            {linhaAtiva.observacao}
+            {linhaAtiva.spreadSobreSelic != null && selic && !selic.indisponivel && (
+              <> <strong>Referência de taxa: Selic ({selic.valor.toFixed(2)}% a.a., {selic.dataReferencia}) + {linhaAtiva.spreadSobreSelic}% a.a. de spread ≈ {(selic.valor + linhaAtiva.spreadSobreSelic).toFixed(2)}% a.a.</strong> Taxa final depende da análise do banco.</>
+            )}
+          </p>
+        )}
+      </div>
+
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <div className="space-y-1.5">
+          <Label htmlFor="valorCredito">Valor do Crédito <span className="text-destructive">*</span></Label>
+          <div className="relative">
+            <span className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground text-sm font-semibold">R$</span>
+            <Input
+              id="valorCredito"
+              value={form.valorCredito}
+              onChange={(e) => set("valorCredito", formatarMoeda(e.target.value))}
+              placeholder="0,00"
+              className={`pl-9 ${erros.valorCredito || valorExcedeLimite ? "border-destructive" : ""}`}
+              inputMode="numeric"
+            />
+          </div>
+          {erros.valorCredito && <p className="text-xs text-destructive">{erros.valorCredito}</p>}
+          {valorExcedeLimite && (
+            <p className="text-xs text-destructive">
+              Acima do limite de {fmtBRL.format(linhaAtiva!.valorMaxReais!)} dessa linha — confirme com o banco antes de prosseguir.
+            </p>
+          )}
+        </div>
+
+        <div className="space-y-1.5">
+          <Label>Prazo (meses) <span className="text-destructive">*</span></Label>
+          <Select value={form.prazo} onValueChange={(v) => set("prazo", v)}>
+            <SelectTrigger>
+              <Calendar className="h-4 w-4 mr-2 text-muted-foreground" />
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              {prazosDisponiveis.map((p) => (
+                <SelectItem key={p} value={String(p)}>{p} meses</SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+          {linhaAtiva?.prazoMaxMeses && (
+            <p className="text-xs text-muted-foreground">Limitado a {linhaAtiva.prazoMaxMeses} meses nessa linha{linhaAtiva.carenciaMaxMeses ? ` (carência de até ${linhaAtiva.carenciaMaxMeses} meses)` : ""}.</p>
+          )}
+        </div>
+
+        <div className="space-y-1.5">
+          <Label>Carência (meses) <span className="text-muted-foreground text-xs font-normal">(opcional — sem pagamento no início)</span></Label>
+          <Select value={form.carencia} onValueChange={(v) => set("carencia", v)}>
+            <SelectTrigger><SelectValue /></SelectTrigger>
+            <SelectContent>
+              {carenciasDisponiveis.map((c) => (
+                <SelectItem key={c} value={String(c)}>{c === 0 ? "Sem carência" : `${c} meses`}</SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+          <p className="text-xs text-muted-foreground">Durante a carência os juros incidem e capitalizam sobre o saldo; a amortização começa depois, sobre os {Math.max(parseInt(form.prazo) - (parseInt(form.carencia) || 0), 1)} meses restantes.</p>
+        </div>
+
+        <div className="space-y-1.5">
+          <Label htmlFor="taxaJuros">Taxa de Juros Mensal (%) <span className="text-destructive">*</span></Label>
+          <div className="relative">
+            <Percent className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+            <Input
+              id="taxaJuros"
+              value={form.taxaJuros}
+              onChange={(e) => set("taxaJuros", e.target.value.replace(",", "."))}
+              placeholder="Ex: 1.89"
+              className={`pl-9 ${erros.taxaJuros ? "border-destructive" : ""}`}
+              inputMode="decimal"
+            />
+          </div>
+          {erros.taxaJuros && <p className="text-xs text-destructive">{erros.taxaJuros}</p>}
+        </div>
+
+        <div className="space-y-1.5">
+          <Label htmlFor="comissao">Comissão Destrava (%) <span className="text-muted-foreground text-xs font-normal">(opcional)</span></Label>
+          <div className="relative">
+            <Percent className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+            <Input
+              id="comissao"
+              value={form.comissao}
+              onChange={(e) => set("comissao", e.target.value.replace(",", "."))}
+              placeholder="Ex: 2.50"
+              className="pl-9"
+              inputMode="decimal"
+            />
+          </div>
+          {form.comissao && parseBRL(form.valorCredito) > 0 && (
+            <p className="text-xs text-warning font-medium">
+              = {fmtBRL.format((parseBRL(form.valorCredito) * parseFloat(form.comissao)) / 100)}
+            </p>
+          )}
+        </div>
+
+        <div className="space-y-1.5">
+          <Label>Banco <span className="text-muted-foreground text-xs font-normal">(opcional)</span></Label>
+          <Select value={form.banco} onValueChange={(v) => set("banco", v)}>
+            <SelectTrigger><SelectValue placeholder="Selecione..." /></SelectTrigger>
+            <SelectContent>
+              {BANCOS.map((b) => <SelectItem key={b} value={b}>{b}</SelectItem>)}
+            </SelectContent>
+          </Select>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ─── Cenário A: COM Imposto ───────────────────────────────────────────────────
+
+function CenarioComImposto({ initialData }: { initialData?: { nome: string; empresa: string; telefone: string; cpf_cnpj: string } }) {
+  const { user } = useAuth();
+  const [form, setForm] = useState<FormComImposto>({
+    ...formBaseInicial,
+    nome: initialData?.nome || "",
+    empresa: initialData?.empresa || "",
+    telefone: initialData?.telefone ? formatarTelefone(initialData.telefone.replace(/\D/g, "")) : "",
+    cpfCnpj: initialData?.cpf_cnpj || "",
+    valorFiscal: "",
+    pctImposto: "",
+  });
+  const [erros, setErros] = useState<Record<string, string>>({});
+  const [resultado, setResultado] = useState<ResultadoCalculo | null>(null);
+  const [salvando, setSalvando] = useState(false);
+  const [salvo, setSalvo] = useState(false);
+
+  const setBase = useCallback((k: keyof FormBase, v: string) => {
+    setForm((prev) => ({ ...prev, [k]: v }));
+    setErros((prev) => ({ ...prev, [k]: "" }));
+  }, []);
+
+  const setExtra = (k: "valorFiscal" | "pctImposto", v: string) => {
+    setForm((prev) => ({ ...prev, [k]: v }));
+  };
+
+  function validar(): boolean {
+    const e: Record<string, string> = {};
+    if (!form.empresa.trim() || !form.empresaId) e.empresa = "Selecione uma empresa cadastrada pela busca acima";
+    if (!form.telefone.trim()) e.telefone = "Obrigatório";
+    else if (form.telefone.replace(/\D/g, "").length < 10) e.telefone = "Telefone inválido";
+    if (!form.valorCredito) e.valorCredito = "Obrigatório";
+    if (!form.taxaJuros) e.taxaJuros = "Obrigatório";
+    setErros(e);
+    return Object.keys(e).length === 0;
+  }
+
+  function handleCalcular() {
+    if (!validar()) return;
+    const vc = parseBRL(form.valorCredito);
+    const prazo = parseInt(form.prazo);
+    const taxa = parseFloat(form.taxaJuros);
+    const vf = parseBRL(form.valorFiscal);
+    const pi = parseFloat(form.pctImposto) || 0;
+    const pc = parseFloat(form.comissao) || 0;
+    setResultado(calcular(vc, prazo, taxa, vf, pi, pc, parseInt(form.carencia) || 0));
+    setSalvo(false);
+  }
+
+  async function handleSalvar() {
+    if (!resultado) return;
+    setSalvando(true);
+    try {
+      const saved = await apiFetch("/api/simulacoes", {
+        method: "POST",
+        body: JSON.stringify({
+          cliente_nome: form.nome,
+          cliente_telefone: form.telefone,
+          cliente_cpf_cnpj: form.cpfCnpj || null,
+          cliente_empresa: form.empresa || null,
+          empresa_id: form.empresaId || null,
+          valor_solicitado: parseBRL(form.valorCredito),
+          quantidade_parcelas: parseInt(form.prazo),
+          taxa_juros_mensal: parseFloat(form.taxaJuros),
+          imposto_percentual: parseFloat(form.pctImposto) || null,
+          total_imposto: resultado.impostoValor || null,
+          comissao_percentual: parseFloat(form.comissao) || null,
+          total_comissao: resultado.comissaoValor,
+          valor_parcela: resultado.parcelaMensal,
+          valor_total_pagar: resultado.totalFinanciamento,
+          total_juros: resultado.totalJuros,
+          custo_efetivo_total: resultado.custoTotalOperacao,
+          banco: form.banco || null,
+          linha_credito: form.linhaCredito || null,
+          observacoes: form.observacoes ? `[com_imposto] ${form.observacoes}` : "[com_imposto]",
+        }),
+      });
+      await armazenarPdfSimulacao(saved?.id, {
+        cliente: { nome: form.nome, empresa: form.empresa, cpfCnpj: form.cpfCnpj, telefone: form.telefone, banco: form.banco, linhaCredito: form.linhaCredito, observacoes: form.observacoes },
+        cenarioA: { taxa: parseFloat(form.taxaJuros), valorCredito: parseBRL(form.valorCredito), prazo: parseInt(form.prazo), parcela: resultado.parcelaMensal, totalFinanciamento: resultado.totalFinanciamento, totalJuros: resultado.totalJuros, impostoValor: resultado.impostoValor, comissaoValor: resultado.comissaoValor, custoTotalOperacao: resultado.custoTotalOperacao, cenario: "com_imposto", taxaAnualEquiv: resultado.taxaAnualEquiv, cetMensal: resultado.cetMensal, cetAnual: resultado.cetAnual },
+        modo: "simples",
+        agenteNome: user?.nome,
+      });
+      setSalvo(true);
+      toast.success("Simulação salva com PDF armazenado para reimpressão!");
+    } catch (err: any) {
+      console.error(err);
+      toast.error(err.message || "Erro ao salvar simulação. Verifique a conexão e tente novamente.");
+    }
+    setSalvando(false);
+  }
+
+  function handleLimpar() {
+    setForm({ ...formBaseInicial, valorFiscal: "", pctImposto: "" });
+    setResultado(null);
+    setSalvo(false);
+    setErros({});
+  }
+
+  function handleSelectLead(empresa: EmpresaOption) {
+    setForm(prev => ({
+      ...prev,
+      nome: empresa.responsavel_nome || prev.nome,
+      empresa: empresa.razao_social || empresa.nome_fantasia || prev.empresa,
+      telefone: empresa.telefone || empresa.whatsapp || prev.telefone,
+      cpfCnpj: empresa.cnpj || prev.cpfCnpj,
+      empresaId: empresa.id,
+    }));
+    setErros({});
+  }
+
+  const valorFiscalNum = parseBRL(form.valorFiscal);
+  const pctImpostoNum = parseFloat(form.pctImposto) || 0;
+  const impostoPreview = valorFiscalNum > 0 && pctImpostoNum > 0
+    ? (valorFiscalNum * pctImpostoNum) / 100
+    : null;
+
+  return (
+    <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+      <div className="space-y-6">
+        <CamposCliente form={form} erros={erros} set={setBase} onSelectLead={handleSelectLead} onLimparEmpresa={() => setForm(prev => ({ ...prev, empresa: "", cpfCnpj: "", empresaId: undefined }))} />
+        <CamposEmprestimo form={form} erros={erros} set={setBase} />
+
+        <div className="space-y-4">
+          <div className="flex items-center gap-2 pb-1 border-b">
+            <FileText className="h-4 w-4 text-primary" />
+            <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Declaração Fiscal e Imposto</p>
+          </div>
+          <div className="bg-primary/10 border border-primary/20 rounded-xl p-3 text-xs text-primary">
+            <Info className="h-3.5 w-3.5 inline mr-1" />
+            O imposto é calculado sobre o <strong>valor fiscal declarado</strong> pelo cliente.
+          </div>
+          <div className="grid grid-cols-2 gap-4">
+            <div className="space-y-1.5">
+              <Label htmlFor="valorFiscal">Valor Fiscal Declarado</Label>
+              <div className="relative">
+                <span className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground text-sm font-semibold">R$</span>
+                <Input
+                  id="valorFiscal"
+                  value={form.valorFiscal}
+                  onChange={(e) => setExtra("valorFiscal", formatarMoeda(e.target.value))}
+                  placeholder="0,00"
+                  className="pl-9"
+                  inputMode="numeric"
+                />
+              </div>
+            </div>
+            <div className="space-y-1.5">
+              <Label htmlFor="pctImposto">Alíquota do Imposto (%)</Label>
+              <div className="relative">
+                <Percent className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                <Input
+                  id="pctImposto"
+                  value={form.pctImposto}
+                  onChange={(e) => setExtra("pctImposto", e.target.value.replace(",", "."))}
+                  placeholder="Ex: 6.00"
+                  className="pl-9"
+                  inputMode="decimal"
+                />
+              </div>
+            </div>
+          </div>
+          {impostoPreview !== null && (
+            <div className="flex items-center justify-between bg-destructive/10 border border-destructive/20 rounded-xl px-4 py-3">
+              <span className="text-sm text-muted-foreground">Imposto ({pctImpostoNum}% de {fmtBRL.format(valorFiscalNum)})</span>
+              <span className="font-bold text-destructive text-lg">{fmtBRL.format(impostoPreview)}</span>
+            </div>
+          )}
+        </div>
+
+        <div className="space-y-1.5">
+          <Label>Observações <span className="text-muted-foreground text-xs font-normal">(opcional)</span></Label>
+          <textarea
+            value={form.observacoes}
+            onChange={(e) => setBase("observacoes", e.target.value)}
+            placeholder="Carência, garantias, condições especiais..."
+            className="w-full min-h-[80px] rounded-xl border border-input bg-background px-3 py-2 text-sm resize-none focus:outline-none focus:ring-2 focus:ring-ring"
+          />
+        </div>
+
+        <div className="flex gap-3">
+          <Button onClick={handleCalcular} className="flex-1 font-bold h-12 text-base">
+            <Calculator className="mr-2 h-5 w-5" />Calcular
+          </Button>
+          <Button variant="outline" onClick={handleLimpar} className="h-12 px-4" title="Limpar">
+            <RotateCcw className="h-4 w-4" />
+          </Button>
+        </div>
+      </div>
+
+      <div>
+        {resultado ? (
+          <Card className="border-0 shadow-lg sticky top-6">
+            <CardHeader className="pb-3 border-b">
+              <CardTitle className="text-base flex items-center gap-2 min-w-0">
+                <CheckCircle2 className="h-5 w-5 flex-shrink-0 text-success" />
+                <span className="truncate min-w-0 flex-1">Resultado — {form.nome}</span>
+                <Badge className="ml-auto flex-shrink-0 bg-primary text-primary-foreground text-xs">Cenário A · Com Imposto</Badge>
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="pt-4">
+              <PainelResultado
+                resultado={resultado}
+                comImposto={true}
+                valorFiscalNum={valorFiscalNum}
+                pctImpostoNum={pctImpostoNum}
+                prazo={parseInt(form.prazo)}
+              />
+              <div className="flex gap-2 mt-5">
+                <Button variant="outline" size="sm" className="flex-1" onClick={handleSalvar} disabled={salvando || salvo}>
+                  {salvo ? <><CheckCircle2 className="mr-1.5 h-4 w-4 text-success" />Salvo!</> : <><Save className="mr-1.5 h-4 w-4" />{salvando ? "Salvando..." : "Salvar"}</>}
+                </Button>
+                <Button variant="outline" size="sm" className="flex-1" onClick={() => gerarPdfSimulacao({
+                  cliente: { nome: form.nome, empresa: form.empresa, cpfCnpj: form.cpfCnpj, telefone: form.telefone, banco: form.banco, linhaCredito: form.linhaCredito, observacoes: form.observacoes },
+                  cenarioA: resultado ? { taxa: parseFloat(form.taxaJuros), valorCredito: parseBRL(form.valorCredito), prazo: parseInt(form.prazo), parcela: resultado.parcelaMensal, totalFinanciamento: resultado.totalFinanciamento, totalJuros: resultado.totalJuros, impostoValor: resultado.impostoValor, comissaoValor: resultado.comissaoValor, custoTotalOperacao: resultado.custoTotalOperacao, cenario: "com_imposto", taxaAnualEquiv: resultado.taxaAnualEquiv, cetMensal: resultado.cetMensal, cetAnual: resultado.cetAnual } : undefined,
+                  modo: "simples",
+                  agenteNome: user?.nome,
+                })}>
+                  <Printer className="mr-1.5 h-4 w-4" />Exportar PDF
+                </Button>
+              </div>
+            </CardContent>
+          </Card>
+        ) : (
+          <div className="flex flex-col items-center justify-center h-full min-h-[320px] text-center text-muted-foreground border-2 border-dashed rounded-2xl p-8">
+            <Calculator className="h-14 w-14 mb-3 opacity-20" />
+            <p className="font-medium">Preencha os dados e clique em Calcular</p>
+            <p className="text-sm mt-1 opacity-60">O resultado aparecerá aqui</p>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+// ─── Cenário B: SEM Imposto ───────────────────────────────────────────────────
+
+function CenarioSemImposto({ initialData }: { initialData?: { nome: string; empresa: string; telefone: string; cpf_cnpj: string } }) {
+  const { user } = useAuth();
+  const [form, setForm] = useState<FormBase>({
+    ...formBaseInicial,
+    nome: initialData?.nome || "",
+    empresa: initialData?.empresa || "",
+    telefone: initialData?.telefone ? formatarTelefone(initialData.telefone.replace(/\D/g, "")) : "",
+    cpfCnpj: initialData?.cpf_cnpj || "",
+  });
+  const [erros, setErros] = useState<Record<string, string>>({});
+  const [resultado, setResultado] = useState<ResultadoCalculo | null>(null);
+  const [salvando, setSalvando] = useState(false);
+  const [salvo, setSalvo] = useState(false);
+
+  const set = useCallback((k: keyof FormBase, v: string) => {
+    setForm((prev: FormBase) => ({ ...prev, [k]: v }));
+    setErros((prev) => ({ ...prev, [k]: "" }));
+  }, []);
+
+  function validar(): boolean {
+    const e: Record<string, string> = {};
+    if (!form.empresa.trim() || !form.empresaId) e.empresa = "Selecione uma empresa cadastrada pela busca acima";
+    if (!form.telefone.trim()) e.telefone = "Obrigatório";
+    else if (form.telefone.replace(/\D/g, "").length < 10) e.telefone = "Telefone inválido";
+    if (!form.valorCredito) e.valorCredito = "Obrigatório";
+    if (!form.taxaJuros) e.taxaJuros = "Obrigatório";
+    setErros(e);
+    return Object.keys(e).length === 0;
+  }
+
+  function handleCalcular() {
+    if (!validar()) return;
+    const vc = parseBRL(form.valorCredito);
+    const prazo = parseInt(form.prazo);
+    const taxa = parseFloat(form.taxaJuros);
+    const pc = parseFloat(form.comissao) || 0;
+    setResultado(calcular(vc, prazo, taxa, 0, 0, pc, parseInt(form.carencia) || 0));
+    setSalvo(false);
+  }
+
+  async function handleSalvar() {
+    if (!resultado) return;
+    setSalvando(true);
+    try {
+      // User obtained from useAuth hook
+      if (false) {
+        toast.error("Sessão expirada. Faça login novamente.");
+        setSalvando(false);
+        return;
+      }
+      const saved = await apiFetch("/api/simulacoes", {
+        method: "POST",
+        body: JSON.stringify({
+          colaborador_id: user?.id,
+          cliente_nome: form.nome,
+          cliente_telefone: form.telefone,
+          cliente_cpf_cnpj: form.cpfCnpj || null,
+          cliente_empresa: form.empresa || null,
+          empresa_id: form.empresaId || null,
+          valor_solicitado: parseBRL(form.valorCredito),
+          quantidade_parcelas: parseInt(form.prazo),
+          taxa_juros_mensal: parseFloat(form.taxaJuros),
+          comissao_percentual: parseFloat(form.comissao) || null,
+          total_comissao: resultado.comissaoValor,
+          valor_parcela: resultado.parcelaMensal,
+          valor_total_pagar: resultado.totalFinanciamento,
+          total_juros: resultado.totalJuros,
+          custo_efetivo_total: resultado.custoTotalOperacao,
+          banco: form.banco || null,
+          linha_credito: form.linhaCredito || null,
+          observacoes: form.observacoes ? `[sem_imposto] ${form.observacoes}` : "[sem_imposto]",
+        }),
+      });
+      await armazenarPdfSimulacao(saved?.id, {
+        cliente: { nome: form.nome, empresa: form.empresa, cpfCnpj: form.cpfCnpj, telefone: form.telefone, banco: form.banco, linhaCredito: form.linhaCredito, observacoes: form.observacoes },
+        cenarioA: { taxa: parseFloat(form.taxaJuros), valorCredito: parseBRL(form.valorCredito), prazo: parseInt(form.prazo), parcela: resultado.parcelaMensal, totalFinanciamento: resultado.totalFinanciamento, totalJuros: resultado.totalJuros, comissaoValor: resultado.comissaoValor, custoTotalOperacao: resultado.custoTotalOperacao, cenario: "sem_imposto", taxaAnualEquiv: resultado.taxaAnualEquiv, cetMensal: resultado.cetMensal, cetAnual: resultado.cetAnual },
+        modo: "simples",
+        agenteNome: user?.nome,
+      });
+      setSalvo(true);
+      toast.success("Simulação salva com PDF armazenado para reimpressão!");
+    } catch (err) {
+      console.error(err);
+      toast.error("Erro ao salvar simulação. Verifique a conexão e tente novamente.");
+    }
+    setSalvando(false);
+  }
+
+  function handleLimpar() {
+    setForm({ ...formBaseInicial });
+    setResultado(null);
+    setSalvo(false);
+    setErros({});
+  }
+
+  function handleSelectLead(empresa: EmpresaOption) {
+    setForm(prev => ({
+      ...prev,
+      nome: empresa.responsavel_nome || prev.nome,
+      empresa: empresa.razao_social || empresa.nome_fantasia || prev.empresa,
+      telefone: empresa.telefone || empresa.whatsapp || prev.telefone,
+      cpfCnpj: empresa.cnpj || prev.cpfCnpj,
+      empresaId: empresa.id,
+    }));
+    setErros({});
+  }
+
+  return (
+    <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+      <div className="space-y-6">
+        <CamposCliente form={form} erros={erros} set={set} onSelectLead={handleSelectLead} onLimparEmpresa={() => setForm(prev => ({ ...prev, empresa: "", cpfCnpj: "", empresaId: undefined }))} />
+        <CamposEmprestimo form={form} erros={erros} set={set} />
+        <div className="space-y-1.5">
+          <Label>Observações <span className="text-muted-foreground text-xs font-normal">(opcional)</span></Label>
+          <textarea
+            value={form.observacoes}
+            onChange={(e) => set("observacoes", e.target.value)}
+            placeholder="Carência, garantias, condições especiais..."
+            className="w-full min-h-[80px] rounded-xl border border-input bg-background px-3 py-2 text-sm resize-none focus:outline-none focus:ring-2 focus:ring-ring"
+          />
+        </div>
+        <div className="flex gap-3">
+          <Button onClick={handleCalcular} className="flex-1 font-bold h-12 text-base">
+            <Calculator className="mr-2 h-5 w-5" />Calcular
+          </Button>
+          <Button variant="outline" onClick={handleLimpar} className="h-12 px-4" title="Limpar">
+            <RotateCcw className="h-4 w-4" />
+          </Button>
+        </div>
+      </div>
+
+      <div>
+        {resultado ? (
+          <Card className="border-0 shadow-lg sticky top-6">
+            <CardHeader className="pb-3 border-b">
+              <CardTitle className="text-base flex items-center gap-2 min-w-0">
+                <CheckCircle2 className="h-5 w-5 flex-shrink-0 text-success" />
+                <span className="truncate min-w-0 flex-1">Resultado — {form.nome}</span>
+                <Badge variant="outline" className="ml-auto flex-shrink-0 text-xs">Cenário B · Sem Imposto</Badge>
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="pt-4">
+              <PainelResultado
+                resultado={resultado}
+                comImposto={false}
+                valorFiscalNum={0}
+                pctImpostoNum={0}
+                prazo={parseInt(form.prazo)}
+              />
+              <div className="flex gap-2 mt-5">
+                <Button variant="outline" size="sm" className="flex-1" onClick={handleSalvar} disabled={salvando || salvo}>
+                  {salvo ? <><CheckCircle2 className="mr-1.5 h-4 w-4 text-success" />Salvo!</> : <><Save className="mr-1.5 h-4 w-4" />{salvando ? "Salvando..." : "Salvar"}</>}
+                </Button>
+                <Button variant="outline" size="sm" className="flex-1" onClick={() => gerarPdfSimulacao({
+                  cliente: { nome: form.nome, empresa: form.empresa, cpfCnpj: form.cpfCnpj, telefone: form.telefone, banco: form.banco, linhaCredito: form.linhaCredito, observacoes: form.observacoes },
+                  cenarioA: resultado ? { taxa: parseFloat(form.taxaJuros), valorCredito: parseBRL(form.valorCredito), prazo: parseInt(form.prazo), parcela: resultado.parcelaMensal, totalFinanciamento: resultado.totalFinanciamento, totalJuros: resultado.totalJuros, comissaoValor: resultado.comissaoValor, custoTotalOperacao: resultado.custoTotalOperacao, cenario: "sem_imposto", taxaAnualEquiv: resultado.taxaAnualEquiv, cetMensal: resultado.cetMensal, cetAnual: resultado.cetAnual } : undefined,
+                  modo: "simples",
+                  agenteNome: user?.nome,
+                })}>
+                  <Printer className="mr-1.5 h-4 w-4" />Exportar PDF
+                </Button>
+              </div>
+            </CardContent>
+          </Card>
+        ) : (
+          <div className="flex flex-col items-center justify-center h-full min-h-[320px] text-center text-muted-foreground border-2 border-dashed rounded-2xl p-8">
+            <Calculator className="h-14 w-14 mb-3 opacity-20" />
+            <p className="font-medium">Preencha os dados e clique em Calcular</p>
+            <p className="text-sm mt-1 opacity-60">O resultado aparecerá aqui</p>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+// ─── Comparativo lado a lado ──────────────────────────────────────────────────
+
+interface FormComparativo {
+  nome: string;
+  empresa: string;
+  telefone: string;
+  cpfCnpj: string;
+  valorCredito: string;
+  prazo: string;
+  carencia: string;
+  comissao: string;
+  banco: string;
+  linhaCredito: string;
+  observacoes: string;
+  // Cenário A — Com Imposto
+  taxaA: string;
+  valorFiscal: string;
+  pctImposto: string;
+  // Cenário B — Sem Imposto
+  taxaB: string;
+  empresaId?: string;
+}
+
+function DifTag({ a, b, campo }: { a: number; b: number; campo: "parcela" | "total" }) {
+  const diff = a - b;
+  if (Math.abs(diff) < 0.01) return <span className="text-xs text-muted-foreground flex items-center gap-0.5"><Minus className="w-3 h-3" /> igual</span>;
+  const maior = diff > 0;
+  return (
+    <span className={`text-xs font-semibold flex items-center gap-0.5 ${maior ? "text-destructive" : "text-success"}`}>
+      {maior ? <TrendingUp className="w-3 h-3" /> : <TrendingDown className="w-3 h-3" />}
+      {maior ? "+" : ""}{fmtBRL.format(Math.abs(diff))}
+    </span>
+  );
+}
+
+function CenarioComparativo({ initialData }: { initialData?: { nome: string; empresa: string; telefone: string; cpf_cnpj: string } }) {
+  const { user } = useAuth();
+  const [form, setForm] = useState<FormComparativo>({
+    nome: initialData?.nome || "",
+    empresa: initialData?.empresa || "",
+    telefone: initialData?.telefone ? formatarTelefone(initialData.telefone.replace(/\D/g, "")) : "",
+    cpfCnpj: initialData?.cpf_cnpj || "",
+    valorCredito: "", prazo: "24", carencia: "0", comissao: "",
+    banco: "", linhaCredito: "", observacoes: "",
+    taxaA: "", valorFiscal: "", pctImposto: "",
+    taxaB: "",
+  });
+  const [erros, setErros] = useState<Record<string, string>>({});
+  const [resA, setResA] = useState<ResultadoCalculo | null>(null);
+  const [resB, setResB] = useState<ResultadoCalculo | null>(null);
+  const [salvando, setSalvando] = useState(false);
+  const [salvo, setSalvo] = useState(false);
+
+  const set = useCallback((k: keyof FormComparativo, v: string) => {
+    setForm((prev) => ({ ...prev, [k]: v }));
+    setErros((prev) => ({ ...prev, [k]: "" }));
+  }, []);
+
+  // Recalcular em tempo real sempre que os campos mudarem
+  useEffect(() => {
+    const vc = parseBRL(form.valorCredito);
+    const prazo = parseInt(form.prazo) || 0;
+    const pc = parseFloat(form.comissao) || 0;
+
+    const taxaA = parseFloat(form.taxaA) || 0;
+    const vf = parseBRL(form.valorFiscal);
+    const pi = parseFloat(form.pctImposto) || 0;
+    const taxaB = parseFloat(form.taxaB) || 0;
+
+    if (vc > 0 && prazo > 0) {
+      setResA(taxaA > 0 ? calcular(vc, prazo, taxaA, vf, pi, pc, parseInt(form.carencia) || 0) : null);
+      setResB(taxaB > 0 ? calcular(vc, prazo, taxaB, 0, 0, pc, parseInt(form.carencia) || 0) : null);
+    } else {
+      setResA(null);
+      setResB(null);
+    }
+  }, [form]);
+
+  function validar(): boolean {
+    const e: Record<string, string> = {};
+    if (!form.empresa.trim() || !form.empresaId) e.empresa = "Selecione uma empresa cadastrada pela busca acima";
+    if (!form.telefone.trim()) e.telefone = "Obrigatório";
+    if (!form.valorCredito) e.valorCredito = "Obrigatório";
+    if (!form.taxaA) e.taxaA = "Obrigatório";
+    if (!form.taxaB) e.taxaB = "Obrigatório";
+    setErros(e);
+    return Object.keys(e).length === 0;
+  }
+
+  async function handleSalvar() {
+    if (!validar() || (!resA && !resB)) return;
+    setSalvando(true);
+    try {
+      // User obtained from useAuth hook
+      if (false) {
+        toast.error("Sessão expirada. Faça login novamente.");
+        setSalvando(false);
+        return;
+      }
+      const base = {
+        colaborador_id: user?.id,
+        cliente_nome: form.nome,
+        cliente_telefone: form.telefone,
+        cliente_cpf_cnpj: form.cpfCnpj || null,
+        cliente_empresa: form.empresa || null,
+        empresa_id: form.empresaId || null,
+        valor_solicitado: parseBRL(form.valorCredito),
+        quantidade_parcelas: parseInt(form.prazo),
+        comissao_percentual: parseFloat(form.comissao) || null,
+        banco: form.banco || null,
+        linha_credito: form.linhaCredito || null,
+      };
+      if (resA) {
+        const savedA = await apiFetch("/api/simulacoes", {
+          method: "POST",
+          body: JSON.stringify({
+            ...base,
+            taxa_juros_mensal: parseFloat(form.taxaA),
+            imposto_percentual: parseFloat(form.pctImposto) || null,
+            total_imposto: resA.impostoValor || null,
+            total_comissao: resA.comissaoValor,
+            valor_parcela: resA.parcelaMensal,
+            valor_total_pagar: resA.totalFinanciamento,
+            total_juros: resA.totalJuros,
+            custo_efetivo_total: resA.custoTotalOperacao,
+            observacoes: form.observacoes ? `[com_imposto] ${form.observacoes}` : "[com_imposto]",
+          }),
+        });
+        await armazenarPdfSimulacao(savedA?.id, {
+          cliente: { nome: form.nome, empresa: form.empresa, cpfCnpj: form.cpfCnpj, telefone: form.telefone, banco: form.banco, linhaCredito: form.linhaCredito, observacoes: form.observacoes },
+          cenarioA: { taxa: parseFloat(form.taxaA), valorCredito: parseBRL(form.valorCredito), prazo: parseInt(form.prazo), parcela: resA.parcelaMensal, totalFinanciamento: resA.totalFinanciamento, totalJuros: resA.totalJuros, impostoValor: resA.impostoValor, comissaoValor: resA.comissaoValor, custoTotalOperacao: resA.custoTotalOperacao, cenario: "com_imposto", taxaAnualEquiv: resA.taxaAnualEquiv, cetMensal: resA.cetMensal, cetAnual: resA.cetAnual },
+          modo: "simples",
+          agenteNome: user?.nome,
+        });
+      }
+      if (resB) {
+        const savedB = await apiFetch("/api/simulacoes", {
+          method: "POST",
+          body: JSON.stringify({
+            ...base,
+            taxa_juros_mensal: parseFloat(form.taxaB),
+            total_comissao: resB.comissaoValor,
+            valor_parcela: resB.parcelaMensal,
+            valor_total_pagar: resB.totalFinanciamento,
+            total_juros: resB.totalJuros,
+            custo_efetivo_total: resB.custoTotalOperacao,
+            observacoes: form.observacoes ? `[sem_imposto] ${form.observacoes}` : "[sem_imposto]",
+          }),
+        });
+        await armazenarPdfSimulacao(savedB?.id, {
+          cliente: { nome: form.nome, empresa: form.empresa, cpfCnpj: form.cpfCnpj, telefone: form.telefone, banco: form.banco, linhaCredito: form.linhaCredito, observacoes: form.observacoes },
+          cenarioA: { taxa: parseFloat(form.taxaB), valorCredito: parseBRL(form.valorCredito), prazo: parseInt(form.prazo), parcela: resB.parcelaMensal, totalFinanciamento: resB.totalFinanciamento, totalJuros: resB.totalJuros, comissaoValor: resB.comissaoValor, custoTotalOperacao: resB.custoTotalOperacao, cenario: "sem_imposto", taxaAnualEquiv: resB.taxaAnualEquiv, cetMensal: resB.cetMensal, cetAnual: resB.cetAnual },
+          modo: "simples",
+          agenteNome: user?.nome,
+        });
+      }
+      setSalvo(true);
+      toast.success("Simulações salvas com PDFs armazenados para reimpressão!");
+    } catch (err) {
+      console.error(err);
+      toast.error("Erro ao salvar simulação. Verifique a conexão e tente novamente.");
+    }
+    setSalvando(false);
+  }
+
+  function handleLimpar() {
+    setForm({
+      nome: "", empresa: "", telefone: "", cpfCnpj: "",
+      valorCredito: "", prazo: "24", carencia: "0", comissao: "",
+      banco: "", linhaCredito: "", observacoes: "",
+      taxaA: "", valorFiscal: "", pctImposto: "",
+      taxaB: "",
+    });
+    setResA(null);
+    setResB(null);
+    setSalvo(false);
+    setErros({});
+  }
+
+  const vc = parseBRL(form.valorCredito);
+  const pc = parseFloat(form.comissao) || 0;
+  const linhaAtivaComp = LINHAS_CREDITO.find((l) => l.nome === form.linhaCredito);
+  const prazosDisponiveisComp = linhaAtivaComp?.prazoMaxMeses
+    ? PRAZOS.filter((p) => p <= linhaAtivaComp.prazoMaxMeses!)
+    : PRAZOS;
+  const prazoAtualComp = parseInt(form.prazo) || 0;
+  const tetoCarenciaComp = Math.min(linhaAtivaComp?.carenciaMaxMeses ?? 24, Math.max(prazoAtualComp - 1, 0));
+  const carenciasDisponiveisComp = [0, 3, 6, 12, 18, 24, 36].filter((c) => c <= tetoCarenciaComp);
+  const selicComp = useSelicMeta();
+  const vf = parseBRL(form.valorFiscal);
+  const pi = parseFloat(form.pctImposto) || 0;
+  const prazoNum = parseInt(form.prazo) || 24;
+
+  function handleSelectLead(empresa: EmpresaOption) {
+    setForm(prev => ({
+      ...prev,
+      nome: empresa.responsavel_nome || prev.nome,
+      empresa: empresa.razao_social || empresa.nome_fantasia || prev.empresa,
+      telefone: empresa.telefone || empresa.whatsapp || prev.telefone,
+      cpfCnpj: empresa.cnpj || prev.cpfCnpj,
+      empresaId: empresa.id,
+    }));
+    setErros({});
+  }
+
+  return (
+    <div className="space-y-6">
+      {/* Dados comuns */}
+      <div className="bg-card rounded-2xl border p-5 space-y-5">
+        <SeletorCliente onSelect={handleSelectLead} />
+        <p className="text-xs text-muted-foreground -mt-3">
+          Empresa não encontrada? {" "}
+          <a href="/colaborador/empresas?novo=1" target="_blank" rel="noreferrer" className="text-primary font-medium underline underline-offset-2">
+            Cadastre a empresa primeiro em Clientes PJ
+          </a>
+          {" "}— simulação de crédito empresarial exige empresa já cadastrada.
+        </p>
+        <div className="flex items-center gap-2 pb-1 border-b">
+          <User className="h-4 w-4 text-primary" />
+          <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Dados do Cliente e do Crédito</p>
+          <span className="text-xs text-destructive ml-auto">* obrigatório</span>
+        </div>
+
+        {form.empresaId && (
+          <div className="flex items-center justify-between gap-3 rounded-lg border border-success/20 bg-success/10 px-3 py-2">
+            <p className="text-xs text-success">
+              <span className="font-bold">✓ Empresa vinculada do cadastro.</span> Razão social e CNPJ vêm do registro, sem digitar de novo.
+            </p>
+            <button type="button" onClick={() => setForm(prev => ({ ...prev, empresa: "", cpfCnpj: "", empresaId: undefined }))} className="text-xs font-semibold text-success underline underline-offset-2 whitespace-nowrap">
+              Trocar empresa
+            </button>
+          </div>
+        )}
+
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+          {/* Nome */}
+          <div className="col-span-2 space-y-1.5">
+            <Label>Nome Completo <span className="text-muted-foreground text-xs font-normal">(opcional — puxa do sócio/responsável se a empresa tiver)</span></Label>
+            <div className="relative">
+              <User className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+              <Input value={form.nome} onChange={e => set("nome", e.target.value)} placeholder="Nome do cliente" className={`pl-9 ${erros.nome ? "border-destructive" : ""}`} />
+            </div>
+            {erros.nome && <p className="text-xs text-destructive">{erros.nome}</p>}
+          </div>
+
+          {/* Empresa */}
+          <div className="col-span-2 space-y-1.5">
+            <Label>Empresa <span className="text-destructive">*</span></Label>
+            <div className="relative">
+              <Building2 className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+              <Input value={form.empresa} readOnly onFocus={e => e.target.blur()} placeholder="Busque e selecione a empresa acima" className={`pl-9 cursor-not-allowed bg-muted/50 ${erros.empresa ? "border-destructive" : ""}`} title="Selecione a empresa pela busca acima — não é possível digitar diretamente." />
+            </div>
+            {erros.empresa && <p className="text-xs text-destructive">{erros.empresa}</p>}
+          </div>
+
+          {/* Telefone */}
+          <div className="col-span-2 space-y-1.5">
+            <Label>Telefone <span className="text-destructive">*</span></Label>
+            <div className="relative">
+              <Phone className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+              <Input value={form.telefone} onChange={e => set("telefone", formatarTelefone(e.target.value))} placeholder="(61) 9 9999-9999" className={`pl-9 ${erros.telefone ? "border-destructive" : ""}`} inputMode="tel" />
+            </div>
+            {erros.telefone && <p className="text-xs text-destructive">{erros.telefone}</p>}
+          </div>
+
+          {/* CPF/CNPJ */}
+          <div className="col-span-2 space-y-1.5">
+            <Label>CPF / CNPJ <span className="text-muted-foreground text-xs font-normal">(opcional)</span></Label>
+            <Input value={form.cpfCnpj} readOnly={Boolean(form.empresaId)} onChange={e => set("cpfCnpj", e.target.value)} placeholder="00.000.000/0001-00" className={form.empresaId ? "cursor-not-allowed bg-muted/50" : ""} title={form.empresaId ? "CNPJ vem do cadastro da empresa selecionada." : undefined} />
+          </div>
+
+          {/* Linha de Crédito */}
+          <div className="col-span-2 space-y-1.5">
+            <Label>Linha de Crédito <span className="text-muted-foreground text-xs font-normal">(escolha primeiro — ajusta o prazo disponível)</span></Label>
+            <Select value={form.linhaCredito} onValueChange={v => set("linhaCredito", v)}>
+              <SelectTrigger><SelectValue placeholder="Selecione..." /></SelectTrigger>
+              <SelectContent>
+                {LINHAS.map((l) => <SelectItem key={l} value={l}>{l}</SelectItem>)}
+              </SelectContent>
+            </Select>
+            {linhaAtivaComp && (
+              <p className="text-xs text-primary bg-primary/10 border border-primary/20 rounded-lg px-3 py-2 mt-1">
+                {linhaAtivaComp.observacao}
+                {linhaAtivaComp.spreadSobreSelic != null && selicComp && !selicComp.indisponivel && (
+                  <> <strong>Referência de taxa: Selic ({selicComp.valor.toFixed(2)}% a.a., {selicComp.dataReferencia}) + {linhaAtivaComp.spreadSobreSelic}% a.a. de spread ≈ {(selicComp.valor + linhaAtivaComp.spreadSobreSelic).toFixed(2)}% a.a.</strong> Taxa final depende da análise do banco.</>
+                )}
+              </p>
+            )}
+          </div>
+
+          {/* Valor do crédito */}
+          <div className="col-span-2 space-y-1.5">
+            <Label>Valor do Crédito <span className="text-destructive">*</span></Label>
+            <div className="relative">
+              <span className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground text-sm font-semibold">R$</span>
+              <Input value={form.valorCredito} onChange={e => set("valorCredito", formatarMoeda(e.target.value))} placeholder="0,00" className={`pl-9 ${erros.valorCredito ? "border-destructive" : ""}`} inputMode="numeric" />
+            </div>
+            {erros.valorCredito && <p className="text-xs text-destructive">{erros.valorCredito}</p>}
+            {linhaAtivaComp?.valorMaxReais && vc > linhaAtivaComp.valorMaxReais && (
+              <p className="text-xs text-destructive">Acima do limite de {fmtBRL.format(linhaAtivaComp.valorMaxReais)} dessa linha.</p>
+            )}
+          </div>
+
+          {/* Prazo */}
+          <div className="col-span-1 space-y-1.5">
+            <Label>Prazo (meses)</Label>
+            <Select value={form.prazo} onValueChange={v => set("prazo", v)}>
+              <SelectTrigger><SelectValue /></SelectTrigger>
+              <SelectContent>
+                {prazosDisponiveisComp.map(p => <SelectItem key={p} value={String(p)}>{p}m</SelectItem>)}
+              </SelectContent>
+            </Select>
+          </div>
+
+          {/* Carência */}
+          <div className="col-span-1 space-y-1.5">
+            <Label>Carência (meses) <span className="text-muted-foreground text-xs font-normal">(opcional)</span></Label>
+            <Select value={form.carencia} onValueChange={v => set("carencia", v)}>
+              <SelectTrigger><SelectValue /></SelectTrigger>
+              <SelectContent>
+                {carenciasDisponiveisComp.map(c => <SelectItem key={c} value={String(c)}>{c === 0 ? "Sem carência" : `${c}m`}</SelectItem>)}
+              </SelectContent>
+            </Select>
+          </div>
+
+          {/* Comissão */}
+          <div className="col-span-1 space-y-1.5">
+            <Label>Comissão (%) <span className="text-muted-foreground text-xs font-normal">(mesma nos dois)</span></Label>
+            <div className="relative">
+              <Percent className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+              <Input value={form.comissao} onChange={e => set("comissao", e.target.value.replace(",", "."))} placeholder="Ex: 2.50" className="pl-9" inputMode="decimal" />
+            </div>
+            {form.comissao && vc > 0 && (
+              <p className="text-xs text-warning font-medium">= {fmtBRL.format(vc * pc / 100)}</p>
+            )}
+          </div>
+        </div>
+      </div>
+
+      {/* Duas colunas de taxas */}
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        {/* Cenário A */}
+        <div className="bg-primary/10 border-2 border-primary/20 rounded-2xl p-5 space-y-4">
+          <div className="flex items-center gap-2">
+            <div className="w-7 h-7 rounded-full bg-primary text-primary-foreground flex items-center justify-center text-sm font-bold">A</div>
+            <div>
+              <p className="font-bold text-primary">Com Imposto</p>
+              <p className="text-xs text-primary">Taxa + imposto sobre valor fiscal</p>
+            </div>
+          </div>
+
+          <div className="space-y-1.5">
+            <Label className="text-primary">Taxa de Juros Mensal (%) <span className="text-destructive">*</span></Label>
+            <div className="relative">
+              <Percent className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-primary" />
+              <Input
+                value={form.taxaA}
+                onChange={e => set("taxaA", e.target.value.replace(",", "."))}
+                placeholder="Ex: 2.10"
+                className={`pl-9 bg-card border-primary/30 focus:border-primary ${erros.taxaA ? "border-destructive" : ""}`}
+                inputMode="decimal"
+              />
+            </div>
+            {erros.taxaA && <p className="text-xs text-destructive">{erros.taxaA}</p>}
+          </div>
+
+          <div className="grid grid-cols-2 gap-3">
+            <div className="space-y-1.5">
+              <Label className="text-primary text-xs">Valor Fiscal Declarado</Label>
+              <div className="relative">
+                <span className="absolute left-3 top-1/2 -translate-y-1/2 text-primary text-sm font-semibold">R$</span>
+                <Input
+                  value={form.valorFiscal}
+                  onChange={e => set("valorFiscal", formatarMoeda(e.target.value))}
+                  placeholder="0,00"
+                  className="pl-9 bg-card border-primary/30 text-sm"
+                  inputMode="numeric"
+                />
+              </div>
+            </div>
+            <div className="space-y-1.5">
+              <Label className="text-primary text-xs">Alíquota Imposto (%)</Label>
+              <div className="relative">
+                <Percent className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-primary" />
+                <Input
+                  value={form.pctImposto}
+                  onChange={e => set("pctImposto", e.target.value.replace(",", "."))}
+                  placeholder="Ex: 6.00"
+                  className="pl-9 bg-card border-primary/30 text-sm"
+                  inputMode="decimal"
+                />
+              </div>
+            </div>
+          </div>
+
+          {vf > 0 && pi > 0 && (
+            <div className="flex items-center justify-between bg-primary/20 rounded-xl px-3 py-2 text-sm">
+              <span className="text-primary">Imposto ({pi}% s/ {fmtBRL.format(vf)})</span>
+              <span className="font-bold text-primary">{fmtBRL.format(vf * pi / 100)}</span>
+            </div>
+          )}
+        </div>
+
+        {/* Cenário B */}
+        <div className="bg-success/10 border-2 border-success/20 rounded-2xl p-5 space-y-4">
+          <div className="flex items-center gap-2">
+            <div className="w-7 h-7 rounded-full bg-success text-primary-foreground flex items-center justify-center text-sm font-bold">B</div>
+            <div>
+              <p className="font-bold text-success">Sem Imposto</p>
+              <p className="text-xs text-success">Apenas taxa de juros + comissão</p>
+            </div>
+          </div>
+
+          <div className="space-y-1.5">
+            <Label className="text-success">Taxa de Juros Mensal (%) <span className="text-destructive">*</span></Label>
+            <div className="relative">
+              <Percent className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-success" />
+              <Input
+                value={form.taxaB}
+                onChange={e => set("taxaB", e.target.value.replace(",", "."))}
+                placeholder="Ex: 1.89"
+                className={`pl-9 bg-card border-success/30 focus:border-success/30 ${erros.taxaB ? "border-destructive" : ""}`}
+                inputMode="decimal"
+              />
+            </div>
+            {erros.taxaB && <p className="text-xs text-destructive">{erros.taxaB}</p>}
+          </div>
+
+          <div className="bg-success/20 rounded-xl px-3 py-2 text-xs text-success">
+            <Info className="h-3.5 w-3.5 inline mr-1" />
+            Neste cenário, o imposto não é cobrado. Apenas a taxa de juros e a comissão compõem o custo.
+          </div>
+        </div>
+      </div>
+
+      {/* Comparativo em tempo real */}
+      {(resA || resB) && (
+        <div className="space-y-4">
+          <div className="flex items-center gap-2">
+            <ArrowLeftRight className="h-5 w-5 text-primary" />
+            <h3 className="font-bold text-foreground">Comparativo em Tempo Real</h3>
+            <Badge variant="secondary" className="text-xs">Atualização automática</Badge>
+          </div>
+
+          {/* Cabeçalho */}
+          <div className="grid grid-cols-3 gap-2 text-center text-xs font-semibold text-muted-foreground uppercase tracking-wide">
+            <div className="bg-primary/20 text-primary rounded-lg py-2">Cenário A — Com Imposto</div>
+            <div className="bg-muted rounded-lg py-2">Diferença</div>
+            <div className="bg-success/20 text-success rounded-lg py-2">Cenário B — Sem Imposto</div>
+          </div>
+
+          {/* Parcela Mensal */}
+          <div className="grid grid-cols-3 gap-2 items-center">
+            <div className="bg-primary rounded-2xl p-4 text-primary-foreground text-center">
+              <p className="text-primary text-xs mb-1">Parcela Mensal</p>
+              <p className="text-2xl font-bold">{resA ? fmtBRL.format(resA.parcelaMensal) : "—"}</p>
+              <p className="text-primary text-xs mt-1">{prazoNum}x mensais</p>
+            </div>
+            <div className="text-center space-y-1">
+              <p className="text-xs text-muted-foreground">Parcela</p>
+              {resA && resB ? (
+                <DifTag a={resA.parcelaMensal} b={resB.parcelaMensal} campo="parcela" />
+              ) : <span className="text-xs text-muted-foreground">—</span>}
+            </div>
+            <div className="bg-success rounded-2xl p-4 text-primary-foreground text-center">
+              <p className="text-success text-xs mb-1">Parcela Mensal</p>
+              <p className="text-2xl font-bold">{resB ? fmtBRL.format(resB.parcelaMensal) : "—"}</p>
+              <p className="text-success text-xs mt-1">{prazoNum}x mensais</p>
+            </div>
+          </div>
+
+          {/* Tabela comparativa detalhada */}
+          <div className="bg-card rounded-2xl border overflow-hidden">
+            <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="bg-muted border-b">
+                  <th className="text-left px-4 py-3 text-xs font-semibold text-muted-foreground uppercase">Item</th>
+                  <th className="text-right px-4 py-3 text-xs font-semibold text-primary uppercase">Cenário A</th>
+                  <th className="text-right px-4 py-3 text-xs font-semibold text-muted-foreground uppercase">Diferença</th>
+                  <th className="text-right px-4 py-3 text-xs font-semibold text-success uppercase">Cenário B</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y">
+                {[
+                  {
+                    label: "Taxa de Juros",
+                    a: form.taxaA ? `${parseFloat(form.taxaA).toFixed(2).replace(".", ",")}% a.m.` : "—",
+                    b: form.taxaB ? `${parseFloat(form.taxaB).toFixed(2).replace(".", ",")}% a.m.` : "—",
+                    aNum: null, bNum: null,
+                  },
+                  {
+                    label: "Valor do Crédito",
+                    a: vc > 0 ? fmtBRL.format(vc) : "—",
+                    b: vc > 0 ? fmtBRL.format(vc) : "—",
+                    aNum: null, bNum: null,
+                  },
+                  {
+                    label: "Total de Juros",
+                    a: resA ? fmtBRL.format(resA.totalJuros) : "—",
+                    b: resB ? fmtBRL.format(resB.totalJuros) : "—",
+                    aNum: resA?.totalJuros ?? null,
+                    bNum: resB?.totalJuros ?? null,
+                  },
+                  {
+                    label: "Total do Financiamento",
+                    a: resA ? fmtBRL.format(resA.totalFinanciamento) : "—",
+                    b: resB ? fmtBRL.format(resB.totalFinanciamento) : "—",
+                    aNum: resA?.totalFinanciamento ?? null,
+                    bNum: resB?.totalFinanciamento ?? null,
+                  },
+                  {
+                    label: `Imposto (${pi}% s/ fiscal)`,
+                    a: resA && resA.impostoValor > 0 ? fmtBRL.format(resA.impostoValor) : "R$ 0,00",
+                    b: "R$ 0,00",
+                    aNum: resA?.impostoValor ?? null,
+                    bNum: 0,
+                    destaque: true,
+                  },
+                ].map((row, i) => (
+                  <tr key={i} className={row.destaque ? "bg-destructive/10" : "hover:bg-muted"}>
+                    <td className="px-4 py-3 text-foreground font-medium">{row.label}</td>
+                    <td className={`px-4 py-3 text-right font-semibold ${row.destaque ? "text-destructive" : "text-primary"}`}>{row.a}</td>
+                    <td className="px-4 py-3 text-right">
+                      {row.aNum !== null && row.bNum !== null ? (
+                        <DifTag a={row.aNum} b={row.bNum} campo="total" />
+                      ) : <span className="text-muted-foreground text-xs">—</span>}
+                    </td>
+                    <td className={`px-4 py-3 text-right font-semibold ${row.destaque ? "text-muted-foreground" : "text-success"}`}>{row.b}</td>
+                  </tr>
+                ))}
+
+                {/* Linha de total */}
+                <tr className="bg-brand-navy text-primary-foreground">
+                  <td className="px-4 py-4 font-bold text-base">Total da Operação <span className="text-xs font-normal">(cálculo bancário — sem honorários Destrava)</span></td>
+                  <td className="px-4 py-4 text-right font-bold text-lg text-primary">
+                    {resA ? fmtBRL.format(resA.custoTotalOperacao) : "—"}
+                  </td>
+                  <td className="px-4 py-4 text-right">
+                    {resA && resB ? (
+                      <span className={`text-sm font-bold flex items-center justify-end gap-1 ${resA.custoTotalOperacao > resB.custoTotalOperacao ? "text-destructive" : "text-success"}`}>
+                        {resA.custoTotalOperacao > resB.custoTotalOperacao ? <TrendingUp className="w-4 h-4" /> : <TrendingDown className="w-4 h-4" />}
+                        {fmtBRL.format(Math.abs(resA.custoTotalOperacao - resB.custoTotalOperacao))}
+                      </span>
+                    ) : <span className="text-muted-foreground">—</span>}
+                  </td>
+                  <td className="px-4 py-4 text-right font-bold text-lg text-success">
+                    {resB ? fmtBRL.format(resB.custoTotalOperacao) : "—"}
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+            </div>
+          </div>
+
+          {/* Resumo visual da diferença */}
+          {resA && resB && (
+            <div className={`rounded-2xl p-5 text-center ${
+              resA.custoTotalOperacao > resB.custoTotalOperacao
+                ? "bg-gradient-to-r from-blue-900 to-blue-700"
+                : "bg-gradient-to-r from-green-900 to-green-700"
+            } text-primary-foreground`}>
+              <p className="text-primary-foreground/70 text-sm mb-1">Diferença Total entre os Cenários (cálculo bancário)</p>
+              <p className="text-4xl font-bold">{fmtBRL.format(Math.abs(resA.custoTotalOperacao - resB.custoTotalOperacao))}</p>
+              <p className="text-primary-foreground/70 text-sm mt-2">
+                {resA.custoTotalOperacao > resB.custoTotalOperacao
+                  ? "O Cenário A (com imposto) custa mais para o cliente"
+                  : "O Cenário B (sem imposto) custa mais para o cliente"}
+              </p>
+            </div>
+          )}
+
+          {/* Honorários Destrava — à parte, nunca somado ao cálculo bancário acima */}
+          {((resA?.comissaoValor ?? 0) > 0 || (resB?.comissaoValor ?? 0) > 0) && (
+            <div className="rounded-xl border-2 border-warning/20 bg-warning/10 p-4">
+              <p className="text-xs font-semibold text-warning uppercase tracking-wide mb-3">
+                Honorários Destrava <span className="normal-case font-normal text-muted-foreground">(mesma comissão nos dois cenários — não é cálculo bancário, não soma no custo da operação)</span>
+              </p>
+              <div className="flex justify-between items-center py-1 text-sm">
+                <span className="text-muted-foreground">Comissão Destrava</span>
+                <span className="font-bold text-lg text-warning">{fmtBRL.format((resA || resB)?.comissaoValor ?? 0)}</span>
+              </div>
+            </div>
+          )}
+
+          {/* Botões */}
+          <div className="flex gap-3">
+            <Button
+              onClick={handleSalvar}
+              disabled={salvando || salvo || (!resA && !resB)}
+              className="flex-1 h-12 font-bold"
+            >
+              {salvo
+                ? <><CheckCircle2 className="mr-2 h-5 w-5" />Salvo com Sucesso!</>
+                : <><Save className="mr-2 h-5 w-5" />{salvando ? "Salvando..." : "Salvar Ambos os Cenários"}</>
+              }
+            </Button>
+            <Button variant="outline" onClick={() => {
+              if (resA && resB) {
+                gerarPdfSimulacao({
+                  cliente: { nome: form.nome, empresa: form.empresa, cpfCnpj: form.cpfCnpj, telefone: form.telefone, banco: form.banco, linhaCredito: form.linhaCredito, observacoes: form.observacoes },
+                    cenarioA: resA ? { taxa: parseFloat(form.taxaA), valorCredito: vc, prazo: parseInt(form.prazo), parcela: resA.parcelaMensal, totalFinanciamento: resA.totalFinanciamento, totalJuros: resA.totalJuros, impostoValor: resA.impostoValor, comissaoValor: resA.comissaoValor, custoTotalOperacao: resA.custoTotalOperacao, cenario: "com_imposto", taxaAnualEquiv: resA.taxaAnualEquiv, cetMensal: resA.cetMensal, cetAnual: resA.cetAnual } : undefined,
+                    cenarioB: resB ? { taxa: parseFloat(form.taxaB), valorCredito: vc, prazo: parseInt(form.prazo), parcela: resB.parcelaMensal, totalFinanciamento: resB.totalFinanciamento, totalJuros: resB.totalJuros, comissaoValor: resB.comissaoValor, custoTotalOperacao: resB.custoTotalOperacao, cenario: "sem_imposto", taxaAnualEquiv: resB.taxaAnualEquiv, cetMensal: resB.cetMensal, cetAnual: resB.cetAnual } : undefined,
+                  modo: "comparativo",
+                  agenteNome: user?.nome,
+                });
+              }
+            }} className="h-12 px-5" title="Exportar PDF">
+              <Printer className="h-5 w-5" />
+            </Button>
+            <Button variant="outline" onClick={handleLimpar} className="h-12 px-5" title="Limpar">
+              <RotateCcw className="h-5 w-5" />
+            </Button>
+          </div>
+        </div>
+      )}
+
+      {/* Estado vazio */}
+      {!resA && !resB && (
+        <div className="flex flex-col items-center justify-center min-h-[200px] text-center text-muted-foreground border-2 border-dashed rounded-2xl p-8">
+          <ArrowLeftRight className="h-14 w-14 mb-3 opacity-20" />
+          <p className="font-medium">Preencha o valor, prazo e as duas taxas</p>
+          <p className="text-sm mt-1 opacity-60">O comparativo aparece automaticamente em tempo real</p>
+        </div>
+      )}
+     </div>
+  );
+}
+
+// ─── Página principal ─────────────────────────────────────────────────────────────────────────────────
+export default function CalculadoraPage() {
+  // Lê dados pré-preenchidos da empresa (passados via sessionStorage pelo módulo de Empresas)
+  const empresaPreenchidaRaw = sessionStorage.getItem("calculadora_empresa");
+  const empresaPreenchida = empresaPreenchidaRaw
+    ? (() => { try { sessionStorage.removeItem("calculadora_empresa"); return JSON.parse(empresaPreenchidaRaw); } catch { return undefined; } })()
+    : undefined;
+
+  return (
+    <Layout>
+      <div className="max-w-6xl mx-auto p-6 space-y-6">
+        {/* Header */}
+        <div className="flex items-center gap-3">
+          <div className="p-2.5 bg-primary/10 rounded-xl">
+            <Calculator className="h-6 w-6 text-primary" />
+          </div>
+          <div>
+            <h1 className="text-2xl font-bold">Calculadora de Crédito</h1>
+            <p className="text-muted-foreground text-sm">
+              Área exclusiva para colaboradores — simule e compare propostas de crédito
+            </p>
+          </div>
+        </div>
+
+        {/* Aviso */}
+        <div className="flex items-start gap-2 bg-warning/10 border border-warning/20 rounded-xl px-4 py-3 text-sm text-warning">
+          <AlertCircle className="h-4 w-4 mt-0.5 flex-shrink-0" />
+          <span>
+            <strong>Uso interno.</strong> Confirme sempre taxas e condições com o banco antes de apresentar ao cliente.
+          </span>
+        </div>
+
+        {/* Tabs */}
+        <Tabs defaultValue="comparativo">
+          <TabsList className="grid grid-cols-3 w-full max-w-2xl h-12">
+            <TabsTrigger value="comparativo" className="text-sm font-medium gap-2">
+              <ArrowLeftRight className="h-4 w-4" />
+              Comparativo
+            </TabsTrigger>
+            <TabsTrigger value="com-imposto" className="text-sm font-medium gap-2">
+              <FileText className="h-4 w-4" />
+              Com Imposto
+            </TabsTrigger>
+            <TabsTrigger value="sem-imposto" className="text-sm font-medium gap-2">
+              <Calculator className="h-4 w-4" />
+              Sem Imposto
+            </TabsTrigger>
+          </TabsList>
+
+          <div className="mt-2 mb-5">
+            <TabsContent value="comparativo">
+              <p className="text-xs text-muted-foreground bg-muted/40 rounded-lg px-3 py-2">
+                <strong>Comparativo:</strong> Preencha os dados uma única vez e informe as duas taxas. O sistema calcula e exibe os dois cenários lado a lado em tempo real, com a diferença destacada.
+              </p>
+            </TabsContent>
+            <TabsContent value="com-imposto">
+              <p className="text-xs text-muted-foreground bg-muted/40 rounded-lg px-3 py-2">
+                <strong>Cenário A:</strong> Inclui imposto calculado sobre o valor fiscal declarado pelo cliente.
+              </p>
+            </TabsContent>
+            <TabsContent value="sem-imposto">
+              <p className="text-xs text-muted-foreground bg-muted/40 rounded-lg px-3 py-2">
+                <strong>Cenário B:</strong> Simulação sem incidência de imposto. Custo base do empréstimo.
+              </p>
+            </TabsContent>
+          </div>
+
+          <TabsContent value="comparativo">
+            <CenarioComparativo initialData={empresaPreenchida} />
+          </TabsContent>
+          <TabsContent value="com-imposto">
+            <CenarioComImposto initialData={empresaPreenchida} />
+          </TabsContent>
+          <TabsContent value="sem-imposto">
+            <CenarioSemImposto initialData={empresaPreenchida} />
+          </TabsContent>
+        </Tabs>
+      </div>
+    </Layout>
+  );
+}

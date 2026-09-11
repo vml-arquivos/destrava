@@ -1,0 +1,9 @@
+# Destrava Crédito — diretivas para mecanismos de busca
+User-agent: *
+Allow: /
+Disallow: /api/
+Disallow: /colaborador/
+Disallow: /sucesso
+Disallow: /captura
+
+Sitemap: https://destravacredito.com/sitemap.xml

@@ -1,0 +1,114 @@
+<!doctype html>
+<html lang="pt-BR">
+  <head>
+    <meta charset="UTF-8" />
+    <meta
+      name="viewport"
+      content="width=device-width, initial-scale=1.0" />
+
+    <!-- Google Search Console Verification -->
+    <meta name="google-site-verification" content="8N_8CiRXM3pXx2k3O1wVEHU6mVJqud2dK9mToYRWfhU" />
+
+    <!-- Google tag (gtag.js) - Google Analytics 4 -->
+    <script async src="https://www.googletagmanager.com/gtag/js?id=G-1M1HKTTLLK"></script>
+    <script>
+      window.dataLayer = window.dataLayer || [];
+      function gtag(){dataLayer.push(arguments);}
+      window.gtag = gtag;
+      gtag('consent', 'default', {
+        analytics_storage: 'denied',
+        ad_storage: 'denied',
+        ad_user_data: 'denied',
+        ad_personalization: 'denied',
+        wait_for_update: 500
+      });
+      gtag('js', new Date());
+      gtag('config', 'G-1M1HKTTLLK', { send_page_view: false, anonymize_ip: true });
+    </script>
+
+    <!-- SEO:START -->
+    <!-- SEO Meta Tags -->
+    <title>Assessoria de Crédito Empresarial | Destrava Crédito</title>
+    <meta
+      name="description"
+      content="Destrave o crédito da sua empresa com assessoria especializada. A Destrava Crédito analisa o perfil do negócio, identifica as melhores linhas de crédito empresarial e conduz o processo com estratégia, clareza e segurança." />
+    <meta name="author" content="Destrava Crédito" />
+    <meta name="robots" content="index, follow, max-image-preview:large, max-snippet:-1, max-video-preview:-1" />
+    <link rel="canonical" href="https://destravacredito.com/" />
+
+    <!-- Open Graph / Facebook / WhatsApp -->
+    <meta property="og:type" content="website" />
+    <meta property="og:locale" content="pt_BR" />
+    <meta property="og:url" content="https://destravacredito.com/" />
+    <meta property="og:site_name" content="Destrava Crédito" />
+    <meta property="og:title" content="Destrave o crédito da sua empresa | Destrava Crédito" />
+    <meta
+      property="og:description"
+      content="Assessoria especializada para empresas que precisam acessar crédito com mais estratégia. Analisamos o perfil, indicamos as melhores linhas e conduzimos o processo do início ao fim." />
+    <meta property="og:image" content="https://destravacredito.com/og-image.png" />
+
+    <!-- Twitter/X -->
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:url" content="https://destravacredito.com/" />
+    <meta name="twitter:title" content="Destrave o crédito da sua empresa | Destrava Crédito" />
+    <meta
+      name="twitter:description"
+      content="Assessoria de crédito empresarial para MEI, micro e pequenas empresas. Simule seu crédito e fale com especialistas para encontrar a melhor linha para o seu negócio." />
+    <meta name="twitter:image" content="https://destravacredito.com/og-image.png" />
+
+    <!-- Dados estruturados básicos da organização -->
+    <script type="application/ld+json">
+      {
+        "@context": "https://schema.org",
+        "@type": "FinancialService",
+        "name": "Destrava Crédito",
+        "url": "https://destravacredito.com/",
+        "description": "Assessoria de crédito empresarial, captação de recursos e simulação de crédito para empresas.",
+        "areaServed": "BR",
+        "inLanguage": "pt-BR",
+        "serviceType": [
+          "Assessoria de crédito empresarial",
+          "Consultoria de crédito",
+          "Simulação de crédito empresarial",
+          "Captação de recursos para empresas"
+        ]
+      }
+    </script>
+    <!-- SEO:END -->
+
+    <meta name="theme-color" content="#0033A0" />
+    <link rel="icon" type="image/svg+xml" href="/destrava-logo.svg" />
+    <link rel="apple-touch-icon" href="/destrava-logo.png" />
+  </head>
+
+  <body>
+    <div id="root"></div>
+    <script>
+      (() => {
+        const recover = (resource) => {
+          if (!resource || !/\/assets\/.*\.(?:js|css)(?:\?|$)/.test(resource)) return;
+          const key = "destrava_html_asset_recovery_at";
+          const now = Date.now();
+          let last = 0;
+          try { last = Number(sessionStorage.getItem(key) || "0"); } catch (_) {}
+          if (last && now - last < 15000) return;
+          try { sessionStorage.setItem(key, String(now)); } catch (_) {}
+          const url = new URL(location.href);
+          url.searchParams.set("__destrava_reload", String(now));
+          location.replace(url.toString());
+        };
+        window.addEventListener("error", (event) => {
+          const target = event.target;
+          recover(target && (target.src || target.href));
+        }, true);
+        window.addEventListener("unhandledrejection", (event) => {
+          const message = String(event.reason && (event.reason.message || event.reason) || "");
+          if (/dynamically imported module|failed to fetch|importing a module/i.test(message)) {
+            recover("/assets/chunk.js");
+          }
+        });
+      })();
+    </script>
+    <script type="module" src="/src/main.tsx"></script>
+  </body>
+</html>

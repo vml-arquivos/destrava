@@ -1,0 +1,13 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="520" height="140" viewBox="0 0 520 140" role="img" aria-label="Aragão Serviços">
+  <defs>
+    <linearGradient id="g" x1="0" x2="1" y1="0" y2="1">
+      <stop offset="0" stop-color="#7c3f00"/>
+      <stop offset="1" stop-color="#d78a1f"/>
+    </linearGradient>
+  </defs>
+  <rect width="520" height="140" rx="28" fill="#fff8ed"/>
+  <circle cx="76" cy="70" r="42" fill="url(#g)"/>
+  <path d="M56 94L76 42l20 52h-13l-4-12H73l-4 12H56zm19-23h10l-5-16-5 16z" fill="#fff"/>
+  <text x="138" y="67" font-family="Inter, Arial, sans-serif" font-size="36" font-weight="800" fill="#1f2937">Aragão</text>
+  <text x="140" y="98" font-family="Inter, Arial, sans-serif" font-size="23" font-weight="700" fill="#a16207">Serviços</text>
+</svg>
