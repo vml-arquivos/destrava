@@ -190,3 +190,14 @@ Pedido original (registrado numa rodada anterior desta sessão): se o regime tri
 ---
 
 Nenhum item desta lista foi omitido por conveniência: cada um está aqui porque implementá-lo com segurança (zero regressão, sem adivinhar dado sensível para decisão de crédito) exige mais do que esta rodada de correção cirúrgica comporta.
+
+## Rodada atual — leitura documental dinâmica — 2026-09-11
+
+### Pendências de código
+Não há falha de teste ou build identificada nesta rodada. A suíte integral passou e os testes direcionados de leitura/OCR e regras de sócio passaram.
+
+### Pendência operacional do ambiente
+O comando `pnpm migrate -- --status` não pôde consultar o banco local porque `DATABASE_URL` não está configurada no sandbox. Nenhuma migration foi necessária ou aplicada nesta rodada. Em ambiente autorizado com banco, repetir apenas o status antes de qualquer alteração.
+
+### Diagnóstico funcional preservado
+Arquivo sem texto legível ou com OCR abaixo do limiar permanece em revisão humana, com mecanismo, motivo, confiança e qualidade registrados. Divergência de CPF/nome do sócio exige justificativa e deixa o documento fora da cobertura completa até resolução.

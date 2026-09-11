@@ -15,6 +15,7 @@ import { resolveDocumentPath } from './documentStorage';
 import {
   validarComprovanteEnderecoExtraido,
   validarFaturamentoExtraido,
+  validarIdentidadeSocioExtraida,
 } from './regrasDocumentaisCredito';
 import { canonicalizeDocumentType, documentAnalysisConfig, documentLabel, getDocumentCatalogEntry } from '../../shared/documentTypes';
 import { classificarResultadoPersistido, type ClassificacaoDocumentalResult } from './classificadorDocumentalCentral';
@@ -58,6 +59,10 @@ export function tipoLeitorLocalDocumentoCatalogado(tipoDocumento: string): TipoD
   if (tipoDocumento === 'atos_junta_comercial') return 'atos_junta_comercial';
   if (['simples_nacional', 'enquadramento_tributario_cnpj', 'comprovante_regime_outro'].includes(tipoDocumento)) return 'simples_nacional';
   if (tipoCanonico === 'comprovante_residencia') return 'comprovante_residencia';
+  if (tipoCanonico === 'ccmei') return 'ccmei';
+  if (['documento_socio', 'rg', 'cpf', 'cnh'].includes(tipoCanonico)) return tipoCanonico as TipoDocumentoLocal;
+  if (tipoCanonico === 'imposto_renda') return 'imposto_renda';
+  if (tipoCanonico === 'recibo_irpf') return 'recibo_irpf';
   if (tipoCanonico === 'faturamento_12_meses') return 'faturamento_12_meses';
   if (tipoCanonico === 'defis') return 'defis';
   if (tipoCanonico === 'dasn_simei') return 'dasn_simei';
@@ -160,6 +165,10 @@ export interface AnaliseExtratoBancarioResult {
   modelo_ia: string | null;
   revisao_humana_necessaria: boolean;
   observacoes: string[];
+  mecanismo_extracao?: string | null;
+  qualidade_extracao?: string | null;
+  diagnostico_extracao?: Record<string, any> | null;
+  alertas?: AlertaDocumental[];
 }
 
 interface Queryable {
@@ -257,6 +266,51 @@ function uniqueAlerts(alertas: AlertaDocumental[]): AlertaDocumental[] {
   });
 }
 
+function metadadosExtracao(extraidos: any): Record<string, any> {
+  const fontes = (Array.isArray(extraidos) ? extraidos : [extraidos]).filter((item) => item && typeof item === 'object');
+  if (!fontes.length) return {};
+  const mecanismos = Array.from(new Set(fontes.map((item) => item.mecanismo_extracao || item.mecanismo).filter(Boolean))).join(' + ') || null;
+  const motivos = fontes.map((item) => item.motivo_extracao_parcial || item.motivo).filter(Boolean);
+  const confiancas = fontes.map((item) => normalizarConfianca(item.confianca)).filter((item): item is number => item !== null);
+  const paginas = fontes.map((item) => item.paginas_processadas).filter((item) => item !== null && item !== undefined);
+  if (!mecanismos && !motivos.length && !confiancas.length) return {};
+  return {
+    mecanismo_extracao: mecanismos,
+    qualidade_extracao: fontes.some((item) => item.extracao_parcial || item.qualidade_extracao === 'BAIXA_QUALIDADE' || item.legivel === false) ? 'BAIXA_QUALIDADE' : 'ADEQUADA',
+    diagnostico_extracao: {
+      mecanismo: mecanismos,
+      motivo: motivos.join(' ') || null,
+      confianca: confiancas.length ? Math.min(...confiancas) : null,
+      paginas_processadas: paginas.length ? Math.max(...paginas.map(Number)) : null,
+    },
+    motivo_extracao: motivos.join(' ') || null,
+  };
+}
+
+function alertasDiagnosticoExtracao(extraidos: any): AlertaDocumental[] {
+  const dados = metadadosExtracao(extraidos);
+  const diagnostico = dados.diagnostico_extracao;
+  if (!diagnostico) return [];
+  const mecanismo = String(diagnostico.mecanismo || '').toLowerCase();
+  const confianca = diagnostico.confianca == null ? null : Number(diagnostico.confianca);
+  if (dados.qualidade_extracao === 'BAIXA_QUALIDADE' || dados.motivo_extracao) {
+    return [{
+      codigo: 'diagnostico_leitura_baixa_qualidade',
+      mensagem: `A leitura documental ficou parcial${mecanismo ? ` pelo mecanismo ${mecanismo === 'tesseract' ? 'OCR de imagem' : mecanismo}` : ''}${confianca !== null ? `, com confiança ${(confianca * 100).toFixed(0)}%` : ''}. ${dados.motivo_extracao || 'Revise os campos extraídos antes da decisão.'}`,
+      severidade: 'baixa',
+      recomendacao: 'Anexar arquivo legível ou revisar manualmente os campos destacados; a baixa qualidade não é convertida automaticamente em aprovação.',
+    }];
+  }
+  if (mecanismo === 'tesseract') {
+    return [{
+      codigo: 'diagnostico_leitura_ocr',
+      mensagem: `Leitura feita por reconhecimento de imagem (OCR)${confianca !== null ? `, confiança ${(confianca * 100).toFixed(0)}%` : ''}. Revise os campos extraídos com atenção.`,
+      severidade: 'baixa',
+    }];
+  }
+  return [];
+}
+
 function criarResultado(
   tipo: TipoAnaliseDocumental,
   empresaId: string,
@@ -264,18 +318,20 @@ function criarResultado(
   dados: Record<string, any>,
   alertas: AlertaDocumental[],
   modelo: string | null,
+  extraidos?: any,
 ): AnaliseDocumentalResult {
-  const alertasUnicos = uniqueAlerts(alertas);
+  const dadosComDiagnostico = { ...dados, ...metadadosExtracao(extraidos) };
+  const alertasUnicos = uniqueAlerts([...alertas, ...alertasDiagnosticoExtracao(extraidos)]);
   const revisao = alertasUnicos.some((alerta) => alerta.severidade === 'critica' || alerta.severidade === 'alta');
   return {
     tipo_analise: tipo,
     empresa_id: empresaId,
     arquivo_id: arquivoId,
     status: revisao ? 'revisao_humana' : 'concluido',
-    dados_extraidos: dados,
+    dados_extraidos: dadosComDiagnostico,
     alertas: alertasUnicos,
     divergencias: alertasUnicos,
-    nivel_confianca: normalizarConfianca(dados?.confianca),
+    nivel_confianca: normalizarConfianca(dadosComDiagnostico?.confianca),
     modelo_ia: modelo,
     analisado_em: new Date().toISOString(),
     revisao_humana_necessaria: revisao,
@@ -1490,6 +1546,7 @@ function normalizarExtratoBancario(
   const datas = validos.map((item) => item.data).sort();
   const confiancaRaw = asNumber(extraidos?.confianca);
   const confianca = confiancaRaw === null ? null : Math.max(0, Math.min(1, confiancaRaw));
+  const diagnostico = metadadosExtracao(extraidos);
   return {
     documento_compativel: documentoCompativel,
     banco: String(extraidos?.banco || '').trim().slice(0, 200) || null,
@@ -1504,6 +1561,8 @@ function normalizarExtratoBancario(
     modelo_ia: null,
     revisao_humana_necessaria: true,
     observacoes,
+    ...diagnostico,
+    alertas: alertasDiagnosticoExtracao(extraidos),
   };
 }
 
@@ -1948,6 +2007,7 @@ function normalizarDocumentoCatalogado(extraidos: any, tipoDocumento: string, em
     cobertura_status: satisfazRequisito ? classificacao.cobertura_status : 'NAO_SATISFAZ',
     campos_essenciais_ausentes: camposObrigatoriosAusentes,
     classificacao_motivo: classificacao.motivo,
+    ...metadadosExtracao(extraidos),
   };
   return { dados, evidencias, camposInferidos, alertas, classificacao, textoFonte: textoLocal || null };
 }
@@ -2137,14 +2197,8 @@ export class AnaliseDocumentalService {
 
     let local: Awaited<ReturnType<typeof extrairDocumentoLocal>> | null = null;
     const fallbackLocalParcial = (motivo: unknown): any | null => {
-      const temDadosLocais = !!local?.dados && Object.keys(local.dados).some((chave) => {
-        const valor = local?.dados?.[chave];
-        return valor !== null && valor !== undefined && valor !== ''
-          && !(Array.isArray(valor) && valor.length === 0)
-          && !(typeof valor === 'object' && !Array.isArray(valor) && Object.keys(valor).length === 0);
-      });
       const temTextoLocal = Boolean(String(local?.texto || '').trim());
-      if (!local || (!temDadosLocais && !temTextoLocal)) return null;
+      if (!local) return null;
       this.ultimoModeloUsado = `local:${local.mecanismo || 'ocr'}-v1-parcial`;
       this.ultimaFonteExtracao = 'local';
       return {
@@ -2339,7 +2393,7 @@ export class AnaliseDocumentalService {
     const alertas = validarQsaExtraida(empresa, socios, dados);
     await persistirEvidenciasP0(this.db, empresaId, arquivoId, 'qsa', dados, [], extraidos?.__texto_local || null)
       .catch((error: any) => console.warn('[P0] Evidências do QSA indisponíveis; laudo preservado:', error?.message || error));
-    return criarResultado('qsa', empresaId, arquivoId, dados, alertas, this.ultimoModeloUsado);
+    return criarResultado('qsa', empresaId, arquivoId, dados, alertas, this.ultimoModeloUsado, extraidos);
   }
 
   async analisarSimplesNacional(empresaId: string, arquivoId: string): Promise<AnaliseDocumentalResult> {
@@ -2351,7 +2405,7 @@ export class AnaliseDocumentalService {
     const alertas = validarSimplesExtraido(empresa, dados);
     await persistirEvidenciasP0(this.db, empresaId, arquivoId, 'simples_nacional', dados, [], extraidos?.__texto_local || null)
       .catch((error: any) => console.warn('[P0] Evidências de enquadramento indisponíveis; laudo preservado:', error?.message || error));
-    return criarResultado('simples_nacional', empresaId, arquivoId, dados, alertas, this.ultimoModeloUsado);
+    return criarResultado('simples_nacional', empresaId, arquivoId, dados, alertas, this.ultimoModeloUsado, extraidos);
   }
 
   async analisarAtosJuntaComercial(empresaId: string, arquivoId: string): Promise<AnaliseDocumentalResult> {
@@ -2363,7 +2417,7 @@ export class AnaliseDocumentalService {
     const alertas = validarAtosJuntaExtraidos(empresa, dados);
     await persistirEvidenciasP0(this.db, empresaId, arquivoId, 'atos_junta_comercial', dados, [], extraidos?.__texto_local || null)
       .catch((error: any) => console.warn('[P0] Evidências societárias indisponíveis; laudo preservado:', error?.message || error));
-    return criarResultado('atos_junta_comercial', empresaId, arquivoId, dados, alertas, this.ultimoModeloUsado);
+    return criarResultado('atos_junta_comercial', empresaId, arquivoId, dados, alertas, this.ultimoModeloUsado, extraidos);
   }
 
   async analisarFaturamento(empresaId: string, arquivoId: string): Promise<AnaliseDocumentalResult> {
@@ -2374,7 +2428,7 @@ export class AnaliseDocumentalService {
     const validacao = validarFaturamentoExtraido(empresa, socios, extraidos);
     await persistirEvidenciasP0(this.db, empresaId, arquivoId, 'faturamento_12_meses', validacao.dados, [], extraidos?.__texto_local || null)
       .catch((error: any) => console.warn('[P0] Faturamento rolling 12 indisponível; laudo preservado:', error?.message || error));
-    return criarResultado('faturamento_12_meses', empresaId, arquivoId, validacao.dados, validacao.alertas, this.ultimoModeloUsado);
+    return criarResultado('faturamento_12_meses', empresaId, arquivoId, validacao.dados, validacao.alertas, this.ultimoModeloUsado, extraidos);
   }
 
   async analisarComprovanteResidencia(empresaId: string, arquivoId: string): Promise<AnaliseDocumentalResult> {
@@ -2385,7 +2439,7 @@ export class AnaliseDocumentalService {
     const validacao = validarComprovanteEnderecoExtraido(socios, extraidos, documento.socio_id || null);
     await persistirEvidenciasP0(this.db, empresaId, arquivoId, 'comprovante_residencia', validacao.dados, [], extraidos?.__texto_local || null)
       .catch((error: any) => console.warn('[P0] Evidências de endereço indisponíveis; laudo preservado:', error?.message || error));
-    return criarResultado('comprovante_residencia', empresaId, arquivoId, validacao.dados, validacao.alertas, this.ultimoModeloUsado);
+    return criarResultado('comprovante_residencia', empresaId, arquivoId, validacao.dados, validacao.alertas, this.ultimoModeloUsado, extraidos);
   }
 
   async analisarDocumentoCatalogado(empresaId: string, arquivoId: string, tipoDocumento: string): Promise<AnaliseDocumentalGenericaResult> {
@@ -2396,12 +2450,19 @@ export class AnaliseDocumentalService {
     const tipoCanonico = canonicalizeDocumentType(tipoDocumento);
     const promptConfig = documentAnalysisConfig(tipoDocumento);
     const prompt = promptDocumentoCatalogado(tipoDocumento, catalogo.nome, catalogo.categoria, promptConfig?.promptCodigo || `catalogo_${tipoCanonico}`);
-    const { empresa, documento } = await this.carregarContexto(empresaId, arquivoId);
+    const { empresa, socios, documento } = await this.carregarContexto(empresaId, arquivoId);
     const tipoLocal = tipoLeitorLocalDocumentoCatalogado(tipoDocumento);
     const extraidos = await this.extrairHibrido(documento.caminho_arquivo!, prompt, documento.mime_type || 'application/pdf', tipoLocal, true, tipoDocumento);
     const normalizado = normalizarDocumentoCatalogado(extraidos, tipoDocumento, empresa);
-    const resultadoBase = criarResultado('documento_generico', empresaId, arquivoId, normalizado.dados, normalizado.alertas, this.ultimoModeloUsado);
-    await persistirEvidenciasP0(this.db, empresaId, arquivoId, tipoDocumento, normalizado.dados, normalizado.evidencias, normalizado.textoFonte)
+    const tipoCanonicoDocumento = canonicalizeDocumentType(tipoDocumento);
+    const documentoDeSocio = ['documento_socio', 'rg', 'cpf', 'cnh', 'imposto_renda', 'recibo_irpf'].includes(tipoCanonicoDocumento);
+    const validacaoSocio = documentoDeSocio
+      ? validarIdentidadeSocioExtraida(socios, normalizado.dados, documento.socio_id || null, tipoDocumento)
+      : { dados: {}, alertas: [] };
+    const dadosNormalizados = { ...normalizado.dados, ...validacaoSocio.dados };
+    const alertasNormalizados = [...normalizado.alertas, ...validacaoSocio.alertas];
+    const resultadoBase = criarResultado('documento_generico', empresaId, arquivoId, dadosNormalizados, alertasNormalizados, this.ultimoModeloUsado, extraidos);
+    await persistirEvidenciasP0(this.db, empresaId, arquivoId, tipoDocumento, dadosNormalizados, normalizado.evidencias, normalizado.textoFonte)
       .catch((error: any) => console.warn('[P0] Evidências temporais/rolling/bureau indisponíveis; laudo preservado:', error?.message || error));
     return {
       ...resultadoBase,

@@ -758,3 +758,17 @@ Arquivos de teste NOVOS ou AMPLIADOS: nenhum (correção puramente de CSS/layout
 
 Total desta rodada: 1 arquivo de código alterado + 6 arquivos de
 documentação alterados = 7 arquivos.
+
+======================================================================
+Rodada atual — leitura documental dinâmica — 2026-09-11
+
+Arquivos de produção:
+- server/services/extracaoDocumentalLocal.ts — parsers OCR aditivos para identidade, endereço, IRPF, recibo IRPF e CCMEI; despacho por tipo e normalização tolerante.
+- server/services/analiseDocumentalEspecializada.ts — propagação de diagnóstico, alerta de qualidade, threading de sócio e persistência da confirmação; retorno estruturado para extrato.
+- server/services/regrasDocumentaisCredito.ts — validação nome/CPF por sócio e cobertura somente com documentos utilizáveis.
+
+Testes:
+- tests/leituraOcrToleranteDinamica.test.ts — cinco regressões sintéticas de OCR, uma por leitor requerido.
+- tests/regrasDocumentaisCredito.test.ts — confirmação de dois sócios, divergência com justificativa e exclusão da cobertura.
+
+Nenhum PDF, imagem, texto extraído, credencial, banco de dados, dist/ ou dado de cliente foi incluído no pacote-fonte.

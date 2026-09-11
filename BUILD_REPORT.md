@@ -33,3 +33,11 @@ Pré-renderização estática validada com sucesso (meta tags OG, Twitter, canon
 
 ## Conclusão
 Nenhum erro em nenhuma das etapas. Nenhuma migration nova, nenhuma alteração de schema, nenhuma dependência nova, nenhuma mudança de lógica de negócio -- correção puramente visual (uma classe CSS removida). Três migrations aditivas seguem pendentes de aplicação manual contra o Postgres da VPS desde rodadas anteriores (100, 101, 102 -- ver `MIGRATION_SAFETY_REPORT.md`); nenhuma delas é aplicada automaticamente por `npm run migrate` (que só executa `db/migrate.sql`), então build e testes não dependem delas para passar.
+
+## Rodada atual — leitura documental dinâmica (2026-09-11)
+
+Esta rodada implementou somente mudanças locais, sem commit, push, PR, merge ou deploy. O caminho nativo de leitura foi preservado e a tolerância OCR foi adicionada como fallback explícito para documentos fotografados ou com texto extraído incompleto.
+
+Validações executadas: `pnpm check` passou; a suíte integral passou com 114 arquivos de teste e 1.080 testes; `pnpm build` passou; `node --check dist/index.js` e `node --check dist/backfill-laudos.js` passaram; `git diff --check` passou. A verificação `pnpm migrate -- --status` não pôde consultar o banco local porque `DATABASE_URL` não está configurada no sandbox; nenhuma migration foi aplicada.
+
+O pacote desta rodada contém parsers locais aditivos para identidade de sócio, comprovante de residência, declaração IRPF, recibo IRPF e CCMEI, diagnóstico persistido da fonte/mecanismo/qualidade da extração e validação de identidade por sócio. Nenhum documento de cliente ou saída de OCR foi incluído no repositório.

@@ -689,3 +689,12 @@ Arquitetura completa de linha temporal do regime tributário, faturamento em jan
 ## Nenhuma migration necessária
 
 Nenhuma das três correções desta rodada exige mudança de schema de banco de dados — são todas correções de lógica de aplicação (constantes, condicional, chamada de rota removida). Não há migration para gerar ou testar nesta entrega.
+
+## Rodada atual — precisão documental dinâmica — 2026-09-11
+
+- Adicionado fallback tolerante a OCR para **documento de identificação do sócio**, **comprovante de residência**, **declaração IRPF**, **recibo IRPF** e **CCMEI**. Os leitores extraem apenas os campos pertinentes ao tipo e mantêm o leitor nativo como primeira opção.
+- Adicionado diagnóstico estruturado de mecanismo, qualidade, motivo, confiança e páginas processadas. Quando a leitura é parcial, baixa qualidade ou OCR, o resultado mantém a revisão humana e gera alerta visível; não converte baixa qualidade em aprovação.
+- Adicionada confirmação independente de nome/CPF contra o sócio vinculado ao arquivo. Divergências geram alertas objetivos e exigência de justificativa; o sistema não redireciona automaticamente o arquivo para outro sócio.
+- Ajustada a cobertura documental por sócio para contar somente documentos utilizáveis, excluindo documentos com divergência de identidade, titularidade ou justificativa pendente.
+- Adicionado retorno de diagnóstico também ao fluxo de extrato bancário, preservando a análise de lançamentos e a revisão humana existente.
+- Nenhum parser nativo de empresa, societário, fiscal, bureau ou Motor de Crédito foi removido ou substituído.

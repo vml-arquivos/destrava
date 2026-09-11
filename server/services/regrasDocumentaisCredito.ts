@@ -197,6 +197,54 @@ export function validarComprovanteEnderecoExtraido(
   };
 }
 
+export function validarIdentidadeSocioExtraida(
+  socios: any[],
+  dados: any,
+  socioAlvoId: string | null = null,
+  tipoDocumento = 'documento do sócio',
+): { dados: Record<string, any>; alertas: AlertaRegraDocumental[] } {
+  const alertas: AlertaRegraDocumental[] = [];
+  const sociosAtivos = (Array.isArray(socios) ? socios : []).filter((socio) => socio?.ativo !== false);
+  const socioAlvo = sociosAtivos.find((socio) => String(socio?.id) === String(socioAlvoId || '')) || null;
+  const cpfDocumento = onlyDigits(dados?.cpf || dados?.cpf_titular);
+  const nomeDocumento = String(dados?.nome || dados?.titular || dados?.nome_titular || '').trim();
+  const cpfSocio = onlyDigits(socioAlvo?.cpf || socioAlvo?.cpf_socio || socioAlvo?.documento || socioAlvo?.cpf_cnpj);
+  const cpfConfere = cpfDocumento && cpfSocio ? cpfDocumento === cpfSocio : null;
+  const nomeConfere = nomeDocumento && socioAlvo?.nome ? nomeEquivalente(nomeDocumento, socioAlvo.nome) : null;
+  const divergenciaCpf = cpfConfere === false;
+  const divergenciaNome = nomeConfere === false;
+  if (divergenciaCpf) {
+    alertas.push({
+      codigo: 'identidade_cpf_diferente_socio',
+      campo: 'cpf',
+      mensagem: `O CPF extraído do ${tipoDocumento} não corresponde ao sócio ao qual o arquivo está vinculado. É obrigatória uma justificativa.`,
+      severidade: 'media',
+      recomendacao: 'Conferir o arquivo e o vínculo do upload; não redirecionar automaticamente o documento para outro sócio.',
+    });
+  }
+  if (divergenciaNome) {
+    alertas.push({
+      codigo: 'identidade_nome_diferente_socio',
+      campo: 'nome',
+      mensagem: `O nome extraído do ${tipoDocumento} não corresponde ao sócio ao qual o arquivo está vinculado. É obrigatória uma justificativa.`,
+      severidade: 'media',
+      recomendacao: 'Conferir a grafia, o documento integral e o sócio selecionado no upload.',
+    });
+  }
+  const confirma = socioAlvo ? !divergenciaCpf && !divergenciaNome && Boolean(cpfConfere === true || nomeConfere === true) : null;
+  return {
+    dados: {
+      socio_alvo_id: socioAlvoId,
+      socio_alvo_nome: socioAlvo?.nome || null,
+      cpf_confere_com_socio: cpfConfere,
+      nome_confere_com_socio: nomeConfere,
+      identidade_socio_confere: confirma,
+      exige_justificativa_identidade: divergenciaCpf || divergenciaNome,
+    },
+    alertas,
+  };
+}
+
 export function calcularCoberturaDocumentalSocios(
   socios: any[],
   documentos: any[],
@@ -206,7 +254,15 @@ export function calcularCoberturaDocumentalSocios(
   const tipos = Array.from(new Set(tiposExigidos.filter(Boolean)));
   const porSocio = sociosAtivos.map((socio) => {
     const docsSocio = (Array.isArray(documentos) ? documentos : []).filter((doc) => String(doc?.socio_id || '') === String(socio.id));
-    const faltantes = tipos.filter((tipo) => !docsSocio.some((doc) => String(doc?.tipo_documento) === tipo));
+    const docsUtilizaveis = docsSocio.filter((doc) => {
+      const dados = doc?.dados_extraidos || doc?.dados || doc;
+      const alertas = Array.isArray(doc?.alertas) ? doc.alertas : [];
+      return dados?.identidade_socio_confere !== false
+        && dados?.titular_confere_com_socio !== false
+        && dados?.exige_justificativa_identidade !== true
+        && !alertas.some((alerta: any) => ['identidade_cpf_diferente_socio', 'identidade_nome_diferente_socio', 'endereco_titular_diferente_socio'].includes(String(alerta?.codigo)));
+    });
+    const faltantes = tipos.filter((tipo) => !docsUtilizaveis.some((doc) => String(doc?.tipo_documento) === tipo));
     return { socio_id: socio.id, socio_nome: socio.nome || null, total_exigido: tipos.length, total_presente: tipos.length - faltantes.length, tipos_faltantes: faltantes, completo: faltantes.length === 0 };
   });
   return { total_socios: sociosAtivos.length, socios_completos: porSocio.filter((item) => item.completo).length, completo: porSocio.every((item) => item.completo), por_socio: porSocio };

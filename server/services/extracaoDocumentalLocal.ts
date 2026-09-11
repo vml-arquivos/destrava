@@ -16,6 +16,13 @@ export type TipoDocumentoLocal =
   | 'contrato_social_alteracao'
   | 'faturamento_12_meses'
   | 'comprovante_residencia'
+  | 'ccmei'
+  | 'documento_socio'
+  | 'rg'
+  | 'cpf'
+  | 'cnh'
+  | 'imposto_renda'
+  | 'recibo_irpf'
   | 'extrato_bancario'
   | 'ecf'
   | 'pgdas_d'
@@ -114,6 +121,61 @@ function valorAposRotulo(linhas: string[], aliases: string[], limite = 3): strin
     }
   }
   return null;
+}
+
+type ModoLeituraLocal = 'pdftotext' | 'tesseract';
+
+function normalizarRotuloOcr(value: unknown): string {
+  return textoNormalizado(value)
+    .toLowerCase()
+    .replace(/\|/g, 'i')
+    .replace(/\b0(?=[a-z])/g, 'o')
+    .replace(/\b1(?=[a-z])/g, 'i');
+}
+
+function corrigirDigitosOcr(value: unknown): string {
+  return String(value || '').replace(/[OoQq]/g, '0').replace(/[IiLl|]/g, '1').replace(/[Ss]/g, '5').replace(/[Bb]/g, '8');
+}
+
+function linhasTextoComModo(texto: string, modo: ModoLeituraLocal = 'pdftotext'): string[] {
+  const base = linhasTexto(texto);
+  if (modo !== 'tesseract') return base;
+  return base.map((linha) => linha.replace(/[|]+/g, ' ').replace(/\s+/g, ' ').trim()).filter(Boolean);
+}
+
+function valorAposRotuloComModo(
+  texto: string,
+  aliases: string[],
+  modo: ModoLeituraLocal = 'pdftotext',
+  limite = 3,
+): string | null {
+  if (modo !== 'tesseract') return limparValor(valorAposRotulo(linhasTexto(texto), aliases, limite));
+  const linhas = linhasTextoComModo(texto, modo);
+  const aliasesOcr = aliases.map(normalizarRotuloOcr).sort((a, b) => b.length - a.length);
+  for (let i = 0; i < linhas.length; i += 1) {
+    const linha = linhas[i];
+    const normalizada = normalizarRotuloOcr(linha);
+    const alias = aliasesOcr.find((item) => normalizada === item || normalizada.startsWith(`${item}:`) || normalizada.startsWith(`${item} `));
+    if (!alias) continue;
+    const indice = normalizada.indexOf(alias);
+    const inline = linha.slice(Math.max(0, indice) + alias.length).replace(/^\s*[-–—:]+\s*/, '').trim();
+    if (inline && !pareceRotulo(inline)) return limparValor(inline);
+    for (let offset = 1; offset <= Math.max(limite, 6) && i + offset < linhas.length; offset += 1) {
+      const candidato = linhas[i + offset];
+      if (!candidato || pareceRotulo(candidato)) continue;
+      return limparValor(candidato);
+    }
+  }
+  const aliasesRegex = aliases.map((item) => item.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')).join('|');
+  const inlineMatch = String(texto).match(new RegExp(`(?:${aliasesRegex})\\s*[:\\-]?\\s*([^\\n\\r]{2,120})`, 'i'));
+  return limparValor(inlineMatch?.[1] || null);
+}
+
+function primeiroCpfTolerante(texto: string, modo: ModoLeituraLocal = 'pdftotext'): string | null {
+  const trecho = String(texto || '').match(/(?:cpf|cadastro de pessoas físicas|cadastro de pessoas fisicas)[^\dA-Za-z]{0,20}([\dOQqIiLl|SsBb]{3}[.\s-]?[\dOQqIiLl|SsBb]{3}[.\s-]?[\dOQqIiLl|SsBb]{3}[.\s-]?[\dOQqIiLl|SsBb]{2})/i)?.[1]
+    || String(texto || '').match(/\b([\dOQqIiLl|SsBb]{3}[.\s-]?[\dOQqIiLl|SsBb]{3}[.\s-]?[\dOQqIiLl|SsBb]{3}[.\s-]?[\dOQqIiLl|SsBb]{2})\b/i)?.[1];
+  const digits = onlyDigits(modo === 'tesseract' ? corrigirDigitosOcr(trecho) : trecho);
+  return digits.length === 11 ? digits : null;
 }
 
 function primeiroCnpj(texto: string): string | null {
@@ -901,8 +963,109 @@ function parseFaturamento12Meses(texto: string): { dados: Record<string, any>; c
   };
 }
 
-function parseComprovanteResidencia(texto: string): { dados: Record<string, any>; confianca: number } {
-  const linhas = linhasTexto(texto);
+function parseDocumentoIdentidadeSocio(texto: string, modo: ModoLeituraLocal = 'pdftotext'): { dados: Record<string, any>; confianca: number } {
+  const linhas = linhasTextoComModo(texto, modo);
+  const norm = textoNormalizado(texto).toLowerCase();
+  const normOcr = normalizarRotuloOcr(texto);
+  const cpf = primeiroCpfTolerante(texto, modo);
+  const ehCnh = /carteira nacional de habilitacao|habilitacao|categoria|permissao para dirigir|cnh/.test(normOcr);
+  const ehCpf = /cadastro de pessoas fisicas|comprovante de situacao cadastral no cpf|cpf/.test(normOcr) && !ehCnh;
+  const tipoDocumento = ehCnh ? 'cnh' : ehCpf ? 'cpf' : 'rg';
+  const nome = limparValor(valorAposRotuloComModo(texto, ['nome completo', 'nome do condutor', 'nome e sobrenome', 'nome', 'titular'], modo, 6));
+  const numeroBruto = valorAposRotuloComModo(texto, ehCnh
+    ? ['numero de registro', 'n registro', 'nº registro', 'registro', 'numero da cnh', 'numero do documento']
+    : ['registro geral', 'numero do rg', 'numero de identidade', 'numero do documento', 'identidade', 'rg'], modo, 6);
+  const numero = onlyDigits(corrigirDigitosOcr(numeroBruto));
+  const dataNascimento = parseDate(valorAposRotuloComModo(texto, ['data de nascimento', 'nascimento'], modo, 6));
+  const dataValidade = parseDate(valorAposRotuloComModo(texto, ['validade', 'data de validade'], modo, 6));
+  const dataEmissao = parseDate(valorAposRotuloComModo(texto, ['data de emissao', 'data de emissão', 'emissao', 'emissão'], modo, 6));
+  const orgaoEmissor = limparValor(valorAposRotuloComModo(texto, ['orgao emissor', 'órgão emissor', 'emissor'], modo, 4));
+  const compativel = ehCnh || /registro geral|identidade|documento de identidade|rg/.test(norm) || ehCpf;
+  const confianca = clamp((compativel ? 0.35 : 0) + (nome ? 0.25 : 0) + (cpf ? 0.2 : 0) + (numero && numero !== cpf ? 0.1 : 0) + (dataNascimento ? 0.05 : 0) + (ehCnh && dataValidade ? 0.05 : 0));
+  return {
+    dados: {
+      documento_compativel: compativel,
+      tipo_documento: tipoDocumento,
+      nome,
+      cpf,
+      numero_documento: numero && numero !== cpf ? numero : null,
+      data_nascimento: dataNascimento,
+      data_validade: dataValidade,
+      data_emissao: dataEmissao,
+      orgao_emissor: orgaoEmissor,
+      fonte_extracao: 'local_deterministica',
+      confianca,
+    },
+    confianca,
+  };
+}
+
+function parseDeclaracaoIrpf(texto: string, modo: ModoLeituraLocal = 'pdftotext'): { dados: Record<string, any>; confianca: number } {
+  const norm = normalizarRotuloOcr(texto);
+  const cpf = primeiroCpfTolerante(texto, modo);
+  const titular = limparValor(valorAposRotuloComModo(texto, ['nome do contribuinte', 'contribuinte', 'titular', 'nome'], modo, 6));
+  const ano = texto.match(/(?:ano[- ]?calendario|ano[- ]?calendário|exercicio|exercício)\s*[:\-]?\s*(20\d{2})/i)?.[1]
+    || texto.match(/\b(20\d{2})\b/)?.[1]
+    || null;
+  const recibo = limparValor(valorAposRotuloComModo(texto, ['numero do recibo', 'número do recibo', 'recibo'], modo, 6));
+  const protocolo = recibo ? (recibo.match(/[A-Z0-9][A-Z0-9./-]{7,}/i)?.[0] || recibo) : null;
+  const dataTransmissao = parseDate(valorAposRotuloComModo(texto, ['data de transmissao', 'data de transmissão', 'transmitida em', 'entregue em'], modo, 5));
+  const compativel = /imposto de renda|declaracao de ajuste anual|declara[cç][aã]o de ajuste|irpf|recibo de entrega/.test(norm);
+  const confianca = clamp((compativel ? 0.35 : 0) + (cpf ? 0.25 : 0) + (titular ? 0.15 : 0) + (ano ? 0.15 : 0) + (protocolo ? 0.1 : 0));
+  return {
+    dados: {
+      documento_compativel: compativel,
+      cpf,
+      titular,
+      nome: titular,
+      ano_calendario: ano,
+      recibo_ou_protocolo: protocolo,
+      data_transmissao: dataTransmissao,
+      fonte_extracao: 'local_deterministica',
+      confianca,
+    },
+    confianca,
+  };
+}
+
+function parseReciboIrpf(texto: string, modo: ModoLeituraLocal = 'pdftotext'): { dados: Record<string, any>; confianca: number } {
+  const base = parseDeclaracaoIrpf(texto, modo);
+  const norm = normalizarRotuloOcr(texto);
+  const compativel = base.dados.documento_compativel || /recibo.*entrega|entrega.*declaracao/.test(norm);
+  const reciboExplicito = texto.match(/(?:numero\s+do\s+recibo|n[uú]mero\s+do\s+recibo|recibo)\s*[:\-]\s*([A-Z0-9][A-Z0-9./-]{7,})/i)?.[1] || null;
+  return { dados: { ...base.dados, tipo_documento: 'recibo_irpf', documento_compativel: compativel, ...(reciboExplicito ? { recibo_ou_protocolo: reciboExplicito } : {}) }, confianca: clamp(base.confianca + (compativel ? 0.1 : 0)) };
+}
+
+function parseCcmei(texto: string, modo: ModoLeituraLocal = 'pdftotext'): { dados: Record<string, any>; confianca: number } {
+  const cnpj = formatarCnpj(primeiroCnpj(texto));
+  const cpf = primeiroCpfTolerante(texto, modo);
+  const nomeEmpresarial = limparValor(valorAposRotuloComModo(texto, ['nome empresarial', 'nome fantasia', 'empresario individual', 'empresário individual'], modo, 6));
+  const titular = limparValor(valorAposRotuloComModo(texto, ['titular', 'nome do titular', 'nome empresarial'], modo, 6));
+  const dataInicio = parseDate(valorAposRotuloComModo(texto, ['data de inicio', 'data de início', 'inicio da atividade', 'início da atividade'], modo, 6));
+  const dataEmissao = parseDate(valorAposRotuloComModo(texto, ['data de emissao', 'data de emissão', 'emitido em'], modo, 5));
+  const norm = normalizarRotuloOcr(texto);
+  const condicaoMei = /microempreendedor individual|mei|simei|certificado da condicao de microempreendedor/.test(norm);
+  const compativel = /microempreendedor|mei|simei|certificado da condicao|ccmei/.test(norm) && Boolean(cnpj || titular || nomeEmpresarial);
+  const confianca = clamp((compativel ? 0.35 : 0) + (cnpj ? 0.25 : 0) + (titular || nomeEmpresarial ? 0.2 : 0) + (condicaoMei ? 0.1 : 0) + (dataInicio || dataEmissao ? 0.1 : 0));
+  return {
+    dados: {
+      documento_compativel: compativel,
+      cnpj,
+      cpf,
+      nome_empresarial: nomeEmpresarial,
+      titular,
+      condicao_mei: condicaoMei,
+      data_inicio: dataInicio,
+      data_emissao: dataEmissao,
+      fonte_extracao: 'local_deterministica',
+      confianca,
+    },
+    confianca,
+  };
+}
+
+function parseComprovanteResidencia(texto: string, modo: ModoLeituraLocal = 'pdftotext'): { dados: Record<string, any>; confianca: number } {
+  const linhas = linhasTextoComModo(texto, modo);
   const norm = textoNormalizado(texto);
   const compativel = /comprovante|conta de (?:agua|energia|telefone|internet)|fatura|endereco|endereço|cep/.test(norm);
   const dataEmissao = parseDate(
@@ -914,7 +1077,7 @@ function parseComprovanteResidencia(texto: string): { dados: Record<string, any>
   const mesReferencia = texto.match(/(?:m[eê]s|compet[eê]ncia|refer[eê]ncia)\s*[:\-]?\s*((?:0?[1-9]|1[0-2])\s*[\/.\-]\s*(?:20\d{2}|\d{2}))/i)?.[1]
     || (dataEmissao ? dataEmissao.slice(0, 7) : null);
   const nomeTitular = limparValor(
-    valorAposRotulo(linhas, ['nome do titular', 'titular', 'cliente', 'nome do cliente', 'consumidor'])
+    valorAposRotuloComModo(texto, ['nome do titular', 'titular', 'cliente', 'nome do cliente', 'consumidor'], modo, 6)
       || texto.match(/(?:titular|cliente|consumidor)\s*[:\-]\s*([^\n\r]{4,100})/i)?.[1]
       || null,
   );
@@ -1986,13 +2149,17 @@ function parseConsultaDocumentalEspecializada(
   };
 }
 
-export function analisarTextoDocumentoLocal(tipo: TipoDocumentoLocal, texto: string, tipoDocumentoEsperado?: string): { dados: Record<string, any>; confianca: number } {
+export function analisarTextoDocumentoLocal(tipo: TipoDocumentoLocal, texto: string, tipoDocumentoEsperado?: string, modo: ModoLeituraLocal = 'pdftotext'): { dados: Record<string, any>; confianca: number } {
   if (tipo === 'cartao_cnpj') return parseCartaoCnpj(texto);
   if (tipo === 'qsa') return parseQsa(texto);
   if (tipo === 'simples_nacional') return parseSimples(texto);
   if (tipo === 'atos_junta_comercial') return parseAtosJunta(texto);
   if (tipo === 'faturamento_12_meses') return parseFaturamento12Meses(texto);
-  if (tipo === 'comprovante_residencia') return parseComprovanteResidencia(texto);
+  if (tipo === 'comprovante_residencia') return parseComprovanteResidencia(texto, modo);
+  if (tipo === 'ccmei') return parseCcmei(texto, modo);
+  if (['documento_socio', 'rg', 'cpf', 'cnh'].includes(tipo)) return parseDocumentoIdentidadeSocio(texto, modo);
+  if (tipo === 'imposto_renda') return parseDeclaracaoIrpf(texto, modo);
+  if (tipo === 'recibo_irpf') return parseReciboIrpf(texto, modo);
   if (tipo === 'extrato_bancario') return parseExtratoBancario(texto);
   if (tipo === 'efd_contribuicoes') return parseEfdContribuicoes(texto);
   if (tipo === 'efd_icms_ipi') return parseEfdIcmsIpi(texto);
@@ -2291,7 +2458,7 @@ export async function extrairDocumentoLocal(
   if (isStructured) {
     try {
       const texto = await extrairTextoEstruturado(arquivoPath, extension, timeoutTexto, bufferMaximo);
-      const { dados, confianca } = analisarTextoDocumentoLocal(tipo, texto, tipoDocumentoEsperado);
+      const { dados, confianca } = analisarTextoDocumentoLocal(tipo, texto, tipoDocumentoEsperado, 'pdftotext');
       return {
         tipo,
         disponivel: true,
@@ -2321,7 +2488,7 @@ export async function extrairDocumentoLocal(
       );
       const texto = String(stdout || '').replace(/\u0000/g, '').trim();
       if (texto.length >= 20) {
-        let { dados, confianca } = analisarTextoDocumentoLocal(tipo, texto, tipoDocumentoEsperado);
+        let { dados, confianca } = analisarTextoDocumentoLocal(tipo, texto, tipoDocumentoEsperado, 'pdftotext');
         const minimoConfianca = Number(process.env.LOCAL_EXTRACTION_MIN_CONFIDENCE || 0.55);
         const precisaOcrSuplementar = tipo === 'faturamento_12_meses'
           && (!dados.assinatura_socio_administrador?.presente || !dados.assinatura_contador?.presente)
@@ -2330,7 +2497,7 @@ export async function extrairDocumentoLocal(
           const ocrSuplementar = await extrairTextoComOcrLocal(arquivoPath, true, timeoutOcr, bufferMaximo);
           if (ocrSuplementar.texto.length >= 20) {
             const combinado = `${texto}\n${ocrSuplementar.texto}`;
-            const resultadoCombinado = analisarTextoDocumentoLocal(tipo, combinado, tipoDocumentoEsperado);
+            const resultadoCombinado = analisarTextoDocumentoLocal(tipo, combinado, tipoDocumentoEsperado, 'tesseract');
             if (resultadoCombinado.confianca >= confianca) {
               dados = resultadoCombinado.dados;
               confianca = resultadoCombinado.confianca;
@@ -2359,7 +2526,7 @@ export async function extrairDocumentoLocal(
 
   const ocr = await extrairTextoComOcrLocal(arquivoPath, isPdf, timeoutOcr, bufferMaximo);
   if (ocr.texto.length >= 20) {
-    const { dados, confianca } = analisarTextoDocumentoLocal(tipo, ocr.texto, tipoDocumentoEsperado);
+    const { dados, confianca } = analisarTextoDocumentoLocal(tipo, ocr.texto, tipoDocumentoEsperado, 'tesseract');
     return {
       tipo,
       disponivel: true,

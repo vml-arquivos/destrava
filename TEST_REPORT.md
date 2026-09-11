@@ -346,3 +346,19 @@ npx tsc --noEmit
 npx vitest run
 pnpm run build
 ```
+
+## Rodada atual — leitura documental dinâmica — 2026-09-11
+
+| Verificação | Resultado |
+|---|---:|
+| `pnpm check` | PASS |
+| Testes direcionados de extração, regras e análise | PASS — 4 arquivos, 98 testes |
+| Testes novos de OCR | PASS — 5 testes |
+| Suíte integral `pnpm test` | PASS — 114 arquivos, 1.080 testes |
+| `pnpm build` | PASS |
+| `node --check dist/index.js` | PASS |
+| `node --check dist/backfill-laudos.js` | PASS |
+| `git diff --check` | PASS |
+| `pnpm migrate -- --status` | NÃO EXECUTADO — `DATABASE_URL` ausente; nenhuma alteração aplicada |
+
+As regressões cobrem os cinco documentos com leitura OCR, confirmação independente para dois sócios, divergência de nome/CPF, exclusão da cobertura e preservação do caminho nativo.
