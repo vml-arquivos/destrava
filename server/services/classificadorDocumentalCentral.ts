@@ -210,7 +210,20 @@ function detectarTipo(texto: string): { tipo: TipoDetectadoDocumental; evidencia
     ['CONTRATO_GARANTIA', /contrato de garantia|instrumento particular de garantia/, 'Contrato de garantia', 0.93],
     ['ALIENACAO_FIDUCIARIA', /alienacao fiduciaria/, 'Alienação fiduciária', 0.95],
     ['NOTA_PROMISSORIA', /nota promissoria/, 'Nota promissória', 0.96],
-    ['AVAL', /avalista|garantidor solidario/, 'Aval', 0.88],
+    // CORREÇÃO (11/09/2026, rodada seguinte -- comprovante de endereço real
+    // de telecom anexado pelo usuário, que ficava "Incompatível" mesmo sendo
+    // um comprovante genuíno e legível): "Sacador/Avalista" é o nome de campo
+    // PADRÃO (FEBRABAN) impresso em QUALQUER boleto bancário emitido no
+    // Brasil -- de aluguel, condomínio, internet, luz, mensalidade escolar
+    // etc. -- e não indica, de forma alguma, que o documento é um instrumento
+    // de aval/garantia de crédito. Como praticamente toda conta/fatura real
+    // vem acompanhada do boleto de pagamento, esse campo padrão disparava um
+    // falso positivo de "AVAL" para qualquer comprovante de residência (ou
+    // qualquer outro documento) que tivesse um boleto anexado -- um problema
+    // geral, não específico desta operadora. A regra de AVAL continua válida
+    // para instrumentos de aval de verdade, só passa a ignorar a ocorrência
+    // do rótulo padrão de campo do boleto.
+    ['AVAL', /(?<!sacador\s*\/\s*)\bavalista\b|garantidor solidario/, 'Aval', 0.88],
     ['GARANTIA', /instrumento de garantia|bem em garantia|laudo de avaliacao/, 'Documento de garantia', 0.82],
     ['COMPARTILHAMENTO_ECAC', /compartilhamento.{0,60}e[- ]?cac|autoriza.{0,80}dados fiscais|autorizar compartilhamento de dados|autorizacao de compartilhamento de dados|compartilhamento de dados.{0,80}(?:receita federal|rfb|blockchain)/, 'Compartilhamento eCAC', 0.95],
   ];

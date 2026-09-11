@@ -197,6 +197,82 @@ export function validarComprovanteEnderecoExtraido(
   };
 }
 
+// CORREÇÃO (11/09/2026, rodada seguinte -- pedido explícito do usuário:
+// "isso tem que ser confrontado com o QSA com as informações, pois isso é
+// pra comprovar que os documentos é da pessoa que está no CNPJ"): nenhum
+// documento de identidade (RG/CNH/CPF/passaporte) ou de IRPF do sócio era
+// cruzado contra o sócio ao qual o arquivo foi de fato anexado -- mesmo
+// quando a leitura extraía CPF/nome com sucesso, nada confirmava que esse
+// CPF/nome batia com o sócio do QSA (`socios_empresa`) dono daquele slot de
+// upload. Com múltiplos sócios na mesma empresa, isso é um risco real: um
+// documento anexado no card errado nunca seria percebido. Mesmo padrão já
+// usado para comprovante de endereço (`validarComprovanteEnderecoExtraido`
+// acima) -- sinaliza divergência para revisão humana, nunca redireciona o
+// arquivo sozinho para outro sócio nem bloqueia automaticamente.
+function cpfFormatadoOuDigitos(value: unknown): string | null {
+  const texto = String(value ?? '');
+  // Prioriza um CPF já formatado (pontos e traço em posição fixa) -- mais
+  // específico e mais resistente a texto poluído (ex.: um campo que, por
+  // bug de extração de coluna em PDF de duas colunas, capturou texto extra
+  // depois do CPF) do que "todos os dígitos encontrados na string".
+  const formatado = texto.match(/\b\d{3}\.\d{3}\.\d{3}-\d{2}\b/)?.[0];
+  if (formatado) return onlyDigits(formatado);
+  const digitos = onlyDigits(texto);
+  return digitos.length === 11 ? digitos : null;
+}
+
+export function validarIdentidadeSocioExtraida(
+  socios: any[],
+  dados: any,
+  socioAlvoId: string | null = null,
+  tipoDocumento = 'documento do sócio',
+): { dados: Record<string, any>; alertas: AlertaRegraDocumental[] } {
+  const alertas: AlertaRegraDocumental[] = [];
+  const sociosAtivos = (Array.isArray(socios) ? socios : []).filter((socio) => socio?.ativo !== false);
+  const socioAlvo = sociosAtivos.find((socio) => String(socio?.id) === String(socioAlvoId || '')) || null;
+  const cpfDocumento = cpfFormatadoOuDigitos(dados?.cpf || dados?.cpf_titular);
+  const nomeDocumento = String(dados?.nome || dados?.titular || dados?.nome_titular || '').trim();
+  const cpfSocio = onlyDigits(socioAlvo?.cpf || socioAlvo?.cpf_socio || socioAlvo?.documento || socioAlvo?.cpf_cnpj);
+  const cpfConfere = cpfDocumento && cpfSocio ? cpfDocumento === cpfSocio : null;
+  const nomeConfere = nomeDocumento && socioAlvo?.nome ? nomeEquivalente(nomeDocumento, socioAlvo.nome) : null;
+  const divergenciaCpf = cpfConfere === false;
+  const divergenciaNome = nomeConfere === false;
+  if (divergenciaCpf) {
+    alertas.push({
+      codigo: 'identidade_cpf_diferente_socio',
+      campo: 'cpf',
+      mensagem: `O CPF extraído do ${tipoDocumento} não corresponde ao sócio ao qual o arquivo está vinculado (QSA). É obrigatória uma justificativa.`,
+      severidade: 'media',
+      valor_documento: dados?.cpf,
+      valor_receita: socioAlvo?.cpf || socioAlvo?.nome,
+      recomendacao: 'Conferir o arquivo e o vínculo do upload; não redirecionar automaticamente o documento para outro sócio.',
+    });
+  }
+  if (divergenciaNome) {
+    alertas.push({
+      codigo: 'identidade_nome_diferente_socio',
+      campo: 'nome',
+      mensagem: `O nome extraído do ${tipoDocumento} não corresponde ao sócio ao qual o arquivo está vinculado (QSA). É obrigatória uma justificativa.`,
+      severidade: 'media',
+      valor_documento: nomeDocumento,
+      valor_receita: socioAlvo?.nome,
+      recomendacao: 'Conferir a grafia, o documento integral e o sócio selecionado no upload.',
+    });
+  }
+  const confirma = socioAlvo ? !divergenciaCpf && !divergenciaNome && Boolean(cpfConfere === true || nomeConfere === true) : null;
+  return {
+    dados: {
+      socio_alvo_id: socioAlvoId,
+      socio_alvo_nome: socioAlvo?.nome || null,
+      cpf_confere_com_socio: cpfConfere,
+      nome_confere_com_socio: nomeConfere,
+      identidade_socio_confere: confirma,
+      exige_justificativa_identidade: divergenciaCpf || divergenciaNome,
+    },
+    alertas,
+  };
+}
+
 export function calcularCoberturaDocumentalSocios(
   socios: any[],
   documentos: any[],
@@ -206,6 +282,11 @@ export function calcularCoberturaDocumentalSocios(
   const tipos = Array.from(new Set(tiposExigidos.filter(Boolean)));
   const porSocio = sociosAtivos.map((socio) => {
     const docsSocio = (Array.isArray(documentos) ? documentos : []).filter((doc) => String(doc?.socio_id || '') === String(socio.id));
+    // CORREÇÃO (11/09/2026, rodada seguinte): um documento com identidade
+    // divergente do sócio (ver `validarIdentidadeSocioExtraida` acima) não
+    // deve contar como cobertura completa -- do contrário o checklist do
+    // sócio se daria por satisfeito com um documento que, na prática,
+    // pertence a outra pessoa.
     const docsUtilizaveis = docsSocio.filter((doc) => {
       const dados = doc?.dados_extraidos || doc?.dados || doc;
       const alertas = Array.isArray(doc?.alertas) ? doc.alertas : [];
@@ -463,51 +544,4 @@ export function limparCacheRegrasDocumentais(): void {
 
 export function regrasDocumentaisFallback(): RegraDocumentalCredito[] {
   return FALLBACK_REGRAS_DOCUMENTAIS.map((regra) => ({ ...regra, condicao: { ...regra.condicao } }));
-}
-export function validarIdentidadeSocioExtraida(
-  socios: any[],
-  dados: any,
-  socioAlvoId: string | null = null,
-  tipoDocumento = 'documento do sócio',
-): { dados: Record<string, any>; alertas: AlertaRegraDocumental[] } {
-  const alertas: AlertaRegraDocumental[] = [];
-  const sociosAtivos = (Array.isArray(socios) ? socios : []).filter((socio) => socio?.ativo !== false);
-  const socioAlvo = sociosAtivos.find((socio) => String(socio?.id) === String(socioAlvoId || '')) || null;
-  const cpfDocumento = onlyDigits(dados?.cpf || dados?.cpf_titular);
-  const nomeDocumento = String(dados?.nome || dados?.titular || dados?.nome_titular || '').trim();
-  const cpfSocio = onlyDigits(socioAlvo?.cpf || socioAlvo?.cpf_socio || socioAlvo?.documento || socioAlvo?.cpf_cnpj);
-  const cpfConfere = cpfDocumento && cpfSocio ? cpfDocumento === cpfSocio : null;
-  const nomeConfere = nomeDocumento && socioAlvo?.nome ? nomeEquivalente(nomeDocumento, socioAlvo.nome) : null;
-  const divergenciaCpf = cpfConfere === false;
-  const divergenciaNome = nomeConfere === false;
-  if (divergenciaCpf) {
-    alertas.push({
-      codigo: 'identidade_cpf_diferente_socio',
-      campo: 'cpf',
-      mensagem: `O CPF extraído do ${tipoDocumento} não corresponde ao sócio ao qual o arquivo está vinculado. É obrigatória uma justificativa.`,
-      severidade: 'media',
-      recomendacao: 'Conferir o arquivo e o vínculo do upload; não redirecionar automaticamente o documento para outro sócio.',
-    });
-  }
-  if (divergenciaNome) {
-    alertas.push({
-      codigo: 'identidade_nome_diferente_socio',
-      campo: 'nome',
-      mensagem: `O nome extraído do ${tipoDocumento} não corresponde ao sócio ao qual o arquivo está vinculado. É obrigatória uma justificativa.`,
-      severidade: 'media',
-      recomendacao: 'Conferir a grafia, o documento integral e o sócio selecionado no upload.',
-    });
-  }
-  const confirma = socioAlvo ? !divergenciaCpf && !divergenciaNome && Boolean(cpfConfere === true || nomeConfere === true) : null;
-  return {
-    dados: {
-      socio_alvo_id: socioAlvoId,
-      socio_alvo_nome: socioAlvo?.nome || null,
-      cpf_confere_com_socio: cpfConfere,
-      nome_confere_com_socio: nomeConfere,
-      identidade_socio_confere: confirma,
-      exige_justificativa_identidade: divergenciaCpf || divergenciaNome,
-    },
-    alertas,
-  };
 }

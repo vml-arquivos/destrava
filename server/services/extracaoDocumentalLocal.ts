@@ -141,6 +141,93 @@ function linhaAposIndiceContendo(linhas: string[], termos: string[], limite = 2)
   return null;
 }
 
+// CORREÇÃO (11/09/2026, rodada seguinte -- mesmo pedido do usuário, agora com
+// uma CNH real cujo conteúdo só existe como IMAGEM embutida no PDF, sem
+// nenhuma camada de texto nativa: o leitor cai para o OCR local, cuja saída é
+// estruturalmente ruidosa -- rótulos oficiais ("4d CPF") frequentemente saem
+// corrompidos do reconhecimento óptico, mesmo com o pacote de idioma
+// português presente (confirmado empiricamente nesta investigação), embora o
+// PADRÃO VISUAL do CPF (pontuação em posições fixas: XXX.XXX.XXX-XX)
+// sobreviva ao OCR de forma muito mais confiável do que o rótulo ao lado
+// dele. Esta função procura QUALQUER CPF já formatado (com pontos e
+// traço -- nunca dígitos soltos, que é o padrão do bug original de pegar o
+// primeiro número de 11 dígitos do texto) em qualquer posição do texto, como
+// alternativa mais robusta a OCR do que depender do rótulo estar legível.
+function cpfFormatadoEmQualquerLugar(texto: string): string | null {
+  return String(texto || '').match(/\b\d{3}\.\d{3}\.\d{3}-\d{2}\b/)?.[0] || null;
+}
+
+// Mesmo espírito da função acima, mas para o Nº de Registro da CNH: no
+// layout oficial da SENATRAN, os campos "4d CPF", "5 Nº REGISTRO" e "9 CAT
+// HAB" ficam lado a lado na mesma linha visual -- quando o OCR consegue ler
+// essa linha (mesmo que os rótulos acima dela tenham saído corrompidos), o
+// CPF e o número de registro aparecem adjacentes, separados só por espaço.
+// Usado como respaldo quando a busca por rótulo (`linhaAposIndiceContendo`)
+// não encontra o número de registro.
+function numeroDeOnzeDigitosProximoDoCpf(texto: string, cpfFormatado: string | null): string | null {
+  if (!cpfFormatado) return null;
+  const indice = String(texto || '').indexOf(cpfFormatado);
+  if (indice === -1) return null;
+  const janela = texto.slice(indice + cpfFormatado.length, indice + cpfFormatado.length + 40);
+  return janela.match(/\b\d{11}\b/)?.[0] || null;
+}
+
+// CORREÇÃO (11/09/2026, mesma rodada -- comprovante de endereço real de
+// telecom/banco anexado pelo usuário, que continuava preso em "Revisão
+// necessária"): muitas faturas reais não rotulam nome/endereço com nenhuma
+// palavra como "titular"/"endereço" -- imprimem um bloco de correspondência
+// (nome do cliente numa linha, endereço logo abaixo, como um envelope), sem
+// nenhum rótulo. Padrão comum, não específico desta operadora. Só entra em
+// ação quando a extração rotulada (acima, em `parseComprovanteResidencia`)
+// não encontrar nome e/ou endereço -- nunca sobrepõe um valor já rotulado.
+function extrairBlocoEnderecoSemRotulo(linhas: string[]): { nome: string | null; endereco: string | null } {
+  const pareceLinhaDeEndereco = (linha: string) => /\b\d{5}-?\d{3}\b/.test(linha) && /-\s*[A-ZÀ-Ü]{2}\s*$/.test(linha.trim());
+  const idx = linhas.findIndex(pareceLinhaDeEndereco);
+  if (idx === -1) return { nome: null, endereco: null };
+
+  const linhasBloco = [linhas[idx]];
+  // A linha imediatamente anterior costuma ser a continuação do logradouro
+  // (número, complemento, bairro) quando não é ela mesma um rótulo de outro
+  // campo nem um número isolado.
+  const anterior = linhas[idx - 1];
+  if (anterior && /,/.test(anterior) && !pareceRotulo(anterior) && !/^\d+$/.test(anterior.trim())) {
+    linhasBloco.unshift(anterior);
+  }
+  const endereco = linhasBloco.join(', ').replace(/,\s*,/g, ',').trim() || null;
+
+  // O nome fica na(s) linha(s) logo antes do bloco de endereço, desde que
+  // pareça mesmo um nome de pessoa (só letras/espaços, 2+ palavras) e não um
+  // cabeçalho de empresa/documento (CNPJ, razão social, título do extrato).
+  const inicioBloco = idx - linhasBloco.length + 1;
+  let nome: string | null = null;
+  for (let i = inicioBloco - 1; i >= Math.max(0, inicioBloco - 3); i -= 1) {
+    const candidato = (linhas[i] || '').trim();
+    if (!candidato) continue;
+    const pareceNome = /^[A-ZÀ-Ü][A-ZÀ-ÜÇÃÕ' .-]{5,70}$/.test(candidato)
+      && candidato.split(/\s+/).length >= 2
+      && !/\bLTDA\b|\bS\.?A\.?\b|\bCNPJ\b|\bEXTRATO\b|\bFATURA\b|\bCONTA\b|\bBOLETO\b|\bCPF\b/i.test(candidato);
+    if (pareceNome) { nome = candidato; break; }
+  }
+  return { nome, endereco };
+}
+
+// CORREÇÃO (11/09/2026, rodada seguinte -- mesma CNH real, após elevar o DPI
+// do OCR): mesmo com o Nº DE REGISTRO/CPF legíveis a 400 DPI, o campo "NOME E
+// SOBROME" ainda sai da mesma linha OCR colado ao campo vizinho da mesma
+// fileira visual do formulário oficial ("1º HABILITAÇÃO", uma data) --
+// symptoma igual ao "column bleed" do `pdftotext -layout` já corrigido em
+// outros documentos, mas aqui produzido pelo OCR (PSM 6 não é ciente de
+// colunas/caixas). Como um nome de pessoa só contém letras, espaços, apóstrofo
+// e hífen, é possível isolar o nome de forma robusta pegando o primeiro trecho
+// contíguo desses caracteres na string, descartando o que vier depois (datas,
+// símbolos de ruído do OCR, campos vizinhos).
+function primeiroTrechoDeNomeAntesDeRuido(valor: string | null): string | null {
+  if (!valor) return null;
+  const match = String(valor).match(/[A-Za-zÀ-ÖØ-öø-ÿ][A-Za-zÀ-ÖØ-öø-ÿ' .-]{3,80}/);
+  if (!match) return null;
+  return match[0].replace(/\s{2,}/g, ' ').trim() || null;
+}
+
 function primeiroCnpj(texto: string): string | null {
   const match = String(texto || '').match(/\b\d{2}\.?\d{3}\.?\d{3}\/?\d{4}-?\d{2}\b/);
   return match?.[0] || null;
@@ -991,32 +1078,69 @@ function parseComprovanteResidencia(texto: string): { dados: Record<string, any>
   // em campos separados (padrão comum de contas de concessionária:
   // logradouro, bairro, município/UF, CEP), compõe o endereço completo a
   // partir deles.
+  // CORREÇÃO (11/09/2026, rodada seguinte -- fatura real de telecom anexada
+  // pelo usuário, endereço vindo errado mesmo já não estando mais em "Revisão
+  // necessária"): a grande maioria das contas/faturas reais vem acompanhada
+  // do próprio boleto de pagamento, cujo layout padrão (FEBRABAN) imprime um
+  // segundo bloco de endereço -- o do "Beneficiário"/"Cedente"/"Sacador"
+  // (quem EMITE a cobrança), não o do cliente que vai anexar o documento como
+  // comprovante da PRÓPRIA residência. Como o rótulo "Endereço do
+  // Beneficiário" começa com a palavra "endereço", ele batia com o alias
+  // genérico de logradouro e o endereço do EMISSOR da fatura era extraído no
+  // lugar do endereço do titular -- um problema estrutural de qualquer
+  // boleto brasileiro, não específico desta operadora. As linhas desse bloco
+  // (rótulo e valor) são excluídas da busca por rótulo de endereço do
+  // titular; o comprovante ainda pode ser composto a partir de um rótulo
+  // isolado de logradouro/bairro/município/UF do PRÓPRIO titular, quando
+  // existir, ou cai no bloco sem rótulo abaixo (endereço + CEP do titular,
+  // já identificado corretamente nesta mesma função).
+  const linhasSemEnderecoDeTerceiro = linhas.filter((linha) => !/benefici[aá]rio|cedente|sacador|favorecido/i.test(linha));
   // Rótulo que já promete o endereço completo pronto (usado direto, sem
   // reconcatenar por cima) -- distinto de um rótulo de logradouro isolado
   // (abaixo), que precisa ser composto com bairro/município/UF/CEP.
-  const enderecoCompletoRotulado = limparValor(valorAposRotulo(linhas, [
+  const enderecoCompletoRotulado = limparValor(valorAposRotulo(linhasSemEnderecoDeTerceiro, [
     'endereço completo', 'endereco completo', 'endereço de instalação', 'endereco de instalacao',
     'endereço do imóvel', 'endereco do imovel', 'local de consumo',
   ]));
-  const logradouro = enderecoCompletoRotulado || limparValor(valorAposRotulo(linhas, ['logradouro', 'endereço', 'endereco']));
-  const bairro = limparValor(valorAposRotulo(linhas, ['bairro/distrito', 'bairro']));
-  const municipio = limparValor(valorAposRotulo(linhas, ['município', 'municipio', 'cidade']));
-  const uf = limparValor(valorAposRotulo(linhas, ['uf', 'estado']));
-  const cep = texto.match(/\b\d{5}-?\d{3}\b/)?.[0] || null;
+  const logradouro = enderecoCompletoRotulado || limparValor(valorAposRotulo(linhasSemEnderecoDeTerceiro, ['logradouro', 'endereço', 'endereco']));
+  const bairro = limparValor(valorAposRotulo(linhasSemEnderecoDeTerceiro, ['bairro/distrito', 'bairro']));
+  const municipio = limparValor(valorAposRotulo(linhasSemEnderecoDeTerceiro, ['município', 'municipio', 'cidade']));
+  const uf = limparValor(valorAposRotulo(linhasSemEnderecoDeTerceiro, ['uf', 'estado']));
+  // O CEP, quando rotulado explicitamente ("CEP: 12345-678"), é extraído
+  // primeiro -- muito mais confiável do que varrer o documento inteiro atrás
+  // de QUALQUER sequência de 8 dígitos (que pode coincidir com inscrição
+  // estadual, número de protocolo, código de barras etc., como ocorreu com a
+  // fatura real desta investigação).
+  const cep = texto.match(/\bcep\D{0,6}(\d{5}-?\d{3})\b/i)?.[1] || texto.match(/\b\d{5}-?\d{3}\b/)?.[0] || null;
   const municipioUf = municipio && uf ? `${municipio} - ${uf}` : municipio || uf || null;
-  const enderecoCompleto = enderecoCompletoRotulado
-    || [logradouro, bairro, municipioUf, cep].filter(Boolean).join(', ') || null;
-  const confianca = clamp((compativel ? 0.35 : 0) + (mesReferencia ? 0.2 : 0) + (nomeTitular ? 0.2 : 0) + (enderecoCompleto ? 0.15 : 0) + (/\b\d{5}-?\d{3}\b/.test(texto) ? 0.1 : 0));
+  // Um CEP sozinho (sem nenhum logradouro rotulado) não é um endereço
+  // composto válido -- só compõe a partir de rótulos quando o logradouro (a
+  // parte que de fato identifica o imóvel) foi encontrado; caso contrário,
+  // mais vale cair no bloco sem rótulo abaixo (que já traz o endereço
+  // completo do titular) do que devolver só um número de CEP.
+  const enderecoRotuladoOuComposto = enderecoCompletoRotulado
+    || (logradouro ? [logradouro, bairro, municipioUf, cep].filter(Boolean).join(', ') : null);
+  // CORREÇÃO (11/09/2026, rodada seguinte -- fatura real de telecom anexada
+  // pelo usuário, ainda presa em "Revisão necessária"): muitas faturas reais
+  // não rotulam nome/endereço com nenhuma palavra -- imprimem um bloco de
+  // correspondência (nome do cliente + endereço, como um envelope), sem
+  // "titular:"/"endereço:". Ver `extrairBlocoEnderecoSemRotulo`. Só é usado
+  // quando a extração rotulada acima não encontrou nome e/ou endereço --
+  // nunca sobrepõe um valor já rotulado.
+  const semRotulo = (!nomeTitular || !enderecoRotuladoOuComposto) ? extrairBlocoEnderecoSemRotulo(linhasSemEnderecoDeTerceiro) : { nome: null, endereco: null };
+  const nomeTitularFinal = nomeTitular || semRotulo.nome;
+  const enderecoCompleto = enderecoRotuladoOuComposto || semRotulo.endereco;
+  const confianca = clamp((compativel ? 0.35 : 0) + (mesReferencia ? 0.2 : 0) + (nomeTitularFinal ? 0.2 : 0) + (enderecoCompleto ? 0.15 : 0) + (/\b\d{5}-?\d{3}\b/.test(texto) ? 0.1 : 0));
   return {
     dados: {
       documento_compativel: compativel,
-      nome_titular: nomeTitular,
+      nome_titular: nomeTitularFinal,
       endereco_completo: enderecoCompleto,
       cep,
       mes_referencia: mesReferencia,
       data_emissao: dataEmissao,
       campos_comprovados: {
-        ...(nomeTitular ? { nome_titular: nomeTitular } : {}),
+        ...(nomeTitularFinal ? { nome_titular: nomeTitularFinal } : {}),
         ...(enderecoCompleto ? { endereco_completo: enderecoCompleto } : {}),
         ...(dataEmissao ? { data_emissao: dataEmissao } : {}),
         ...(mesReferencia ? { mes_referencia: mesReferencia } : {}),
@@ -1862,24 +1986,46 @@ function parseDocumentoIdentidadeSocio(texto: string): { dados: Record<string, a
   const ehCnh = /carteira\s+nacional\s+de\s+habilitacao|permissao\s+para\s+dirigir/.test(norm);
   const ehRg = !ehCnh && /registro\s+geral|carteira\s+de\s+identidade|secretaria\s+de\s+seguranca\s+publica/.test(norm);
   const ehCpf = !ehCnh && !ehRg && /cadastro\s+de\s+pessoas\s+fisicas|comprovante\s+de\s+situacao\s+cadastral\s+no\s+cpf/.test(norm);
-  const compativel = ehCnh || ehRg || ehCpf;
+  // CORREÇÃO (11/09/2026, rodada seguinte -- passaporte real ainda não
+  // suportado por este leitor, pedido explícito do usuário para que o
+  // sistema "entenda o que é cada um" dos documentos de identidade
+  // aceitos): passaporte brasileiro não tem CPF impresso na página de dados,
+  // então não pode reaproveitar `ehCpf`/`cpf` como número do documento --
+  // usa o próprio número do passaporte (padrão CI/MRZ: 2 letras + 6 dígitos).
+  const ehPassaporte = !ehCnh && !ehRg && !ehCpf && /passaporte|republica\s+federativa\s+do\s+brasil.{0,120}passport|documento\s+de\s+viagem/.test(norm);
+  const compativel = ehCnh || ehRg || ehCpf || ehPassaporte;
 
-  const nome = limparValor(
-    linhaAposIndiceContendo(linhas, ['nome e sobrenome', 'nome da pessoa fisica', 'nome civil', 'nome completo', 'nome do titular'])
+  const nome = primeiroTrechoDeNomeAntesDeRuido(limparValor(
+    linhaAposIndiceContendo(linhas, ['nome e sobrenome', 'nome da pessoa fisica', 'nome civil', 'nome completo', 'nome do titular', 'surname', 'given names'])
       || valorAposRotulo(linhas, ['nome', 'titular']),
-  ) || base.dados.nome || null;
+  )) || base.dados.nome || null;
 
   // CPF explicitamente rotulado -- nunca o primeiro número de 11 dígitos do
-  // texto (ver comentário acima sobre a CNH).
+  // texto (ver comentário acima sobre a CNH). Quando o rótulo não é
+  // encontrado (comum em texto vindo de OCR, cujo reconhecimento de palavras
+  // é bem menos confiável que o de dígitos/pontuação em posição fixa), cai
+  // para qualquer CPF já formatado (com pontos e traço) em qualquer lugar do
+  // texto -- ver `cpfFormatadoEmQualquerLugar`.
   const cpfRotulado = limparValor(texto.match(/\bcpf\D{0,12}(\d{3}\.?\d{3}\.?\d{3}-?\d{2})/i)?.[1] || null);
-  const cpf = cpfRotulado || base.dados.cpf || null;
+  const cpf = cpfRotulado || cpfFormatadoEmQualquerLugar(texto) || base.dados.cpf || null;
 
   const numeroRegistroCnh = limparValor(
     linhaAposIndiceContendo(linhas, ['n. registro', 'nº registro', 'nº de registro', 'numero de registro', 'número de registro', 'registro n'])
-      || (texto.match(/n[ºo°]\s*(?:de\s*)?registro\D{0,10}(\d{6,15})/i)?.[1] ?? null),
+      || (texto.match(/n[ºo°]\s*(?:de\s*)?registro\D{0,10}(\d{6,15})/i)?.[1] ?? null)
+      // Respaldo específico para OCR de CNH: no layout oficial, CPF e Nº de
+      // Registro ficam lado a lado na mesma linha visual -- quando o rótulo
+      // "5 Nº REGISTRO" sai corrompido do OCR mas os dígitos sobrevivem,
+      // ainda é possível achar o registro pela proximidade com o CPF já
+      // localizado.
+      || (ehCnh ? numeroDeOnzeDigitosProximoDoCpf(texto, cpf) : null),
   );
   const numeroRg = limparValor(
     linhaAposIndiceContendo(linhas, ['registro geral', 'identidade nº', 'identidade n°', 'rg nº', 'rg n°']),
+  );
+  const numeroPassaporte = limparValor(
+    linhaAposIndiceContendo(linhas, ['passaporte n', 'passport no', 'nº do passaporte', 'numero do passaporte'])
+      || texto.match(/\b([A-Z]{2}\d{6})\b/)?.[1]
+      || null,
   );
   const numeroDocumento = ehCnh
     ? numeroRegistroCnh
@@ -1887,7 +2033,9 @@ function parseDocumentoIdentidadeSocio(texto: string): { dados: Record<string, a
       ? numeroRg
       : ehCpf
         ? cpf
-        : numeroRegistroCnh || numeroRg || null;
+        : ehPassaporte
+          ? numeroPassaporte
+          : numeroRegistroCnh || numeroRg || numeroPassaporte || null;
 
   const dataNascimento = dataProximaDe(texto, /(?:data,?\s+local\s+e\s+uf\s+de\s+nascimento|data\s+de\s+nascimento|nascimento)\D{0,30}(\d{2}\/\d{2}\/\d{4})/i);
   const dataEmissao = dataProximaDe(texto, /(?:data\s+(?:de\s+)?emiss[aã]o|emitid[oa]\s+em)\D{0,30}(\d{2}\/\d{2}\/\d{4})/i) || base.dados.data_emissao || null;
@@ -1918,7 +2066,7 @@ function parseDocumentoIdentidadeSocio(texto: string): { dados: Record<string, a
     ...base.dados,
     ...camposComprovados,
     documento_compativel: compativel,
-    tipo_detectado_local: ehCnh ? 'CNH' : ehRg ? 'RG' : ehCpf ? 'CPF' : null,
+    tipo_detectado_local: ehCnh ? 'CNH' : ehRg ? 'RG' : ehCpf ? 'CPF' : ehPassaporte ? 'PASSAPORTE' : null,
     campos_comprovados: camposComprovados,
     fonte_extracao: 'local_deterministica_especializada',
   };
@@ -1950,7 +2098,17 @@ function parseDeclaracaoIrpf(texto: string): { dados: Record<string, any>; confi
   // declaração completa (e vice-versa) como se fossem o mesmo documento.
   const ehDeclaracaoCompleta = /declaracao de ajuste anual/.test(norm) && !/recibo de entrega/.test(norm);
   const nome = limparValor(valorAposRotulo(linhas, ['nome'])) || base.dados.nome || null;
-  const cpf = limparValor(valorAposRotulo(linhas, ['cpf'])) || base.dados.cpf || null;
+  // CORREÇÃO (11/09/2026, rodada seguinte -- declaração real de 9 páginas
+  // anexada pelo usuário): o cabeçalho oficial imprime "CPF: 038.211.981-92"
+  // e, na mesma linha visual, bem mais à direita, "IMPOSTO SOBRE A RENDA -
+  // PESSOA FÍSICA" (documento gerado em duas colunas via `pdftotext
+  // -layout`). Como as linhas já chegam aqui com os espaços múltiplos (que
+  // demarcavam a coluna) colapsados em um só, `valorAposRotulo` não tinha
+  // como saber onde a coluna terminava e capturava a linha inteira, incluindo
+  // o texto da coluna vizinha. Um CPF já formatado (pontos e traço em
+  // posição fixa) é um padrão específico o bastante para ser extraído direto
+  // do texto bruto, sem depender de "até onde vai a linha".
+  const cpf = cpfFormatadoEmQualquerLugar(texto) || limparValor(valorAposRotulo(linhas, ['cpf'])) || base.dados.cpf || null;
   // Sempre o ano-calendário, nunca o exercício -- ver comentário acima.
   const anoCalendario = Number(texto.match(/ano[- ]calend[aá]rio\D{0,15}(20\d{2})/i)?.[1] || 0) || null;
   const competencia = anoCalendario
@@ -2411,7 +2569,7 @@ export function analisarTextoDocumentoLocal(tipo: TipoDocumentoLocal, texto: str
     if (esperado === 'dasn_simei' || esperado === 'recibo_dasn_simei') return parseDeclaracaoDasnSimei(texto);
     if (esperado === 'ccmei') return parseCcmei(texto);
     if (esperado === 'compartilhamento_ecac') return parseCompartilhamentoEcac(texto);
-    if (['documento_socio', 'rg', 'cnh', 'cpf', 'rg_socio', 'cnh_socio'].includes(esperado)) return parseDocumentoIdentidadeSocio(texto);
+    if (['documento_socio', 'rg', 'cnh', 'cpf', 'passaporte', 'rg_socio', 'cnh_socio'].includes(esperado)) return parseDocumentoIdentidadeSocio(texto);
     if (['irpf', 'imposto_renda', 'irpf_socio'].includes(esperado)) return parseDeclaracaoIrpf(texto);
     if (esperado === 'recibo_irpf') return parseReciboIrpf(texto);
     return parseDocumentoGenerico(texto, tipoDocumentoEsperado);
@@ -2637,9 +2795,25 @@ async function extrairTextoComOcrLocal(
 
     const maxPaginas = Math.max(1, Math.min(30, Number(process.env.LOCAL_OCR_MAX_PAGES || 12)));
     const prefixo = path.join(tempDir, 'pagina');
+    // CORREÇÃO (11/09/2026, rodada seguinte -- CNH real anexada pelo usuário
+    // cujo conteúdo só existe como imagem embutida no PDF): a 180 DPI
+    // (padrão anterior), o Tesseract não consegue ler de forma confiável os
+    // campos em caixas com fundo colorido de um documento de identidade
+    // oficial (CPF, Nº de registro, Nome e Sobrenome) -- confirmado
+    // empiricamente nesta investigação, renderizando a mesma página em
+    // várias resoluções (180/300/350/400/450/500 DPI) com um CNH real e
+    // comparando a saída do OCR. A 300 DPI o campo "Nº REGISTRO" já fica
+    // legível, mas o campo "CPF" (caixa ao lado, fonte menor) ainda sai
+    // ilegível na maioria dos testes; a partir de 400 DPI ambos os campos
+    // (CPF e Nome e Sobrenome) saem consistentemente corretos. Por isso o
+    // padrão foi elevado para 400. Custo: mais tempo de processamento por
+    // página (ainda dentro do timeout configurado), pago só quando o OCR
+    // local é de fato necessário (documento sem camada de texto nativa
+    // suficiente) -- não afeta nenhum documento lido via `pdftotext`.
+    const dpi = Math.max(72, Math.min(600, Number(process.env.LOCAL_OCR_DPI || 400)));
     await execFileAsync(
       process.env.PDFTOPPM_BINARY || 'pdftoppm',
-      ['-png', '-r', process.env.LOCAL_OCR_DPI || '180', '-f', '1', '-l', String(maxPaginas), arquivoPath, prefixo],
+      ['-png', '-r', String(dpi), '-f', '1', '-l', String(maxPaginas), arquivoPath, prefixo],
       { timeout, maxBuffer, encoding: 'utf8' },
     );
     const paginas = (await readdir(tempDir))

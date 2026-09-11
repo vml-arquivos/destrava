@@ -1,4 +1,10 @@
-# === Rodada 11/09/2026 parte 17 (esta entrega) — documento de identificação do sócio, comprovante de endereço, Declaração de IRPF e Recibo de entrega do IRPF ganham leitores locais dedicados — arquivos alterados/novos, checksum atual ===
+# === Rodada 11/09/2026 parte 18 (esta entrega) — seis causas raiz adicionais de leitura documental (CNH/comprovante/Declaração REAIS); confronto de identidade contra o QSA; Passaporte — arquivos alterados/novos, checksum atual ===
+ababade5b587a89773a417ffa5e86781f21371d0b855f45040e64f872d576f5c  server/services/extracaoDocumentalLocal.ts
+38eb1e4e3bc70f113d9b2a6e832a78e190e707a42a3fee499d9827e99f33e9cf  server/services/analiseDocumentalEspecializada.ts
+37d60239a17ccdd2585cc15ede824f8f9aef173ae6b2519e4313b88147b1b92e  server/services/regrasDocumentaisCredito.ts
+fc210ade36598e99f7cd170d478a17ead7fe2b51b9781d8e59b4b894f7454dd3  server/services/classificadorDocumentalCentral.ts
+23b38632912ee30e907152e67e15391f632c09a960214d16ed7e5da055f77b88  tests/leituraDocumentalDinamicaMultiSocio.test.ts
+# === Rodada 11/09/2026 parte 17 (mesma entrega) — documento de identificação do sócio, comprovante de endereço, Declaração de IRPF e Recibo de entrega do IRPF ganham leitores locais dedicados — arquivos alterados/novos, checksum atual ===
 48cd3ffa6ef933bc1f99e9ea4b83ffe191c7925c8482b8d73f4b1a8bc0ed6725  server/services/extracaoDocumentalLocal.ts
 a6f7169578d393aef7cf583f60893b28369dca8bd01bd2cf9b8b57ddbe7fd7f4  server/services/analiseDocumentalEspecializada.ts
 272e2666324cb6d098560ca52408a4741e3d0219dc259a28fa2f8b9c935d8488  server/services/classificadorDocumentalCentral.ts

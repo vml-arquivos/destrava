@@ -64,7 +64,7 @@ export function tipoLeitorLocalDocumentoCatalogado(tipoDocumento: string): TipoD
   if (tipoCanonico === 'dasn_simei') return 'dasn_simei';
   if (tipoCanonico === 'ccmei') return 'ccmei';
   if (tipoCanonico === 'compartilhamento_ecac') return 'compartilhamento_ecac';
-  if (['documento_socio', 'rg', 'cnh', 'cpf'].includes(tipoCanonico)) return 'documento_identidade_socio';
+  if (['documento_socio', 'rg', 'cnh', 'cpf', 'passaporte'].includes(tipoCanonico)) return 'documento_identidade_socio';
   if (tipoCanonico === 'imposto_renda') return 'declaracao_irpf';
   if (tipoCanonico === 'recibo_irpf') return 'recibo_irpf';
   if (tipoCanonico === 'extrato_bancario') return 'extrato_bancario';
@@ -1570,6 +1570,39 @@ function descreverTipoDetectadoResumido(tipoDetectado: unknown): string | null {
   return ROTULOS_TIPO_DETECTADO[chave] || null;
 }
 
+// CORREÇÃO (11/09/2026, rodada seguinte -- pedido explícito do usuário:
+// "garantindo os diagnósticos"): `extrairDocumentoLocal`/`extrairHibrido` já
+// calculam `mecanismo_extracao` ('pdftotext'|'tesseract'|...),
+// `extracao_parcial` e `motivo_extracao_parcial`, mas nenhum desses dados
+// chegava à tela -- o usuário só via o selo final ("Revisão
+// necessária"/"Documento incompatível"), sem nenhuma pista de por que a
+// leitura falhou (arquivo sem camada de texto? OCR de baixa confiança?).
+// Reaproveita o mesmo canal genérico de alertas que a tela já renderiza
+// (nenhum componente novo de UI necessário) para expor esse diagnóstico
+// como um alerta informativo de baixa severidade.
+function alertaDiagnosticoLeitura(bruto: any): AlertaDocumental | null {
+  if (bruto?.extracao_parcial === true) {
+    const motivo = bruto?.motivo_extracao_parcial || bruto?.motivo_extracao || null;
+    return {
+      codigo: 'leitura_automatica_parcial',
+      mensagem: motivo
+        ? `A leitura automática deste documento ficou incompleta: ${motivo}`
+        : 'A leitura automática deste documento ficou incompleta -- alguns campos podem não ter sido comprovados.',
+      severidade: 'baixa',
+      recomendacao: 'Confira os campos abaixo com atenção, ou anexe uma versão mais nítida/legível do documento.',
+    };
+  }
+  if (bruto?.mecanismo_extracao === 'tesseract') {
+    return {
+      codigo: 'leitura_via_reconhecimento_de_imagem',
+      mensagem: 'Este documento foi lido por reconhecimento de imagem (OCR), não pela camada de texto do arquivo -- comum em fotos ou digitalizações, e mais sujeito a erro de leitura.',
+      severidade: 'baixa',
+      recomendacao: 'Confira os campos abaixo com atenção.',
+    };
+  }
+  return null;
+}
+
 // Exportada (09/09/2026, Rodada 09/09 parte 10) só para permitir um teste de
 // integração real e direto -- sem mockar toda a cadeia de I/O de arquivo e
 // extração por IA (`extrairHibrido`) -- do que realmente é persistido para um
@@ -1960,6 +1993,9 @@ export function normalizarDocumentoCatalogado(extraidos: any, tipoDocumento: str
     campos_essenciais_ausentes: camposObrigatoriosAusentes,
     classificacao_motivo: classificacao.motivo,
   };
+  const diagnosticoLeitura = alertaDiagnosticoLeitura(bruto);
+  if (diagnosticoLeitura) alertas.push(diagnosticoLeitura);
+
   return { dados, evidencias, camposInferidos, alertas, classificacao, textoFonte: textoLocal || null };
 }
 
@@ -2411,14 +2447,22 @@ export class AnaliseDocumentalService {
     const tipoLocal = tipoLeitorLocalDocumentoCatalogado(tipoDocumento);
     const extraidos = await this.extrairHibrido(documento.caminho_arquivo!, prompt, documento.mime_type || 'application/pdf', tipoLocal, true, tipoDocumento);
     const normalizado = normalizarDocumentoCatalogado(extraidos, tipoDocumento, empresa);
-    const documentoDeSocio = ['documento_socio', 'rg', 'cpf', 'cnh', 'imposto_renda', 'recibo_irpf'].includes(canonicalizeDocumentType(tipoDocumento));
+    // CORREÇÃO (11/09/2026, rodada seguinte -- pedido explícito do usuário:
+    // "isso tem que ser confrontado com o QSA com as informações, pois isso
+    // é pra comprovar que os documentos é da pessoa que está no CNPJ"):
+    // documento de identidade e de IRPF do sócio nunca eram cruzados contra
+    // o sócio (QSA) ao qual o arquivo foi de fato anexado. Ver
+    // `validarIdentidadeSocioExtraida` (regrasDocumentaisCredito.ts) -- só se
+    // aplica aos tipos "de sócio"; para os demais tipos catalogados
+    // (empresa), o comportamento permanece idêntico ao de antes.
+    const documentoDeSocio = ['documento_socio', 'rg', 'cnh', 'cpf', 'passaporte', 'imposto_renda', 'recibo_irpf'].includes(tipoCanonico);
     const validacaoSocio = documentoDeSocio
-      ? validarIdentidadeSocioExtraida(socios, normalizado.dados, documento.socio_id || null, tipoDocumento)
+      ? validarIdentidadeSocioExtraida(socios, normalizado.dados, documento.socio_id || null, catalogo.nome || tipoDocumento)
       : { dados: {}, alertas: [] };
-    const dadosNormalizados = { ...normalizado.dados, ...validacaoSocio.dados };
-    const alertasNormalizados = [...normalizado.alertas, ...validacaoSocio.alertas];
-    const resultadoBase = criarResultado('documento_generico', empresaId, arquivoId, dadosNormalizados, alertasNormalizados, this.ultimoModeloUsado);
-    await persistirEvidenciasP0(this.db, empresaId, arquivoId, tipoDocumento, dadosNormalizados, normalizado.evidencias, normalizado.textoFonte)
+    const dadosFinais = { ...normalizado.dados, ...validacaoSocio.dados };
+    const alertasFinais = [...normalizado.alertas, ...validacaoSocio.alertas];
+    const resultadoBase = criarResultado('documento_generico', empresaId, arquivoId, dadosFinais, alertasFinais, this.ultimoModeloUsado);
+    await persistirEvidenciasP0(this.db, empresaId, arquivoId, tipoDocumento, dadosFinais, normalizado.evidencias, normalizado.textoFonte)
       .catch((error: any) => console.warn('[P0] Evidências temporais/rolling/bureau indisponíveis; laudo preservado:', error?.message || error));
     return {
       ...resultadoBase,

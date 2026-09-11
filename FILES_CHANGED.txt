@@ -1,4 +1,106 @@
-=== RODADA 11/09/2026 PARTE 17 (esta entrega) — Documento de identificação do sócio, comprovante de endereço, Declaração de IRPF e Recibo de entrega do IRPF ganham leitores locais dedicados ===
+=== RODADA 11/09/2026 PARTE 18 (esta entrega) — Seis causas raiz adicionais de leitura documental (CNH/comprovante/Declaração REAIS); confronto de identidade contra o QSA; Passaporte ===
+
+ALTERADO (produção, backend):
+server/services/extracaoDocumentalLocal.ts  (DPI padrão do OCR local
+                                             elevado de 300 para 400
+                                             (`LOCAL_OCR_DPI`, ainda
+                                             sobrescrevível); novo helper
+                                             `primeiroTrechoDeNomeAntesDeRuido`
+                                             (isola o nome de um campo que
+                                             saiu colado a ruído/campo
+                                             vizinho pelo OCR), aplicado em
+                                             `parseDocumentoIdentidadeSocio`;
+                                             `parseComprovanteResidencia`:
+                                             nova constante
+                                             `linhasSemEnderecoDeTerceiro`
+                                             (exclui linhas rotuladas
+                                             Beneficiário/Cedente/Sacador/
+                                             Favorecido -- endereço do
+                                             boleto anexado -- da busca por
+                                             endereço do titular), `cep`
+                                             passa a priorizar um CEP
+                                             explicitamente rotulado sobre
+                                             a varredura cega por 8 dígitos,
+                                             `enderecoRotuladoOuComposto`
+                                             passa a exigir `logradouro`
+                                             truthy antes de compor com
+                                             CEP sozinho; `ehPassaporte`/
+                                             `numeroPassaporte`/branch
+                                             'PASSAPORTE' adicionados a
+                                             `parseDocumentoIdentidadeSocio`
+                                             -- Passaporte como quarto
+                                             subtipo de identidade)
+server/services/classificadorDocumentalCentral.ts  (regra `['AVAL', ...]`
+                                                    de `detectarTipo` passa a
+                                                    ignorar o rótulo padrão
+                                                    de boleto
+                                                    "Sacador/Avalista" via
+                                                    lookbehind negativo,
+                                                    sem deixar de reconhecer
+                                                    um instrumento de aval
+                                                    de verdade)
+server/services/regrasDocumentaisCredito.ts  (nova função
+                                              `cpfFormatadoOuDigitos` e
+                                              nova função exportada
+                                              `validarIdentidadeSocioExtraida`
+                                              -- confronta CPF/nome extraído
+                                              de um documento de
+                                              identidade/IRPF contra o
+                                              sócio (QSA) do card de
+                                              upload; `calcularCoberturaDocumentalSocios`
+                                              passa a excluir documentos
+                                              com identidade divergente do
+                                              cálculo de cobertura)
+server/services/analiseDocumentalEspecializada.ts  (`tipoLeitorLocalDocumentoCatalogado`
+                                                    e o `documentoDeSocio`
+                                                    de `analisarDocumentoCatalogado`
+                                                    ganham 'passaporte'; nova
+                                                    função
+                                                    `alertaDiagnosticoLeitura`
+                                                    (extracao_parcial /
+                                                    mecanismo_extracao
+                                                    tesseract viram alertas,
+                                                    reaproveitando a
+                                                    renderização genérica
+                                                    de alertas -- zero
+                                                    frontend novo);
+                                                    `analisarDocumentoCatalogado`
+                                                    passa a chamar
+                                                    `validarIdentidadeSocioExtraida`
+                                                    e mesclar seus
+                                                    `dados`/`alertas` no
+                                                    resultado final para
+                                                    documentos de
+                                                    identidade/IRPF do
+                                                    sócio)
+
+ALTERADO (teste):
+tests/leituraDocumentalDinamicaMultiSocio.test.ts  (novo -- 17 testes, com
+                                                    dados sintéticos que
+                                                    reproduzem fielmente os
+                                                    padrões estruturais
+                                                    confirmados contra os 4
+                                                    documentos reais
+                                                    anexados pelo usuário:
+                                                    CNH com rótulos
+                                                    corrompidos pelo OCR,
+                                                    Passaporte, comprovante
+                                                    com boleto anexado
+                                                    (endereço/CEP/AVAL),
+                                                    Declaração de IRPF sem
+                                                    sangramento de coluna,
+                                                    diagnóstico de leitura,
+                                                    e 6 cenários de
+                                                    `validarIdentidadeSocioExtraida`)
+
+NÃO ALTERADO NESTA RODADA (contexto): o Pull Request #81, externo e aberto
+no GitHub (travado por conflito de merge), tentava implementar o mesmo
+confronto de identidade contra o QSA -- seu desenho foi auditado e adotado
+(com uma correção: CPF em formato estrito antes de "todos os dígitos" na
+nova `validarIdentidadeSocioExtraida`), mas nenhum arquivo do PR foi
+aplicado diretamente; esta entrega substitui o PR #81 por completo.
+
+=== RODADA 11/09/2026 PARTE 17 — Documento de identificação do sócio, comprovante de endereço, Declaração de IRPF e Recibo de entrega do IRPF ganham leitores locais dedicados ===
 
 ALTERADO (produção, backend):
 server/services/extracaoDocumentalLocal.ts  (novo helper
