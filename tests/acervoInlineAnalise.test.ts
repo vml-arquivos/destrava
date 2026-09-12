@@ -14,7 +14,7 @@ describe('análise inline no Acervo Documental', () => {
 
   it('renderiza resultado por arquivo e mantém o estado de upload quando não há laudo', () => {
     expect(acervo).toContain('resultado_analise?: Record<string, any> | null;');
-    expect(acervo).toContain('const resultadoInline = doc.resultado_analise || laudo || laudoErro || null;');
+    expect(acervo).toContain('const resultadoInline = doc.leitura_desatualizada');
     expect(acervo).toContain('<ResultadoAnaliseDocumento resultado={analiseModal.resultado} documento={analiseModal.documento} />');
     expect(acervo).toContain('Dados da análise');
     expect(acervo).toContain('detalheTitulo');
@@ -37,9 +37,10 @@ describe('análise inline no Acervo Documental', () => {
     expect(acervo).toContain('tipoDocumentoTemLeituraAutomatica(doc.tipo_documento)');
     expect(acervo).toContain('temLeituraReal ? "Reler" : "Ler"');
     expect(acervo).toContain('somenteSeNecessario: true');
+    expect(acervo).toContain('leitura_desatualizada?: boolean;');
     expect(acervo).toContain('/api/documentacao/ia/documentos/${doc.id}/status');
     expect(acervo).toContain('const exigeCrosscheckSocietario = ["contrato_social", "alteracao_contratual"].includes(doc.tipo_documento)');
-    expect(acervo).toContain('if (doc.analisado === true) return false;');
+    expect(acervo).toContain('if (doc.analisado === true && doc.leitura_desatualizada !== true) return false;');
   });
 
   it('abre o Acervo com laudos individuais antes de aguardar o dossiê completo', () => {

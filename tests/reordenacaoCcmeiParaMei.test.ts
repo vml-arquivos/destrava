@@ -73,7 +73,7 @@ describe('Para MEI, "Atos da Junta Comercial"/"Contrato social" somem da grade (
 
   it('título de cada card de documento usa `text-foreground` (mais contraste/mais escuro) com tipografia compacta e legível', () => {
     const conteudo = readFileSync(resolve(process.cwd(), CAMINHO), 'utf8');
-    expect(conteudo).toContain('<p className="text-[11px] font-semibold leading-snug text-foreground">{documentoSlot.titulo}</p>');
-    expect(conteudo).not.toContain('<p className="text-[11px] font-semibold leading-snug text-muted-foreground">{documentoSlot.titulo}</p>');
+    expect(conteudo).toContain('<p className="text-[10px] font-semibold leading-snug text-foreground">{documentoSlot.titulo}</p>');
+    expect(conteudo).not.toContain('<p className="text-[10px] font-semibold leading-snug text-muted-foreground">{documentoSlot.titulo}</p>');
   });
 });
