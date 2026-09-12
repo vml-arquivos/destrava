@@ -15,6 +15,14 @@ import { analiseDocumentalService, type AnaliseDocumentalResult } from '../servi
 import { analisarCnpjReceitaCartaoEmpresa } from '../services/analiseCnpjReceitaCartao';
 import { DOCUMENT_TYPE_CATALOG, TIPOS_DOCUMENTO as TIPOS_DOCUMENTO_CATALOGO, canonicalizeDocumentType, documentAnalysisConfig, getDocumentCatalogEntry, isKnownDocumentType } from '../../shared/documentTypes';
 import { backfillLaudosService } from '../services/backfillLaudosService';
+import {
+  calcularAssinaturaAnalise,
+  CLASSIFIER_VERSION,
+  EXTRACTOR_VERSION,
+  RULE_VERSION,
+  SCHEMA_VERSION,
+  versaoPromptDocumental,
+} from '../services/documentalLaudoVersioning';
 // CORREÇÃO (2026-09-02, Rodada 17 -- pedido explícito do usuário -- "eu quero
 // que... as confirmações já apareçam sem precisar iniciar a análise
 // documental... essa primeira confirmação... já é pra ser feita de forma
@@ -314,6 +322,16 @@ async function tableExists(tableName: string): Promise<boolean> {
   const { rows } = await pool.query(
     `SELECT 1 FROM information_schema.tables WHERE table_schema='public' AND table_name=$1 LIMIT 1`,
     [tableName]
+  );
+  return rows.length > 0;
+}
+
+async function columnExists(tableName: string, columnName: string): Promise<boolean> {
+  const { rows } = await pool.query(
+    `SELECT 1 FROM information_schema.columns
+      WHERE table_schema='public' AND table_name=$1 AND column_name=$2
+      LIMIT 1`,
+    [tableName, columnName],
   );
   return rows.length > 0;
 }
@@ -649,18 +667,45 @@ router.get('/', auth, async (req: Request, res: Response) => {
       tableExists('documentos_extracoes_ia'),
       tableExists('analises_cnpj_empresa'),
     ]);
-    const selectExtracao = temExtracoesIa
+    const temVersionamentoExtracoes = temExtracoesIa
+      ? await columnExists('documentos_extracoes_ia', 'analysis_signature')
+      : false;
+    const selectExtracao = temVersionamentoExtracoes
       ? `, extracao_persistida.resultado AS resultado_analise_persistida,
-           extracao_persistida.status AS resultado_analise_status_persistido`
-      : `, NULL::jsonb AS resultado_analise_persistida, NULL::text AS resultado_analise_status_persistido`;
+           extracao_persistida.status AS resultado_analise_status_persistido,
+           extracao_persistida.prompt_versao AS resultado_analise_prompt_versao,
+           extracao_persistida.analysis_signature AS resultado_analise_signature,
+           extracao_persistida.analysis_status AS resultado_analise_lifecycle,
+           extracao_persistida.classifier_version AS resultado_analise_classifier_version,
+           extracao_persistida.extractor_version AS resultado_analise_extractor_version,
+           extracao_persistida.rule_version AS resultado_analise_rule_version,
+           extracao_persistida.schema_version AS resultado_analise_schema_version`
+      : temExtracoesIa
+        ? `, extracao_persistida.resultado AS resultado_analise_persistida,
+             extracao_persistida.status AS resultado_analise_status_persistido`
+        : `, NULL::jsonb AS resultado_analise_persistida, NULL::text AS resultado_analise_status_persistido`;
+    const ordemExtracao = temVersionamentoExtracoes
+      ? `ORDER BY CASE
+             WHEN e.status IN ('pendente','processando') THEN 0
+             WHEN e.status IN ('concluido','revisao_humana') AND e.analysis_status = 'ATIVO' THEN 1
+             WHEN e.status IN ('concluido','revisao_humana') THEN 2
+             WHEN e.status = 'falhou' THEN 3
+             ELSE 4
+           END,
+           e.processado_em DESC NULLS LAST,
+           e.criado_em DESC`
+      : `ORDER BY CASE WHEN e.status IN ('concluido','revisao_humana') THEN 0 WHEN e.status='falhou' THEN 1 ELSE 2 END,
+           e.processado_em DESC NULLS LAST,
+           e.criado_em DESC`;
     const joinExtracao = temExtracoesIa
       ? `LEFT JOIN LATERAL (
-           SELECT e.resultado, e.status
+           SELECT e.resultado, e.status${temVersionamentoExtracoes ? `,
+                  e.prompt_versao, e.analysis_signature,
+                  e.analysis_status, e.classifier_version, e.extractor_version,
+                  e.rule_version, e.schema_version` : ''}
              FROM public.documentos_extracoes_ia e
             WHERE e.arquivo_id = docs.id
-            ORDER BY CASE WHEN e.status IN ('concluido','revisao_humana') THEN 0 WHEN e.status='falhou' THEN 1 ELSE 2 END,
-                     e.processado_em DESC NULLS LAST,
-                     e.criado_em DESC
+            ${ordemExtracao}
             LIMIT 1
          ) extracao_persistida ON TRUE`
       : '';
@@ -716,6 +761,13 @@ router.get('/', auth, async (req: Request, res: Response) => {
         caminho_arquivo,
         resultado_analise_persistida,
         resultado_analise_status_persistido,
+        resultado_analise_prompt_versao,
+        resultado_analise_signature,
+        resultado_analise_lifecycle,
+        resultado_analise_classifier_version,
+        resultado_analise_extractor_version,
+        resultado_analise_rule_version,
+        resultado_analise_schema_version,
         resultado_cnpj_persistido,
         resultado_cnpj_status_persistido,
         campos_cartao_persistidos,
@@ -748,9 +800,42 @@ router.get('/', auth, async (req: Request, res: Response) => {
           }
         : null;
       const resultadoAnalise = laudoExtracao || laudoDoArquivo || laudoCnpjLegado || null;
+      const promptCodigoAtual = TIPOS_ETAPA1_PROMPT_CODIGO[String(doc.tipo_documento || '')]
+        || documentAnalysisConfig(String(doc.tipo_documento || ''))?.promptCodigo
+        || null;
+      const assinaturaEsperada = temVersionamentoExtracoes && promptCodigoAtual
+        ? calcularAssinaturaAnalise({
+            arquivoId: String(doc.id),
+            arquivoHash: doc.hash_arquivo || null,
+            promptCodigo: promptCodigoAtual,
+            promptVersao: versaoPromptDocumental(promptCodigoAtual),
+            classifierVersion: CLASSIFIER_VERSION,
+            extractorVersion: EXTRACTOR_VERSION,
+            ruleVersion: RULE_VERSION,
+            schemaVersion: SCHEMA_VERSION,
+          })
+        : null;
+      const laudoDesatualizado = Boolean(
+        resultadoAnalise
+        && (laudoExtracao || laudoDoArquivo)
+        && assinaturaEsperada
+        && (
+          !resultado_analise_signature
+          || resultado_analise_signature !== assinaturaEsperada
+          || resultado_analise_lifecycle === 'STALE'
+          || resultado_analise_lifecycle === 'SUPERSEDED'
+          || resultado_analise_lifecycle === 'REANALISE_NECESSARIA'
+          || resultado_analise_classifier_version !== CLASSIFIER_VERSION
+          || resultado_analise_extractor_version !== EXTRACTOR_VERSION
+          || resultado_analise_rule_version !== RULE_VERSION
+          || resultado_analise_schema_version !== SCHEMA_VERSION
+          || resultado_analise_prompt_versao !== versaoPromptDocumental(promptCodigoAtual || '')
+        ),
+      );
       return {
         ...safeDoc,
         resultado_analise: resultadoAnalise,
+        leitura_desatualizada: laudoDesatualizado,
         analisado: Boolean(resultadoAnalise && ['concluido','revisao_humana','falhou'].includes(String(resultadoAnalise.status || resultado_analise_status_persistido || '').toLowerCase())),
         arquivo_disponivel: Boolean(resolved.absolutePath),
         arquivo_relativo: resolved.relativePath || null,

@@ -51,6 +51,7 @@ export type DocumentoArquivo = {
   exige_revisao_humana?: boolean;
   resultado_validacao?: Record<string, any> | null;
   analisado?: boolean;
+  leitura_desatualizada?: boolean;
   consistente?: boolean;
   resultado_analise?: Record<string, any> | null;
 };
@@ -297,19 +298,6 @@ const TODOS_SLOTS = SECOES_DOCUMENTAIS.flatMap((secao) => secao.slots);
 const TIPO_PARA_SLOT = new Map<string, DocumentoSlot>();
 TODOS_SLOTS.forEach((documentoSlot) => documentoSlot.matchTipos.forEach((tipo) => TIPO_PARA_SLOT.set(tipo, documentoSlot)));
 
-// CORREÇÃO (11/09/2026, rodada seguinte -- seletor de tipo no anexo do
-// documento de identidade do sócio): opções do seletor opcional -- valor
-// vazio ("") mantém o tipo genérico "documento_socio" (auto, comportamento
-// de antes desta rodada); qualquer outra opção usa o tipo específico
-// (catálogo em shared/documentTypes.ts) na hora de enviar o arquivo.
-const OPCOES_TIPO_IDENTIDADE_SOCIO: Array<{ value: string; label: string }> = [
-  { value: "", label: "Não sei / outro" },
-  { value: "rg", label: "RG" },
-  { value: "cnh", label: "CNH" },
-  { value: "passaporte", label: "Passaporte" },
-  { value: "cpf", label: "CPF" },
-];
-
 // Duas abas de navegação (pedido do usuário, 2026-08): as seções internas
 // (Identidade do CNPJ, Documentação da Empresa, Outros documentos do sistema,
 // Documentação dos Sócios) continuam existindo exatamente como antes -- mesmos
@@ -347,6 +335,7 @@ export function tipoDocumentoTemLeituraAutomatica(tipo: string): boolean {
 
 export function documentoTemResultadoDeLeitura(doc?: DocumentoArquivo | null): boolean {
   if (!doc) return false;
+  if (doc.leitura_desatualizada === true) return false;
   if (doc.resultado_validacao?.analise_regra_documental || doc.resultado_validacao?.analise_regra_documental_erro) return true;
   if (doc.analisado === true) return true;
   const resultado = doc.resultado_analise || {};
@@ -843,21 +832,6 @@ export default function DocumentosEntidade({
   const [socioSelecionadoPorTipo, setSocioSelecionadoPorTipo] = useState<Record<string, string>>({});
   const timersObservacoes = useRef<Record<string, ReturnType<typeof setTimeout>>>({});
   const [nomeCustomizadoPorTipo, setNomeCustomizadoPorTipo] = useState<Record<string, string>>({});
-  // CORREÇÃO (11/09/2026, rodada seguinte -- pedido explícito do usuário,
-  // reforçando um pedido anterior: "como selecionar qual o documento que
-  // está sendo anexado pra que tenha leitura"): seletor simples e opcional
-  // (não bloqueia o anexo), ao lado do botão "Anexar" do slot genérico
-  // "Documento de identificação do sócio" -- deixar o usuário dizer de
-  // antemão se é RG/CNH/Passaporte/CPF, em vez de sempre subir como o tipo
-  // genérico "documento_socio". A leitura em si já funcionava sem isso
-  // (`parseDocumentoIdentidadeSocio` já detecta o tipo pelo próprio texto),
-  // mas sem essa escolha o classificador central nunca podia confrontar
-  // "o usuário disse que era um X" contra "o conteúdo lido é um Y" -- e a
-  // grade do Acervo Documental sempre mostrava o rótulo genérico, nunca "RG"/
-  // "CNH"/"Passaporte" de fato. Chave por `chaveSlot` (tipo + sócio) para
-  // cada sócio escolher o seu independentemente; vazio = "não sei/auto"
-  // (mantém o comportamento de antes desta rodada, sem escolha nenhuma).
-  const [tipoIdentidadeSelecionadoPorSlot, setTipoIdentidadeSelecionadoPorSlot] = useState<Record<string, string>>({});
   const [selecionados, setSelecionados] = useState<Record<string, boolean>>({});
   const [exportando, setExportando] = useState(false);
   const [modalExportacao, setModalExportacao] = useState(false);
@@ -1098,7 +1072,7 @@ export default function DocumentosEntidade({
           // Um laudo genérico do contrato não substitui o confronto com Atos da
           // Junta. Só paramos quando o dossiê marcou este arquivo como analisado
           // pela cadeia societária.
-          if (doc.analisado === true) return false;
+          if (doc.analisado === true && doc.leitura_desatualizada !== true) return false;
           if (!temAtosJunta) return false;
         } else if (documentoTemResultadoDeLeitura(doc)) {
           return false;
@@ -1492,19 +1466,11 @@ export default function DocumentosEntidade({
     setModalExportacao(true);
   }
 
-  // CORREÇÃO (11/09/2026, rodada seguinte -- seletor de tipo no anexo do
-  // documento de identidade do sócio): `tipoDocumentoReal`, quando informado,
-  // é o tipo ESPECÍFICO escolhido no seletor (ex.: "cnh"), enviado de fato
-  // como `tipo_documento` ao backend -- mas `tipoDocumento` (o tipo do SLOT,
-  // ex.: "documento_socio") continua sendo a chave usada para o estado de
-  // upload em andamento, a observação e o nome customizado, exatamente como
-  // antes desta rodada. Sem essa separação, escolher "CNH" no seletor faria
-  // o spinner de "enviando" e a observação/nome digitados no card nunca
-  // baterem com a chave real do slot na tela (cada um calculado a partir de
-  // um tipo diferente), quebrando os dois.
-  async function enviar(tipoDocumento: string, file: File, socioVinculado: string | null = null, tipoDocumentoReal?: string) {
+  // O tipo do slot permanece genérico para identidade de sócio; o leitor local
+  // detecta CNH, RG, CPF ou passaporte pelo conteúdo do PDF/imagem.
+  async function enviar(tipoDocumento: string, file: File, socioVinculado: string | null = null) {
     if (!entidadeId) return;
-    const tipoParaEnviar = tipoDocumentoReal || tipoDocumento;
+    const tipoParaEnviar = tipoDocumento;
     const fd = new FormData();
     fd.append("file", file);
     fd.append("entidade_tipo", entidadeTipo);
@@ -2578,35 +2544,8 @@ export default function DocumentosEntidade({
                     // fica no proprio campo, junto do arquivo, em vez de num
                     // relatorio separado repetindo os mesmos documentos.
                     const analiseDoSlot = identidadeCnpj?.documentos_iniciais?.[CHAVE_ANALISE_POR_SLOT[tipo] || ""] || undefined;
-                    // CORREÇÃO (2026-09-02, Rodada 18, pedido explícito do usuário --
-                    // print anotado "qual documento correto de cada tipo de empresa...
-                    // tem que saber e expor as informações"): quando algum arquivo
-                    // deste campo está marcado como incompatível, a explicação de "o
-                    // que é este documento / o que anexar aqui" (descricao do slot)
-                    // passa a aparecer automaticamente, sem exigir o clique manual no
-                    // botão "i" -- é exatamente o momento em que o usuário mais precisa
-                    // dela. Regra genérica, válida para QUALQUER slot com descricao (não
-                    // é um caso especial de enquadramento_tributario_cnpj); reaproveita a
-                    // mesma detecção de incompatibilidade por arquivo já usada mais
-                    // abaixo para exibir o resultado inline (linhas ~2047-2049).
-                    const algumArquivoIncompativelNoSlot = docsTipo.some((doc) => {
-                      const laudoDoc = doc.resultado_validacao?.analise_regra_documental || null;
-                      const laudoErroDoc = doc.resultado_validacao?.analise_regra_documental_erro || null;
-                      const resultadoInlineDoc = doc.resultado_analise || laudoDoc || laudoErroDoc || null;
-                      return Boolean(resultadoInlineDoc) && estadoVisualDocumento(resultadoInlineDoc, doc) === "incompativel";
-                    });
-                    // CORREÇÃO (09/09/2026, pedido explícito do usuário -- "deixando o I
-                    // de informações e o resultado, se está validado ou pendente"): selo
-                    // único de resultado do campo inteiro, mostrado sempre (mesmo com o
-                    // card recolhido). Espelha, de propósito, a mesma classificação por
-                    // arquivo já usada mais abaixo no map de `docsTipo` (`detalheCor`/
-                    // `detalheTitulo`, linhas ~2545-2546) -- não reaproveita a variável de
-                    // lá porque aquela é calculada arquivo a arquivo, dentro do próprio
-                    // map, e este selo precisa do resultado agregado de TODOS os arquivos
-                    // do campo, calculado antes do map. Mesmo padrão de duplicação
-                    // deliberada já usado neste arquivo para `algumArquivoIncompativelNoSlot`
-                    // (linhas acima) pelo mesmo motivo -- evitar reestruturar o map que já
-                    // funciona corretamente.
+                    // O selo agregado é a única informação de resultado sempre visível;
+                    // detalhes de leitura ficam no modal do arquivo ou no relatório.
                     const resumoCampo: { texto: string; cor: "success" | "warning" | "destructive" | "muted" } = (() => {
                       if (dispensadoPorMei && docsTipo.length === 0 && !satisfeitoPorOutro) {
                         return { texto: "Dispensado (MEI)", cor: "success" };
@@ -2622,7 +2561,9 @@ export default function DocumentosEntidade({
                       const estadosCampo = docsTipo.map((doc) => {
                         const laudoDoc = doc.resultado_validacao?.analise_regra_documental || null;
                         const laudoErroDoc = doc.resultado_validacao?.analise_regra_documental_erro || null;
-                        const resultadoInlineDoc = doc.resultado_analise || laudoDoc || laudoErroDoc || null;
+                        const resultadoInlineDoc = doc.leitura_desatualizada
+                          ? null
+                          : doc.resultado_analise || laudoDoc || laudoErroDoc || null;
                         const temLeituraRealDoc = documentoTemResultadoDeLeitura(doc);
                         const estadoDoc = resultadoInlineDoc ? estadoVisualDocumento(resultadoInlineDoc, doc) : null;
                         const incompativelDoc = estadoDoc === "incompativel";
@@ -2688,9 +2629,9 @@ export default function DocumentosEntidade({
                                   claro) para `text-foreground` (a cor de texto padrão do tema,
                                   mais escura/contrastada em claro e em escuro) -- mesmo peso
                                   `font-bold` de antes, só a cor muda. */}
-                              <p className="text-[11px] font-semibold leading-snug text-foreground">{documentoSlot.titulo}</p>
+                              <p className="text-[10px] font-semibold leading-snug text-foreground">{documentoSlot.titulo}</p>
                               {dispensadoPorMei && docsTipo.length === 0 && !satisfeitoPorOutro && <span className="rounded-full bg-success/20 px-1.5 py-0.5 text-[8px] font-bold leading-tight text-success shrink-0">DISPENSADO (MEI)</span>}
-                              {!dispensadoPorMei && (documentoSlot.obrigatorio || destaqueConfirmacaoRegime) && !satisfeitoPorOutro && <span className="rounded-full bg-brand-navy px-1.5 py-0.5 text-[8px] font-bold leading-tight text-primary-foreground shrink-0">OBRIGATÓRIO NA ETAPA</span>}
+                              {!dispensadoPorMei && (documentoSlot.obrigatorio || destaqueConfirmacaoRegime) && !satisfeitoPorOutro && <span className="rounded-full bg-brand-navy px-1.5 py-0.5 text-[8px] font-bold leading-tight text-primary-foreground shrink-0">Obrigatório</span>}
                               {(documentoSlot.descricao || tipo === "cartao_cnpj") && (
                                 <button
                                   type="button"
@@ -2709,38 +2650,19 @@ export default function DocumentosEntidade({
                               <span className={`rounded-full px-1.5 py-0.5 text-[9px] font-bold leading-tight shrink-0 ${CORES_RESUMO_CAMPO[resumoCampo.cor]}`}>{resumoCampo.texto}</span>
                             </div>
                             <p className="mt-0.5 text-[9px] leading-4 text-muted-foreground">
-                              {exigeVinculoSocio ? `${sociosComDocumento}/${socios.length} sócio(s) com documento · ` : ""}{docsTipo.length} arquivo(s) no contexto atual
+                              {exigeVinculoSocio ? `${sociosComDocumento}/${socios.length} sócio(s) · ` : ""}{docsTipo.length} arquivo(s)
                             </p>
                           </div>
-                          <div className={`flex min-w-0 max-w-full flex-wrap items-center justify-end gap-1 ${cardExpandido ? "w-full border-t border-border/70 pt-1.5" : "shrink-0"}`}>
+                          <div className={`flex min-w-0 max-w-full flex-wrap items-center justify-center gap-1.5 ${cardExpandido ? "w-full border-t border-border/70 pt-1.5" : "shrink-0"}`}>
                             {/* Já coberto por outro documento (ex: CND cobre CADIN/PGFN) -- não
                                 faz sentido oferecer anexar algo que não é mais necessário. O
                                 botão "Anexar" só aparece com o card expandido -- recolhido,
                                 mostra só o resultado (selo acima) + o ícone "i". */}
                             {!satisfeitoPorOutro && cardExpandido && (
                               <>
-                              {/* CORREÇÃO (11/09/2026, rodada seguinte -- pedido explícito do
-                                  usuário, reforçando um pedido anterior: "como selecionar qual
-                                  o documento que está sendo anexado pra que tenha leitura"):
-                                  seletor opcional, só para o slot genérico "Documento de
-                                  identificação do sócio" -- nunca bloqueia o anexo (a leitura já
-                                  detecta o tipo sozinha pelo próprio conteúdo do arquivo), só
-                                  permite ao usuário dizer de antemão qual documento está
-                                  anexando. Ver OPCOES_TIPO_IDENTIDADE_SOCIO acima. */}
-                              {tipo === "documento_socio" && (
-                                <select
-                                  value={tipoIdentidadeSelecionadoPorSlot[chaveSlot] || ""}
-                                  onChange={(e) => setTipoIdentidadeSelecionadoPorSlot((prev) => ({ ...prev, [chaveSlot]: e.target.value }))}
-                                  title="Qual documento você vai anexar? Opcional -- ajuda a conferência automática, mas não é obrigatório."
-                                  disabled={uploading || !!motivoBloqueio || (exigeVinculoSocio && !socioVinculado)}
-                                  className="h-7 max-w-full rounded-md border border-input bg-card px-1.5 text-[9px] font-semibold text-muted-foreground shrink-0 disabled:opacity-50"
-                                >
-                                  {OPCOES_TIPO_IDENTIDADE_SOCIO.map((opcao) => <option key={opcao.value} value={opcao.value}>{opcao.label}</option>)}
-                                </select>
-                              )}
                               <label title={motivoBloqueio || undefined} className={`inline-flex h-7 shrink-0 items-center justify-center gap-1 rounded-md px-2 text-[10px] font-semibold transition-colors ${motivoBloqueio || (exigeVinculoSocio && !socioVinculado) ? "cursor-not-allowed bg-border text-primary-foreground" : "cursor-pointer bg-primary text-primary-foreground hover:bg-primary/90"}`}>
                                 {uploading ? <Loader2 className="w-3 h-3 animate-spin" /> : <Upload className="w-3 h-3" />} Anexar
-                                <input type="file" accept=".pdf,.jpg,.jpeg,.png,.webp,.xlsx,.csv,.docx" className="hidden" disabled={uploading || !!motivoBloqueio || (exigeVinculoSocio && !socioVinculado)} onChange={(e) => { const file = e.target.files?.[0]; if (file) enviar(tipo, file, socioVinculado, tipo === "documento_socio" ? (tipoIdentidadeSelecionadoPorSlot[chaveSlot] || undefined) : undefined); e.currentTarget.value = ""; }} />
+                                <input type="file" accept=".pdf,.jpg,.jpeg,.png,.webp,.xlsx,.csv,.docx" className="hidden" disabled={uploading || !!motivoBloqueio || (exigeVinculoSocio && !socioVinculado)} onChange={(e) => { const file = e.target.files?.[0]; if (file) enviar(tipo, file, socioVinculado); e.currentTarget.value = ""; }} />
                               </label>
                               </>
                             )}
@@ -2749,9 +2671,10 @@ export default function DocumentosEntidade({
                                 type="button"
                                 onClick={() => setDetalhesAbertos((prev) => ({ ...prev, [chaveSlot]: !detalhesAbertosNoCard }))}
                                 title={detalhesAbertosNoCard ? "Ocultar detalhes secundários" : "Mostrar detalhes secundários"}
-                                className={`inline-flex h-7 shrink-0 items-center justify-center gap-1 rounded-md border px-1.5 text-[9px] font-semibold ${detalhesAbertosNoCard ? "border-primary/30 bg-primary/10 text-primary" : "border-input text-muted-foreground hover:border-primary/30 hover:text-primary"}`}
+                                aria-label={detalhesAbertosNoCard ? "Ocultar detalhes secundários" : "Mostrar detalhes secundários"}
+                                className={`inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-md border ${detalhesAbertosNoCard ? "border-primary/30 bg-primary/10 text-primary" : "border-input text-muted-foreground hover:border-primary/30 hover:text-primary"}`}
                               >
-                                <Info className="h-3 w-3" /> {detalhesAbertosNoCard ? "Ocultar" : "Detalhes"}
+                                <Info className="h-3 w-3" />
                               </button>
                             )}
                             <button
@@ -2798,9 +2721,12 @@ export default function DocumentosEntidade({
                           </div>
                         )}
                         {docsSemSocio.length > 0 && (
-                          <p className="rounded-md border border-warning/20 bg-warning/10 px-2.5 py-1.5 text-[10px] text-warning">
-                            {docsSemSocio.length} arquivo(s) legado(s) ainda sem identificação de sócio. Eles foram preservados e podem ser reenviados no nome correto.
-                          </p>
+                          <span
+                            title={`${docsSemSocio.length} arquivo(s) antigo(s) sem vínculo com sócio. O arquivo foi preservado; vincule-o novamente para a cobertura documental.`}
+                            className="inline-flex w-fit items-center rounded-full border border-warning/20 bg-warning/10 px-2 py-0.5 text-[9px] font-semibold text-warning"
+                          >
+                            {docsSemSocio.length} arquivo sem vínculo
+                          </span>
                         )}
                         {detalhesAbertosNoCard && <div className={exigeNome ? "grid grid-cols-1 sm:grid-cols-2 gap-2" : ""}>
                           {exigeNome && (
@@ -2840,7 +2766,7 @@ export default function DocumentosEntidade({
                           onReler={entidadeTipo === "empresa" && empresaId ? () => void relerDocumentoIdentidade(tipo) : undefined}
                           relendo={relendoTipoIdentidade === tipo}
                         />}
-                        {(descricaoVisivel[tipo] || algumArquivoIncompativelNoSlot) && documentoSlot.descricao && <p className="text-[11px] text-muted-foreground bg-muted border border-border rounded-md px-2.5 py-1.5">{documentoSlot.descricao}</p>}
+                        {descricaoVisivel[tipo] && documentoSlot.descricao && <p className="text-[11px] text-muted-foreground bg-muted border border-border rounded-md px-2.5 py-1.5">{documentoSlot.descricao}</p>}
                         {descricaoVisivel[tipo] && tipo === "cartao_cnpj" && <p className="text-[11px] text-primary bg-primary/10 border border-primary/20 rounded-md px-2.5 py-1.5">O usuário só anexa. O sistema/IA deverá identificar emissão, CNPJ, matriz/filial, abertura, CNAE, natureza, porte, endereço e situação cadastral para o relatório.</p>}
                         {docsTipo.length > 0 && (
                           <div className="rounded-md border border-border bg-muted p-2">
@@ -2857,7 +2783,9 @@ export default function DocumentosEntidade({
                               {(camposExpandidos[chaveSlot] ? docsTipo : docsTipo.slice(0, 3)).map((doc) => {
                                 const laudo = doc.resultado_validacao?.analise_regra_documental || null;
                                 const laudoErro = doc.resultado_validacao?.analise_regra_documental_erro || null;
-                                const resultadoInline = doc.resultado_analise || laudo || laudoErro || null;
+                                const resultadoInline = doc.leitura_desatualizada
+                                  ? null
+                                  : doc.resultado_analise || laudo || laudoErro || null;
                                 const temResultadoInline = Boolean(resultadoInline);
                                 const temLeituraReal = documentoTemResultadoDeLeitura(doc);
                                 // O estado objetivo fica sempre visível; o conteúdo do laudo fica
