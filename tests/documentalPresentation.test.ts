@@ -527,7 +527,7 @@ describe("construirSecoesAnaliseDocumento — validação objetiva", () => {
       dados_extraidos: {
         satisfaz_requisito: true,
         documento_compativel: true,
-        tipo_esperado: "documento_socio",
+        tipo_esperado: "DOCUMENTO_IDENTIDADE",
         tipo_detectado: "CNH",
         identidade_status: "IDENTIFICADO",
       },

@@ -800,6 +800,7 @@ function ehTipoIdentidadeSocio(tipo: string): boolean {
     "cpf",
     "passaporte",
     "documento_socio",
+    "documento_identidade",
     "documento_identidade_socio",
     "identidade_socio",
     "identidade",
@@ -836,7 +837,7 @@ function documentoMarcadoIncompativel(resultado: any, documento: any): boolean {
   );
   const tipoEsperado = familiaTipoVisual(classificacao?.tipo_esperado || resultado?.tipo_esperado || dadosExtraidos?.tipo_esperado || documento?.tipo_documento);
   const tipoDetectado = familiaTipoVisual(classificacao?.tipo_detectado || resultado?.tipo_detectado || dadosExtraidos?.tipo_detectado);
-  const identidadeSocioEsperada = ["documento_socio", "documento_identidade_socio", "identidade_socio"].includes(tipoEsperado);
+  const identidadeSocioEsperada = ["documento_socio", "documento_identidade", "documento_identidade_socio", "identidade_socio"].includes(tipoEsperado);
   const identidadeSocioDetectada = ehTipoIdentidadeSocio(tipoDetectado);
   const divergenciaDeFamilia = Boolean(
     tipoEsperado
