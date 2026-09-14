@@ -96,6 +96,7 @@ import {
 } from "./services/featureAccessService";
 import { enviarDocumento, resolverTokenPublico } from "./services/documentDeliveryService";
 import { analiseDocumentalService } from './services/analiseDocumentalEspecializada';
+import { ContratoAnexoValidationError, decodificarPdfContratoAssinado } from './services/contratoAnexoValidation';
 import { isUuid } from './utils/validators';
 import {
   CAMPOS_RASTREAVEIS_EDICAO_MANUAL,
@@ -15407,10 +15408,7 @@ async function registrarDocumentoContratoGerado(params: {
     try {
       const { arquivo_base64, pdf_base64, nome_arquivo } = req.body || {};
       const conteudo = arquivo_base64 || pdf_base64;
-      if (!conteudo) { res.status(400).json({ error: 'Informe o PDF assinado em base64.' }); return; }
-      const base64 = String(conteudo).includes(',') ? String(conteudo).split(',').pop()! : String(conteudo);
-      const buffer = Buffer.from(base64, 'base64');
-      const nomeOriginal = String(nome_arquivo || 'contrato-assinado.pdf');
+      const { buffer, nomeOriginal } = decodificarPdfContratoAssinado(conteudo, nome_arquivo);
 
       // Consolidado no mesmo armazenamento resiliente usado pelo resto do Acervo
       // Documental (mesma raiz persistente, gravação atômica, checagem de integridade) --
@@ -15441,41 +15439,68 @@ async function registrarDocumentoContratoGerado(params: {
         buffer,
       });
 
-      const { rows } = await pool.query(
-        `UPDATE contratos_gerados SET status='assinado', assinado_em=NOW(), assinado_pdf_path=$1, updated_at=NOW()
-          WHERE id=$2 RETURNING id, status, assinado_em, assinado_pdf_path, empresa_id`,
-        [salvo.absolutePath, req.params.id]
-      );
-      if (!rows.length) { res.status(404).json({ error: 'Contrato não encontrado' }); return; }
+      // O arquivo físico e os vínculos de banco precisam avançar juntos. Antes,
+      // uma falha no INSERT do acervo era apenas registrada no log e a rota ainda
+      // respondia sucesso: o contrato ficava assinado, mas não aparecia no acervo.
+      let client: any = null;
+      let contratoAtualizado: any = null;
+      try {
+        client = await pool.connect();
+        await client.query('BEGIN');
+        const atualizado = await client.query(
+          `UPDATE contratos_gerados SET status='assinado', assinado_em=NOW(), assinado_pdf_path=$1, updated_at=NOW()
+            WHERE id=$2 AND status <> 'assinado' AND assinado_em IS NULL AND assinado_pdf_path IS NULL
+            RETURNING id, status, assinado_em, assinado_pdf_path, empresa_id`,
+          [salvo.absolutePath, req.params.id],
+        );
+        if (!atualizado.rows.length) {
+          await client.query('ROLLBACK');
+          await fs.promises.unlink(salvo.absolutePath).catch(() => undefined);
+          res.status(409).json({ error: 'Este contrato já foi assinado e não pode ser substituído. Se for preciso complementar, gere um novo contrato (aditivo).' });
+          return;
+        }
+        contratoAtualizado = atualizado.rows[0];
 
       // tipo_documento = contrato_prestacao_servicos (não contrato_assinado) -- é o mesmo
       // tipo que o campo "1. Contrato de prestação de serviços" do checklist já procura
       // (matchTipos inclui esse tipo), então o contrato assinado aparece no lugar certo
       // do Acervo Documental em vez de cair na categoria genérica de sobra.
-      if (rows[0].empresa_id) {
-        await pool.query(
+      if (contratoAtualizado.empresa_id) {
+        await client.query(
           `INSERT INTO public.documentos_arquivos
             (entidade_tipo, entidade_id, contrato_id, tipo_documento, nome_original, nome_arquivo, caminho_arquivo, url_arquivo,
              mime_type, tamanho_bytes, status, origem, validado, criado_por, metadados)
            VALUES ('empresa',$1,$2,'contrato_prestacao_servicos',$3,$4,$5,NULL,'application/pdf',$6,'ativo','upload_manual',true,$7,$8::jsonb)`,
-          [rows[0].empresa_id, req.params.id, nomeOriginal, path.basename(salvo.absolutePath), salvo.absolutePath, buffer.byteLength, ((req as any).colaborador || (req as any).user)?.id || null, JSON.stringify({ origem_endpoint: '/api/contratos/:id/anexo-assinado', sha256: salvo.sha256 })]
-        ).catch((docErr) => console.warn('[documentos_arquivos] Falha ao registrar contrato assinado:', docErr?.message || docErr));
-
-        // Registro histórico obrigatório: toda vez que um contrato assinado é anexado
-        // pela primeira vez (nunca substituído -- ver bloqueio acima), fica registrado
-        // na aba Histórico da empresa com data, autor e nome do arquivo -- não só no
-        // banco de dados de forma invisível.
-        const autorNome = (req as any).colaborador?.nome || (req as any).colaborador?.email || (req as any).user?.nome || (req as any).user?.email || null;
-        await registrarHistoricoEmpresaSeguro(
-          rows[0].empresa_id,
-          'contrato_assinado_anexado',
-          `Contrato assinado anexado: ${nomeOriginal} (contrato ${rows[0].id})`,
-          autorNome,
+          [contratoAtualizado.empresa_id, req.params.id, nomeOriginal, path.basename(salvo.absolutePath), salvo.absolutePath, buffer.byteLength, ((req as any).colaborador || (req as any).user)?.id || null, JSON.stringify({ origem_endpoint: '/api/contratos/:id/anexo-assinado', sha256: salvo.sha256 })],
         );
       }
-      res.json({ success: true, ...rows[0] });
+        await client.query('COMMIT');
+      } catch (error) {
+        if (client) await client.query('ROLLBACK').catch(() => undefined);
+        await fs.promises.unlink(salvo.absolutePath).catch(() => undefined);
+        throw error;
+      } finally {
+        client?.release();
+      }
+
+      if (contratoAtualizado.empresa_id) {
+        // O histórico é complementar ao vínculo transacional; uma indisponibilidade
+        // do histórico não transforma um anexo já confirmado em falso erro.
+        const autorNome = (req as any).colaborador?.nome || (req as any).colaborador?.email || (req as any).user?.nome || (req as any).user?.email || null;
+        await registrarHistoricoEmpresaSeguro(
+          contratoAtualizado.empresa_id,
+          'contrato_assinado_anexado',
+          `Contrato assinado anexado: ${nomeOriginal} (contrato ${contratoAtualizado.id})`,
+          autorNome,
+        ).catch((historyError: any) => console.warn('[historico contrato assinado]', historyError?.message || historyError));
+      }
+      res.json({ success: true, ...contratoAtualizado });
     } catch (err) {
       console.error('[POST /api/contratos/:id/anexo-assinado]', err);
+      if (err instanceof ContratoAnexoValidationError) {
+        res.status(err.statusCode).json({ error: err.message });
+        return;
+      }
       res.status(500).json({ error: 'Erro ao anexar contrato assinado' });
     }
   });
