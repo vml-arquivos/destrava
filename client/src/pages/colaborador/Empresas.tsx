@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback, useRef, useMemo } from "react";
 import Layout from "./Layout";
 import { apiFetch, apiFetchBlob } from "@/lib/api";
+import { validarArquivoPdfContrato } from "@/utils/contratoAnexo";
 import { toast } from "sonner";
 import { useLocation, useSearch } from "wouter";
 import { useAuth } from "@/contexts/AuthContext";
@@ -1393,6 +1394,11 @@ export default function Empresas() {
     }
   }
   async function handleAnexarContratoAssinado(contratoId: string, file: File) {
+    const erroArquivo = await validarArquivoPdfContrato(file);
+    if (erroArquivo) {
+      toast.error(erroArquivo);
+      return;
+    }
     setEnviandoAnexoAssinado(true);
     try {
       const base64 = await new Promise<string>((resolve, reject) => {
@@ -1428,7 +1434,12 @@ export default function Empresas() {
   // Abre a confirmação em vez de anexar direto -- garante que o colaborador
   // vê explicitamente qual contrato (número + tipo) vai receber o anexo
   // assinado (definitivo, sem volta) antes de o upload de verdade acontecer.
-  function abrirConfirmacaoAnexoAssinado(contrato: any, file: File) {
+  async function abrirConfirmacaoAnexoAssinado(contrato: any, file: File) {
+    const erroArquivo = await validarArquivoPdfContrato(file);
+    if (erroArquivo) {
+      toast.error(erroArquivo);
+      return;
+    }
     setConfirmouAssinaturas(false);
     setModalAnexoAssinado({ contrato, file });
   }

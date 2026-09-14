@@ -1,6 +1,7 @@
 import { useState, useMemo, useEffect } from 'react';
 import { Download, CheckCircle, XCircle, Trash2, Eye, RefreshCw, Upload, Pencil, Printer, X, Lock } from 'lucide-react';
 import { apiFetch, getToken } from '../../lib/api';
+import { validarArquivoPdfContrato } from '../../utils/contratoAnexo';
 import { toast } from 'sonner';
 
 interface Contrato {
@@ -312,6 +313,11 @@ export function ListaContratos({ contratos, onStatusChange, onDelete, userCargo,
     input.onchange = async () => {
       const file = input.files?.[0];
       if (!file) return;
+      const erroArquivo = await validarArquivoPdfContrato(file);
+      if (erroArquivo) {
+        toast.error(erroArquivo);
+        return;
+      }
       const reader = new FileReader();
       reader.onload = async () => {
         try {
