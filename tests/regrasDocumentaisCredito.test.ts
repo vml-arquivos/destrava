@@ -66,13 +66,23 @@ describe('regras documentais de crédito', () => {
 
   it('calcula cobertura separada para todos os sócios', () => {
     const cobertura = calcularCoberturaDocumentalSocios(socios, [
-      { socio_id: 's1', tipo_documento: 'documento_socio' },
-      { socio_id: 's1', tipo_documento: 'comprovante_residencia' },
-      { socio_id: 's2', tipo_documento: 'documento_socio' },
+      { socio_id: 's1', tipo_documento: 'documento_socio', dados_extraidos: { identidade_socio_confere: true } },
+      { socio_id: 's1', tipo_documento: 'comprovante_residencia', dados_extraidos: { titular_confere_com_socio: true } },
+      { socio_id: 's2', tipo_documento: 'documento_socio', dados_extraidos: { identidade_socio_confere: true } },
     ], ['documento_socio', 'comprovante_residencia']);
     expect(cobertura.total_socios).toBe(2);
     expect(cobertura.socios_completos).toBe(1);
     expect(cobertura.por_socio[1].tipos_faltantes).toEqual(['comprovante_residencia']);
+  });
+
+  it('não conta documento pessoal sem confirmação positiva do sócio na cobertura', () => {
+    const cobertura = calcularCoberturaDocumentalSocios(
+      [{ id: 's1', nome: 'Maria da Silva' }],
+      [{ socio_id: 's1', tipo_documento: 'documento_socio', dados_extraidos: { identidade_socio_confere: null } }],
+      ['documento_socio'],
+    );
+    expect(cobertura.socios_completos).toBe(0);
+    expect(cobertura.por_socio[0].tipos_faltantes).toEqual(['documento_socio']);
   });
 
   // CORREÇÃO (Rodada 33, 05/09/2026, diagnóstico cruzado de duas pesquisas

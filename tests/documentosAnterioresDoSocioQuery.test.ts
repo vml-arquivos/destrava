@@ -6,9 +6,10 @@ import { AnaliseDocumentalService } from '../server/services/analiseDocumentalEs
 // dados que tenha na empresa pra validar os dados do documento do sócio"):
 // `carregarDocumentosAnterioresDoSocio` (método privado de
 // AnaliseDocumentalService) é a consulta que busca o laudo mais recente de
-// cada OUTRO documento já enviado/analisado para o MESMO `socio_id`, usada
-// como fonte de apoio por `validarIdentidadeSocioExtraida` quando o QSA
-// sincronizado não tem o CPF do sócio. Este teste cobre a consulta em si
+// cada OUTRO documento já enviado/analisado para o MESMO `socio_id`, além de
+// QSA/contrato/Atos/CCMEI empresariais sem `socio_id`, usada como fonte de
+// apoio por `validarIdentidadeSocioExtraida` quando o QSA sincronizado não tem
+// o CPF do sócio. Este teste cobre a consulta em si
 // (filtros e mapeamento de linhas) de forma isolada, sem depender de toda a
 // cadeia de classificação documental -- o mesmo padrão de teste unitário já
 // usado para `validarIdentidadeSocioExtraida` neste projeto.
@@ -25,12 +26,15 @@ function criarDbMock(rows: any[]) {
 }
 
 describe('AnaliseDocumentalService.carregarDocumentosAnterioresDoSocio (privado, acessado via cast em teste)', () => {
-  it('não consulta o banco quando não há socio_id (documento ainda não vinculado a um sócio)', async () => {
-    const db = criarDbMock([]);
+  it('consulta referências empresariais mesmo quando não há socio_id no documento atual', async () => {
+    const db = criarDbMock([
+      { arquivo_id: 'qsa-1', tipo_documento: 'qsa', socio_id: null, resultado: { dados_extraidos: { socios: [{ nome: 'CARLOS EDUARDO SANTOS' }] } } },
+    ]);
     const service = new AnaliseDocumentalService(db as any);
     const resultado = await (service as any).carregarDocumentosAnterioresDoSocio('empresa-1', null, 'doc-atual');
-    expect(resultado).toEqual([]);
-    expect(db.calls).toHaveLength(0);
+    expect(resultado).toEqual([{ tipo_documento: 'qsa', dados: { socios: [{ nome: 'CARLOS EDUARDO SANTOS' }] } }]);
+    expect(db.calls).toHaveLength(1);
+    expect(db.calls[0].text).toContain("'qsa', 'contrato_social', 'alteracao_contratual', 'atos_junta_comercial', 'ccmei'");
   });
 
   it('filtra por socio_id, exclui o próprio arquivo, e mapeia tipo_documento + dados_extraidos de cada linha retornada', async () => {

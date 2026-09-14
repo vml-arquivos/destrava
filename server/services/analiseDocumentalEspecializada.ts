@@ -2327,24 +2327,23 @@ export class AnaliseDocumentalService {
   // (`socios_empresa`) normalmente não traz o CPF do sócio, o cruzamento de
   // identidade (`validarIdentidadeSocioExtraida`) precisa de uma fonte de
   // apoio adicional. Busca o laudo mais recente de CADA outro documento já
-  // enviado e já analisado para o MESMO `socio_id` (nunca de outro sócio, e
-  // nunca o próprio arquivo sendo analisado agora) -- é o mesmo vínculo já
-  // usado pelo Acervo Documental para agrupar os documentos por sócio. Uma
-  // falha aqui nunca pode derrubar a análise do documento principal: se a
-  // consulta falhar, a validação de identidade simplesmente segue sem essa
-  // fonte de apoio (exatamente como se nenhum documento anterior existisse).
+  // enviado e já analisado para o MESMO `socio_id` (nunca de outro sócio) e,
+  // separadamente, das referências empresariais sem vínculo individual (QSA,
+  // contrato/alteração, Atos da Junta e CCMEI). O próprio arquivo analisado é
+  // sempre excluído. Uma falha aqui nunca pode derrubar a análise principal:
+  // sem a consulta, a validação segue inconclusiva e não aprova por ausência.
   private async carregarDocumentosAnterioresDoSocio(
     empresaId: string,
     socioId: string | null,
     arquivoIdAtual: string,
-  ): Promise<Array<{ tipo_documento: string | null; dados: any }>> {
-    if (!socioId) return [];
+  ): Promise<Array<{ tipo_documento: string | null; socio_id?: string | null; dados: any }>> {
+    if (!empresaId) return [];
     try {
       const { rows } = await this.db.query(
-        `SELECT DISTINCT ON (d.id) d.id AS arquivo_id, d.tipo_documento, e.resultado
+        `SELECT DISTINCT ON (d.id) d.id AS arquivo_id, d.tipo_documento, d.socio_id, e.resultado
            FROM public.documentos_arquivos d
            JOIN public.documentos_extracoes_ia e ON e.arquivo_id = d.id
-          WHERE d.socio_id = $1
+          WHERE (d.socio_id = $1 OR (d.socio_id IS NULL AND d.tipo_documento IN ('qsa', 'contrato_social', 'alteracao_contratual', 'atos_junta_comercial', 'ccmei')))
             AND d.id <> $2
             AND (d.empresa_id = $3 OR (d.entidade_tipo = 'empresa' AND d.entidade_id = $3))
             AND d.excluido_em IS NULL
@@ -2355,6 +2354,7 @@ export class AnaliseDocumentalService {
       );
       return (rows || []).map((row: any) => ({
         tipo_documento: row.tipo_documento || null,
+        ...(row.socio_id ? { socio_id: row.socio_id } : {}),
         dados: (row.resultado && typeof row.resultado === 'object' ? row.resultado.dados_extraidos : null) || {},
       }));
     } catch (error: any) {

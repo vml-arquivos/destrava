@@ -325,8 +325,11 @@ describe('validarIdentidadeSocioExtraida -- apoio em outros documentos já envia
     );
     expect(r.dados.cpf_confere_com_socio).toBeNull();
     expect(r.dados.identidade_fonte_cpf).toBeNull();
-    // Nome ainda confirma pelo QSA, então a identidade segue confirmada.
-    expect(r.dados.identidade_socio_confere).toBe(true);
+    // Mesmo com nome coincidente, conflito entre fontes documentais não pode
+    // virar confirmação automática: a decisão deve permanecer bloqueada.
+    expect(r.dados.identidade_socio_confere).toBe(false);
+    expect(r.dados.identidade_cruzamento_status).toBe('inconclusivo');
+    expect(r.alertas.map((alerta) => alerta.codigo)).toContain('identidade_referencias_cpf_conflitantes');
   });
 
   it('quando o sócio não está mais no QSA sincronizado (socioAlvoId não encontrado) mas há documentos anteriores confiáveis para aquele socio_id, ainda assim usa o apoio', () => {
@@ -358,6 +361,23 @@ describe('validarIdentidadeSocioExtraida -- apoio em outros documentos já envia
     );
     expect(r.dados.identidade_fonte_cpf).toBe('qsa');
     expect(r.dados.cpf_confere_com_socio).toBe(true);
+    expect(r.dados.identidade_socio_confere).toBe(false);
+    expect(r.alertas.map((alerta) => alerta.codigo)).toContain('identidade_referencias_cpf_conflitantes');
+  });
+
+  it('registra o cruzamento com QSA e quadro societário do contrato sem redirecionar o arquivo', () => {
+    const r = validarIdentidadeSocioExtraida(
+      sociosSemCpf,
+      { cpf: '123.456.789-01', nome: 'CARLOS EDUARDO SANTOS' },
+      's1',
+      'CNH',
+      [
+        { tipo_documento: 'qsa', dados: { socios: [{ nome: 'CARLOS EDUARDO SANTOS' }] } },
+        { tipo_documento: 'contrato_social', dados: { quadro_societario_final: [{ nome: 'CARLOS EDUARDO SANTOS', administrador: true }] } },
+      ],
+    );
     expect(r.dados.identidade_socio_confere).toBe(true);
+    expect(r.dados.identidade_referencias_documentais).toEqual(expect.arrayContaining(['qsa', 'contrato_social']));
+    expect(r.dados.identidade_cruzamento_status).toBe('confirmado');
   });
 });

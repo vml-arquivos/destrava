@@ -43,6 +43,13 @@ describe('análise inline no Acervo Documental', () => {
     expect(acervo).toContain('if (doc.analisado === true && doc.leitura_desatualizada !== true) return false;');
   });
 
+  it('oferece CTA direto para analisar os documentos dos sócios fora do modal', () => {
+    expect(acervo).toContain('analisarDocumentacaoSocios');
+    expect(acervo).toContain('Leitura dos sócios');
+    expect(acervo).toContain('setAnalisandoDocumentosSocios');
+    expect(acervo).toContain('solicitarLeituraDocumento(doc, { forcar: true, silencioso: true');
+  });
+
   it('abre o Acervo com laudos individuais antes de aguardar o dossiê completo', () => {
     expect(acervo).toContain('Rodada 38: primeira pintura = Acervo + laudos persistidos por arquivo.');
     expect(acervo).toContain('setDocs(filtrada);');
