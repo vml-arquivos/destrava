@@ -521,6 +521,36 @@ describe("construirSecoesAnaliseDocumento — validação objetiva", () => {
     expect(estadoVisualDocumento({ status: "concluido", satisfaz_requisito: true }, { consistente: true })).toBe("aprovado");
   });
 
+  it("aceita CNH, RG, CPF ou passaporte no slot genérico de identidade do sócio", () => {
+    expect(estadoVisualDocumento({
+      status: "concluido",
+      dados_extraidos: {
+        satisfaz_requisito: true,
+        documento_compativel: true,
+        tipo_esperado: "documento_socio",
+        tipo_detectado: "CNH",
+        identidade_status: "IDENTIFICADO",
+      },
+    }, { tipo_documento: "documento_socio", analisado: true, consistente: true })).toBe("aprovado");
+  });
+
+  it("mantém incompatibilidade explícita e não relaxa slots de tipo específico", () => {
+    expect(estadoVisualDocumento({
+      status: "concluido",
+      satisfaz_requisito: false,
+      documento_compativel: false,
+      tipo_esperado: "documento_socio",
+      tipo_detectado: "CNH",
+    }, { tipo_documento: "documento_socio", analisado: true, consistente: true })).toBe("incompativel");
+    expect(estadoVisualDocumento({
+      status: "concluido",
+      satisfaz_requisito: true,
+      documento_compativel: true,
+      tipo_esperado: "cnh",
+      tipo_detectado: "RG",
+    }, { tipo_documento: "cnh", analisado: true, consistente: true })).toBe("incompativel");
+  });
+
   it("não deixa flag administrativo antigo manter amarelo um laudo novo satisfatório", () => {
     expect(estadoVisualDocumento(
       { status: "concluido", satisfaz_requisito: true },
