@@ -2674,8 +2674,10 @@ export function analisarTextoDocumentoLocal(tipo: TipoDocumentoLocal, texto: str
 
 function decodificarXml(value: string): string {
   return value
+    .replace(/<text:p[^>]*>|<text:h[^>]*>|<table:table-row[^>]*>/g, '\n')
+    .replace(/<text:tab\s*\/?>/g, '\t')
     .replace(/<w:tab\s*\/?>/g, '\t')
-    .replace(/<w:br\s*\/?>|<\/w:p>|<\/row>/g, '\n')
+    .replace(/<w:br\s*\/?>|<\/w:p>|<\/row>|<\/text:p>|<\/text:h>|<\/table:table-row>/g, '\n')
     .replace(/<[^>]+>/g, ' ')
     .replace(/&amp;/g, '&')
     .replace(/&lt;/g, '<')
@@ -2687,14 +2689,31 @@ function decodificarXml(value: string): string {
     .trim();
 }
 
+function decodificarRtf(value: string): string {
+  return value
+    .replace(/\\'[0-9a-f]{2}/gi, (match) => Buffer.from(match.slice(2), 'hex').toString('latin1'))
+    .replace(/\\par[d]?\s?/gi, '\n')
+    .replace(/\\tab\s?/gi, '\t')
+    .replace(/\\[a-z]+-?\d*\s?/gi, '')
+    .replace(/[{}]/g, '')
+    .replace(/[ \t]+/g, ' ')
+    .replace(/\n\s+/g, '\n')
+    .trim();
+}
+
 async function unzipEntry(arquivoPath: string, entry: string, timeout: number, maxBuffer: number): Promise<string> {
   const { stdout } = await execFileAsync('unzip', ['-p', arquivoPath, entry], { timeout, maxBuffer, encoding: 'utf8' });
   return String(stdout || '');
 }
 
 async function extrairTextoEstruturado(arquivoPath: string, extension: string, timeout: number, maxBuffer: number): Promise<string> {
-  if (extension === '.csv') return String(await readFile(arquivoPath, 'utf8')).replace(/\u0000/g, '').trim();
+  if (['.txt', '.text', '.log', '.md', '.markdown', '.json', '.xml', '.html', '.htm', '.svg', '.csv'].includes(extension)) {
+    return String(await readFile(arquivoPath, 'utf8')).replace(/\u0000/g, '').trim();
+  }
+  if (extension === '.rtf') return decodificarRtf(await readFile(arquivoPath, 'utf8'));
   if (extension === '.docx') return decodificarXml(await unzipEntry(arquivoPath, 'word/document.xml', timeout, maxBuffer));
+  if (extension === '.odt') return decodificarXml(await unzipEntry(arquivoPath, 'content.xml', timeout, maxBuffer));
+  if (extension === '.ods') return decodificarXml(await unzipEntry(arquivoPath, 'content.xml', timeout, maxBuffer));
   if (extension !== '.xlsx') return '';
 
   const sharedXml = await unzipEntry(arquivoPath, 'xl/sharedStrings.xml', timeout, maxBuffer).catch(() => '');
@@ -2755,6 +2774,40 @@ function dimensoesImagem(buffer: Buffer, extension: string): { largura: number; 
   // GIF: o cabeçalho também informa as dimensões do canvas.
   if ((extension === '.gif') && buffer.length >= 10 && buffer.subarray(0, 3).toString('ascii') === 'GIF') {
     return { largura: buffer.readUInt16LE(6), altura: buffer.readUInt16LE(8) };
+  }
+
+  // BMP: o cabeçalho DIB guarda largura/altura em inteiros little-endian.
+  if (extension === '.bmp' && buffer.length >= 26 && buffer.subarray(0, 2).toString('ascii') === 'BM') {
+    return { largura: Math.abs(buffer.readInt32LE(18)), altura: Math.abs(buffer.readInt32LE(22)) };
+  }
+
+  // TIFF: aceita os dois byte-orders oficiais e lê somente as tags de largura
+  // (256) e altura (257), mantendo limites seguros para arquivos truncados.
+  if ((extension === '.tif' || extension === '.tiff') && buffer.length >= 8) {
+    const littleEndian = buffer.subarray(0, 2).toString('ascii') === 'II';
+    const bigEndian = buffer.subarray(0, 2).toString('ascii') === 'MM';
+    const read16 = (offset: number) => littleEndian ? buffer.readUInt16LE(offset) : buffer.readUInt16BE(offset);
+    const read32 = (offset: number) => littleEndian ? buffer.readUInt32LE(offset) : buffer.readUInt32BE(offset);
+    if ((littleEndian || bigEndian) && read16(2) === 42) {
+      const ifd = read32(4);
+      if (ifd + 2 <= buffer.length) {
+        const entries = Math.min(read16(ifd), 256);
+        let largura: number | null = null;
+        let altura: number | null = null;
+        for (let index = 0; index < entries; index += 1) {
+          const offset = ifd + 2 + index * 12;
+          if (offset + 12 > buffer.length) break;
+          const tag = read16(offset);
+          const type = read16(offset + 2);
+          const count = read32(offset + 4);
+          if (count !== 1 || ![3, 4].includes(type)) continue;
+          const valor = type === 3 ? read16(offset + 8) : read32(offset + 8);
+          if (tag === 256) largura = valor;
+          if (tag === 257) altura = valor;
+        }
+        if (largura && altura) return { largura, altura };
+      }
+    }
   }
 
   return null;
@@ -2943,7 +2996,7 @@ export async function extrairDocumentoLocal(
   const extension = path.extname(arquivoPath).toLowerCase();
   const isPdf = effectiveMime === 'application/pdf' || extension === '.pdf';
   const isImage = effectiveMime.startsWith('image/') || ['.png', '.jpg', '.jpeg', '.webp', '.tif', '.tiff', '.bmp'].includes(extension);
-  const isStructured = ['.csv', '.docx', '.xlsx'].includes(extension);
+  const isStructured = ['.csv', '.txt', '.text', '.log', '.md', '.markdown', '.json', '.xml', '.html', '.htm', '.svg', '.rtf', '.docx', '.odt', '.xlsx', '.ods'].includes(extension);
   const paginasProcessadas = isPdf
     ? await contarPaginasPdfLocal(arquivoPath)
     : isImage || isStructured ? 1 : null;

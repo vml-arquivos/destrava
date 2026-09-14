@@ -1223,9 +1223,21 @@ function mimePorExtensao(filePath: string): string | null {
   if (ext === '.png') return 'image/png';
   if (ext === '.jpg' || ext === '.jpeg') return 'image/jpeg';
   if (ext === '.webp') return 'image/webp';
+  if (ext === '.gif') return 'image/gif';
+  if (ext === '.tif' || ext === '.tiff') return 'image/tiff';
+  if (ext === '.bmp') return 'image/bmp';
+  if (ext === '.svg') return 'image/svg+xml';
   if (ext === '.csv') return 'text/csv';
+  if (ext === '.txt' || ext === '.text' || ext === '.log') return 'text/plain';
+  if (ext === '.md' || ext === '.markdown') return 'text/markdown';
+  if (ext === '.json') return 'application/json';
+  if (ext === '.xml') return 'application/xml';
+  if (ext === '.html' || ext === '.htm') return 'text/html';
+  if (ext === '.rtf') return 'application/rtf';
   if (ext === '.docx') return 'application/vnd.openxmlformats-officedocument.wordprocessingml.document';
+  if (ext === '.odt') return 'application/vnd.oasis.opendocument.text';
   if (ext === '.xlsx') return 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet';
+  if (ext === '.ods') return 'application/vnd.oasis.opendocument.spreadsheet';
   return null;
 }
 
