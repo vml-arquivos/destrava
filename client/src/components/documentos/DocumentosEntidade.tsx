@@ -19,6 +19,7 @@ import {
   Paperclip,
   Printer,
   RefreshCw,
+  ScanSearch,
   ShieldCheck,
   Trash2,
   Upload,
@@ -849,6 +850,7 @@ export default function DocumentosEntidade({
   // o arquivo. Este estado controla o botão "Reanalisar" novo, por arquivo,
   // que resolve isso sem precisar reanexar nada.
   const [reanalisandoId, setReanalisandoId] = useState<string | null>(null);
+  const [analisandoDocumentosSocios, setAnalisandoDocumentosSocios] = useState(false);
   // Evita solicitar automaticamente a mesma leitura várias vezes durante a
   // mesma permanência na tela. O backend continua idempotente; este guard é
   // apenas para reduzir chamadas/reloads no navegador.
@@ -1707,6 +1709,38 @@ export default function DocumentosEntidade({
     await solicitarLeituraDocumento(doc, { forcar: true, silencioso: false, recarregar: true });
   }
 
+  async function analisarDocumentacaoSocios() {
+    if (entidadeTipo !== "empresa" || !empresaId) return;
+    const documentos = docs.filter((doc) => (
+      tipoDocumentoTemLeituraAutomatica(doc.tipo_documento)
+      && doc.arquivo_disponivel !== false
+      && (doc.socio_id || SECOES_DOCUMENTAIS.some((secao) => secao.slots.some((slot) => slot.porSocio && slot.matchTipos.includes(doc.tipo_documento))))
+    ));
+    if (!documentos.length) {
+      toast.info("Nenhum documento de sócio disponível para leitura.");
+      return;
+    }
+    setAnalisandoDocumentosSocios(true);
+    let concluidos = 0;
+    let falhas = 0;
+    try {
+      // Sequencial por arquivo: evita concorrência de OCR pesado e mantém cada
+      // laudo associado ao socio_id original, sem redirecionar documentos.
+      for (const doc of documentos) {
+        const resultado = await solicitarLeituraDocumento(doc, { forcar: true, silencioso: true, recarregar: false });
+        if (resultado?.falhou) falhas += 1;
+        else concluidos += 1;
+      }
+      await carregar();
+      if (falhas) toast.warning(`${concluidos} documento(s) lido(s); ${falhas} exige(m) revisão.`);
+      else toast.success(`${concluidos} documento(s) dos sócios analisado(s).`);
+    } catch (err: any) {
+      toast.error(err?.message || "Não foi possível concluir a análise dos documentos dos sócios.");
+    } finally {
+      setAnalisandoDocumentosSocios(false);
+    }
+  }
+
   function marcarDocs(lista: DocumentoArquivo[], valor: boolean) {
     setSelecionados((prev) => {
       const copy = { ...prev };
@@ -2156,6 +2190,27 @@ export default function DocumentosEntidade({
               );
             })}
           </div>
+
+          {grupoAtivoId === "socios" && entidadeTipo === "empresa" && empresaId && (
+            <div className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-primary/20 bg-primary/5 px-3 py-2">
+              <div className="flex min-w-0 items-center gap-2">
+                <ScanSearch className="h-4 w-4 shrink-0 text-primary" />
+                <div className="min-w-0">
+                  <p className="text-[11px] font-black text-foreground">Leitura dos sócios</p>
+                  <p className="text-[9px] text-muted-foreground">Ler e cruzar os arquivos anexados com o QSA e os documentos societários.</p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => void analisarDocumentacaoSocios()}
+                disabled={analisandoDocumentosSocios}
+                className="inline-flex h-8 shrink-0 items-center justify-center gap-1.5 rounded-lg bg-primary px-2.5 text-[10px] font-black text-primary-foreground hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-60"
+              >
+                {analisandoDocumentosSocios ? <Loader2 className="h-3 w-3 animate-spin" /> : <ScanSearch className="h-3 w-3" />}
+                {analisandoDocumentosSocios ? "Analisando..." : "Analisar documentos"}
+              </button>
+            </div>
+          )}
 
           {/* Resultado da Etapa 1 no mesmo lugar onde os documentos sao anexados.
               Documento a documento, o veredito aparece dentro do proprio campo

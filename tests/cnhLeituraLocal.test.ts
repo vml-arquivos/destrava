@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { analisarTextoDocumentoLocal } from '../server/services/extracaoDocumentalLocal';
 import { classificarResultadoPersistido } from '../server/services/classificadorDocumentalCentral';
+import { normalizarDocumentoCatalogado } from '../server/services/analiseDocumentalEspecializada';
 
 const CNH_OCR = `
 Carteira Nacional de Habilitação / Driver License / Permiso de Conducción
@@ -46,5 +47,20 @@ describe('leitura local de CNH rasterizada', () => {
 
     expect(resultado.tipo_detectado).toBe('CNH');
     expect(resultado.identidade_status).toBe('IDENTIFICADO');
+  });
+
+  it('mantém CNH compatível ao atravessar a normalização final do documento_socio', () => {
+    const local = analisarTextoDocumentoLocal('documento_identidade_socio', CNH_OCR, 'documento_socio');
+    const normalizado = normalizarDocumentoCatalogado({
+      ...local.dados,
+      confianca: local.confianca,
+      mecanismo_extracao: 'tesseract',
+      __texto_local: CNH_OCR,
+    }, 'documento_socio');
+
+    expect(normalizado.classificacao?.tipo_detectado).toBe('CNH');
+    expect(normalizado.classificacao?.identidade_status).toBe('IDENTIFICADO');
+    expect(normalizado.classificacao?.satisfaz_requisito).toBe(true);
+    expect(normalizado.alertas.map((alerta) => alerta.codigo)).not.toContain('documento_catalogado_tipo_incompativel');
   });
 });

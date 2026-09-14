@@ -238,7 +238,7 @@ function cpfFormatadoOuDigitos(value: unknown): string | null {
 // (fica inconclusivo, exatamente como já acontecia quando o QSA não tinha o
 // dado).
 function derivarIdentidadeApoio(
-  documentosAnteriores: Array<{ tipo_documento?: string | null; dados?: any }> = [],
+  documentosAnteriores: Array<{ tipo_documento?: string | null; socio_id?: string | null; dados?: any }> = [],
 ): { cpf: string | null; nome: string | null } {
   const cpfsValidos: string[] = [];
   const nomesValidos: string[] = [];
@@ -260,30 +260,124 @@ function derivarIdentidadeApoio(
   return { cpf: cpfApoio, nome: nomeApoio };
 }
 
+type ReferenciaIdentidadeSocio = {
+  nome: string;
+  cpf: string | null;
+  tipo_documento: string | null;
+  fonte: 'qsa' | 'contrato_social' | 'alteracao_contratual' | 'atos_junta_comercial' | 'ccmei' | 'documento_do_socio' | 'outro';
+};
+
+function tipoFonteIdentidade(tipoDocumento: unknown): ReferenciaIdentidadeSocio['fonte'] {
+  const tipo = String(tipoDocumento || '').toLowerCase();
+  if (tipo === 'qsa') return 'qsa';
+  if (tipo === 'contrato_social') return 'contrato_social';
+  if (tipo === 'alteracao_contratual') return 'alteracao_contratual';
+  if (tipo === 'atos_junta_comercial') return 'atos_junta_comercial';
+  if (tipo === 'ccmei') return 'ccmei';
+  if (['documento_socio', 'rg', 'cnh', 'cpf', 'passaporte', 'imposto_renda', 'irpf', 'recibo_irpf'].includes(tipo)) return 'documento_do_socio';
+  return 'outro';
+}
+
+function candidatosIdentidadeDocumento(
+  documento: { tipo_documento?: string | null; socio_id?: string | null; dados?: any },
+): Array<{ nome: string; cpf: string | null }> {
+  const dados = documento?.dados || {};
+  const tipo = String(documento?.tipo_documento || '').toLowerCase();
+  const candidatos: Array<{ nome: string; cpf: string | null }> = [];
+  const adicionar = (valor: any, cpfValor?: any) => {
+    const nome = String(valor || '').trim();
+    if (!nome) return;
+    candidatos.push({ nome, cpf: cpfFormatadoOuDigitos(cpfValor ?? dados?.cpf ?? dados?.cpf_titular) });
+  };
+  const adicionarArray = (lista: any) => {
+    if (!Array.isArray(lista)) return;
+    lista.forEach((item) => adicionar(item?.nome || item?.nome_socio || item?.titular, item?.cpf || item?.cpf_socio || item?.cpf_titular));
+  };
+
+  // Documentos societários podem chegar como QSA direto ou dentro do laudo
+  // combinado contrato_junta. Só os campos societários conhecidos entram como
+  // evidência; não se usa a razão social da empresa como nome de pessoa.
+  if (tipo === 'qsa') adicionarArray(dados.socios);
+  if (['contrato_social', 'alteracao_contratual', 'contrato_junta'].includes(tipo) || dados?.contrato || dados?.atos_junta) {
+    adicionarArray(dados.socios);
+    adicionarArray(dados.quadro_societario_final);
+    adicionarArray(dados.contrato?.socios);
+    adicionarArray(dados.contrato?.quadro_societario_final);
+    adicionarArray(dados.atos_junta?.socios_alterados);
+    adicionarArray(dados.analise_societaria_auditavel?.estado_atual?.socios);
+    adicionar(dados.analise_societaria_auditavel?.estado_atual?.socio_administrador?.nome, dados.analise_societaria_auditavel?.estado_atual?.socio_administrador?.cpf);
+  }
+  if (tipo === 'atos_junta_comercial') adicionarArray(dados.socios_alterados);
+  if (tipo === 'ccmei') adicionar(dados.nome_titular || dados.titular || dados.nome, dados.cpf_titular || dados.cpf);
+
+  // Para documentos anexados no slot do próprio sócio, os campos diretos são
+  // evidência válida do arquivo vinculado. Para documentos empresariais, os
+  // campos diretos podem ser a razão social e por isso são deliberadamente
+  // ignorados acima, salvo os tipos pessoais/CCMEI tratados explicitamente.
+  const documentoPessoal = ['documento_socio', 'rg', 'cnh', 'cpf', 'passaporte', 'imposto_renda', 'irpf', 'recibo_irpf', 'comprovante_residencia', 'comprovante_endereco'].includes(tipo);
+  if (documento?.socio_id || documentoPessoal) adicionar(dados.nome || dados.titular || dados.nome_titular, dados.cpf || dados.cpf_titular);
+  return candidatos;
+}
+
+function reunirReferenciasIdentidadeSocio(
+  socioAlvo: any,
+  documentosAnteriores: Array<{ tipo_documento?: string | null; socio_id?: string | null; dados?: any }>,
+): { referencias: ReferenciaIdentidadeSocio[]; cpfs: string[]; nomes: string[]; fontes: string[]; conflitante: boolean } {
+  const nomeAlvo = String(socioAlvo?.nome || '').trim();
+  const cpfAlvo = cpfFormatadoOuDigitos(socioAlvo?.cpf || socioAlvo?.cpf_socio || socioAlvo?.documento || socioAlvo?.cpf_cnpj);
+  const referencias: ReferenciaIdentidadeSocio[] = [];
+  const incluir = (nome: string, cpf: string | null, tipoDocumento: string | null) => {
+    const nomeConfere = !!nomeAlvo && nomeEquivalente(nome, nomeAlvo);
+    const cpfConfere = !!cpfAlvo && !!cpf && cpf === cpfAlvo;
+    if (!nomeConfere && !cpfConfere) return;
+    referencias.push({ nome, cpf, tipo_documento: tipoDocumento || null, fonte: tipoFonteIdentidade(tipoDocumento) });
+  };
+  if (nomeAlvo || cpfAlvo) referencias.push({ nome: nomeAlvo, cpf: cpfAlvo, tipo_documento: 'qsa_sincronizado', fonte: 'qsa' });
+  for (const documento of Array.isArray(documentosAnteriores) ? documentosAnteriores : []) {
+    if (documento?.dados?.identidade_socio_confere === false || documento?.dados?.exige_justificativa_identidade === true) continue;
+    const candidatos = candidatosIdentidadeDocumento(documento);
+    for (const candidato of candidatos) incluir(candidato.nome, candidato.cpf, documento.tipo_documento || null);
+  }
+  const cpfs = Array.from(new Set(referencias.map((item) => item.cpf).filter(Boolean))) as string[];
+  const nomes = Array.from(new Set(referencias.map((item) => item.nome).filter(Boolean)));
+  const fontes = Array.from(new Set(referencias.map((item) => item.tipo_documento || item.fonte).filter(Boolean)));
+  return { referencias, cpfs, nomes, fontes, conflitante: cpfs.length > 1 };
+}
+
 export function validarIdentidadeSocioExtraida(
   socios: any[],
   dados: any,
   socioAlvoId: string | null = null,
   tipoDocumento = 'documento do sócio',
-  documentosAnterioresDoSocio: Array<{ tipo_documento?: string | null; dados?: any }> = [],
+  documentosAnterioresDoSocio: Array<{ tipo_documento?: string | null; socio_id?: string | null; dados?: any }> = [],
 ): { dados: Record<string, any>; alertas: AlertaRegraDocumental[] } {
   const alertas: AlertaRegraDocumental[] = [];
   const sociosAtivos = (Array.isArray(socios) ? socios : []).filter((socio) => socio?.ativo !== false);
   const socioAlvo = sociosAtivos.find((socio) => String(socio?.id) === String(socioAlvoId || '')) || null;
   const cpfDocumento = cpfFormatadoOuDigitos(dados?.cpf || dados?.cpf_titular);
   const nomeDocumento = String(dados?.nome || dados?.titular || dados?.nome_titular || '').trim();
-  const cpfSocioQsa = onlyDigits(socioAlvo?.cpf || socioAlvo?.cpf_socio || socioAlvo?.documento || socioAlvo?.cpf_cnpj);
-
+  const referencias = reunirReferenciasIdentidadeSocio(socioAlvo, documentosAnterioresDoSocio);
   const apoio = derivarIdentidadeApoio(documentosAnterioresDoSocio);
-  const cpfSocio = cpfSocioQsa || apoio.cpf;
-  const fonteCpf: 'qsa' | 'documentos_anteriores' | null = cpfSocioQsa ? 'qsa' : (apoio.cpf ? 'documentos_anteriores' : null);
-  const nomeSocioReferencia = socioAlvo?.nome || apoio.nome;
-  const fonteNome: 'qsa' | 'documentos_anteriores' | null = socioAlvo?.nome ? 'qsa' : (apoio.nome ? 'documentos_anteriores' : null);
+  const cpfSocioQsa = cpfFormatadoOuDigitos(socioAlvo?.cpf || socioAlvo?.cpf_socio || socioAlvo?.documento || socioAlvo?.cpf_cnpj);
+  const cpfSocio = cpfSocioQsa || (referencias.cpfs.length === 1 ? referencias.cpfs[0] : apoio.cpf);
+  const fonteCpf: 'qsa' | 'documentos_anteriores' | null = cpfSocioQsa ? 'qsa' : (cpfSocio ? 'documentos_anteriores' : null);
+  const nomeSocioReferencia = socioAlvo?.nome || apoio.nome || referencias.nomes[0] || null;
+  const fonteNome: 'qsa' | 'documentos_anteriores' | null = socioAlvo?.nome ? 'qsa' : (nomeSocioReferencia ? 'documentos_anteriores' : null);
 
   const cpfConfere = cpfDocumento && cpfSocio ? cpfDocumento === cpfSocio : null;
   const nomeConfere = nomeDocumento && nomeSocioReferencia ? nomeEquivalente(nomeDocumento, nomeSocioReferencia) : null;
   const divergenciaCpf = cpfConfere === false;
   const divergenciaNome = nomeConfere === false;
+  if (referencias.conflitante) {
+    alertas.push({
+      codigo: 'identidade_referencias_cpf_conflitantes',
+      campo: 'cpf',
+      mensagem: `Os documentos de referência da empresa apresentam CPFs diferentes para o sócio vinculado ao ${tipoDocumento}. É necessária conferência humana antes da validação.`,
+      severidade: 'alta',
+      valor_documento: referencias.cpfs,
+      recomendacao: 'Conferir QSA, contrato/alteração, CCMEI e documentos do sócio; não aprovar por ausência de consenso.',
+    });
+  }
   if (divergenciaCpf) {
     const origemTexto = fonteCpf === 'documentos_anteriores'
       ? 'não corresponde ao CPF já identificado em outro documento já enviado para este mesmo sócio'
@@ -312,8 +406,10 @@ export function validarIdentidadeSocioExtraida(
       recomendacao: 'Conferir a grafia, o documento integral e o sócio selecionado no upload.',
     });
   }
-  const temReferencia = Boolean(socioAlvo || apoio.cpf || apoio.nome);
-  const confirma = temReferencia ? !divergenciaCpf && !divergenciaNome && Boolean(cpfConfere === true || nomeConfere === true) : null;
+  const temReferencia = Boolean(socioAlvo || apoio.cpf || apoio.nome || referencias.referencias.length);
+  const confirma = temReferencia
+    ? (!referencias.conflitante && !divergenciaCpf && !divergenciaNome && Boolean(cpfConfere === true || nomeConfere === true))
+    : null;
   return {
     dados: {
       socio_alvo_id: socioAlvoId,
@@ -324,6 +420,9 @@ export function validarIdentidadeSocioExtraida(
       exige_justificativa_identidade: divergenciaCpf || divergenciaNome,
       identidade_fonte_cpf: fonteCpf,
       identidade_fonte_nome: fonteNome,
+      identidade_referencias_documentais: referencias.fontes,
+      identidade_referencias_cpfs_consensuais: referencias.cpfs.length === 1,
+      identidade_cruzamento_status: referencias.conflitante ? 'inconclusivo' : confirma === true ? 'confirmado' : (divergenciaCpf || divergenciaNome ? 'divergente' : 'inconclusivo'),
     },
     alertas,
   };
@@ -346,8 +445,11 @@ export function calcularCoberturaDocumentalSocios(
     const docsUtilizaveis = docsSocio.filter((doc) => {
       const dados = doc?.dados_extraidos || doc?.dados || doc;
       const alertas = Array.isArray(doc?.alertas) ? doc.alertas : [];
-      return dados?.identidade_socio_confere !== false
-        && dados?.titular_confere_com_socio !== false
+      const tipo = String(doc?.tipo_documento || '');
+      const exigeIdentidadeConfirmada = ['documento_socio', 'rg', 'cnh', 'cpf', 'passaporte', 'imposto_renda', 'irpf', 'recibo_irpf'].includes(tipo);
+      const exigeTitularConfirmado = ['comprovante_residencia', 'comprovante_endereco', 'comprovante_residencia_socio'].includes(tipo);
+      return (!exigeIdentidadeConfirmada || dados?.identidade_socio_confere === true)
+        && (!exigeTitularConfirmado || dados?.titular_confere_com_socio === true)
         && dados?.exige_justificativa_identidade !== true
         && !alertas.some((alerta: any) => ['identidade_cpf_diferente_socio', 'identidade_nome_diferente_socio', 'endereco_titular_diferente_socio'].includes(String(alerta?.codigo)));
     });
