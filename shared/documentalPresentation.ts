@@ -793,6 +793,19 @@ function familiaTipoVisual(value: unknown): string {
   return tipo;
 }
 
+function ehTipoIdentidadeSocio(tipo: string): boolean {
+  return [
+    "cnh",
+    "rg",
+    "cpf",
+    "passaporte",
+    "documento_socio",
+    "documento_identidade_socio",
+    "identidade_socio",
+    "identidade",
+  ].includes(tipo);
+}
+
 /**
  * A camada visual nunca transforma um laudo explicitamente incompatível,
  * stale, superseded, em reanálise ou com requisito não satisfeito em sucesso.
@@ -823,6 +836,14 @@ function documentoMarcadoIncompativel(resultado: any, documento: any): boolean {
   );
   const tipoEsperado = familiaTipoVisual(classificacao?.tipo_esperado || resultado?.tipo_esperado || dadosExtraidos?.tipo_esperado || documento?.tipo_documento);
   const tipoDetectado = familiaTipoVisual(classificacao?.tipo_detectado || resultado?.tipo_detectado || dadosExtraidos?.tipo_detectado);
+  const identidadeSocioEsperada = ["documento_socio", "documento_identidade_socio", "identidade_socio"].includes(tipoEsperado);
+  const identidadeSocioDetectada = ehTipoIdentidadeSocio(tipoDetectado);
+  const divergenciaDeFamilia = Boolean(
+    tipoEsperado
+    && tipoDetectado
+    && tipoEsperado !== tipoDetectado
+    && !(identidadeSocioEsperada && identidadeSocioDetectada),
+  );
   return Boolean(
     temIncompatibilidadeExplicita
     || identidade === "incompativel"
@@ -830,7 +851,7 @@ function documentoMarcadoIncompativel(resultado: any, documento: any): boolean {
       resultado?.documento_compativel === false
       || dadosExtraidos?.documento_compativel === false
       || classificacao?.documento_compativel === false
-      || (tipoEsperado && tipoDetectado && tipoEsperado !== tipoDetectado)
+      || divergenciaDeFamilia
     )),
   );
 }
