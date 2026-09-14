@@ -93,6 +93,8 @@ const statusValidadeCls: Record<string, string> = {
   nao_verificado: "bg-muted text-muted-foreground border-border",
 };
 
+const ACCEPT_DOCUMENTOS = ".pdf,.jpg,.jpeg,.png,.webp,.gif,.tif,.tiff,.bmp,.svg,.txt,.text,.log,.md,.markdown,.json,.xml,.html,.htm,.rtf,.odt,.xlsx,.ods,.csv,.docx";
+
 function itensTextoRelatorio(value: unknown): string[] {
   if (Array.isArray(value)) {
     return value.map((item) => {
@@ -1799,11 +1801,11 @@ export default function DocumentosEntidade({
           <>
             <label className={`h-7 inline-flex items-center justify-center gap-1 text-[10px] font-bold px-2.5 rounded-lg transition-colors shrink-0 ${uploadingTipo === chaveEcf ? "bg-border text-primary-foreground cursor-not-allowed" : "bg-primary text-primary-foreground cursor-pointer hover:bg-primary/90"}`}>
               {uploadingTipo === chaveEcf ? <Loader2 className="w-3 h-3 animate-spin" /> : <Upload className="w-3 h-3" />} ECF
-              <input type="file" accept=".pdf,.jpg,.jpeg,.png,.webp,.xlsx,.csv,.docx" className="hidden" disabled={uploadingTipo === chaveEcf} onChange={(e) => { const file = e.target.files?.[0]; if (file) void enviar("ecf", file); e.currentTarget.value = ""; }} />
+              <input type="file" accept={ACCEPT_DOCUMENTOS} className="hidden" disabled={uploadingTipo === chaveEcf} onChange={(e) => { const file = e.target.files?.[0]; if (file) void enviar("ecf", file); e.currentTarget.value = ""; }} />
             </label>
             <label className={`h-7 inline-flex items-center justify-center gap-1 text-[10px] font-bold px-2.5 rounded-lg transition-colors shrink-0 ${uploadingTipo === chaveDctf ? "bg-border text-primary-foreground cursor-not-allowed" : "bg-primary text-primary-foreground cursor-pointer hover:bg-primary/90"}`}>
               {uploadingTipo === chaveDctf ? <Loader2 className="w-3 h-3 animate-spin" /> : <Upload className="w-3 h-3" />} DCTF
-              <input type="file" accept=".pdf,.jpg,.jpeg,.png,.webp,.xlsx,.csv,.docx" className="hidden" disabled={uploadingTipo === chaveDctf} onChange={(e) => { const file = e.target.files?.[0]; if (file) void enviar("dctf", file); e.currentTarget.value = ""; }} />
+              <input type="file" accept={ACCEPT_DOCUMENTOS} className="hidden" disabled={uploadingTipo === chaveDctf} onChange={(e) => { const file = e.target.files?.[0]; if (file) void enviar("dctf", file); e.currentTarget.value = ""; }} />
             </label>
             {/* Terceiro botão genérico (rodada 12, pedido explícito do
                 usuário): "abra mais um campo... pra que possa ter outro...
@@ -1815,7 +1817,7 @@ export default function DocumentosEntidade({
                 e em routes/documentacao.ts). */}
             <label title="Qualquer outro documento que comprove o regime tributário da empresa, com o regime tributário indicado de forma explícita." className={`h-7 inline-flex items-center justify-center gap-1 text-[10px] font-bold px-2.5 rounded-lg transition-colors shrink-0 ${uploadingTipo === chaveOutro ? "bg-border text-primary-foreground cursor-not-allowed" : "bg-primary text-primary-foreground cursor-pointer hover:bg-primary/90"}`}>
               {uploadingTipo === chaveOutro ? <Loader2 className="w-3 h-3 animate-spin" /> : <Upload className="w-3 h-3" />} Outro
-              <input type="file" accept=".pdf,.jpg,.jpeg,.png,.webp,.xlsx,.csv,.docx" className="hidden" disabled={uploadingTipo === chaveOutro} onChange={(e) => { const file = e.target.files?.[0]; if (file) void enviar("comprovante_regime_outro", file); e.currentTarget.value = ""; }} />
+              <input type="file" accept={ACCEPT_DOCUMENTOS} className="hidden" disabled={uploadingTipo === chaveOutro} onChange={(e) => { const file = e.target.files?.[0]; if (file) void enviar("comprovante_regime_outro", file); e.currentTarget.value = ""; }} />
             </label>
           </>
         )}
@@ -2192,22 +2194,22 @@ export default function DocumentosEntidade({
           </div>
 
           {grupoAtivoId === "socios" && entidadeTipo === "empresa" && empresaId && (
-            <div className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-primary/20 bg-primary/5 px-3 py-2">
+            <div className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-primary/20 bg-primary/5 px-2.5 py-1.5">
               <div className="flex min-w-0 items-center gap-2">
-                <ScanSearch className="h-4 w-4 shrink-0 text-primary" />
+                <ScanSearch className="h-3.5 w-3.5 shrink-0 text-primary" />
                 <div className="min-w-0">
-                  <p className="text-[11px] font-black text-foreground">Leitura dos sócios</p>
-                  <p className="text-[9px] text-muted-foreground">Ler e cruzar os arquivos anexados com o QSA e os documentos societários.</p>
+                  <p className="text-[10px] font-black text-foreground">Análise dos sócios</p>
                 </div>
               </div>
               <button
                 type="button"
                 onClick={() => void analisarDocumentacaoSocios()}
                 disabled={analisandoDocumentosSocios}
-                className="inline-flex h-8 shrink-0 items-center justify-center gap-1.5 rounded-lg bg-primary px-2.5 text-[10px] font-black text-primary-foreground hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-60"
+                aria-label="Leitura dos sócios"
+                className="inline-flex h-7 shrink-0 items-center justify-center gap-1 rounded-md bg-primary px-2 text-[9px] font-black text-primary-foreground hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-60"
               >
-                {analisandoDocumentosSocios ? <Loader2 className="h-3 w-3 animate-spin" /> : <ScanSearch className="h-3 w-3" />}
-                {analisandoDocumentosSocios ? "Analisando..." : "Analisar documentos"}
+                {analisandoDocumentosSocios ? <Loader2 className="h-2.5 w-2.5 animate-spin" /> : <ScanSearch className="h-2.5 w-2.5" />}
+                {analisandoDocumentosSocios ? "Analisando" : "Ler e cruzar"}
               </button>
             </div>
           )}
@@ -2717,7 +2719,7 @@ export default function DocumentosEntidade({
                               <>
                               <label title={motivoBloqueio || undefined} className={`inline-flex h-7 shrink-0 items-center justify-center gap-1 rounded-md px-2 text-[10px] font-semibold transition-colors ${motivoBloqueio || (exigeVinculoSocio && !socioVinculado) ? "cursor-not-allowed bg-border text-primary-foreground" : "cursor-pointer bg-primary text-primary-foreground hover:bg-primary/90"}`}>
                                 {uploading ? <Loader2 className="w-3 h-3 animate-spin" /> : <Upload className="w-3 h-3" />} Anexar
-                                <input type="file" accept=".pdf,.jpg,.jpeg,.png,.webp,.xlsx,.csv,.docx" className="hidden" disabled={uploading || !!motivoBloqueio || (exigeVinculoSocio && !socioVinculado)} onChange={(e) => { const file = e.target.files?.[0]; if (file) enviar(tipo, file, socioVinculado); e.currentTarget.value = ""; }} />
+                                <input type="file" accept={ACCEPT_DOCUMENTOS} className="hidden" disabled={uploading || !!motivoBloqueio || (exigeVinculoSocio && !socioVinculado)} onChange={(e) => { const file = e.target.files?.[0]; if (file) enviar(tipo, file, socioVinculado); e.currentTarget.value = ""; }} />
                               </label>
                               </>
                             )}

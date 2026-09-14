@@ -67,10 +67,24 @@ export const MIME_EXT: Record<string, string[]> = {
   'image/jpeg': ['.jpg', '.jpeg'],
   'image/png': ['.png'],
   'image/webp': ['.webp'],
+  'image/gif': ['.gif'],
+  'image/tiff': ['.tif', '.tiff'],
+  'image/bmp': ['.bmp'],
+  'image/svg+xml': ['.svg'],
   'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet': ['.xlsx'],
   'text/csv': ['.csv'],
   'application/csv': ['.csv'],
   'application/vnd.openxmlformats-officedocument.wordprocessingml.document': ['.docx'],
+  'text/plain': ['.txt', '.text', '.log'],
+  'text/markdown': ['.md', '.markdown'],
+  'application/json': ['.json'],
+  'application/xml': ['.xml'],
+  'text/xml': ['.xml'],
+  'text/html': ['.html', '.htm'],
+  'application/rtf': ['.rtf'],
+  'text/rtf': ['.rtf'],
+  'application/vnd.oasis.opendocument.text': ['.odt'],
+  'application/vnd.oasis.opendocument.spreadsheet': ['.ods'],
 };
 
 const upload = multer({
@@ -514,17 +528,25 @@ export function validarArquivo(file: Express.Multer.File, tipoDocumento: string)
     if (file.mimetype === 'image/jpeg') return buffer.length >= 3 && buffer[0] === 0xff && buffer[1] === 0xd8 && buffer[2] === 0xff;
     if (file.mimetype === 'image/png') return buffer.subarray(0, 8).equals(Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]));
     if (file.mimetype === 'image/webp') return buffer.subarray(0, 4).toString('ascii') === 'RIFF' && buffer.subarray(8, 12).toString('ascii') === 'WEBP';
+    if (file.mimetype === 'image/gif') return buffer.subarray(0, 6).toString('ascii') === 'GIF87a' || buffer.subarray(0, 6).toString('ascii') === 'GIF89a';
+    if (file.mimetype === 'image/tiff') return (buffer.length >= 4 && buffer.subarray(0, 4).equals(Buffer.from([0x49, 0x49, 0x2a, 0x00]))) || (buffer.length >= 4 && buffer.subarray(0, 4).equals(Buffer.from([0x4d, 0x4d, 0x00, 0x2a])));
+    if (file.mimetype === 'image/bmp') return buffer.length >= 2 && buffer.subarray(0, 2).toString('ascii') === 'BM';
+    if (file.mimetype === 'image/svg+xml') return /<svg(?:\s|>)/i.test(buffer.subarray(0, 4096).toString('utf8'));
     if (file.mimetype === 'application/vnd.openxmlformats-officedocument.wordprocessingml.document') {
       return buffer.subarray(0, 2).toString('ascii') === 'PK' && buffer.includes(Buffer.from('word/'));
     }
     if (file.mimetype === 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet') {
       return buffer.subarray(0, 2).toString('ascii') === 'PK' && buffer.includes(Buffer.from('xl/'));
     }
-    if (file.mimetype === 'text/csv' || file.mimetype === 'application/csv') {
+    if (file.mimetype === 'text/csv' || file.mimetype === 'application/csv' || file.mimetype === 'text/plain' || file.mimetype === 'text/markdown' || file.mimetype === 'application/json' || file.mimetype === 'application/xml' || file.mimetype === 'text/xml' || file.mimetype === 'text/html') {
       if (buffer.includes(0)) return false;
       const texto = buffer.subarray(0, Math.min(buffer.length, 8192)).toString('utf8');
       const substituicoes = (texto.match(/\uFFFD/g) || []).length;
       return texto.length > 0 && substituicoes <= Math.max(2, Math.floor(texto.length * 0.01));
+    }
+    if (file.mimetype === 'application/rtf' || file.mimetype === 'text/rtf') return buffer.subarray(0, 5).toString('ascii') === '{\\rtf';
+    if (file.mimetype === 'application/vnd.oasis.opendocument.text' || file.mimetype === 'application/vnd.oasis.opendocument.spreadsheet') {
+      return buffer.subarray(0, 2).toString('ascii') === 'PK' && buffer.includes(Buffer.from('content.xml'));
     }
     return false;
   })();
